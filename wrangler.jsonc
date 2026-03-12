@@ -1,0 +1,19 @@
+{
+	"name": "multistreamer-tcg",
+	"main": "src/index.ts",
+	"compatibility_date": "2024-02-27",
+	"assets": {
+		"directory": "public",
+		"binding": "ASSETS"
+	},
+	"r2_buckets": [
+		{
+			"bucket_name": "multistreamer-tcg-cards",
+			"binding": "multistreamer_tcg_cards"
+		},
+		{
+			"binding": "CARD_IMAGES",
+			"bucket_name": "multistreamer-tcg-cards"
+		}
+	]
+}
