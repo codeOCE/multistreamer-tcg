@@ -4,6 +4,24 @@ const BACKEND_URL = window.location.origin === 'http://localhost:3000' || window
     ? 'http://localhost:8787'
     : '';
 
+// --- GLOBAL IMAGE FALLBACK HANDLER ---
+// Catches all 404/broken images automatically
+window.addEventListener('error', function(e) {
+    if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'img') {
+        if (e.target.dataset.fallbackApplied) return; // Prevent infinite loop
+        e.target.dataset.fallbackApplied = 'true';
+        
+        // Determine fallback based on visual context (avatar vs card vs logo)
+        const isAvatar = e.target.id.includes('avatar') || e.target.className.includes('rounded-full') || e.target.src.includes('twitchcdn');
+        
+        if (isAvatar) {
+            e.target.src = 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback';
+        } else {
+            e.target.src = '/pack.png'; // Main card fallback
+        }
+    }
+}, true); // useCapture = true is strictly required for 'error' events which don't bubble
+
 let currentUser = null;
 let creatorCards = [];
 let creatorStats = {};
@@ -25,7 +43,6 @@ let cardToEdit = null;
 
 
 async function initDashboard() {
-    console.log("[Dashboard] Initializing Dashboard...");
     await fetchCSRFToken();
     await bootstrapDashboard();
 
@@ -81,7 +98,6 @@ function setupEventListeners() {
     }
 }
 function switchTab(tabId) {
-    console.log(`[Dashboard] Switching to tab: ${tabId}`);
 
     document.querySelectorAll('.dashboard-tab-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -97,7 +113,7 @@ function switchTab(tabId) {
 
     const contentArea = document.querySelector('.dashboard-content-area');
     if (contentArea) contentArea.scrollTop = 0;
-    
+
     loadTabData(tabId);
 }
 
@@ -141,7 +157,7 @@ function switchSubTab(parentTab, subTabId) {
         btn.classList.remove('active', 'bg-void-accent', 'text-void-bg', 'shadow-lg', 'shadow-void-accent/20');
         btn.classList.add('bg-white/5', 'text-void-muted');
     });
-    
+
     const activeBtn = document.getElementById(`subtab-${parentTab}-${subTabId}`);
     if (activeBtn) {
         activeBtn.classList.add('active', 'bg-void-accent', 'text-void-bg', 'shadow-lg', 'shadow-void-accent/20');
@@ -152,7 +168,7 @@ function switchSubTab(parentTab, subTabId) {
         panel.classList.add('hidden');
         panel.classList.remove('active');
     });
-    
+
     const activePanel = document.getElementById(`${parentTab}-subcontent-${subTabId}`);
     if (activePanel) {
         activePanel.classList.remove('hidden');
@@ -176,19 +192,32 @@ function populateOverlaySettings() {
     const s = currentUser.streamer;
     const token = s.obs_overlay_token || "PENDING_TOKEN";
     const baseUrl = window.location.origin;
-    
-    const packsLink = document.getElementById('packs-obs-link');
-    const battlesLink = document.getElementById('battles-obs-link');
-    
-    if (packsLink) packsLink.textContent = `${baseUrl}/overlay/packs?token=${token}`;
-    if (battlesLink) battlesLink.textContent = `${baseUrl}/overlay/battles?token=${token}`;
+
+    const packsInput = document.getElementById('packs-obs-link');
+    const battlesInput = document.getElementById('battles-obs-link');
+
+    // Pass the streamer parameter to match what the backend expects
+    const authParams = `streamer=${encodeURIComponent(currentUser.name)}&token=${token}`;
+
+    if (packsInput) packsInput.value = `${baseUrl}/obs-overlay?${authParams}&type=pack`;
+    if (battlesInput) battlesInput.value = `${baseUrl}/obs-overlay?${authParams}&type=battle`;
 
     const animSelect = document.getElementById('pack-animation-style');
+    const iframe = document.getElementById('anim-preview-iframe');
+    const label = document.getElementById('anim-preview-label');
+
     if (animSelect) {
-        animSelect.value = s.pack_animation_style || 'default';
-        animSelect.onchange = (e) => saveSettings({ pack_animation_style: e.target.value });
+        animSelect.value = s.pack_animation_style || 'style1';
+        if (iframe) iframe.src = `/obs-overlay?${authParams}&preview=${animSelect.value}`;
+        if (label && animSelect.selectedIndex >= 0) label.textContent = animSelect.options[animSelect.selectedIndex].text;
+
+        animSelect.onchange = (e) => {
+            saveSettings({ pack_animation_style: e.target.value });
+            if (iframe) iframe.src = `/obs-overlay?${authParams}&preview=${e.target.value}`;
+            if (label && e.target.selectedIndex >= 0) label.textContent = e.target.options[e.target.selectedIndex].text;
+        };
     }
-    
+
     const soundSelect = document.getElementById('pack-sound-effect');
     if (soundSelect) {
         soundSelect.value = s.pack_open_sound_url || '/packopensound.wav';
@@ -201,7 +230,7 @@ async function bootstrapDashboard() {
     try {
         const res = await fetch(`${BACKEND_URL}/api/bootstrap`, { credentials: 'include' });
         if (!res.ok) throw new Error("Initialization failed");
-        
+
         const data = await res.json();
         if (!data.user || !data.user.is_creator) {
             console.warn("[Dashboard] Unauthorized attempt. Redirecting...");
@@ -210,13 +239,13 @@ async function bootstrapDashboard() {
         }
 
         currentUser = {
-            name: (data.user.streamer && data.user.streamer.brand_name) || data.user.username || 'Creator',
+            name: data.user.username || (data.user.streamer && data.user.streamer.username) || (data.user.streamer && data.user.streamer.brand_name) || 'Creator',
             avatar: data.user.avatar_url,
             is_creator: data.user.is_creator,
             streamer: data.user.streamer || {}
         };
 
-        const navUsername = document.getElementById('nav-username');
+        const navUsername = currentUser.name;
         const navAvatar = document.getElementById('nav-avatar');
         if (navUsername) navUsername.textContent = currentUser.name;
         if (navAvatar) {
@@ -225,14 +254,11 @@ async function bootstrapDashboard() {
         }
 
         creatorStats = data.stats || {};
-
         populateBranding();
+        populateOverlaySettings();
         checkActiveEvent();
-        fetchUserList();
-        fetchAdminLogs();
-        
+
     } catch (err) {
-        console.error("[Dashboard] Error:", err);
         showToast("System error during initialization", "error");
     }
 }
@@ -255,7 +281,7 @@ function populateBranding() {
     if (!currentUser) return;
     const s = currentUser.streamer || {};
 
-    const name = s.brand_name || s.display_name || s.username || currentUser.name;
+    const name = s.brand_name;
     const tagline = s.brand_tagline || 'No tagline set';
     const color = s.binder_color || s.brand_color_primary || '#00f2fe';
 
@@ -299,26 +325,73 @@ function toggleBrandingEdit() {
     }
 }
 
+function confirmResetPackArt() {
+    showConfirmModal(
+        'Reset Pack Art',
+        'Reset your pack art back to the default image? Your custom art will be removed.',
+        () => {
+            const preview = document.getElementById('pack-art-preview');
+            preview.src = '/pack.png';
+            saveSettings({ pack_image_url: null });
+            showToast('Pack art reset to default', 'success');
+        }
+    );
+}
+
 function resetPackArt() {
-    if (confirm("Reset pack art to default?")) {
-        const preview = document.getElementById('pack-art-preview');
-        const placeholder = document.getElementById('pack-art-placeholder');
-        preview.src = '/pack.png';
-        preview.classList.add('hidden');
-        placeholder.classList.remove('hidden');
-        saveSettings({ pack_image_url: null });
-    }
+    confirmResetPackArt();
+}
+
+function showConfirmModal(title, message, onConfirm, confirmLabel = 'Confirm') {
+    const modal = document.getElementById('confirm-action-modal');
+    if (!modal) { if (onConfirm && confirm(message)) onConfirm(); return; }
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-message').textContent = message;
+    const btn = document.getElementById('confirm-modal-action-btn');
+    btn.textContent = confirmLabel;
+    btn.onclick = () => { closeConfirmModal(); onConfirm(); };
+    modal.classList.remove('hidden');
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirm-action-modal')?.classList.add('hidden');
+}
+
+function copyOBSLink(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    navigator.clipboard.writeText(input.value).then(() => showToast('Copied to clipboard', 'success'));
+}
+
+function updateAnimPreview(style) {
+    const label = document.getElementById('anim-preview-label');
+    const box = document.getElementById('anim-preview-box');
+    if (!label || !box) return;
+
+    const labels = { standard: 'Standard', cosmic: 'Cosmic Burst', brutalist: 'Brutalist Jitter' };
+    label.textContent = labels[style] || style;
+
+    // Remove old anim classes
+    box.classList.remove('anim-standard', 'anim-cosmic', 'anim-brutalist');
+    void box.offsetWidth; // Force reflow
+    box.classList.add(`anim-${style}`);
+}
+
+function closeGrantModal() {
+    document.getElementById('grant-card-modal')?.classList.add('hidden');
+    const oldModal = document.getElementById('grant-modal');
+    if (oldModal) oldModal.remove();
 }
 
 async function handlePackArtUpload(file) {
     if (!file) return;
-    
+
     showToast("Uploading pack art...", "loading");
-    
+
     try {
         const formData = new FormData();
         formData.append('file', file);
-        
+
         const res = await fetch(`${BACKEND_URL}/api/creator/upload`, {
             method: 'POST',
             headers: { 'X-CSRF-Token': csrfToken },
@@ -394,7 +467,7 @@ async function fetchCardsForGrid(gridId = 'cards-grid') {
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
         if (!res.ok) throw new Error("Access denied");
-        
+
         creatorCards = await res.json();
         renderCardGrid(gridId, creatorCards);
     } catch (err) {
@@ -417,8 +490,8 @@ function renderCardGrid(gridId, cards) {
             return `
                 <div class="card-select-item ${isSelected ? 'selected' : ''}" onclick="${bulkSelectMode ? `toggleCardSelection('${card.id}')` : `editCard('${card.id}')`}">
                     ${bulkSelectMode ? `<div class="card-select-check"></div>` : ''}
-                    <div class="aspect-[2/3] w-full bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center p-2">
-                        <img src="${card.image_url || '/pack.png'}" class="max-w-full max-h-full object-contain transition-all duration-500 scale-[1.05]">
+                    <div class="aspect-[2/3] w-full rounded-xl overflow-hidden shadow-2xl">
+                        <img src="${card.image_url || '/pack.png'}" class="w-full h-full object-cover transition-all duration-500 hover:scale-105">
                     </div>
                     <div class="p-4 bg-white/5 flex flex-col gap-2">
                         <div class="flex justify-between items-start">
@@ -448,8 +521,8 @@ function renderCardGrid(gridId, cards) {
     grid.innerHTML = cards.map(card => `
         <div class="card-select-item ${card[field] ? 'selected' : ''}" onclick="toggleCardEligibility('${card.id}', '${field}', this)">
             <div class="card-select-check"></div>
-            <div class="aspect-[2/3] w-full bg-void-bg flex items-center justify-center p-4">
-                <img src="${card.image_url || '/pack.png'}" class="max-w-full max-h-full object-contain ${card[field] ? '' : 'grayscale opacity-50'} transition-all duration-500">
+            <div class="aspect-[2/3] w-full flex items-center justify-center">
+                <img src="${card.image_url || '/pack.png'}" class="w-full h-full object-cover ${card[field] ? '' : 'grayscale opacity-50'} transition-all duration-500">
             </div>
             <div class="p-3 bg-white/5">
                 <div class="text-[9px] font-black text-white uppercase truncate">${card.name}</div>
@@ -506,7 +579,7 @@ async function fetchAdminLogs() {
         const url = new URL(`${BACKEND_URL}/api/creator/analytics/overview`);
         url.searchParams.set('days', '7');
         const res = await fetch(url.toString(), { credentials: 'include' });
-        
+
         if (res.ok) {
             const data = await res.json();
 
@@ -519,8 +592,8 @@ async function fetchAdminLogs() {
 
             const filtered = events.filter(ev => {
                 const matchesCategory = category === 'all' || ev.type === category;
-                const matchesSearch = !searchQuery || 
-                    ev.message.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                const matchesSearch = !searchQuery ||
+                    ev.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
                     ev.type.toLowerCase().includes(searchQuery.toLowerCase());
                 return matchesCategory && matchesSearch;
             });
@@ -529,7 +602,7 @@ async function fetchAdminLogs() {
                 container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase text-[9px]">No matching activity found</div>`;
                 return;
             }
-            
+
             container.innerHTML = filtered.map(event => `
                 <div class="log-row">
                     <div class="col-span-2 text-[10px] text-void-muted flex flex-col">
@@ -564,12 +637,12 @@ async function fetchUserList(query = "") {
         const url = new URL(`${BACKEND_URL}/api/creator/analytics/collectors`);
         url.searchParams.set('days', '30');
         if (query) url.searchParams.set('search', query);
-        
+
         const res = await fetch(url.toString(), { credentials: 'include' });
         if (res.ok) {
             const data = await res.json();
             let users = data.top_collectors || [];
-            
+
             if (users.length === 0) {
                 container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase text-[9px]">No members found</div>`;
                 return;
@@ -578,9 +651,10 @@ async function fetchUserList(query = "") {
             container.innerHTML = users.map(u => `
                 <div class="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-void-accent/30 transition-all">
                     <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20">
-                            <i class="fa-solid fa-user text-xs"></i>
-                        </div>
+                        ${u.avatar_url
+                    ? `<img src="${u.avatar_url}" class="w-10 h-10 rounded-xl border border-white/10 object-cover" onerror="this.outerHTML='<div class=\'w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20\'><i class=\'fa-solid fa-user text-xs\'></i></div>'">`
+                    : `<div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20"><i class="fa-solid fa-user text-xs"></i></div>`
+                }
                         <div>
                             <div class="text-[11px] font-black text-white uppercase">${u.username}</div>
                             <div class="text-[9px] text-void-muted uppercase mt-1">Cards: ${u.total_cards} | Unique: ${u.unique_cards}</div>
@@ -606,24 +680,27 @@ async function fetchUserList(query = "") {
 async function loadAnalytics() {
     const timeRange = document.getElementById('analytics-time-range')?.value || '30';
 
+    // Clear previous explicit data state
+    analyticsData = {};
+    renderAnalytics(); // Initial paint with placeholders/empty 
 
-    try {
-        const [overviewRes, cardsRes, collectorsRes, packsRes] = await Promise.all([
-            fetch(`${BACKEND_URL}/api/creator/analytics/overview?days=${timeRange}`, { credentials: 'include' }),
-            fetch(`${BACKEND_URL}/api/creator/analytics/cards?days=${timeRange}`, { credentials: 'include' }),
-            fetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=${timeRange}`, { credentials: 'include' }),
-            fetch(`${BACKEND_URL}/api/creator/analytics/packs?days=${timeRange}`, { credentials: 'include' })
-        ]);
+    const fetchEndpoint = (endpoint, key) => {
+        fetch(`${BACKEND_URL}/api/creator/analytics/${endpoint}?days=${timeRange}`, { credentials: 'include' })
+            .then(res => {
+                if (res.ok) return res.json();
+                throw new Error('Network error');
+            })
+            .then(data => {
+                analyticsData[key] = data;
+                renderAnalytics();
+            })
+            .catch(err => console.error(`Failed to load ${key} analytics:`, err));
+    };
 
-        if (overviewRes.ok) analyticsData.overview = await overviewRes.json();
-        if (cardsRes.ok) analyticsData.cards = await cardsRes.json();
-        if (collectorsRes.ok) analyticsData.collectors = await collectorsRes.json();
-        if (packsRes.ok) analyticsData.packs = await packsRes.json();
-
-        renderAnalytics();
-    } catch (err) {
-        console.error("Failed to load analytics:", err);
-    }
+    fetchEndpoint('overview', 'overview');
+    fetchEndpoint('packs', 'packs');
+    fetchEndpoint('cards', 'cards');
+    fetchEndpoint('collectors', 'collectors');
 }
 
 function renderAnalytics() {
@@ -798,7 +875,7 @@ function renderPackActivityChart(data) {
 
 let debounceTimer;
 function debounce(func, delay) {
-    return function() {
+    return function () {
         const context = this;
         const args = arguments;
         clearTimeout(debounceTimer);
@@ -809,10 +886,16 @@ function debounce(func, delay) {
 function showToast(msg, type = "info") {
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+
+    if (window.lastLoadingToast && type !== 'loading') {
+        window.lastLoadingToast.classList.add('translate-y-[-20px]', 'opacity-0');
+        setTimeout(() => window.lastLoadingToast.remove(), 500);
+        window.lastLoadingToast = null;
+    }
+
     const toast = document.createElement('div');
     toast.className = `px-6 py-3 rounded-xl border backdrop-blur-xl shadow-2xl transition-all duration-500 translate-y-20 opacity-0 flex items-center gap-3`;
-    
+
     if (type === 'error') toast.className += " bg-red-500/10 border-red-500/20 text-red-500";
     else if (type === 'success') toast.className += " bg-void-accent/10 border-void-accent/20 text-void-accent";
     else if (type === 'loading') toast.className += " bg-white/5 border-white/10 text-white";
@@ -824,7 +907,7 @@ function showToast(msg, type = "info") {
     `;
 
     container.appendChild(toast);
-    
+
     setTimeout(() => {
         toast.classList.remove('translate-y-20', 'opacity-0');
     }, 10);
@@ -880,7 +963,7 @@ async function checkActiveEvent() {
         const res = await fetch(`${BACKEND_URL}/api/creator/profile`, { credentials: 'include' });
         if (!res.ok) return;
         const streamer = await res.json();
-        
+
         const evRes = await fetch(`${BACKEND_URL}/api/creator/events/active`, { credentials: 'include' });
         if (evRes.ok) {
             const data = await evRes.json();
@@ -890,7 +973,7 @@ async function checkActiveEvent() {
                 updateEventUI(false);
             }
         }
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function updateEventUI(isActive, name = "", endsAt = null) {
@@ -903,13 +986,13 @@ function updateEventUI(isActive, name = "", endsAt = null) {
         statusIndicator.classList.add('text-void-accent');
         statusIndicator.parentElement.classList.remove('bg-red-500/10', 'border-red-500/20');
         statusIndicator.parentElement.classList.add('bg-void-accent/10', 'border-void-accent/20');
-        
+
         if (endsAt) {
             const timer = document.createElement('div');
             timer.id = 'event-countdown';
             timer.className = 'text-[8px] font-bold text-void-accent/50 uppercase mt-1 text-center';
             const end = new Date(endsAt).getTime();
-            
+
             const updateTimer = () => {
                 const now = Date.now();
                 const diff = end - now;
@@ -923,11 +1006,11 @@ function updateEventUI(isActive, name = "", endsAt = null) {
                 const s = Math.floor((diff % 60000) / 1000);
                 timer.textContent = `Ends in: ${h}h ${m}m ${s}s`;
             };
-            
+
             if (window.eventInterval) clearInterval(window.eventInterval);
             window.eventInterval = setInterval(updateTimer, 1000);
             updateTimer();
-            
+
             const parent = statusIndicator.parentElement.parentElement;
             const existingTimer = document.getElementById('event-countdown');
             if (existingTimer) existingTimer.remove();
@@ -949,7 +1032,7 @@ async function openUserGrant(username = null, twitchId = null) {
     const isGeneric = !twitchId;
     let allUsers = [];
     let allCards = [];
-    
+
     const modalHtml = `
         <div id="grant-modal" class="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-md">
             <div class="glass-card w-full max-w-lg p-10 animate-in fade-in zoom-in duration-300 border border-white/10 shadow-2xl">
@@ -1035,10 +1118,10 @@ async function openUserGrant(username = null, twitchId = null) {
     const userSearch = document.getElementById('grant-user-search');
 
     allCards = await fetchAllCreatorCards();
-    
+
     const populateCards = (filter = '') => {
-        let filtered = allCards.filter(c => 
-            c.name.toLowerCase().includes(filter.toLowerCase()) || 
+        let filtered = allCards.filter(c =>
+            c.name.toLowerCase().includes(filter.toLowerCase()) ||
             c.rarity.toLowerCase().includes(filter.toLowerCase())
         );
 
@@ -1059,18 +1142,18 @@ async function openUserGrant(username = null, twitchId = null) {
         options += '<optgroup label="SPECIFIC CARDS">';
         options += filtered.map(c => `<option value="${c.id}">${c.rarity.toUpperCase()} | ${c.name}</option>`).join('');
         options += '</optgroup>';
-        
+
         cardSelect.innerHTML = options;
     };
 
     const populateUsers = (filter = '') => {
         if (!userSelect) return;
-        let filtered = allUsers.filter(u => 
-            u.username.toLowerCase().includes(filter.toLowerCase()) || 
+        let filtered = allUsers.filter(u =>
+            u.username.toLowerCase().includes(filter.toLowerCase()) ||
             String(u.twitch_id).includes(filter)
         );
 
-        userSelect.innerHTML = '<option value="">-- SELECT SUBJECT --</option>' + 
+        userSelect.innerHTML = '<option value="">-- SELECT SUBJECT --</option>' +
             filtered.map(u => `<option value="${u.twitch_id}">${u.username} (${u.total_cards} CARDS)</option>`).join('');
     };
 
@@ -1096,7 +1179,7 @@ async function openUserGrant(username = null, twitchId = null) {
         if (!selection) return showToast("Please select a card", "error");
 
         const isSilent = document.getElementById('grant-silent').checked;
-        
+
         if (selection.startsWith('random')) {
             const parts = selection.split(':');
             executeGrant(targetTwitchId, targetUsername, 'random', parts[1] || null, isSilent);
@@ -1162,11 +1245,15 @@ async function fetchUserList() {
         if (res.ok) {
             const data = await res.json();
             const users = data.top_collectors || [];
-            
-            container.innerHTML = users.map(u => `
+
+            container.innerHTML = users.map(u => {
+                const avatarHtml = u.avatar_url ?
+                    `<img src="${u.avatar_url}" class="w-10 h-10 rounded-xl border border-white/10 object-cover" onerror="this.outerHTML='<div class=\\'w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20\\'><i class=\\'fa-solid fa-user text-xs\\'></i></div>'">` :
+                    `<div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20"><i class="fa-solid fa-user text-xs"></i></div>`;
+                return `
                 <div class="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-void-accent/30 transition-all">
                     <div class="flex items-center gap-4">
-                        <img src="${u.avatar_url || ''}" class="w-10 h-10 rounded-xl border border-white/10">
+                        ${avatarHtml}
                         <div>
                             <div class="text-[11px] font-black text-white uppercase">${u.username}</div>
                             <div class="text-[9px] text-void-muted uppercase mt-1">Cards: ${u.total_cards} | Unique: ${u.unique_cards}</div>
@@ -1177,8 +1264,8 @@ async function fetchUserList() {
                             Grant
                         </button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
     } catch (err) {
         container.innerHTML = `<div class="p-4 text-center text-red-500 uppercase text-[9px]">Failed to load members</div>`;
@@ -1215,7 +1302,7 @@ function renderAdminLogs(logs) {
     container.innerHTML = logs.map(log => {
         const time = new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const levelClass = log.level === 'error' ? 'text-red-500' : (log.level === 'warn' ? 'text-amber-500' : 'text-void-accent');
-        
+
         return `
             <div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-white/5 transition-colors items-center">
                 <div class="col-span-2 text-[9px] font-mono text-void-muted">${time}</div>
@@ -1249,7 +1336,7 @@ async function openGenericGrant() {
 
 async function toggleUserBlock(twitchId, isBlocked) {
     if (!confirm(`Are you sure you want to ${isBlocked ? 'BLOCK' : 'UNBLOCK'} this user? they will no longer be able to earn cards.`)) return;
-    
+
     showToast("Updating member status...", "loading");
 
     setTimeout(() => {
@@ -1283,7 +1370,7 @@ async function loadSets() {
             renderSetsList();
             populateSetDropdowns();
         }
-    } catch (err) {}
+    } catch (err) { }
 }
 
 function renderSetsList() {
@@ -1314,7 +1401,10 @@ function renderSetsList() {
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="text-[11px] font-black text-white uppercase truncate">${set.name}</div>
-                    <div class="text-[9px] text-void-accent font-bold mt-1 uppercase tracking-widest">${set.total_cards || 0} Units</div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <div class="text-[9px] text-void-accent font-bold uppercase tracking-widest">${set.total_cards || 0} Units</div>
+                        ${set.is_active !== false ? `<span class="text-[7px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">ACTIVE</span>` : `<span class="text-[7px] font-black uppercase tracking-widest text-void-muted bg-white/5 px-1.5 py-0.5 rounded">INACTIVE</span>`}
+                    </div>
                 </div>
                 <button onclick="event.stopPropagation(); deleteSet('${set.id}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-400 p-2">
                     <i class="fa-solid fa-trash-can"></i>
@@ -1371,6 +1461,8 @@ function editSet(setId) {
     document.getElementById('set-name-input').value = set.name;
     document.getElementById('set-description-input').value = set.description || '';
     document.getElementById('set-form-title').textContent = 'Edit Set';
+    const isActiveToggle = document.getElementById('set-is-active');
+    if (isActiveToggle) isActiveToggle.checked = set.is_active !== false; // default true
     const deleteBtn = document.getElementById('set-delete-btn');
     if (deleteBtn) deleteBtn.classList.remove('hidden');
 }
@@ -1379,6 +1471,7 @@ async function saveSet() {
     const name = document.getElementById('set-name-input').value;
     const description = document.getElementById('set-description-input').value;
     const setId = document.getElementById('set-edit-id').value;
+    const isActive = document.getElementById('set-is-active')?.checked ?? true;
 
     if (!name) return showToast("Set name required", "error");
 
@@ -1392,7 +1485,7 @@ async function saveSet() {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': csrfToken
             },
-            body: JSON.stringify({ id: setId || undefined, name, description }),
+            body: JSON.stringify({ id: setId || undefined, name, description, is_active: isActive }),
             credentials: 'include'
         });
 
@@ -1410,26 +1503,23 @@ async function saveSet() {
 }
 
 async function deleteSet(setId) {
-    if (!confirm("Are you sure you want to delete this set?")) return;
-
-    showToast("Deleting set...", "loading");
-
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/sets/${setId}`, {
-            method: 'DELETE',
-            headers: { 'X-CSRF-Token': csrfToken },
-            credentials: 'include'
-        });
-
-        if (res.ok) {
-            showToast("Set deleted", "success");
-            loadSets();
-        } else {
-            showToast("Failed to delete set", "error");
-        }
-    } catch (err) {
-        showToast("Something went wrong", "error");
-    }
+    showConfirmModal(
+        'Delete Set',
+        'Are you sure you want to delete this set? Cards in this set will not be deleted.',
+        async () => {
+            showToast("Deleting set...", "loading");
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/creator/sets/${setId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-Token': csrfToken },
+                    credentials: 'include'
+                });
+                if (res.ok) { showToast("Set deleted", "success"); loadSets(); }
+                else showToast("Failed to delete set", "error");
+            } catch (err) { showToast("Something went wrong", "error"); }
+        },
+        'Delete'
+    );
 }
 
 
@@ -1487,26 +1577,28 @@ async function bulkAssignSet() {
 
 async function bulkDeleteCards() {
     if (selectedCardIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedCardIds.size} cards?`)) return;
-
-    showToast(`Deleting ${selectedCardIds.size} cards...`, "loading");
-
-    try {
-        let success = 0;
-        for (const cardId of selectedCardIds) {
-            const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
-                method: 'DELETE',
-                headers: { 'X-CSRF-Token': csrfToken },
-                credentials: 'include'
-            });
-            if (res.ok) success++;
-        }
-        showToast(`Deleted ${success} cards`, "success");
-        toggleBulkSelect();
-        fetchCardsForGrid('creator-cards-grid');
-    } catch (err) {
-        showToast("Something went wrong", "error");
-    }
+    showConfirmModal(
+        `Delete ${selectedCardIds.size} Cards`,
+        `Are you sure you want to permanently delete ${selectedCardIds.size} selected card(s)? This cannot be undone.`,
+        async () => {
+            showToast(`Deleting ${selectedCardIds.size} cards...`, "loading");
+            try {
+                let success = 0;
+                for (const cardId of selectedCardIds) {
+                    const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRF-Token': csrfToken },
+                        credentials: 'include'
+                    });
+                    if (res.ok) success++;
+                }
+                showToast(`Deleted ${success} cards`, "success");
+                toggleBulkSelect();
+                fetchCardsForGrid('creator-cards-grid');
+            } catch (err) { showToast("Something went wrong", "error"); }
+        },
+        'Delete All'
+    );
 }
 
 
@@ -1609,6 +1701,8 @@ async function saveCard() {
     const setId = document.getElementById('card-creator-set').value;
     const cardId = document.getElementById('card-edit-id').value;
     const imageFile = document.getElementById('card-image-upload')?.files[0];
+    const isBattleable = document.getElementById('card-creator-battleable')?.checked ?? true;
+    const isTradable = document.getElementById('card-creator-tradable')?.checked ?? true;
 
     if (!name) return showToast("Card name required", "error");
 
@@ -1643,7 +1737,9 @@ async function saveCard() {
             attack,
             defense,
             set_id: setId || null,
-            image_url: imageUrl || '/pack.png'
+            image_url: imageUrl || '/pack.png',
+            is_battle_eligible: isBattleable,
+            is_trading_eligible: isTradable
         };
 
         const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
@@ -1704,7 +1800,11 @@ function editCard(cardId) {
     document.getElementById('card-creator-attack').value = card.attack || 0;
     document.getElementById('card-creator-defense').value = card.defense || 0;
     document.getElementById('card-creator-set').value = card.set_id || '';
-    
+    const battleToggle = document.getElementById('card-creator-battleable');
+    if (battleToggle) battleToggle.checked = card.is_battle_eligible !== false;
+    const tradeToggle = document.getElementById('card-creator-tradable');
+    if (tradeToggle) tradeToggle.checked = card.is_trading_eligible !== false;
+
     const preview = document.getElementById('card-image-preview');
     const placeholder = document.getElementById('card-image-placeholder');
     if (card.image_url) {
@@ -1712,7 +1812,7 @@ function editCard(cardId) {
         preview.classList.remove('hidden');
         placeholder.classList.add('hidden');
     }
-    
+
     document.getElementById('card-form-title').textContent = 'Edit Card';
 }
 
@@ -1720,9 +1820,9 @@ function editCard(cardId) {
 async function fetchCardBacks() {
     const grid = document.getElementById('card-backs-grid');
     if (!grid) return;
-    
+
     grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading card backs...</div>';
-    
+
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/card-backs`, { credentials: 'include' });
         if (res.ok) {
@@ -1733,7 +1833,7 @@ async function fetchCardBacks() {
             }
 
         }
-    } catch (e) {}
+    } catch (e) { }
 }
 
 
@@ -1883,11 +1983,17 @@ window.previewCardImage = previewCardImage;
 window.previewSetIcon = previewSetIcon;
 window.switchSubTab = switchSubTab;
 window.resetPackArt = resetPackArt;
+window.confirmResetPackArt = confirmResetPackArt;
+window.showConfirmModal = showConfirmModal;
+window.closeConfirmModal = closeConfirmModal;
+window.copyOBSLink = copyOBSLink;
+window.updateAnimPreview = updateAnimPreview;
+window.closeGrantModal = closeGrantModal;
 window.saveBranding = saveBranding;
 window.toggleBrandingEdit = toggleBrandingEdit;
 window.fetchAdminLogs = fetchAdminLogs;
 window.openGenericGrant = openGenericGrant;
-window.randomizeStats = function() {
+window.randomizeStats = function () {
     const rarity = document.getElementById('card-creator-rarity').value;
     let budget = 6;
     if (rarity === 'rare') budget = 10;
@@ -1902,10 +2008,11 @@ window.randomizeStats = function() {
     document.getElementById('card-creator-defense').value = defense;
     showToast(`Stats randomized (Budget: ${budget})`, "success");
 };
+window.initiateEventPulse = initiateEventPulse;
+window.logout = logout;
 
 window.addEventListener('DOMContentLoaded', () => {
     initDashboard();
     setupCardFilters();
     setupBulkUpload();
 });
-

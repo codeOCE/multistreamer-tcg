@@ -1,5 +1,23 @@
 const BACKEND_URL = window.location.origin; // Use same domain for cookies to work
 
+// --- GLOBAL IMAGE FALLBACK HANDLER ---
+// Catches all 404/broken images even in dynamically inserted HTML
+window.addEventListener('error', function (e) {
+    if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'img') {
+        if (e.target.dataset.fallbackApplied) return; // Prevent infinite loop
+        e.target.dataset.fallbackApplied = 'true';
+
+        // Determine fallback based on visual context (avatar vs card)
+        const isAvatar = e.target.id.includes('avatar') || e.target.className.includes('rounded-full') || e.target.className.includes('rounded-[1.2rem]') || e.target.src.includes('twitchcdn');
+
+        if (isAvatar) {
+            e.target.src = 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback';
+        } else {
+            e.target.src = '/pack.png'; // Main card fallback
+        }
+    }
+}, true); // useCapture = true is strictly required for 'error' events which don't bubble
+
 let APP_STREAMER = null; // Global streamer context
 window.activeStreamerFilter = null; // null = use APP_STREAMER context, 'all' = global binder
 
@@ -20,6 +38,115 @@ let csrfToken = null; // CSRF Token Storage
 const CARD_IMAGE_MAX_BYTES = 8 * 1024 * 1024;   // 8MB
 const CARD_IMAGE_MAX_EDGE_PX = 2000;            // max width or height
 const CARD_IMAGE_WEBP_QUALITY = 0.85;
+
+// --- LANDING MODE MANAGEMENT ---
+const LANDING_COPY = {
+    viewer: {
+        'hero-title': 'SUPPORT.<br>COLLECT.<br><span class="text-void-accent">FLEX.</span>',
+        'hero-subtitle': 'Castle TCG is where streamers and fans collect together. Discover unique cards from your favorite creators and trade with the community to complete your collection.',
+        'hero-secondary-btn': 'View Platform',
+        'login-nav-btn': 'Start Setup',
+        'hero-login-btn': 'Get Started',
+        'how-tagline': 'The Community',
+        'how-title': 'How it Works',
+        'step-1-title': '01. Connect Twitch',
+        'step-1-desc': 'Join the community by linking your Twitch account to start your collecting journey.',
+        'step-2-title': '02. Collect Cards',
+        'step-2-desc': 'Support your favorite streamers and earn rare cards through drops and rewards.',
+        'step-3-title': '03. Trade & Battle',
+        'step-3-desc': 'Trade with friends to complete your sets and battle others to show off your best cards.',
+        'step-1-icon': 'fa-solid fa-link text-xl',
+        'step-2-icon': 'fa-solid fa-layer-group text-xl',
+        'step-3-icon': 'fa-solid fa-repeat text-xl'
+    },
+    streamer: {
+        'hero-title': 'CREATE.<br>REWARD.<br><span class="text-void-accent">GROW.</span>',
+        'hero-subtitle': 'Castle TCG is the ultimate engagement layer for your stream. Create custom digital collectibles, reward your most loyal fans, and watch your community grow.',
+        'hero-secondary-btn': 'Launch Collection',
+        'login-nav-btn': 'Start Setup',
+        'hero-login-btn': 'Start Setup',
+        'how-tagline': 'The Platform',
+        'how-title': 'Streamer Toolkit',
+        'step-1-title': '01. Connect Channel',
+        'step-1-desc': "Link your Twitch channel to get started. We'll automatically sync your rewards and subscriber data.",
+        'step-2-title': '02. Create Cards',
+        'step-2-desc': 'Design and create your own digital cards.',
+        'step-3-title': '03. Automate Drops',
+        'step-3-desc': "Set up automated card drops for subs, bits, and channel points.",
+        'step-1-icon': 'fa-solid fa-plug text-xl',
+        'step-2-icon': 'fa-solid fa-wand-magic-sparkles text-xl',
+        'step-3-icon': 'fa-solid fa-robot text-xl'
+    }
+};
+
+let currentLandingMode = localStorage.getItem('landing-mode') || 'viewer';
+
+function setLandingMode(mode, skipAnimation = false) {
+    if (skipAnimation) {
+        applyLandingMode(mode);
+        return;
+    }
+
+    const sections = document.querySelectorAll('.landing-section');
+
+    // Phase 1: Fade & Slide Out
+    sections.forEach(s => {
+        s.classList.remove('landing-content-in');
+        s.classList.add('landing-content-out');
+    });
+
+    // Phase 2: Swap Content & Fade/Slide In
+    setTimeout(() => {
+        applyLandingMode(mode);
+
+        sections.forEach(s => {
+            s.classList.remove('landing-content-out');
+            void s.offsetWidth; // Force reflow
+            s.classList.add('landing-content-in');
+        });
+
+        // Cleanup
+        setTimeout(() => {
+            sections.forEach(s => s.classList.remove('landing-content-in'));
+        }, 650);
+    }, 300);
+}
+
+function applyLandingMode(mode) {
+    currentLandingMode = mode;
+    localStorage.setItem('landing-mode', mode);
+    document.body.setAttribute('data-landing-mode', mode);
+
+    // Update Toggle UI
+    document.getElementById('mode-viewer-btn')?.classList.toggle('active', mode === 'viewer');
+    document.getElementById('mode-streamer-btn')?.classList.toggle('active', mode === 'streamer');
+
+    const indicator = document.getElementById('mode-indicator');
+    const activeBtn = mode === 'viewer' ? document.getElementById('mode-viewer-btn') : document.getElementById('mode-streamer-btn');
+    if (indicator && activeBtn) {
+        indicator.style.width = `${activeBtn.offsetWidth}px`;
+        indicator.style.left = `${activeBtn.offsetLeft}px`;
+    }
+
+    // Update Content
+    const copy = LANDING_COPY[mode];
+    for (const [id, text] of Object.entries(copy)) {
+        const el = document.getElementById(id);
+        if (el) {
+            if (id.includes('icon')) el.className = text;
+            else if (id.includes('btn')) el.firstChild.textContent = text;
+            else el.innerHTML = text;
+        }
+    }
+
+    // Update CTA actions
+    const secondaryBtn = document.getElementById('hero-secondary-btn');
+    if (secondaryBtn) {
+        secondaryBtn.onclick = mode === 'viewer'
+            ? () => document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })
+            : () => window.location.href = '/onboarding.html';
+    }
+}
 
 /**
  * Process a card image: validate size, resize to max edge, convert to WebP, strip metadata.
@@ -953,6 +1080,9 @@ function hideLanding() {
 // --- AUTH & INIT ---
 async function initializeApp() {
     console.log("[App] initializeApp starting...");
+    if (typeof applyLandingMode === 'function') {
+        applyLandingMode(currentLandingMode);
+    }
     initButtons();
     setupDragAndDrop();
     window.scrollTo(0, 0);
@@ -969,6 +1099,8 @@ async function initializeApp() {
     // View visibility management
     if (routeInfo.view === 'home') {
         showLanding();
+        const centralNav = document.getElementById('central-nav');
+        if (centralNav) { centralNav.classList.add('hidden'); centralNav.classList.remove('flex'); }
     } else if (routeInfo.view === 'hub') {
         const hub = document.getElementById('hub-view');
         if (hub) hub.classList.remove('hidden');
@@ -984,7 +1116,10 @@ async function initializeApp() {
 
         // Dashboard uses the centralized nav
         const centralNav = document.getElementById('central-nav');
-        if (centralNav) centralNav.classList.remove('hidden');
+        if (centralNav) {
+            centralNav.classList.remove('hidden');
+            centralNav.classList.add('flex');
+        }
 
         // Hide all subviews so nothing flashes
         ['collection-view', 'leaderboard-view', 'trading-view', 'creator-dashboard-view', 'admin-view', 'profile-view', 'battle-view'].forEach(id => {
@@ -1175,9 +1310,12 @@ async function initializeApp() {
                 heroBtn.onclick = (e) => { e.preventDefault(); window.location.href = `/${dashSlug}`; };
             }
             if (navBtn) {
-                navBtn.textContent = 'Hub';
+                navBtn.textContent = 'Go to Hub';
                 navBtn.onclick = (e) => { e.preventDefault(); window.location.href = `/${dashSlug}`; };
             }
+            const centralNav = document.getElementById('central-nav');
+            if (centralNav) centralNav.classList.add('hidden');
+
             const navUser = document.getElementById('nav-user-preview');
             const navNick = document.getElementById('nav-username');
             const navImg = document.getElementById('nav-avatar');
@@ -2164,7 +2302,7 @@ async function renderEditorView() {
 
 async function selectEditorSet(setId) {
     editorCurrentSetId = setId;
-    
+
     // Update Sidebar UI
     const items = document.querySelectorAll('[id^="editor-set-item-"]');
     items.forEach(el => {
@@ -2172,7 +2310,7 @@ async function selectEditorSet(setId) {
         el.classList.add('bg-white/5', 'border-white/5', 'text-void-muted');
         const chevron = el.querySelector('.fa-chevron-right');
         if (chevron) chevron.remove();
-        
+
         const title = el.querySelector('.font-black');
         if (title) title.classList.remove('text-white');
     });
@@ -2210,12 +2348,12 @@ async function loadEditorCards() {
         const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
         if (!res.ok) throw new Error('API Error');
         const cards = await res.json();
-        
+
         // Filter by set
         editorAllCards = cards.filter(c => c.set_id === editorCurrentSetId);
-        
+
         document.getElementById('editor-card-count').textContent = `${editorAllCards.length} Cards`;
-        
+
         renderEditorGrid(editorAllCards);
     } catch (e) {
         console.error("[Editor] Error loading cards:", e);
@@ -2302,13 +2440,13 @@ async function updateCardInline(cardId, field, value) {
     }
 }
 
-window.openQuickAddCard = function() {
+window.openQuickAddCard = function () {
     // We leverage the existing card creator modal but set the current set
     const modal = document.getElementById('card-creator-modal');
     if (modal) {
         modal.classList.remove('hidden');
         resetCardCreatorForm();
-        
+
         // Ensure the dropdown for sets is present and set to current
         if (typeof populateSetDropdowns === 'function') {
             populateSetDropdowns();
@@ -2326,16 +2464,16 @@ document.addEventListener('input', e => {
         const queryInput = document.getElementById('editor-card-search');
         const rarityInput = document.getElementById('editor-rarity-filter');
         if (!queryInput || !rarityInput) return;
-        
+
         const query = queryInput.value.toLowerCase();
         const rarity = rarityInput.value;
-        
+
         const filtered = editorAllCards.filter(c => {
             const matchesQuery = c.name.toLowerCase().includes(query) || (c.description && c.description.toLowerCase().includes(query));
             const matchesRarity = !rarity || c.rarity.toLowerCase() === rarity.toLowerCase();
             return matchesQuery && matchesRarity;
         });
-        
+
         renderEditorGrid(filtered);
     }
 });
@@ -2922,11 +3060,42 @@ function closePackManager() {
 }
 
 async function loadPacks() {
-    // TODO: Implement pack loading from API
-    const packsList = document.getElementById('packs-list');
-    if (packsList) {
-        packsList.innerHTML = '<p class="text-sm text-void-muted">No packs yet</p>';
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/creator/packs`, { credentials: 'include' });
+        if (res.ok) {
+            const packs = await res.json();
+            renderPacksList(packs);
+        }
+    } catch (err) {
+        console.error('Failed to load packs:', err);
     }
+}
+
+function renderPacksList(packs) {
+    const packsList = document.getElementById('packs-list');
+    if (!packsList) return;
+
+    if (!packs || packs.length === 0) {
+        packsList.innerHTML = '<p class="text-xs text-void-muted uppercase tracking-widest font-bold text-center py-4">No packs created yet</p>';
+        return;
+    }
+
+    packsList.innerHTML = packs.map(pack => `
+        <div class="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl group hover:border-void-accent/30 transition-all">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
+                    <i class="fa-solid fa-box-open text-xs"></i>
+                </div>
+                <div>
+                    <div class="text-[11px] font-black uppercase text-white">${pack.name}</div>
+                    <div class="text-[8px] font-bold text-void-muted uppercase tracking-widest">${pack.code || 'TCG'} • ${pack.is_active ? 'Active' : 'Inactive'}</div>
+                </div>
+            </div>
+            <button onclick="editPack('${pack.id}')" class="opacity-0 group-hover:opacity-100 p-2 text-void-accent hover:text-white transition-all">
+                <i class="fa-solid fa-pen-to-square text-xs"></i>
+            </button>
+        </div>
+    `).join('');
 }
 
 async function createPack() {
@@ -2938,7 +3107,7 @@ async function createPack() {
         return;
     }
 
-    showToast("Creating pack...", "loading");
+    showToast(editingPackId ? "Updating pack..." : "Creating pack...", "loading");
 
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/packs`, {
@@ -2947,20 +3116,41 @@ async function createPack() {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': csrfToken
             },
-            body: JSON.stringify({ name, cost }),
+            body: JSON.stringify({ id: editingPackId, name, cost }),
             credentials: 'include'
         });
 
         if (res.ok) {
-            showToast("Pack created!", "success");
+            showToast(editingPackId ? "Pack updated!" : "Pack created!", "success");
             document.getElementById('new-pack-name').value = '';
             document.getElementById('new-pack-cost').value = '';
+            editingPackId = null;
+            const btn = document.querySelector('button[onclick="createPack()"]');
+            if (btn) btn.textContent = 'Create Pack';
             loadPacks();
         } else {
-            showToast("Failed to create pack", "error");
+            showToast("Failed to save pack", "error");
         }
     } catch (err) {
         showToast("Connection error", "error");
+    }
+}
+
+let editingPackId = null;
+
+function editPack(packId) {
+    // In a real app, we'd fetch the pack details or find it in a local cache
+    // For now, we'll just toggle the UI to an edit state if we had one
+    // But since the current UI only has a 'Create' form, we'll just populate it
+    const packsList = document.getElementById('packs-list');
+    const packDiv = Array.from(packsList.children).find(div => div.outerHTML.includes(`editPack('${packId}')`));
+    if (packDiv) {
+        const name = packDiv.querySelector('.text-\\[11px\\]').textContent;
+        document.getElementById('new-pack-name').value = name;
+        editingPackId = packId;
+        // Change button text to indicate update
+        const btn = document.querySelector('button[onclick="createPack()"]');
+        if (btn) btn.textContent = 'Update Pack';
     }
 }
 
@@ -7520,10 +7710,12 @@ function renderBattlesLeaderboard() {
 
     if (battlesData.length === 0) {
         list.innerHTML = `
-                <div class="text-center py-12">
-                    <div class="text-4xl mb-3">⚔️</div>
-                    <div class="text-gray-400 text-sm">No battles fought yet!</div>
-                    <div class="text-gray-600 text-xs mt-1">Be the first to challenge someone!</div>
+                <div class="p-12 text-center flex flex-col items-center justify-center space-y-4 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
+                    <div class="w-16 h-16 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2">
+                        <i class="fa-solid fa-khanda"></i>
+                    </div>
+                    <h3 class="text-xl font-black uppercase text-void-text tracking-widest italic">No Battles Fought</h3>
+                    <p class="text-void-muted text-xs">Be the first to challenge a rival and climb the ranks!</p>
                 </div>
             `;
         return;
@@ -8493,17 +8685,32 @@ function renderBinder() {
         document.getElementById('prev-page-btn').disabled = currentPage === 1;
         document.getElementById('next-page-btn').disabled = currentPage === totalPages;
 
-        for (let i = 0; i < ITEMS_PER_PAGE; i++) {
-            const card = filteredCards[start + i];
-            const div = document.createElement('div');
-            div.className = 'binder-slot relative aspect-[5/7] w-full';
+        if (filteredCards.length === 0) {
+            grid.innerHTML = `
+                    <div class="col-span-full py-20 text-center flex flex-col items-center justify-center space-y-4">
+                        <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2">
+                            <i class="fa-solid fa-ghost"></i>
+                        </div>
+                        <h3 class="text-xl font-black uppercase text-void-text tracking-widest">No Cards Found</h3>
+                        <p class="text-void-muted text-xs">There are no cards matching your current filters in this binder.</p>
+                    </div>
+                `;
+            document.getElementById('page-indicator').innerText = `All Cards`;
+            document.getElementById('prev-page-btn').disabled = true;
+            document.getElementById('next-page-btn').disabled = true;
+        } else {
+            for (let i = 0; i < ITEMS_PER_PAGE; i++) {
+                const card = filteredCards[start + i];
+                const div = document.createElement('div');
+                div.className = 'binder-slot relative aspect-[5/7] w-full';
 
-            if (card) {
-                renderCardInSlot(div, card);
-            } else {
-                div.innerHTML = `<div class="absolute inset-0 flex items-center justify-center bg-void-bg/20 rounded-md border border-white/5 border-dashed"><i class="fa-solid fa-layer-group text-3xl text-white/5 select-none"></i></div>`;
+                if (card) {
+                    renderCardInSlot(div, card);
+                } else {
+                    div.innerHTML = `<div class="absolute inset-0 flex items-center justify-center bg-void-bg/20 rounded-md border border-white/5 border-dashed"><i class="fa-solid fa-layer-group text-3xl text-white/5 select-none"></i></div>`;
+                }
+                grid.appendChild(div);
             }
-            grid.appendChild(div);
         }
     }
 
@@ -8980,7 +9187,15 @@ if (upgradeSubTab) upgradeSubTab.onclick = () => switchTradingSubTab('upgrade');
 function renderTrades() {
     const list = document.getElementById('trade-list');
     if (trades.length === 0) {
-        list.innerHTML = '<div class="text-center text-gray-500 py-20">No active trades.</div>';
+        list.innerHTML = `
+            <div class="p-16 text-center flex flex-col items-center justify-center space-y-4 bg-white/[0.02] border border-white/5 border-dashed rounded-[3rem]">
+                <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2 hover:rotate-12 transition-transform">
+                    <i class="fa-solid fa-handshake-angle"></i>
+                </div>
+                <h3 class="text-xl font-black uppercase text-void-text tracking-widest italic">No Active Trades</h3>
+                <p class="text-void-muted text-xs">Initiate a trade from the 'All Cards' binder view, or check back later for offers.</p>
+            </div>
+        `;
         return;
     }
 
@@ -9885,9 +10100,9 @@ const LAYER_EDITOR_W = 500;
 const LAYER_EDITOR_H = 700;
 
 const LAYER_STICKERS = [
-    '😀','😎','🔥','💎','⚡','🌟','🎮','🃏','⚔️','🛡️','🎯','💫',
-    '🌈','🏆','👑','🐉','🦋','🌸','💜','🚀','🎉','🦊','🌙','❄️',
-    '💥','👾','🎸','🦁','🐺','🐸'
+    '😀', '😎', '🔥', '💎', '⚡', '🌟', '🎮', '🃏', '⚔️', '🛡️', '🎯', '💫',
+    '🌈', '🏆', '👑', '🐉', '🦋', '🌸', '💜', '🚀', '🎉', '🦊', '🌙', '❄️',
+    '💥', '👾', '🎸', '🦁', '🐺', '🐸'
 ];
 
 let _layerFabric = null;
@@ -10073,7 +10288,7 @@ function _initLayerEditorEvents() {
 }
 
 // ── Tool Management ───────────────────────────────────────────
-window.setLayerEditorTool = function(tool) {
+window.setLayerEditorTool = function (tool) {
     _layerCurrentTool = tool;
     const c = _layerFabric;
     if (!c) return;
@@ -10134,12 +10349,12 @@ window.setLayerEditorTool = function(tool) {
 };
 
 // ── Add shapes / images / stickers ───────────────────────────
-window.layerEditorAddImage = function() {
+window.layerEditorAddImage = function () {
     const input = document.getElementById('layer-editor-image-input');
     if (input) input.click();
 };
 
-window.layerEditorAddShape = function(type) {
+window.layerEditorAddShape = function (type) {
     if (!_layerFabric) return;
     let shape;
     const cx = LAYER_EDITOR_W / 2, cy = LAYER_EDITOR_H / 2;
@@ -10158,7 +10373,7 @@ window.layerEditorAddShape = function(type) {
     setLayerEditorTool('select');
 };
 
-window.layerEditorAddSticker = function(emoji) {
+window.layerEditorAddSticker = function (emoji) {
     if (!_layerFabric) return;
     const t = new fabric.Text(emoji, { left: LAYER_EDITOR_W / 2, top: LAYER_EDITOR_H / 2, originX: 'center', originY: 'center', fontSize: 80 });
     t.data = { layerName: emoji + ' Sticker', layerType: 'sticker' };
@@ -10171,11 +10386,11 @@ window.layerEditorAddSticker = function(emoji) {
     setLayerEditorTool('select');
 };
 
-window.toggleLayerEditorStickerPicker = function() {
+window.toggleLayerEditorStickerPicker = function () {
     document.getElementById('layer-editor-sticker-picker').classList.toggle('hidden');
 };
 
-window.layerEditorDeleteSelected = function() {
+window.layerEditorDeleteSelected = function () {
     const c = _layerFabric;
     if (!c) return;
     const objs = c.getActiveObjects();
@@ -10197,7 +10412,7 @@ function _lePushHistory() {
     else _layerHistoryIdx++;
 }
 
-window.undoLayerEditor = function() {
+window.undoLayerEditor = function () {
     if (_layerHistoryIdx <= 0 || !_layerFabric) return;
     _layerHistoryIdx--;
     _layerHistoryPaused = true;
@@ -10208,7 +10423,7 @@ window.undoLayerEditor = function() {
     });
 };
 
-window.redoLayerEditor = function() {
+window.redoLayerEditor = function () {
     if (_layerHistoryIdx >= _layerHistory.length - 1 || !_layerFabric) return;
     _layerHistoryIdx++;
     _layerHistoryPaused = true;
@@ -10268,7 +10483,7 @@ function _renderLayerList() {
     });
 }
 
-window._leSelectLayer = function(fabricIdx) {
+window._leSelectLayer = function (fabricIdx) {
     if (!_layerFabric) return;
     const objs = _layerFabric.getObjects();
     if (fabricIdx >= 0 && fabricIdx < objs.length) {
@@ -10279,7 +10494,7 @@ window._leSelectLayer = function(fabricIdx) {
     }
 };
 
-window._leToggleVis = function(fabricIdx) {
+window._leToggleVis = function (fabricIdx) {
     if (!_layerFabric) return;
     const obj = _layerFabric.getObjects()[fabricIdx];
     if (obj) { obj.visible = !obj.visible; _layerFabric.renderAll(); _renderLayerList(); }
@@ -10331,8 +10546,8 @@ function _renderPropsPanel(obj) {
         <div class="le-prop-row">
             <label class="le-prop-label">Font</label>
             <select onchange="_leSetProp('fontFamily', this.value)">
-                ${['Arial','Georgia','Impact','Courier New','Verdana','Trebuchet MS','Times New Roman','Palatino','Garamond','Comic Sans MS'].map(f =>
-                    `<option value="${f}" ${(obj.fontFamily || 'Arial') === f ? 'selected' : ''}>${f}</option>`).join('')}
+                ${['Arial', 'Georgia', 'Impact', 'Courier New', 'Verdana', 'Trebuchet MS', 'Times New Roman', 'Palatino', 'Garamond', 'Comic Sans MS'].map(f =>
+            `<option value="${f}" ${(obj.fontFamily || 'Arial') === f ? 'selected' : ''}>${f}</option>`).join('')}
             </select>
         </div>
         <div class="le-prop-btn-row">
@@ -10399,7 +10614,7 @@ function _leBrushPropsHTML() {
     </div>`;
 }
 
-window._leSetBrushMode = function(mode) {
+window._leSetBrushMode = function (mode) {
     if (!_layerFabric) return;
     if (mode === 'eraser') {
         _layerFabric.freeDrawingBrush.color = _layerFabric.backgroundColor || '#1a1025';
@@ -10411,21 +10626,21 @@ window._leSetBrushMode = function(mode) {
 };
 
 // ── Prop helpers ──────────────────────────────────────────────
-window._leSetProp = function(prop, value) {
+window._leSetProp = function (prop, value) {
     const obj = _layerFabric?.getActiveObject();
     if (!obj) return;
     obj.set(prop, value);
     _layerFabric.renderAll();
 };
 
-window._leToggleProp = function(prop, onVal, offVal) {
+window._leToggleProp = function (prop, onVal, offVal) {
     const obj = _layerFabric?.getActiveObject();
     if (!obj) return;
     obj.set(prop, obj[prop] === onVal ? offVal : onVal);
     _layerFabric.renderAll();
 };
 
-window._leFlip = function(axis) {
+window._leFlip = function (axis) {
     const obj = _layerFabric?.getActiveObject();
     if (!obj) return;
     obj.set(axis === 'X' ? 'flipX' : 'flipY', !obj[axis === 'X' ? 'flipX' : 'flipY']);
@@ -10440,7 +10655,7 @@ function _leColorHex(color, fallback) {
 }
 
 // ── Save ──────────────────────────────────────────────────────
-window.saveLayerEditor = async function() {
+window.saveLayerEditor = async function () {
     if (!_layerFabric) return;
     const btn = document.getElementById('layer-editor-save-btn');
     if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
@@ -10503,7 +10718,7 @@ async function _leUploadAndPatchCard(cardId, blob) {
 }
 
 // ── Open from editor grid ─────────────────────────────────────
-window.openLayerEditorForCard = function(cardId) {
+window.openLayerEditorForCard = function (cardId) {
     const card = editorAllCards.find(c => c.id === cardId);
     if (!card) return;
     openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob) => {

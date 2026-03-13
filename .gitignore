@@ -13,6 +13,8 @@ dist/
 # Custom Project Folders
 /not needed/
 tests/output/
+/migrations/
+/migration-package/
 
 # OS/Editor Files
 .DS_Store

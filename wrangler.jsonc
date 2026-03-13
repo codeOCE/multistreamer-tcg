@@ -8,8 +8,8 @@
 	},
 	"r2_buckets": [
 		{
-			"bucket_name": "multistreamer-tcg-cards",
-			"binding": "multistreamer_tcg_cards"
+			"binding": "multistreamer_tcg_cards",
+			"bucket_name": "multistreamer-tcg-cards"
 		},
 		{
 			"binding": "CARD_IMAGES",

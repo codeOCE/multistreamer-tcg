@@ -254,8 +254,9 @@
         const urlParams = new URLSearchParams(window.location.search);
         const STREAMER = urlParams.get('streamer');
         const TOKEN = urlParams.get('token');
+        const PREVIEW_STYLE = urlParams.get('preview');
 
-        if (!STREAMER || !TOKEN) {
+        if (!STREAMER && !PREVIEW_STYLE) {
             document.body.style.cssText = 'background:rgba(0,0,0,.9)';
             document.body.innerHTML = '<p style="color:white;padding:24px;font-family:sans-serif">⛔ Invalid overlay URL. Missing streamer or token parameter.</p>';
             throw new Error('Missing streamer or token');
@@ -265,6 +266,16 @@
         let streamerConfig = null;
 
         async function initOverlay() {
+            if (PREVIEW_STYLE) {
+                streamerConfig = { pack_animation_style: PREVIEW_STYLE };
+                // Start a preview loop
+                setInterval(() => {
+                    playReveal({ image_url: '/pack.png', user_card_id: 'mock_preview' });
+                }, 8000);
+                setTimeout(() => playReveal({ image_url: '/pack.png', user_card_id: 'mock_preview' }), 500);
+                return;
+            }
+
             try {
                 // Fetch streamer config for branding
                 const res = await fetch(`${API_URL}/api/streamer/config?streamer=${STREAMER}`);
@@ -360,7 +371,9 @@
             audio.load();
 
             // ── CONSUME IMMEDIATELY ──
-            fetch(`${API_URL}/api/obs/consume?streamer=${STREAMER}&token=${TOKEN}&id=${card.user_card_id}`, { method: 'POST' });
+            if (!PREVIEW_STYLE) {
+                fetch(`${API_URL}/api/obs/consume?streamer=${STREAMER}&token=${TOKEN}&id=${card.user_card_id}`, { method: 'POST' });
+            }
 
             // ── RESET visual state ──
             scene.style.opacity = '0';

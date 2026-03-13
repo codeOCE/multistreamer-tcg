@@ -5,6 +5,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Castle TCG | Collect. Trade. Flex.</title>
+    <meta name="description" content="Castle TCG is the ultimate digital collectible platform for streamers and fans. Collect unique cards from your favorite creators, trade with the community, and flex your collection.">
+    <meta name="keywords" content="TCG, Streamer, Twitch, Collectibles, Trading Cards, Digital Assets, Gaming">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://multistreamer-tcg.codeoce.workers.dev/">
+    <meta property="og:title" content="Castle TCG | Collect. Trade. Flex.">
+    <meta property="og:description" content="The ultimate digital collectible platform for streamers and fans.">
+    <meta property="og:image" content="https://multistreamer-tcg.codeoce.workers.dev/social-preview.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://multistreamer-tcg.codeoce.workers.dev/">
+    <meta property="twitter:title" content="Castle TCG | Collect. Trade. Flex.">
+    <meta property="twitter:description" content="The ultimate digital collectible platform for streamers and fans.">
+    <meta property="twitter:image" content="https://multistreamer-tcg.codeoce.workers.dev/social-preview.png">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -107,9 +123,22 @@
                     </div>
                 </div>
 
+                <!-- LANDING MODE TOGGLE -->
+                <div id="landing-mode-toggle" class="relative flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md ml-4">
+                    <button onclick="setLandingMode('viewer')" id="mode-viewer-btn"
+                        class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
+                        I am a Viewer
+                    </button>
+                    <button onclick="setLandingMode('streamer')" id="mode-streamer-btn"
+                        class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
+                        I am a Streamer
+                    </button>
+                    <div id="mode-indicator" class="absolute h-[calc(100%-8px)] rounded-xl bg-void-accent/20 transition-all duration-500 ease-premium"></div>
+                </div>
+
                 <!-- CENTRALIZED NAVIGATION (PREMIUM STYLE) -->
                 <div id="central-nav"
-                    class="hidden lg:flex items-center bg-white/[0.04] border border-white/5 p-1.5 rounded-3xl shadow-2xl backdrop-blur-md">
+                    class="hidden items-center bg-white/[0.04] border border-white/5 p-1.5 rounded-3xl shadow-2xl backdrop-blur-md">
                     <button onclick="switchView('collection')" id="nav-collection-btn"
                         class="nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all active rounded-2xl border-none outline-none">
                         Collection
@@ -171,14 +200,14 @@
             style="display:none">
             <!-- Hero Content (Left) -->
             <div class="w-full lg:w-1/2 space-y-10 void-fade text-left z-10" style="animation-delay: 0.1s">
-                <h1
+                <h1 id="hero-title"
                     class="text-6xl md:text-8xl lg:text-[120px] xl:text-[140px] font-display font-black text-void-text leading-[0.8] tracking-tighter uppercase italic">
                     SUPPORT.<br>COLLECT.<br><span class="text-void-accent">FLEX.</span>
                 </h1>
 
-                <p class="text-lg md:text-xl text-void-muted font-medium max-w-xl leading-relaxed">
-                    Castle TCG is a tactical TCG repository. Collectors design and trade custom digital assets built
-                    on the streamer's original matrix.
+                <p id="hero-subtitle" class="text-lg md:text-xl text-void-muted font-medium max-w-xl leading-relaxed">
+                    Castle TCG is where streamers and fans collect together. Discover unique cards from your favorite
+                    creators and trade with the community to complete your collection.
                 </p>
 
                 <div class="flex flex-col sm:flex-row gap-5 items-center justify-start pt-6">
@@ -186,7 +215,7 @@
                         class="saas-button px-12 py-5 text-[12px] uppercase tracking-widest w-full sm:w-auto rounded-xl">
                         Get Started
                     </button>
-                    <button onclick="document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })"
+                    <button id="hero-secondary-btn" onclick="document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })"
                         class="saas-button saas-button-secondary px-12 py-5 text-[12px] uppercase tracking-widest w-full sm:w-auto rounded-xl">
                         View Platform
                     </button>
@@ -244,10 +273,10 @@
         <section id="how-it-works" class="landing-section py-40 px-8 max-w-7xl mx-auto void-fade relative"
             style="display:none">
             <div class="text-center space-y-6 mb-32">
-                <div class="text-[11px] font-black text-void-accent uppercase tracking-[0.4em]">The Engine</div>
-                <h2
+                <div id="how-tagline" class="text-[11px] font-black text-void-accent uppercase tracking-[0.4em]">The Community</div>
+                <h2 id="how-title"
                     class="text-6xl md:text-7xl font-display font-black text-void-text uppercase italic tracking-tighter">
-                    The Platform</h2>
+                    How it Works</h2>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -255,153 +284,70 @@
                 <div class="p-10 glass-panel rounded-3xl group hover:bg-void-accent/5 transition-all">
                     <div
                         class="w-14 h-14 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent mb-8 group-hover:scale-110 group-hover:bg-void-accent group-hover:text-void-bg transition-all duration-500">
-                        <i class="fa-solid fa-link text-xl"></i>
+                        <i id="step-1-icon" class="fa-solid fa-link text-xl"></i>
                     </div>
-                    <h3 class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">01. Sync Identity
-                    </h3>
-                    <p class="text-void-muted leading-relaxed font-medium text-sm">Connect your Twitch account to
-                        initialize your global card profile and link your community legacy.</p>
+                    <h3 id="step-1-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">01. Connect Twitch</h3>
+                    <p id="step-1-desc" class="text-void-muted leading-relaxed font-medium text-sm">Join the community by linking your Twitch account to start your collecting journey.</p>
                 </div>
 
                 <!-- Step 2 -->
                 <div class="p-10 glass-panel rounded-3xl group hover:bg-void-accent/5 transition-all">
                     <div
                         class="w-14 h-14 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent mb-8 group-hover:scale-110 group-hover:bg-void-accent group-hover:text-void-bg transition-all duration-500">
-                        <i class="fa-solid fa-layer-group text-xl"></i>
+                        <i id="step-2-icon" class="fa-solid fa-layer-group text-xl"></i>
                     </div>
-                    <h3 class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">02. Claim Vault
-                    </h3>
-                    <p class="text-void-muted leading-relaxed font-medium text-sm">Collect cards from your favorite
-                        streamers. Every card is a verified piece of history in your vault.</p>
+                    <h3 id="step-2-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">02. Collect Cards</h3>
+                    <p id="step-2-desc" class="text-void-muted leading-relaxed font-medium text-sm">Support your favorite streamers and earn rare cards through drops and rewards.</p>
                 </div>
 
                 <!-- Step 3 -->
                 <div class="p-10 glass-panel rounded-3xl group hover:bg-void-accent/5 transition-all">
                     <div
                         class="w-14 h-14 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent mb-8 group-hover:scale-110 group-hover:bg-void-accent group-hover:text-void-bg transition-all duration-500">
-                        <i class="fa-solid fa-repeat text-xl"></i>
+                        <i id="step-3-icon" class="fa-solid fa-repeat text-xl"></i>
                     </div>
-                    <h3 class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">03. Trade Assets
-                    </h3>
-                    <p class="text-void-muted leading-relaxed font-medium text-sm">Trade with the global community to
-                        complete your sets. Negotiate and climb the global rankings.</p>
+                    <h3 id="step-3-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">03. Trade & Battle</h3>
+                    <p id="step-3-desc" class="text-void-muted leading-relaxed font-medium text-sm">Trade with friends to complete your sets and battle others to show off your best cards.</p>
                 </div>
             </div>
 
-            <!-- Platform Stats -->
-            <div
-                class="mt-32 grid grid-cols-2 lg:grid-cols-4 gap-8 p-12 glass-panel rounded-[3rem] border-void-accent/10">
-                <div class="text-center space-y-2">
-                    <div class="text-4xl font-display font-black text-void-text">14.2K</div>
-                    <div class="text-[10px] font-bold text-void-accent uppercase tracking-widest">Active Players</div>
-                </div>
-                <div class="text-center space-y-2 border-l border-white/5">
-                    <div class="text-4xl font-display font-black text-void-text">89.4K</div>
-                    <div class="text-[10px] font-bold text-void-accent uppercase tracking-widest">Cards Minted</div>
-                </div>
-                <div class="text-center space-y-2 border-l border-white/5">
-                    <div class="text-4xl font-display font-black text-void-text">1.2K+</div>
-                    <div class="text-[10px] font-bold text-void-accent uppercase tracking-widest">Live Channels</div>
-                </div>
-                <div class="text-center space-y-2 border-l border-white/5">
-                    <div class="text-4xl font-display font-black text-void-text">$10M+</div>
-                    <div class="text-[10px] font-bold text-void-accent uppercase tracking-widest">Trade Volume</div>
-                </div>
-            </div>
         </section>
 
 
-        <!-- BECOME A CREATOR CTA -->
-        <section class="landing-section py-32 px-8 max-w-5xl mx-auto void-fade" style="display:none">
-            <div
-                class="glass-panel p-12 rounded-[3rem] border border-void-accent/20 flex flex-col md:flex-row items-center justify-between gap-10">
-                <div class="space-y-4 text-center md:text-left">
-                    <h2 class="text-4xl font-display font-black text-void-text uppercase italic tracking-tighter">Are
-                        you a Streamer?</h2>
-                    <p class="text-void-muted font-medium max-w-md">Launch your own digital card collection and monetize
-                        your community with automated Channel Point drops.</p>
-                </div>
-                <button onclick="window.location.href='/onboarding.html'"
-                    class="btn-void px-12 py-5 rounded-2xl whitespace-nowrap">
-                    Launch Collection <i class="fa-solid fa-rocket ml-2"></i>
-                </button>
-            </div>
-        </section>
 
         <!-- FOOTER -->
-        <footer class="landing-section py-20 px-8 border-t border-white/5 bg-void-bg-alt/10 backdrop-blur-3xl"
+        <footer class="landing-section py-12 px-8 border-t border-white/5 bg-void-bg-alt/10 backdrop-blur-3xl"
             style="display:none">
-            <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-16">
-                <!-- Branding -->
-                <div class="col-span-1 md:col-span-1 space-y-6">
-                        <div class="flex items-center gap-3">
-                        <div
-                            class="w-8 h-8 rounded-lg bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent">
-                            <i class="fa-solid fa-chess-rook text-sm"></i>
-                        </div>
-                        <span
-                            class="text-sm font-display font-black uppercase tracking-tight text-void-text">Castle<span
-                                class="text-void-accent">TCG</span></span>
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-8 h-8 rounded-lg bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent">
+                        <i class="fa-solid fa-chess-rook text-sm"></i>
                     </div>
-                    <p class="text-xs text-void-muted leading-relaxed">
-                        The definitive digital collectible platform for creators and their most loyal communities.
-                        Engineered for scale, built for obsession., pure legacy.
-                    </p>
-                    <div class="flex gap-4">
-                        <a href="#" class="text-void-muted hover:text-void-accent transition-colors"><i
-                                class="fa-brands fa-twitter"></i></a>
-                        <a href="#" class="text-void-muted hover:text-void-accent transition-colors"><i
-                                class="fa-brands fa-discord"></i></a>
-                        <a href="#" class="text-void-muted hover:text-void-accent transition-colors"><i
-                                class="fa-brands fa-twitch"></i></a>
+                    <span class="text-sm font-display font-black uppercase tracking-tight text-void-text">Castle<span
+                            class="text-void-accent">TCG</span></span>
+                </div>
+
+                <div class="flex flex-col items-center gap-2">
+                    <div class="text-[10px] font-bold text-void-muted uppercase tracking-[0.2em] text-center">
+                        &copy; 2026 CASTLE TCG. ALL RIGHTS RESERVED.
+                    </div>
+                    <div class="flex gap-4 text-[9px] font-black uppercase tracking-widest text-void-muted/50">
+                        <a href="#" class="hover:text-void-accent transition-all">Privacy Policy</a>
+                        <span class="opacity-20">•</span>
+                        <a href="#" class="hover:text-void-accent transition-all">Terms of Service</a>
                     </div>
                 </div>
 
-                <!-- Product -->
-                <div class="space-y-6">
-                    <h4 class="text-[10px] font-black uppercase tracking-widest text-void-text">Platform</h4>
-                    <nav class="flex flex-col gap-3">
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Dashboard
-                            Entry</a>
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Platform
-                            Exchange</a>
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Global
-                            Archive</a>
-                    </nav>
-                </div>
-
-                <!-- Creators -->
-                <div class="space-y-6">
-                    <h4 class="text-[10px] font-black uppercase tracking-widest text-void-text">Creators</h4>
-                    <nav class="flex flex-col gap-3">
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Onboarding
-                            Wizard</a>
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Asset
-                            Management</a>
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Creator
-                            Portal</a>
-                    </nav>
-                </div>
-
-                <!-- Legal -->
-                <div class="space-y-6">
-                    <h4 class="text-[10px] font-black uppercase tracking-widest text-void-text">Platform</h4>
-                    <nav class="flex flex-col gap-3">
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Privacy
-                            Policy</a>
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Terms of
-                            Service</a>
-                        <a href="#" class="text-xs text-void-muted hover:text-void-accent transition-colors">Support
-                            Terminal</a>
-                    </nav>
-                </div>
-            </div>
-            <div
-                class="max-w-7xl mx-auto mt-20 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] font-bold text-void-muted uppercase tracking-widest">
-                <p>&copy; 2026 CASTLE TCG. ALL RIGHTS RESERVED.</p>
-                <div class="flex gap-8">
-                    <span>BUILD 2.4.0_STABLE</span>
-                    <span class="text-void-accent">SYSTEM: ONLINE</span>
+                <!-- Socials -->
+                <div class="flex gap-6 items-center">
+                    <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
+                            class="fa-brands fa-x-twitter text-lg"></i></a>
+                    <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
+                            class="fa-brands fa-discord text-lg"></i></a>
+                    <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
+                            class="fa-brands fa-tiktok text-lg"></i></a>
                 </div>
             </div>
         </footer>
@@ -430,7 +376,7 @@
                         class="w-16 h-16 rounded-full border-4 border-void-accent/20 border-t-void-accent animate-spin">
                     </div>
                     <p class="text-void-muted font-black uppercase tracking-widest text-[10px] animate-pulse">Syncing
-                        Network Flux...</p>
+                        Creator Data...</p>
                 </div>
 
                 <!-- Sections will be rendered here dynamically -->
@@ -1600,7 +1546,8 @@
                         <div class="w-full lg:w-72 shrink-0 space-y-6">
                             <div class="flex items-center justify-between">
                                 <h3 class="text-xl font-black uppercase italic tracking-tight">Sets</h3>
-                                <button onclick="openSetManager()" class="text-void-accent hover:text-void-accent-glow transition-all">
+                                <button onclick="openSetManager()"
+                                    class="text-void-accent hover:text-void-accent-glow transition-all">
                                     <i class="fa-solid fa-plus-circle text-lg"></i>
                                 </button>
                             </div>
@@ -1613,11 +1560,16 @@
                         <div class="flex-1 space-y-6">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-4">
-                                    <h3 id="editor-current-set-title" class="text-2xl font-black uppercase italic tracking-tight text-void-accent">Select a Set</h3>
-                                    <span id="editor-card-count" class="px-2 py-0.5 rounded bg-white/5 text-[10px] font-black text-void-muted uppercase">0 Cards</span>
+                                    <h3 id="editor-current-set-title"
+                                        class="text-2xl font-black uppercase italic tracking-tight text-void-accent">
+                                        Select a Set</h3>
+                                    <span id="editor-card-count"
+                                        class="px-2 py-0.5 rounded bg-white/5 text-[10px] font-black text-void-muted uppercase">0
+                                        Cards</span>
                                 </div>
                                 <div class="flex gap-3">
-                                    <button onclick="openQuickAddCard()" class="px-6 py-2.5 bg-void-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-void-accent-glow transition-all shadow-lg shadow-void-accent/20">
+                                    <button onclick="openQuickAddCard()"
+                                        class="px-6 py-2.5 bg-void-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-void-accent-glow transition-all shadow-lg shadow-void-accent/20">
                                         <i class="fa-solid fa-plus mr-2"></i>Quick Add
                                     </button>
                                 </div>
@@ -1626,10 +1578,13 @@
                             <!-- Card View Filters -->
                             <div class="flex items-center gap-4 py-4 border-y border-white/5">
                                 <div class="flex-1 relative">
-                                    <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-void-muted text-xs"></i>
-                                    <input type="text" id="editor-card-search" placeholder="Search in set..." class="w-full bg-white/5 border border-white/5 rounded-xl pl-10 pr-4 py-2 text-xs focus:border-void-accent transition-all">
+                                    <i
+                                        class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-void-muted text-xs"></i>
+                                    <input type="text" id="editor-card-search" placeholder="Search in set..."
+                                        class="w-full bg-white/5 border border-white/5 rounded-xl pl-10 pr-4 py-2 text-xs focus:border-void-accent transition-all">
                                 </div>
-                                <select id="editor-rarity-filter" class="bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-xs font-bold focus:border-void-accent transition-all">
+                                <select id="editor-rarity-filter"
+                                    class="bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-xs font-bold focus:border-void-accent transition-all">
                                     <option value="">All Rarities</option>
                                     <option value="Common">Common</option>
                                     <option value="Uncommon">Uncommon</option>
@@ -1639,7 +1594,8 @@
                                 </select>
                             </div>
 
-                            <div id="editor-card-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                            <div id="editor-card-grid"
+                                class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                                 <!-- Populated by JS -->
                             </div>
                         </div>
@@ -1861,7 +1817,8 @@
                     <div class="space-y-1">
                         <div id="card-detail-genesis-mechanic-name"
                             class="text-[10px] font-black uppercase tracking-[0.2em] text-void-accent">Genesis</div>
-                        <p id="card-detail-genesis-mechanic-desc" class="text-sm text-void-muted leading-relaxed font-light">
+                        <p id="card-detail-genesis-mechanic-desc"
+                            class="text-sm text-void-muted leading-relaxed font-light">
                             Description...</p>
                     </div>
                 </div>
@@ -2105,7 +2062,8 @@
                     <div class="glass-panel rounded-2xl border border-white/5 p-6 space-y-4">
                         <label class="text-[10px] font-black uppercase tracking-[0.3em] text-void-muted">Collection
                             Name</label>
-                        <input id="setup-collection-name" type="text" maxlength="50" placeholder="e.g., Lilypad Legends"
+                        <input id="setup-collection-name" type="text" maxlength="50"
+                            placeholder="e.g., My TCG Collection"
                             class="w-full bg-void-bg border border-white/5 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent focus:ring-1 ring-void-accent transition-all">
                         <p class="text-xs text-void-muted">This is what viewers will see as the title of your
                             collection.</p>
@@ -2593,7 +2551,8 @@
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-            <p class="text-xs text-void-muted">Drag to position, zoom, adjust lighting, and apply filters. The frame is your card (5:7).</p>
+            <p class="text-xs text-void-muted">Drag to position, zoom, adjust lighting, and apply filters. The frame is
+                your card (5:7).</p>
             <!-- TCG card frame -->
             <div id="card-crop-frame"
                 class="relative w-full aspect-[5/7] rounded-xl overflow-hidden bg-void-bg border-2 border-void-accent/50 shadow-lg cursor-move touch-none">
@@ -2613,17 +2572,20 @@
             <!-- Adjustments -->
             <div class="grid grid-cols-3 gap-4">
                 <div>
-                    <label class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-1 block">Brightness</label>
+                    <label
+                        class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-1 block">Brightness</label>
                     <input type="range" id="card-editor-brightness" min="50" max="150" value="100" step="1"
                         class="w-full h-2 bg-void-bg rounded-lg appearance-none cursor-pointer accent-void-accent">
                 </div>
                 <div>
-                    <label class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-1 block">Contrast</label>
+                    <label
+                        class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-1 block">Contrast</label>
                     <input type="range" id="card-editor-contrast" min="50" max="150" value="100" step="1"
                         class="w-full h-2 bg-void-bg rounded-lg appearance-none cursor-pointer accent-void-accent">
                 </div>
                 <div>
-                    <label class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-1 block">Saturation</label>
+                    <label
+                        class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-1 block">Saturation</label>
                     <input type="range" id="card-editor-saturation" min="0" max="200" value="100" step="1"
                         class="w-full h-2 bg-void-bg rounded-lg appearance-none cursor-pointer accent-void-accent">
                 </div>
@@ -2631,13 +2593,21 @@
             <!-- Filters & Rotate -->
             <div class="flex flex-wrap items-center gap-3">
                 <span class="text-[9px] font-black uppercase tracking-widest text-void-muted">Filters</span>
-                <button type="button" id="card-editor-filter-none" class="px-3 py-1.5 rounded-lg bg-void-accent/20 border border-void-accent/40 text-void-accent text-[9px] font-black uppercase">None</button>
-                <button type="button" id="card-editor-filter-grayscale" class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-void-muted hover:border-void-accent/30 text-[9px] font-black uppercase">Grayscale</button>
-                <button type="button" id="card-editor-filter-sepia" class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-void-muted hover:border-void-accent/30 text-[9px] font-black uppercase">Sepia</button>
-                <button type="button" id="card-editor-filter-vivid" class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-void-muted hover:border-void-accent/30 text-[9px] font-black uppercase">Vivid</button>
+                <button type="button" id="card-editor-filter-none"
+                    class="px-3 py-1.5 rounded-lg bg-void-accent/20 border border-void-accent/40 text-void-accent text-[9px] font-black uppercase">None</button>
+                <button type="button" id="card-editor-filter-grayscale"
+                    class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-void-muted hover:border-void-accent/30 text-[9px] font-black uppercase">Grayscale</button>
+                <button type="button" id="card-editor-filter-sepia"
+                    class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-void-muted hover:border-void-accent/30 text-[9px] font-black uppercase">Sepia</button>
+                <button type="button" id="card-editor-filter-vivid"
+                    class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-void-muted hover:border-void-accent/30 text-[9px] font-black uppercase">Vivid</button>
                 <span class="text-[9px] font-black uppercase tracking-widest text-void-muted ml-2">Rotate</span>
-                <button type="button" id="card-editor-rotate-left" class="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all" title="Rotate left"><i class="fa-solid fa-rotate-left text-sm"></i></button>
-                <button type="button" id="card-editor-rotate-right" class="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all" title="Rotate right"><i class="fa-solid fa-rotate-right text-sm"></i></button>
+                <button type="button" id="card-editor-rotate-left"
+                    class="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"
+                    title="Rotate left"><i class="fa-solid fa-rotate-left text-sm"></i></button>
+                <button type="button" id="card-editor-rotate-right"
+                    class="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"
+                    title="Rotate right"><i class="fa-solid fa-rotate-right text-sm"></i></button>
             </div>
             <div class="flex gap-3">
                 <button type="button" onclick="closeCardImageCropModal()"
@@ -3358,109 +3328,116 @@
             </div>
         </div>
     </div>
-<!-- ===================== CARD LAYER EDITOR ===================== -->
-<div id="card-layer-editor" class="hidden fixed inset-0 z-[200] bg-[#05070a] flex flex-col">
-    <!-- Top Bar -->
-    <div class="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.07] shrink-0">
-        <button onclick="closeCardLayerEditor()"
-            class="flex items-center gap-2 text-white/50 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider shrink-0">
-            <i class="fa-solid fa-arrow-left"></i> Back
-        </button>
-        <span id="layer-editor-title" class="text-white font-black text-xs uppercase tracking-widest truncate flex-1"></span>
-        <div class="flex items-center gap-2 shrink-0">
-            <button onclick="undoLayerEditor()" title="Undo (Ctrl+Z)"
-                class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all text-sm">
-                <i class="fa-solid fa-rotate-left"></i>
+    <!-- ===================== CARD LAYER EDITOR ===================== -->
+    <div id="card-layer-editor" class="hidden fixed inset-0 z-[200] bg-[#05070a] flex flex-col">
+        <!-- Top Bar -->
+        <div class="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.07] shrink-0">
+            <button onclick="closeCardLayerEditor()"
+                class="flex items-center gap-2 text-white/50 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider shrink-0">
+                <i class="fa-solid fa-arrow-left"></i> Back
             </button>
-            <button onclick="redoLayerEditor()" title="Redo (Ctrl+Y)"
-                class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all text-sm">
-                <i class="fa-solid fa-rotate-right"></i>
-            </button>
-            <button id="layer-editor-save-btn" onclick="saveLayerEditor()"
-                class="px-4 py-2 bg-void-accent text-void-bg font-black text-[10px] uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all shadow-[0_0_16px_rgba(var(--void-accent-rgb),0.3)]">
-                Save Card Art
-            </button>
-        </div>
-    </div>
-
-    <!-- Body -->
-    <div class="flex flex-1 overflow-hidden">
-        <!-- Left Toolbar -->
-        <div class="flex flex-col gap-1 p-2 border-r border-white/[0.07] shrink-0 w-14 items-center pt-3">
-            <button id="layer-tool-select" onclick="setLayerEditorTool('select')" title="Select / Move (V)"
-                class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
-                <i class="fa-solid fa-arrow-pointer"></i>
-            </button>
-            <button id="layer-tool-text" onclick="setLayerEditorTool('text')" title="Add Text (T)"
-                class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
-                <i class="fa-solid fa-t"></i>
-            </button>
-            <button id="layer-tool-image" onclick="layerEditorAddImage()" title="Add Image (I)"
-                class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
-                <i class="fa-solid fa-image"></i>
-            </button>
-            <button id="layer-tool-rect" onclick="layerEditorAddShape('rect')" title="Add Rectangle"
-                class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
-                <i class="fa-regular fa-square"></i>
-            </button>
-            <button id="layer-tool-circle" onclick="layerEditorAddShape('circle')" title="Add Circle"
-                class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
-                <i class="fa-regular fa-circle"></i>
-            </button>
-            <button id="layer-tool-draw" onclick="setLayerEditorTool('draw')" title="Free Draw (D)"
-                class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
-                <i class="fa-solid fa-pen-nib"></i>
-            </button>
-            <button id="layer-tool-sticker" onclick="toggleLayerEditorStickerPicker()" title="Stickers"
-                class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
-                <i class="fa-regular fa-face-smile"></i>
-            </button>
-            <div class="mt-auto mb-2 pt-2 border-t border-white/[0.07] w-full flex justify-center">
-                <button onclick="layerEditorDeleteSelected()" title="Delete Selected (Del)"
-                    class="w-10 h-10 rounded-xl flex items-center justify-center text-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-all text-sm">
-                    <i class="fa-solid fa-trash-can"></i>
+            <span id="layer-editor-title"
+                class="text-white font-black text-xs uppercase tracking-widest truncate flex-1"></span>
+            <div class="flex items-center gap-2 shrink-0">
+                <button onclick="undoLayerEditor()" title="Undo (Ctrl+Z)"
+                    class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all text-sm">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+                <button onclick="redoLayerEditor()" title="Redo (Ctrl+Y)"
+                    class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all text-sm">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <button id="layer-editor-save-btn" onclick="saveLayerEditor()"
+                    class="px-4 py-2 bg-void-accent text-void-bg font-black text-[10px] uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all shadow-[0_0_16px_rgba(var(--void-accent-rgb),0.3)]">
+                    Save Card Art
                 </button>
             </div>
         </div>
 
-        <!-- Canvas Area -->
-        <div id="layer-editor-canvas-area" class="flex-1 flex items-center justify-center bg-[#07090e] overflow-auto p-6 relative">
-            <!-- Sticker Picker Popup -->
-            <div id="layer-editor-sticker-picker"
-                class="hidden absolute top-4 left-4 z-20 bg-[#0f1116] border border-white/10 rounded-2xl p-4 shadow-2xl">
-                <div class="flex items-center justify-between mb-3">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-void-accent">Stickers</span>
-                    <button onclick="document.getElementById('layer-editor-sticker-picker').classList.add('hidden')"
-                        class="text-white/30 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+        <!-- Body -->
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Left Toolbar -->
+            <div class="flex flex-col gap-1 p-2 border-r border-white/[0.07] shrink-0 w-14 items-center pt-3">
+                <button id="layer-tool-select" onclick="setLayerEditorTool('select')" title="Select / Move (V)"
+                    class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
+                    <i class="fa-solid fa-arrow-pointer"></i>
+                </button>
+                <button id="layer-tool-text" onclick="setLayerEditorTool('text')" title="Add Text (T)"
+                    class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
+                    <i class="fa-solid fa-t"></i>
+                </button>
+                <button id="layer-tool-image" onclick="layerEditorAddImage()" title="Add Image (I)"
+                    class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
+                    <i class="fa-solid fa-image"></i>
+                </button>
+                <button id="layer-tool-rect" onclick="layerEditorAddShape('rect')" title="Add Rectangle"
+                    class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
+                    <i class="fa-regular fa-square"></i>
+                </button>
+                <button id="layer-tool-circle" onclick="layerEditorAddShape('circle')" title="Add Circle"
+                    class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
+                    <i class="fa-regular fa-circle"></i>
+                </button>
+                <button id="layer-tool-draw" onclick="setLayerEditorTool('draw')" title="Free Draw (D)"
+                    class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
+                    <i class="fa-solid fa-pen-nib"></i>
+                </button>
+                <button id="layer-tool-sticker" onclick="toggleLayerEditorStickerPicker()" title="Stickers"
+                    class="layer-editor-tool-btn w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm">
+                    <i class="fa-regular fa-face-smile"></i>
+                </button>
+                <div class="mt-auto mb-2 pt-2 border-t border-white/[0.07] w-full flex justify-center">
+                    <button onclick="layerEditorDeleteSelected()" title="Delete Selected (Del)"
+                        class="w-10 h-10 rounded-xl flex items-center justify-center text-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-all text-sm">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
                 </div>
-                <div id="layer-editor-sticker-grid" class="grid grid-cols-6 gap-1"></div>
             </div>
-            <canvas id="layer-editor-canvas" class="shadow-2xl"></canvas>
-        </div>
 
-        <!-- Right Sidebar -->
-        <div class="w-56 flex flex-col border-l border-white/[0.07] shrink-0 overflow-hidden bg-[#07090e]">
-            <!-- Layer List -->
-            <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <div class="px-4 pt-4 pb-2 shrink-0">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-void-accent">Layers</span>
+            <!-- Canvas Area -->
+            <div id="layer-editor-canvas-area"
+                class="flex-1 flex items-center justify-center bg-[#07090e] overflow-auto p-6 relative">
+                <!-- Sticker Picker Popup -->
+                <div id="layer-editor-sticker-picker"
+                    class="hidden absolute top-4 left-4 z-20 bg-[#0f1116] border border-white/10 rounded-2xl p-4 shadow-2xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-void-accent">Stickers</span>
+                        <button onclick="document.getElementById('layer-editor-sticker-picker').classList.add('hidden')"
+                            class="text-white/30 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div id="layer-editor-sticker-grid" class="grid grid-cols-6 gap-1"></div>
                 </div>
-                <div id="layer-editor-layer-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5 min-h-0"></div>
+                <canvas id="layer-editor-canvas" class="shadow-2xl"></canvas>
             </div>
-            <!-- Properties Panel -->
-            <div class="border-t border-white/[0.07] shrink-0 flex flex-col overflow-hidden" style="max-height:55%">
-                <div class="px-4 pt-3 pb-2 shrink-0">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-void-accent">Properties</span>
+
+            <!-- Right Sidebar -->
+            <div class="w-56 flex flex-col border-l border-white/[0.07] shrink-0 overflow-hidden bg-[#07090e]">
+                <!-- Layer List -->
+                <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <div class="px-4 pt-4 pb-2 shrink-0">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-void-accent">Layers</span>
+                    </div>
+                    <div id="layer-editor-layer-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5 min-h-0">
+                    </div>
                 </div>
-                <div id="layer-editor-props-content" class="overflow-y-auto px-4 pb-4 text-[11px] text-white/30 flex-1">
-                    Select a layer
+                <!-- Properties Panel -->
+                <div class="border-t border-white/[0.07] shrink-0 flex flex-col overflow-hidden" style="max-height:55%">
+                    <div class="px-4 pt-3 pb-2 shrink-0">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-void-accent">Properties</span>
+                    </div>
+                    <div id="layer-editor-props-content"
+                        class="overflow-y-auto px-4 pb-4 text-[11px] text-white/30 flex-1">
+                        Select a layer
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-<!-- Hidden file input for layer editor images -->
-<input type="file" id="layer-editor-image-input" accept="image/*" class="hidden">
+    <!-- Hidden file input for layer editor images -->
+    <input type="file" id="layer-editor-image-input" accept="image/*" class="hidden">
+
+    <!-- GLOWING BEAM SWEEP -->
+
 
 </body>
 

@@ -1,6 +1,17 @@
 // arena.js — Battle System Overlay Controller
 // Polls /api/public/battle/latest every 3 seconds and animates the battle sequence.
 
+
+// --- GLOBAL IMAGE FALLBACK HANDLER ---
+window.addEventListener('error', function(e) {
+    if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'img') {
+        if (e.target.dataset.fallbackApplied) return;
+        e.target.dataset.fallbackApplied = 'true';
+        const isAvatar = e.target.id?.includes('avatar') || e.target.className?.includes('rounded-full') || e.target.src?.includes('twitchcdn');
+        e.target.src = isAvatar ? 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback' : '/pack.png';
+    }
+}, true);
+
 const POLL_INTERVAL = 3000;
 let lastBattleId = null;
 let isAnimating = false;

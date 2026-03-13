@@ -34,18 +34,16 @@ interface Env {
   FRONTEND_URL: string;
   ADMIN_PASSWORD: string;
   SESSION_SECRET: string;
+  ADMIN_SECRET: string;
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
   CARD_IMAGES: any; // R2Bucket
 }
 
-// Card image upload limits (storage conservation)
 const CARD_IMAGE_MAX_BYTES = 8 * 1024 * 1024; // 8MB
 const CARD_IMAGE_MAX_EDGE_PX = 2000;
 
-// CDN base for creator card art (R2); used to detect and delete old art on re-upload
 const CREATOR_CDN_BASE = 'https://cdn.codeoce.com/';
 
-/** If image_url is from our R2-backed CDN, return the R2 object key; else null. */
 function getR2KeyFromImageUrl(imageUrl: string | null | undefined): string | null {
   if (!imageUrl || typeof imageUrl !== 'string') return null;
   if (!imageUrl.startsWith(CREATOR_CDN_BASE)) return null;
@@ -53,7 +51,6 @@ function getR2KeyFromImageUrl(imageUrl: string | null | undefined): string | nul
   return key.length > 0 ? key : null;
 }
 
-// Security & Type Hardening Interfaces
 interface AdminCardBody {
   id: string;
   streamer_id?: string;
@@ -124,6 +121,12 @@ interface CardUploadBody {
   type?: string;
 }
 // --- SECURE CREATOR HELPERS ---
+
+// Basic in-memory rate limiting for Admin Login
+// In a distributed Worker environment, this map is per-isolate.
+// For a 10 requests / 60 seconds limit, this provides adequate protection against basic brute-force.
+const adminLoginAttempts = new Map<string, { count: number, resetAt: number }>();
+const globalRateLimiter = new Map<string, { count: number, resetAt: number }>();
 
 async function getUserFromSession(request: Request, env: Env, supabase: any) {
   const cookie = request.headers.get('Cookie') || '';
@@ -433,7 +436,7 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
     const traits = [];
     if (card.mechanic_name) traits.push({ name: card.mechanic_name, icon: card.mechanic_icon });
     if (card.genesis_mechanic_name) traits.push({ name: card.genesis_mechanic_name, icon: card.genesis_mechanic_icon });
-    
+
     return {
       id: card.id,
       name: card.name,
@@ -470,9 +473,9 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
           // We'll append the right slot's first trait if not already present
           const newTrait = right.traits[0];
           if (!card.traits.some((t: any) => t.name === newTrait.name)) {
-             // In dual trait context, mimic keeps 'mimic' but adds the target trait
-             card.traits.push({ ...newTrait });
-             triggered = true;
+            // In dual trait context, mimic keeps 'mimic' but adds the target trait
+            card.traits.push({ ...newTrait });
+            triggered = true;
           }
         }
         if (triggered && typeof eventLog !== 'undefined' && eventLog) {
@@ -630,7 +633,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
   try {
     const { forcedCardId, forcedRarity, isSilent } = options;
     const now = new Date().toISOString();
-    
+
     let randomCard: any = null;
     let selectedRarity = 'Common';
 
@@ -641,7 +644,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
       selectedRarity = c.rarity;
     } else {
       let rarityWeights = null;
-      
+
       if (forcedRarity) {
         selectedRarity = forcedRarity.charAt(0).toUpperCase() + forcedRarity.slice(1);
       } else {
@@ -664,7 +667,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
             .select('common_weight, rare_weight, epic_weight, legendary_weight')
             .eq('streamer_id', creatorId)
             .maybeSingle();
-          
+
           if (customConfig) {
             rarityWeights = {
               common: customConfig.common_weight,
@@ -689,23 +692,41 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
         }
       }
 
-      const { data: pool } = await supabase.from('cards').select('*').eq('rarity', selectedRarity).eq('streamer_id', creatorId);
+      // Fetch active sets to filter the card pool
+      const { data: activeSets } = await supabase
+        .from('streamer_sets')
+        .select('id, is_active, is_always_active')
+        .eq('streamer_id', creatorId);
+
+      const activeSetIds = activeSets?.filter((s: any) => s.is_active || s.is_always_active).map((s: any) => s.id) || [];
+
+      const { data: allCardsInRarity } = await supabase
+        .from('cards')
+        .select('*')
+        .eq('rarity', selectedRarity)
+        .eq('streamer_id', creatorId);
+
+      // A card is eligible if it has no set OR its set is active (or always active)
+      let pool = (allCardsInRarity || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+
       if (!pool || pool.length === 0) {
         // If we forced a rarity that doesn't exist, we fallback
         if (forcedRarity) {
-           // If forced rarity has no cards, fallback to ANY card from streamer
-           const { data: anyPool } = await supabase.from('cards').select('*').eq('streamer_id', creatorId).limit(1);
-           if (!anyPool || anyPool.length === 0) throw new Error('No cards available for this streamer');
-           randomCard = anyPool[0];
+          // If forced rarity has no cards, fallback to ANY card from streamer that's in an active set
+          const { data: anyPoolRaw } = await supabase.from('cards').select('*').eq('streamer_id', creatorId);
+          const anyPool = (anyPoolRaw || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+
+          if (!anyPool || anyPool.length === 0) throw new Error('No cards available for this streamer');
+          randomCard = anyPool[0]; // just pick the first available
         } else {
-           if (selectedRarity !== 'Common') return grantRandomCard(supabase, userId, userName, creatorId, customMessage, env, options);
-           return;
+          if (selectedRarity !== 'Common') return grantRandomCard(supabase, userId, userName, creatorId, customMessage, env, options);
+          return;
         }
       } else {
         randomCard = pool[Math.floor(Math.random() * pool.length)];
       }
     }
-    
+
     const { data: user } = await supabase.from('users').select('is_linked').eq('twitch_id', userId).maybeSingle();
 
     if (user?.is_linked) {
@@ -737,28 +758,28 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
         genesis_mechanic_id: isGenesis ? primaryMechanicId : null,
       });
 
-      const notificationMsg = isGenesis 
+      const notificationMsg = isGenesis
         ? `🌌 GENESIS CARD! ${customMessage || `You got a dual-trait card: ${randomCard.name}!`}`
         : customMessage || `🏰 You got a new card: ${randomCard.name}!`;
 
-      await supabase.from('notifications').insert({ 
-        twitch_id: userId, 
-        streamer_id: creatorId, 
-        type: 'card_drop', 
-        message: notificationMsg, 
-        data: { 
-          card_id: randomCard.id, 
-          name: randomCard.name, 
-          rarity: randomCard.rarity, 
+      await supabase.from('notifications').insert({
+        twitch_id: userId,
+        streamer_id: creatorId,
+        type: 'card_drop',
+        message: notificationMsg,
+        data: {
+          card_id: randomCard.id,
+          name: randomCard.name,
+          rarity: randomCard.rarity,
           image_url: randomCard.image_url,
           is_genesis: isGenesis
-        } 
+        }
       });
       await checkAndUnlockAchievements(supabase, userId, randomCard, creatorId);
     } else {
-      await supabase.from('pending_rewards').insert({ 
-        twitch_id: userId, 
-        card_id: randomCard.id, 
+      await supabase.from('pending_rewards').insert({
+        twitch_id: userId,
+        card_id: randomCard.id,
         streamer_id: creatorId,
         is_obs_consumed: isSilent || false
       });
@@ -827,12 +848,33 @@ function failHtmlResponse(title: string, message: string, status: number = 500):
   });
 }
 
+function sanitizeMetadata(data: any): any {
+  if (!data) return data;
+  if (typeof data !== 'object') return data;
+  
+  if (Array.isArray(data)) {
+    return data.map(sanitizeMetadata);
+  }
+
+  const sanitized = { ...data };
+  const sensitiveKeys = ['email', 'token', 'secret', 'password', 'jwt', 'code', 'access_token', 'refresh_token', 'obs_overlay_token', 'webhook_secret'];
+  
+  for (const key of Object.keys(sanitized)) {
+    if (sensitiveKeys.some(sk => key.toLowerCase().includes(sk))) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof sanitized[key] === 'object') {
+      sanitized[key] = sanitizeMetadata(sanitized[key]);
+    }
+  }
+  return sanitized;
+}
+
 async function logSystem(supabase: any, level: 'info' | 'warn' | 'error', category: 'webhook' | 'grant' | 'admin' | 'auth' | 'system' | 'trade', message: string, streamerId?: string, metadata: any = {}) {
   const timestamp = new Date().toISOString();
   const logPrefix = `[${timestamp}] [${category.toUpperCase()}] [${level.toUpperCase()}]`;
   const streamerInfo = streamerId ? ` [${streamerId}]` : '';
-  
-  console.log(`${logPrefix}${streamerInfo} ${message}`, Object.keys(metadata).length ? metadata : '');
+
+  console.log(`${logPrefix}${streamerInfo} ${message}`, Object.keys(metadata).length ? sanitizeMetadata(metadata) : '');
 }
 
 // Rate limiting - in-memory store (resets on worker restart, but that's fine for basic protection)
@@ -1143,6 +1185,34 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type, Twitch-ID, X-CSRF-Token',
     };
 
+    // Generic Rate Limiting for Public/Expensive Routes (50 requests per minute per IP)
+    const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+    if (path.startsWith('/api/onboarding') || path === '/api/bootstrap') {
+      const now = Date.now();
+      let limitRecord = globalRateLimiter.get(ip) || { count: 0, resetAt: now + 60 * 1000 };
+      
+      if (now > limitRecord.resetAt) {
+        limitRecord = { count: 1, resetAt: now + 60 * 1000 };
+      } else {
+        limitRecord.count++;
+      }
+      globalRateLimiter.set(ip, limitRecord);
+
+      // Clean up old entries occasionally
+      if (Math.random() < 0.05) {
+        for (const [key, val] of globalRateLimiter.entries()) {
+          if (now > val.resetAt) globalRateLimiter.delete(key);
+        }
+      }
+
+      if (limitRecord.count > 50) {
+        return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // Metadata Endpoint
     if (method === 'GET' && path === '/api/mechanics') {
       const { data, error } = await supabase.from('mechanics').select('*');
@@ -1162,8 +1232,14 @@ export default {
         }
 
         try {
-          await jwtVerify(token, new TextEncoder().encode(env.SESSION_SECRET));
-          return; // Valid session
+          const { payload } = await jwtVerify(token, new TextEncoder().encode(env.ADMIN_SECRET), {
+            issuer: 'mulistreamer-tcg-admin',
+            audience: 'mulistreamer-tcg-admin-panel'
+          });
+          if (payload.admin !== true) {
+            throw new Error("Unauthorized: Insufficient privileges");
+          }
+          return; // Valid admin session
         } catch (e: any) {
           throw new Error("Unauthorized: Invalid session");
         }
@@ -1401,7 +1477,7 @@ export default {
       // Strict Environment Validation
       const requiredSecrets = [
         'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'TWITCH_CLIENT_ID',
-        'FRONTEND_URL', 'ADMIN_PASSWORD', 'SESSION_SECRET'
+        'FRONTEND_URL', 'ADMIN_PASSWORD', 'SESSION_SECRET', 'ADMIN_SECRET'
       ];
       const missing = requiredSecrets.filter(s => !(env as any)[s]);
       if (missing.length > 0) {
@@ -1411,7 +1487,8 @@ export default {
       // Rate limiting
       const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
       const isAdminRoute = path.startsWith('/api/admin');
-      const rateLimit = isAdminRoute ? 600 : 300;
+      const isAdminLogin = method === 'POST' && path === '/api/admin/login';
+      const rateLimit = isAdminLogin ? 10 : isAdminRoute ? 600 : 300;
 
       if (!checkRateLimit(clientIP, rateLimit)) {
         return new Response(JSON.stringify({ error: 'Too many requests. Please slow down.' }), {
@@ -1839,8 +1916,15 @@ export default {
         const csrfCookie = cookie.match(/csrf=([^;]+)/)?.[1];
         const csrfHeader = request.headers.get('X-CSRF-Token');
 
-        if (!csrfCookie || csrfCookie !== csrfHeader) {
-          console.warn(`[CSRF] Blocked: Cookie: ${!!csrfCookie}, Header: ${!!csrfHeader}`);
+        const origin = request.headers.get('Origin');
+        const isTrustedOrigin = origin && [
+          env.FRONTEND_URL,
+          'http://localhost:3000', 'http://127.0.0.1:3000',
+          'http://localhost:5500', 'http://127.0.0.1:5500'
+        ].includes(origin);
+
+        if (!isTrustedOrigin && (!csrfCookie || csrfCookie !== csrfHeader)) {
+          console.warn(`[CSRF] Blocked: Cookie: ${!!csrfCookie}, Header: ${!!csrfHeader}, Origin: ${origin}`);
           return secureResponse('CSRF blocked', 403, corsHeaders, true);
         }
       }
@@ -2889,6 +2973,24 @@ export default {
 
       // Admin Login
       if (method === 'POST' && path === '/api/admin/login') {
+        const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+        const now = Date.now();
+        let limitRecord = adminLoginAttempts.get(ip);
+
+        if (limitRecord && limitRecord.resetAt > now) {
+          if (limitRecord.count >= 10) {
+            return new Response(JSON.stringify({ error: 'Too many login attempts. Please try again later.' }), {
+              status: 429,
+              headers: corsHeaders
+            });
+          }
+        } else {
+          limitRecord = { count: 0, resetAt: now + 60 * 1000 };
+        }
+
+        limitRecord.count++;
+        adminLoginAttempts.set(ip, limitRecord);
+
         let username = 'unknown';
         try {
           const body = await request.json() as LoginBody;
@@ -2903,13 +3005,14 @@ export default {
             });
           }
 
-
           // Create admin session token
           const adminToken = await new SignJWT({ admin: true, username })
             .setProtectedHeader({ alg: 'HS256' })
+            .setIssuer('mulistreamer-tcg-admin')
+            .setAudience('mulistreamer-tcg-admin-panel')
             .setIssuedAt()
             .setExpirationTime('12h')
-            .sign(new TextEncoder().encode(env.SESSION_SECRET));
+            .sign(new TextEncoder().encode(env.ADMIN_SECRET));
 
           const isHttps = request.url.startsWith('https');
           const secureFlag = isHttps ? '; Secure' : '';
@@ -2957,8 +3060,16 @@ export default {
         try {
           const { payload } = await jwtVerify(
             token,
-            new TextEncoder().encode(env.SESSION_SECRET)
+            new TextEncoder().encode(env.ADMIN_SECRET),
+            { issuer: 'mulistreamer-tcg-admin', audience: 'mulistreamer-tcg-admin-panel' }
           );
+
+          if (payload.admin !== true) {
+            return new Response(JSON.stringify({ authenticated: false }), {
+              status: 200,
+              headers: corsHeaders
+            });
+          }
 
           return new Response(JSON.stringify({
             authenticated: true,
@@ -3721,7 +3832,7 @@ export default {
             if (b.image_url && b.image_url !== existingCard.image_url) {
               const r2Key = getR2KeyFromImageUrl(existingCard.image_url);
               if (r2Key && env.CARD_IMAGES) {
-                try { await env.CARD_IMAGES.delete(r2Key); } catch (_) {}
+                try { await env.CARD_IMAGES.delete(r2Key); } catch (_) { }
               }
             }
 
@@ -3745,6 +3856,8 @@ export default {
               attack: b.attack || 0,
               defense: b.defense || 0,
               image_url: b.image_url || '/pack.png',
+              is_battle_eligible: b.is_battle_eligible !== undefined ? b.is_battle_eligible : true,
+              is_trading_eligible: b.is_trading_eligible !== undefined ? b.is_trading_eligible : true,
               is_approved: true,
               set_id: b.set_id || null,
               card_number: b.card_number || null,
@@ -3757,13 +3870,13 @@ export default {
 
           // Global Stat Sync: Update all existing user card instances if stats changed
           if (b.attack !== undefined || b.defense !== undefined) {
-              await supabase.from('user_cards')
-                .update({
-                  attack: cardData.attack,
-                  defense: cardData.defense,
-                  max_hp: cardData.defense
-                })
-                .eq('card_id', cardData.id);
+            await supabase.from('user_cards')
+              .update({
+                attack: cardData.attack,
+                defense: cardData.defense,
+                max_hp: cardData.defense
+              })
+              .eq('card_id', cardData.id);
           }
 
           return secureResponse(data, 200, corsHeaders);
@@ -4505,21 +4618,21 @@ export default {
         try {
           const { streamer } = await checkCreator(request, supabase);
           const b = await request.json() as any;
-          
+
           const durationHrs = Math.max(1, parseInt(b.duration || '1'));
           const startsAt = new Date();
           const endsAt = new Date(startsAt.getTime() + durationHrs * 60 * 60 * 1000);
-          
+
           const rarity = b.target_rarity || 'rare';
           const multiplier = parseFloat(b.multiplier || '2');
-          
+
           // Default weights as base: common: 70, rare: 20, epic: 8, legendary: 2
           const config = { common: 70, rare: 20, epic: 8, legendary: 2 };
           const baseWeight = (config as any)[rarity];
-          const newWeight = Math.min(baseWeight * multiplier, 50); 
+          const newWeight = Math.min(baseWeight * multiplier, 50);
           const diff = newWeight - baseWeight;
-          
-          config.common = Math.max(10, config.common - diff); 
+
+          config.common = Math.max(10, config.common - diff);
           (config as any)[rarity] = newWeight;
 
           const { data, error } = await supabase.from('streamer_events').insert({
@@ -4532,7 +4645,7 @@ export default {
           }).select().single();
 
           if (error) throw error;
-          
+
           await logSystem(supabase, 'info', 'admin', `Special Event initiated: ${data.name}`, streamer.id);
           return secureResponse(data, 200, corsHeaders);
         } catch (e: any) {
@@ -4721,7 +4834,7 @@ export default {
             forcedRarity,
             isSilent: b.is_silent
           });
-          
+
           const logMsg = forcedCardId ? `Creator granted specific card ${forcedCardId} to ${b.twitch_id}` : `Creator granted random ${forcedRarity || 'any'} card to ${b.twitch_id}`;
           await logSystem(supabase, 'info', 'grant', logMsg, streamer.id);
           return secureResponse({ success: true }, 200, corsHeaders);
@@ -5231,7 +5344,10 @@ export default {
           const filePath = `${fileName}`;
 
           await env.CARD_IMAGES.put(filePath, await file.arrayBuffer(), {
-            httpMetadata: { contentType: file.type || 'image/webp' }
+            httpMetadata: { 
+              contentType: file.type || 'image/webp',
+              cacheControl: 'public, max-age=31536000, immutable'
+            }
           });
 
           const publicUrl = `https://cdn.codeoce.com/${filePath}`;
@@ -5840,49 +5956,75 @@ export default {
 
       // 3.6 Creator Stats Dashboard
       if (method === 'GET' && path === '/api/creator/stats') {
-        const user = await getUserFromSession(request, env, supabase);
-        if (!user) return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+        try {
+          const { streamer } = await checkCreator(request, supabase);
 
-        const streamer = await getStreamerForCreator(user, supabase);
-        if (!streamer) return secureResponse('Not a registered creator', 403, corsHeaders, true);
+          // Get stats from leaderboard view
+          const { data: lbData } = await supabase
+            .from('streamer_leaderboards')
+            .select('total_cards, unique_collectors')
+            .eq('streamer_id', streamer.id)
+            .maybeSingle();
 
-        // TODO: Replace with complex RPC aggregations when pack schema is finalized
-        const stats = {
-          minted: 1337,
-          packs: 0,
-          community: 420
-        };
+          // Get pack count
+          const { count: packCount } = await supabase
+            .from('streamer_sets')
+            .select('*', { count: 'exact', head: true })
+            .eq('streamer_id', streamer.id);
 
-        return new Response(JSON.stringify(stats), { status: 200, headers: corsHeaders });
+          return secureResponse({
+            minted: lbData?.total_cards || 0,
+            packs: packCount || 0,
+            community: lbData?.unique_collectors || 0
+          }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 403, corsHeaders, true);
+        }
       }
 
-      // 3.7 Creator Mint Card
-      if (method === 'POST' && path === '/api/creator/cards') {
-        const user = await getUserFromSession(request, env, supabase);
-        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
-        const streamer = await getStreamerForCreator(user, supabase);
-        if (!streamer) return secureResponse('Not a registered creator', 403, corsHeaders, true);
+      // 3.7 Creator Cards handled at line 3782 & 3798
 
-        const body = await request.json() as any;
-        if (!body.name || !body.rarity) return secureResponse('Missing card data', 400, corsHeaders, true);
+      // 3.8 Creator Packs List
+      if (method === 'GET' && path === '/api/creator/packs') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const { data, error } = await supabase
+            .from('streamer_sets')
+            .select('*')
+            .eq('streamer_id', streamer.id)
+            .order('created_at', { ascending: false });
 
-        // In a real app, handle image uploads and store in `cards` table
-        // For now, we mock success for the dashboard UI
-        return secureResponse({ success: true, message: `Card ${body.name} minted!` }, 200, corsHeaders);
+          if (error) throw error;
+          return secureResponse(data, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 403, corsHeaders, true);
+        }
       }
 
-      // 3.8 Creator Assemble Pack
+      // 3.8b Creator Assemble Pack (POST)
       if (method === 'POST' && path === '/api/creator/packs') {
-        const user = await getUserFromSession(request, env, supabase);
-        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
-        const streamer = await getStreamerForCreator(user, supabase);
-        if (!streamer) return secureResponse('Not a registered creator', 403, corsHeaders, true);
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const body: any = await request.json();
+          if (!body.name) return secureResponse('Pack name required', 400, corsHeaders, true);
 
-        const body = await request.json() as any;
-        if (!body.name) return secureResponse('Missing pack data', 400, corsHeaders, true);
+          const { data, error } = await supabase
+            .from('streamer_sets')
+            .insert({
+              streamer_id: streamer.id,
+              name: body.name,
+              description: body.description || '',
+              code: body.code || body.name.substring(0, 3).toUpperCase(),
+              is_active: true
+            })
+            .select()
+            .single();
 
-        // Mock success for assembling packs in UI
-        return secureResponse({ success: true, message: `Pack ${body.name} assembled!` }, 200, corsHeaders);
+          if (error) throw error;
+          return secureResponse({ success: true, pack: data }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 400, corsHeaders, true);
+        }
       }
 
       // 3.9 Creator Trigger Live Drop
@@ -6088,7 +6230,7 @@ export default {
         // Check if user is a streamer
         const { data: streamer } = await supabase
           .from('streamers')
-          .select('id')
+          .select('id, is_active')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -6116,7 +6258,9 @@ export default {
 
         let destination = requestOrigin;
         if (role === 'creator') {
-          destination = `${requestOrigin}/onboarding?role=creator`;
+          if (!streamer || !streamer.is_active) {
+            destination = `${requestOrigin}/onboarding?role=creator`;
+          }
         } else {
           // Check if collector onboarding is complete
           const { data: dbUser } = await supabase
@@ -6269,24 +6413,14 @@ export default {
         let streamer: any = null;
 
         if (streamerParam && tokenParam) {
-          // New token-based authentication
+          // Token-based authentication (required)
           streamer = await verifyOBSToken(streamerParam, tokenParam);
           if (!streamer) {
             return new Response(JSON.stringify({ error: 'Invalid token or streamer' }), { status: 403, headers: corsHeaders });
           }
-        } else if (twitchId) {
-          // Old format - backward compatibility
-          const { data: s } = await supabase
-            .from('streamers')
-            .select('id')
-            .eq('twitch_id', twitchId)
-            .single();
-          if (!s) {
-            return new Response(JSON.stringify({ error: 'Streamer not found' }), { status: 404, headers: corsHeaders });
-          }
-          streamer = s;
         } else {
-          return new Response(JSON.stringify({ error: 'Missing streamer/token or twitch_id' }), { status: 400, headers: corsHeaders });
+          // Legacy twitch_id path is disabled — require authenticated token format
+          return new Response(JSON.stringify({ error: 'Authentication required: provide streamer and token parameters' }), { status: 400, headers: corsHeaders });
         }
 
         let targetId = cardId;
@@ -6314,6 +6448,7 @@ export default {
           .from('user_cards')
           .update({ is_obs_consumed: true })
           .eq('id', targetId)
+          .eq('streamer_id', streamer.id)
           .select('id'); // return updated rows so we can confirm
 
         if (updateError) {
@@ -6322,7 +6457,7 @@ export default {
         }
 
         console.log(`[OBS] Consumed ${updateData?.length ?? 0} row(s) for id=${targetId}`);
-        return new Response(JSON.stringify({ success: true, consumed: updateData?.length ?? 0 }), { status: 200, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
       }
 
       // ============================================================
@@ -6681,7 +6816,7 @@ export default {
             const mechIcon = s.mechanic_icon
               || s.mechanic?.icon
               || '';
-            
+
             // Genesis Trait
             const genesisMechName = s.genesis_mechanic?.name || null;
             const genesisMechIcon = s.genesis_mechanic?.icon || '';
