@@ -42,12 +42,32 @@ let bulkSelectMode = false;
 let cardToEdit = null;
 
 
+const CACHE_KEY = 'bootstrap_api_bootstrap';
+
 async function initDashboard() {
-    await fetchCSRFToken();
-    await bootstrapDashboard();
+    // 1. Initial Snapshot from Cache (Instant Load)
+    const cachedData = sessionStorage.getItem(CACHE_KEY);
+    let initialBootstrapPromise = null;
 
+    if (cachedData) {
+        try {
+            const data = JSON.parse(cachedData);
+            console.log("[Dashboard] Loading from cache...");
+            applyBootstrapData(data);
+        } catch (e) {
+            console.error("[Dashboard] Cache parse error:", e);
+        }
+    }
+
+    // 2. Parallel Background/Blocking Fetch
+    // We run CSRF and Bootstrap in parallel to save time
+    const [csrfTokenLoaded, bootstrapData] = await Promise.all([
+        fetchCSRFToken(),
+        bootstrapDashboard()
+    ]);
+
+    // 3. Final Revalidation (Complete the load)
     setupEventListeners();
-
     switchTab('branding');
 }
 
@@ -232,35 +252,53 @@ async function bootstrapDashboard() {
         if (!res.ok) throw new Error("Initialization failed");
 
         const data = await res.json();
-        if (!data.user || !data.user.is_creator) {
-            console.warn("[Dashboard] Unauthorized attempt. Redirecting...");
-            window.location.href = '/';
-            return;
-        }
-
-        currentUser = {
-            name: data.user.username || (data.user.streamer && data.user.streamer.username) || (data.user.streamer && data.user.streamer.brand_name) || 'Creator',
-            avatar: data.user.avatar_url,
-            is_creator: data.user.is_creator,
-            streamer: data.user.streamer || {}
-        };
-
-        const navUsername = currentUser.name;
-        const navAvatar = document.getElementById('nav-avatar');
-        if (navUsername) navUsername.textContent = currentUser.name;
-        if (navAvatar) {
-            navAvatar.src = currentUser.avatar || '/default-avatar.png';
-            navAvatar.onerror = () => navAvatar.src = '/default-avatar.png';
-        }
-
-        creatorStats = data.stats || {};
-        populateBranding();
-        populateOverlaySettings();
-        checkActiveEvent();
-
+        
+        // Save to cache for next time
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        
+        return applyBootstrapData(data);
     } catch (err) {
+        console.error("[Dashboard] Bootstrap error:", err);
         showToast("System error during initialization", "error");
+        return null;
     }
+}
+
+/**
+ * Applies bootstrap data to the global state and UI.
+ * Can be called multiple times (cache then fresh).
+ */
+function applyBootstrapData(data) {
+    if (!data.user || !data.user.is_creator) {
+        console.warn("[Dashboard] Unauthorized attempt. Redirecting...");
+        window.location.href = '/';
+        return null;
+    }
+
+    currentUser = {
+        name: data.user.username || (data.user.streamer && data.user.streamer.username) || (data.user.streamer && data.user.streamer.brand_name) || 'Creator',
+        avatar: data.user.avatar_url,
+        is_creator: data.user.is_creator,
+        streamer: data.user.streamer || {}
+    };
+
+    // Update Nav UI
+    const navUsername = document.getElementById('nav-username');
+    const navAvatar = document.getElementById('nav-avatar');
+    if (navUsername) navUsername.textContent = currentUser.name;
+    if (navAvatar) {
+        navAvatar.src = currentUser.avatar || '/default-avatar.png';
+        navAvatar.onerror = () => navAvatar.src = '/default-avatar.png';
+    }
+
+    creatorStats = data.stats || {};
+    
+    // Populate sections
+    populateBranding();
+    populateOverlaySettings();
+    checkActiveEvent();
+    
+    return data;
 }
 
 

@@ -1,0 +1,72 @@
+<!-- VIEWER HUB VIEW -->
+<section id="hub-view"
+    class="hidden min-h-screen pt-32 px-6 lg:px-12 pb-32 max-w-[1500px] mx-auto void-fade space-y-12">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-white/5 pb-12">
+        <div class="space-y-4">
+            <h2
+                class="text-4xl md:text-6xl font-display font-black text-void-text uppercase italic tracking-tighter">
+                Creator Directory</h2>
+            <p class="text-void-muted text-lg font-medium max-w-2xl">Access your collected vaults and discover
+                new
+                networks within your linked ecosystem.</p>
+        </div>
+        <div id="hub-self-container" class="flex-shrink-0">
+            <!-- Your Hub button injected here if creator -->
+        </div>
+    </div>
+
+    <div id="hub-sections" class="space-y-16">
+        <!-- SKELETON -->
+        <div id="hub-loading" class="py-20 flex flex-col items-center justify-center space-y-4">
+            <div
+                class="w-16 h-16 rounded-full border-4 border-void-accent/20 border-t-void-accent animate-spin">
+            </div>
+            <p class="text-void-muted font-black uppercase tracking-widest text-[10px] animate-pulse">Syncing
+                Creator Data...</p>
+        </div>
+
+        <!-- Sections will be rendered here dynamically -->
+        <div id="hub-sections-container" class="space-y-16 hidden">
+            <!-- Favourites Section -->
+            <div id="hub-favorites-section" class="space-y-6 hidden">
+                <div class="flex items-center gap-4 border-l-4 border-void-accent pl-6">
+                    <h3 class="text-2xl font-display font-black text-void-text uppercase tracking-tight">
+                        Favourite Collections</h3>
+                </div>
+                <div id="hub-favorites-empty"
+                    class="hidden py-12 px-8 border border-dashed border-white/5 rounded-3xl text-center bg-white/[0.01]">
+                    <p class="text-void-muted/60 text-xs font-black uppercase tracking-widest italic">Click the
+                        star to add favourites here</p>
+                </div>
+                <div id="hub-favorites-grid"
+                    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+            </div>
+
+            <!-- Followed Section -->
+            <div id="hub-followed-section" class="space-y-6 hidden">
+                <div class="flex items-center gap-4 border-l-4 border-void-accent pl-6">
+                    <h3 class="text-2xl font-display font-black text-void-text uppercase tracking-tight">
+                        Followed Creators</h3>
+                </div>
+                <div id="hub-followed-empty"
+                    class="hidden py-12 px-8 border border-dashed border-white/5 rounded-3xl text-center bg-white/[0.01]">
+                    <p class="text-void-muted/60 text-xs font-black uppercase tracking-widest italic">Follow
+                        creators on Twitch who are on Castle TCG to see them here</p>
+                </div>
+                <div id="hub-followed-grid"
+                    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="hub-empty-state" class="hidden py-40 text-center space-y-6">
+                <div class="text-6xl grayscale opacity-20">🛰️</div>
+                <div class="space-y-2">
+                    <h3 class="text-xl font-black uppercase italic tracking-widest text-void-muted">No active
+                        nodes found in nearby sectors</h3>
+                    <p class="text-void-muted/50 text-xs uppercase tracking-widest">Scanning deep space for
+                        creator signatures...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

@@ -1,5 +1,323 @@
 const BACKEND_URL = window.location.origin; // Use same domain for cookies to work
 
+// --- DYNAMIC VIEW ENGINE ---
+const loadedViews = new Set();
+async function loadView(viewName) {
+    if (loadedViews.has(viewName)) return true;
+    
+    console.log(`[ViewEngine] Loading view: ${viewName}`);
+    try {
+        const response = await fetch(`/views/${viewName}.html`);
+        if (!response.ok) throw new Error(`Failed to load view: ${viewName}`);
+        
+        const html = await response.text();
+        const mount = document.getElementById('dynamic-view-mount');
+        if (mount) {
+            // Append the new view to the mount point
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            while (temp.firstChild) {
+                mount.appendChild(temp.firstChild);
+            }
+            loadedViews.add(viewName);
+            // Re-initialize events for the newly loaded view
+            if (typeof initViewEvents === 'function') initViewEvents(viewName);
+            return true;
+        }
+    } catch (error) {
+        console.error(`[ViewEngine] Error loading view ${viewName}:`, error);
+    }
+    return false;
+}
+
+/**
+ * Re-initializes event listeners and state for dynamically loaded views.
+ */
+function initViewEvents(viewName) {
+    console.log(`[ViewEngine] Initializing events for: ${viewName}`);
+    if (viewName === 'viewer-dashboard') {
+        initViewerDashboardEvents();
+    } else if (viewName === 'creator-dashboard') {
+        initCreatorDashboardEvents();
+    }
+}
+
+function initViewerDashboardEvents() {
+    console.log("[ViewEngine] Initializing Viewer Dashboard events...");
+    
+    const tabAdmin = document.getElementById('tab-admin');
+    if (tabAdmin) tabAdmin.onclick = async () => {
+        const isCodeOce = currentUser.name.toLowerCase() === 'codeoce';
+        if (isCodeOce && !adminAuthenticated) {
+            showAdminLogin();
+            return;
+        }
+        switchView('admin');
+        loadAdminCards();
+        if (isCodeOce && adminAuthenticated) {
+            // Show global admin panels
+            const panels = ['admin-stats-panel', 'admin-users-panel', 'admin-grant-panel', 'admin-upload-panel', 'admin-bulk-panel', 'admin-config-panel'];
+            panels.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('hidden');
+            });
+            loadAdminStats();
+            loadAdminUsers();
+            loadAdminConfig();
+        } else {
+            // Hide global admin panels for normal creators
+            const panels = ['admin-stats-panel', 'admin-users-panel', 'admin-grant-panel', 'admin-upload-panel', 'admin-bulk-panel', 'admin-config-panel'];
+            panels.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+        }
+    };
+
+    const viewLogsBtn = document.getElementById('view-logs');
+    if (viewLogsBtn) viewLogsBtn.onclick = () => {
+        const modal = document.getElementById('logs-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            scrollLock();
+            loadSystemLogs();
+        }
+    };
+
+    const closeLogsBtn = document.getElementById('close-logs-modal');
+    if (closeLogsBtn) closeLogsBtn.onclick = () => {
+        const modal = document.getElementById('logs-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            scrollUnlock();
+        }
+    };
+
+    const refreshLogsBtn = document.getElementById('refresh-logs-btn');
+    if (refreshLogsBtn) refreshLogsBtn.onclick = loadSystemLogs;
+
+    const logSearch = document.getElementById('log-search');
+    if (logSearch) logSearch.oninput = debounce(loadSystemLogs, 300);
+
+    const logCategoryFilter = document.getElementById('log-category-filter');
+    if (logCategoryFilter) logCategoryFilter.onchange = loadSystemLogs;
+
+    const refreshUsersBtn = document.getElementById('refresh-users');
+    if (refreshUsersBtn) refreshUsersBtn.onclick = loadAdminUsers;
+
+    const refreshCardsBtn = document.getElementById('refresh-cards');
+    if (refreshCardsBtn) refreshCardsBtn.onclick = loadAdminCards;
+
+    const helpBtn = document.getElementById('help-btn');
+    if (helpBtn) helpBtn.onclick = showHowToPlay;
+}
+
+function initCreatorDashboardEvents() {
+    console.log("[ViewEngine] Initializing Creator Dashboard events...");
+
+    const addCardForm = document.getElementById('add-card-form');
+    if (addCardForm) {
+        addCardForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const setDropdown = document.getElementById('ac-set-dropdown');
+            const payload = {
+                id: document.getElementById('ac-id')?.value,
+                name: document.getElementById('ac-name')?.value,
+                image_url: document.getElementById('ac-image')?.value,
+                rarity: document.getElementById('ac-rarity')?.value,
+                set_id: setDropdown?.value,
+                card_number: document.getElementById('ac-card-number')?.value
+            };
+
+            const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            });
+
+            if (res.ok) {
+                showToast("Card Created!", "success");
+                e.target.reset();
+                loadAdminCards();
+            } else {
+                showToast("Failed. Check your session or card data.", "error");
+            }
+        };
+    }
+
+    const acUpload = document.getElementById('ac-upload');
+    if (acUpload) {
+        acUpload.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const preview = document.getElementById('ac-image-preview');
+            const reader = new FileReader();
+            reader.onload = (re) => { if (preview) preview.innerHTML = `<img src="${re.target.result}" class="w-full h-full object-cover">`; };
+            reader.readAsDataURL(file);
+            try {
+                const button = e.target.nextElementSibling;
+                if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>...'; }
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await fetch(`${BACKEND_URL}/api/admin/upload`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: formData, credentials: 'include' });
+                const data = await res.json();
+                if (data.success) {
+                    const acImage = document.getElementById('ac-image');
+                    if (acImage) acImage.value = data.url;
+                    if (button) { button.innerHTML = '<i class="fa-solid fa-check mr-2"></i>DONE'; }
+                }
+                if (button) button.disabled = false;
+            } catch (err) { if (button) button.disabled = false; }
+        };
+    }
+
+    const createSetForm = document.getElementById('create-set-form');
+    if (createSetForm) {
+        createSetForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const payload = {
+                id: document.getElementById('set-id')?.value,
+                name: document.getElementById('set-name')?.value,
+                code: document.getElementById('set-code')?.value,
+                release_date: document.getElementById('set-release-date')?.value || null,
+                icon_url: document.getElementById('set-icon-url')?.value || null,
+                description: document.getElementById('set-description')?.value || null,
+                total_cards: parseInt(document.getElementById('set-total-cards')?.value) || 0,
+                card_back_url: document.getElementById('set-back-url')?.value || null
+            };
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/creator/sets`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify(payload),
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    const setIdInput = document.getElementById('set-id');
+                    showToast(setIdInput && setIdInput.disabled ? "Set updated!" : "Set created successfully!", "success");
+                    e.target.reset();
+                    resetSetForm();
+                    loadSets();
+                } else {
+                    const error = await res.json();
+                    showToast(`Failed: ${error.error}`, "error");
+                }
+            } catch (err) {
+                showToast("Connection error", "error");
+            }
+        };
+    }
+
+    const cancelSetEditBtn = document.getElementById('cancel-set-edit');
+    if (cancelSetEditBtn) cancelSetEditBtn.onclick = window.cancelSetEdit;
+
+    const processCsvBtn = document.getElementById('process-csv-btn');
+    if (processCsvBtn) {
+        processCsvBtn.onclick = async () => {
+            const fileInput = document.getElementById('csv-upload');
+            const file = fileInput ? fileInput.files[0] : null;
+            if (!file) { showToast("Select CSV", "error"); return; }
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const text = e.target?.result;
+                const lines = text ? text.split('\n').filter(l => l.trim()) : [];
+                const cards = lines.slice(1).map(l => { const [id, name, img, rar, sid, num] = l.split(',').map(s => s.trim()); return { id, name, image_url: img, rarity: rar, set_id: sid, card_number: num }; });
+                const res = await fetch(`${BACKEND_URL}/api/admin/cards/bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ cards }), credentials: 'include' });
+                if (res.ok) { showToast("Bulk upload success!", "success"); loadAdminCards(); }
+            };
+            reader.readAsText(file);
+        };
+    }
+
+    // Rarity Config
+    ['cfg-rarity-common', 'cfg-rarity-rare', 'cfg-rarity-epic', 'cfg-rarity-legendary'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateRarityTotal);
+    });
+
+    const saveConfigBtn = document.getElementById('save-config-btn');
+    if (saveConfigBtn) {
+        saveConfigBtn.onclick = async () => {
+            const configs = [
+                { id: 'rarity_weights', data: { common: parseInt(document.getElementById('cfg-rarity-common').value), rare: parseInt(document.getElementById('cfg-rarity-rare').value), epic: parseInt(document.getElementById('cfg-rarity-epic').value), legendary: parseInt(document.getElementById('cfg-rarity-legendary').value) } },
+                { id: 'gifting_rules', data: { cards_per_sub: parseInt(document.getElementById('cfg-gift-per-sub').value), bonus_per_5: parseInt(document.getElementById('cfg-gift-bonus').value) } },
+                { id: 'visuals', data: { global_card_back_url: document.getElementById('cfg-global-back').value } }
+            ];
+            for (const cfg of configs) { await fetch(`${BACKEND_URL}/api/admin/config`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, body: JSON.stringify(cfg), credentials: 'include' }); }
+            showToast("Config saved!", "success");
+        };
+    }
+
+    const cfgBackUpload = document.getElementById('cfg-back-upload');
+    if (cfgBackUpload) {
+        cfgBackUpload.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(`${BACKEND_URL}/api/admin/upload`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: formData, credentials: 'include' });
+            if (res.ok) { const data = await res.json(); document.getElementById('cfg-global-back').value = data.url; showToast("Back uploaded!", "success"); }
+        };
+    }
+
+    const adminUserSearch = document.getElementById('admin-user-search');
+    if (adminUserSearch) adminUserSearch.addEventListener('input', renderAdminUsers);
+}
+
+async function loadModals() {
+    if (loadedViews.has('modals')) return;
+    console.log(`[ViewEngine] Loading modals...`);
+    try {
+        const response = await fetch('/views/modals.html');
+        if (response.ok) {
+            const html = await response.text();
+            document.body.insertAdjacentHTML('beforeend', html);
+            loadedViews.add('modals');
+            if (typeof initModalEvents === 'function') initModalEvents();
+        }
+    } catch (e) {
+        console.error("[ViewEngine] Failed to load modals:", e);
+    }
+}
+
+function initModalEvents() {
+    console.log("[ViewEngine] Initializing modal events...");
+    
+    const obNext = document.getElementById('onboarding-next');
+    if (obNext) {
+        obNext.onclick = () => {
+            if (currentOnboardingSlide < totalOnboardingSlides - 1) {
+                currentOnboardingSlide++;
+                updateOnboardingUI();
+            } else {
+                if (typeof window.closeOnboarding === 'function') window.closeOnboarding();
+            }
+        };
+    }
+
+    const obPrev = document.getElementById('onboarding-prev');
+    if (obPrev) {
+        obPrev.onclick = () => {
+            if (currentOnboardingSlide > 0) {
+                currentOnboardingSlide--;
+                updateOnboardingUI();
+            }
+        };
+    }
+
+    const obSkip = document.getElementById('onboarding-skip');
+    if (obSkip) obSkip.onclick = window.closeOnboarding;
+}
+
 // --- GLOBAL IMAGE FALLBACK HANDLER ---
 // Catches all 404/broken images even in dynamically inserted HTML
 window.addEventListener('error', function (e) {
@@ -1066,20 +1384,30 @@ function setLoadingState(elementId, isLoading, emptyMessage = 'No items yet') {
 
 
 // Helper: show/hide landing sections via inline style (HTML default is display:none)
+// Helper: show/hide landing sections via inline style (HTML default is display:none)
 function showLanding() {
     const landing = document.getElementById('landing-view');
     if (landing) landing.style.display = 'flex';
     document.querySelectorAll('.landing-section').forEach(s => s.style.display = '');
+
+    const landingToggle = document.getElementById('landing-mode-toggle');
+    if (landingToggle) landingToggle.classList.remove('hidden');
 }
 function hideLanding() {
     const landing = document.getElementById('landing-view');
     if (landing) landing.style.display = 'none';
     document.querySelectorAll('.landing-section').forEach(s => s.style.display = 'none');
+
+    const landingToggle = document.getElementById('landing-mode-toggle');
+    if (landingToggle) landingToggle.classList.add('hidden');
 }
 
 // --- AUTH & INIT ---
+// --- AUTH & INIT ---
 async function initializeApp() {
     console.log("[App] initializeApp starting...");
+
+    // 1. Core initialization
     if (typeof applyLandingMode === 'function') {
         applyLandingMode(currentLandingMode);
     }
@@ -1087,24 +1415,33 @@ async function initializeApp() {
     setupDragAndDrop();
     window.scrollTo(0, 0);
     parseRoute();
-    // fetchMechanics(); // removed
 
-    // Pre-hide views unconditionally to prevent flashing
+    // 2. Load common modals immediately
+    await loadModals();
+
+    // 3. Pre-load the primary view based on route
+    if (routeInfo.view === 'hub') {
+        await loadView('hub');
+    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
+        await loadView('viewer-dashboard');
+    } else if (routeInfo.view === 'streamer-profile') {
+        await loadView('streamer-profile');
+    }
+
+    // 4. Handle initial visibility
     hideLanding();
     ['dashboard-view', 'hub-view', 'streamer-profile-view', 'login-view'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
 
-    // View visibility management
-    if (routeInfo.view === 'home') {
+    if (routeInfo.view === 'home' || routeInfo.view === 'landing') {
         showLanding();
         const centralNav = document.getElementById('central-nav');
         if (centralNav) { centralNav.classList.add('hidden'); centralNav.classList.remove('flex'); }
     } else if (routeInfo.view === 'hub') {
         const hub = document.getElementById('hub-view');
         if (hub) hub.classList.remove('hidden');
-        // Hub doesn't use the centralized collection/battle nav
         const centralNav = document.getElementById('central-nav');
         if (centralNav) centralNav.classList.add('hidden');
     } else if (routeInfo.view === 'streamer-profile') {
@@ -1114,14 +1451,13 @@ async function initializeApp() {
         const dashboard = document.getElementById('dashboard-view');
         if (dashboard) dashboard.classList.remove('hidden');
 
-        // Dashboard uses the centralized nav
         const centralNav = document.getElementById('central-nav');
         if (centralNav) {
             centralNav.classList.remove('hidden');
             centralNav.classList.add('flex');
         }
 
-        // Hide all subviews so nothing flashes
+        // Hide sub-views inside dashboard
         ['collection-view', 'leaderboard-view', 'trading-view', 'creator-dashboard-view', 'admin-view', 'profile-view', 'battle-view'].forEach(id => {
             const el = document.getElementById(id);
             if (el) { el.classList.add('hidden'); el.style.display = 'none'; }
@@ -1326,14 +1662,14 @@ async function initializeApp() {
             if (navNick) navNick.innerText = currentUser.name;
             if (navImg) navImg.src = currentUser.avatar;
 
-            // Updated Navbar Button Actions
-            if (navLogout) navLogout.onclick = () => logout();
             if (navCreator) {
+                const navRole = document.getElementById('nav-user-role');
                 if (currentUser.is_creator) {
                     navCreator.classList.remove('hidden');
-                    navCreator.onclick = () => { window.location.href = `/dashboard`; };
+                    if (navRole) navRole.innerText = "Creator";
                 } else {
                     navCreator.classList.add('hidden');
+                    if (navRole) navRole.innerText = "Collector";
                 }
             }
             return;
@@ -6041,41 +6377,7 @@ async function checkAdminSession() {
         console.error('Admin check failed:', e);
     }
 }
-const tabAdmin = document.getElementById('tab-admin');
-if (tabAdmin) tabAdmin.onclick = async () => {
-    const isCodeOce = currentUser.name.toLowerCase() === 'codeoce';
-    const isCreator = APP_STREAMER && currentUser.twitch_id === APP_STREAMER.id;
-
-    if (isCodeOce && !adminAuthenticated) {
-        showAdminLogin();
-        return;
-    }
-
-    switchView('admin');
-    loadAdminCards();
-
-    if (isCodeOce && adminAuthenticated) {
-        // Show global admin panels
-        document.getElementById('admin-stats-panel').classList.remove('hidden');
-        document.getElementById('admin-users-panel').classList.remove('hidden');
-        document.getElementById('admin-grant-panel').classList.remove('hidden');
-        document.getElementById('admin-upload-panel').classList.remove('hidden');
-        document.getElementById('admin-bulk-panel').classList.remove('hidden');
-        document.getElementById('admin-config-panel').classList.remove('hidden');
-
-        loadAdminStats();
-        loadAdminUsers();
-        loadAdminConfig();
-    } else {
-        // Hide global admin panels for normal creators
-        document.getElementById('admin-stats-panel').classList.add('hidden');
-        document.getElementById('admin-users-panel').classList.add('hidden');
-        document.getElementById('admin-grant-panel').classList.add('hidden');
-        document.getElementById('admin-upload-panel').classList.add('hidden');
-        document.getElementById('admin-bulk-panel').classList.add('hidden');
-        document.getElementById('admin-config-panel').classList.add('hidden');
-    }
-};
+// Moved to initViewerDashboardEvents
 
 function showAdminLogin() {
     document.getElementById('admin-login-modal').classList.remove('hidden');
@@ -6269,37 +6571,7 @@ function renderSystemLogs() {
     }
 }
 
-const viewLogsBtn = document.getElementById('view-logs');
-if (viewLogsBtn) {
-    viewLogsBtn.onclick = () => {
-        const modal = document.getElementById('logs-modal');
-        if (modal) {
-            modal.classList.remove('hidden');
-            scrollLock();
-            loadSystemLogs();
-        }
-    };
-}
-
-const closeLogsBtn = document.getElementById('close-logs-modal');
-if (closeLogsBtn) {
-    closeLogsBtn.onclick = () => {
-        const modal = document.getElementById('logs-modal');
-        if (modal) {
-            modal.classList.add('hidden');
-            scrollUnlock();
-        }
-    };
-}
-
-const refreshLogsBtn = document.getElementById('refresh-logs-btn');
-if (refreshLogsBtn) refreshLogsBtn.onclick = loadSystemLogs;
-
-const logSearch = document.getElementById('log-search');
-if (logSearch) logSearch.oninput = debounce(loadSystemLogs, 300);
-
-const logCategoryFilter = document.getElementById('log-category-filter');
-if (logCategoryFilter) logCategoryFilter.onchange = loadSystemLogs;
+// Moved to initViewerDashboardEvents
 
 function debounce(func, wait) {
     let timeout;
@@ -6313,105 +6585,7 @@ function debounce(func, wait) {
     };
 }
 
-const acUpload = document.getElementById('ac-upload');
-if (acUpload) {
-    acUpload.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Preview immediately
-        const preview = document.getElementById('ac-image-preview');
-        const reader = new FileReader();
-        reader.onload = (re) => {
-            if (preview) preview.innerHTML = `<img src="${re.target.result}" class="w-full h-full object-cover">`;
-        };
-        reader.readAsDataURL(file);
-
-        // Upload to server
-        try {
-            const button = e.target.nextElementSibling;
-            const originalText = button ? button.innerHTML : '';
-            if (button) {
-                button.disabled = true;
-                button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>UPLOADING...';
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const res = await fetch(`${BACKEND_URL}/api/admin/upload`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': csrfToken
-                },
-                body: formData,
-                credentials: 'include'
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-                const acImage = document.getElementById('ac-image');
-                if (acImage) acImage.value = data.url;
-                if (button) {
-                    button.innerHTML = '<i class="fa-solid fa-check mr-2"></i>UPLOADED!';
-                    button.classList.replace('bg-white/5', 'bg-void-accent/20');
-                    button.classList.add('text-void-accent/40');
-                }
-            } else {
-                alert('Upload failed: ' + data.error);
-                if (button) button.innerHTML = originalText;
-            }
-            if (button) button.disabled = false;
-        } catch (err) {
-            console.error('Upload error:', err);
-            alert('Connection error during upload');
-            const button = e.target.nextElementSibling;
-            if (button) button.disabled = false;
-        }
-    };
-}
-
-const addCardForm = document.getElementById('add-card-form');
-if (addCardForm) {
-    addCardForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const setDropdown = document.getElementById('ac-set-dropdown');
-        const payload = {
-            id: document.getElementById('ac-id')?.value,
-            name: document.getElementById('ac-name')?.value,
-            image_url: document.getElementById('ac-image')?.value,
-            rarity: document.getElementById('ac-rarity')?.value,
-            set_id: setDropdown?.value,
-            card_number: document.getElementById('ac-card-number')?.value
-        };
-
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
-            body: JSON.stringify(payload),
-            credentials: 'include'
-        });
-
-
-        if (res.ok) {
-            showToast("Card Created!", "success");
-            e.target.reset();
-            loadAdminCards();
-        } else {
-            showToast("Failed. Check your session or card data.", "error");
-        }
-    };
-}
-
-const refreshUsersBtn = document.getElementById('refresh-users');
-if (refreshUsersBtn) refreshUsersBtn.onclick = loadAdminUsers;
-
-const refreshCardsBtn = document.getElementById('refresh-cards');
-if (refreshCardsBtn) refreshCardsBtn.onclick = loadAdminCards;
+// Moved to initCreatorDashboardEvents
 
 // --- SET MANAGEMENT ---
 let allSets = [];
@@ -6525,75 +6699,11 @@ function updateOnboardingUI() {
     }
 }
 
-const helpBtn = document.getElementById('help-btn');
-if (helpBtn) helpBtn.onclick = showHowToPlay;
+// Handled in initViewerDashboardEvents
 
-const obNext = document.getElementById('onboarding-next');
-if (obNext) {
-    obNext.onclick = () => {
-        if (currentOnboardingSlide < totalOnboardingSlides - 1) {
-            currentOnboardingSlide++;
-            updateOnboardingUI();
-        } else {
-            if (typeof window.closeOnboarding === 'function') window.closeOnboarding();
-        }
-    };
-}
+// Moved to initModalEvents
 
-const obPrev = document.getElementById('onboarding-prev');
-if (obPrev) {
-    obPrev.onclick = () => {
-        if (currentOnboardingSlide > 0) {
-            currentOnboardingSlide--;
-            updateOnboardingUI();
-        }
-    };
-}
-
-const obSkip = document.getElementById('onboarding-skip');
-if (obSkip) obSkip.onclick = window.closeOnboarding;
-
-const createSetForm = document.getElementById('create-set-form');
-if (createSetForm) {
-    createSetForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const payload = {
-            id: document.getElementById('set-id')?.value,
-            name: document.getElementById('set-name')?.value,
-            code: document.getElementById('set-code')?.value,
-            release_date: document.getElementById('set-release-date')?.value || null,
-            icon_url: document.getElementById('set-icon-url')?.value || null,
-            description: document.getElementById('set-description')?.value || null,
-            total_cards: parseInt(document.getElementById('set-total-cards')?.value) || 0,
-            card_back_url: document.getElementById('set-back-url')?.value || null
-        };
-
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/creator/sets`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify(payload),
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const setIdInput = document.getElementById('set-id');
-                showToast(setIdInput && setIdInput.disabled ? "Set updated!" : "Set created successfully!", "success");
-                e.target.reset();
-                resetSetForm();
-                loadSets();
-            } else {
-                const error = await res.json();
-                showToast(`Failed: ${error.error}`, "error");
-            }
-        } catch (err) {
-            showToast("Connection error", "error");
-        }
-    };
-}
+// Handled in initCreatorDashboardEvents
 
 window.resetSetForm = () => {
     const createSetForm = document.getElementById('create-set-form');
@@ -6608,8 +6718,7 @@ window.resetSetForm = () => {
     if (cancelSetEditBtn) cancelSetEditBtn.classList.add('hidden');
 };
 
-const cancelSetEditBtn = document.getElementById('cancel-set-edit');
-if (cancelSetEditBtn) cancelSetEditBtn.onclick = window.cancelSetEdit;
+// Handled in initCreatorDashboardEvents
 
 window.editSet = (id) => {
     const set = allSets.find(s => s.id === id);
@@ -6933,62 +7042,7 @@ function renderAchievements() {
 }
 
 // --- BULK CSV UPLOAD ---
-const processCsvBtn = document.getElementById('process-csv-btn');
-if (processCsvBtn) {
-    processCsvBtn.onclick = async () => {
-        const fileInput = document.getElementById('csv-upload');
-        const file = fileInput ? fileInput.files[0] : null;
-
-        if (!file) {
-            showToast("Please select a CSV file", "error");
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const text = e.target?.result;
-                const lines = text ? text.split('\n').filter(l => l.trim()) : [];
-
-                if (lines.length < 2) {
-                    showToast("CSV file is empty", "error");
-                    return;
-                }
-
-                // Skip header, parse rows
-                const cards = lines.slice(1).map(line => {
-                    const [id, name, image_url, rarity, set_id, card_number] = line.split(',').map(s => s.trim());
-                    return { id, name, image_url, rarity, set_id, card_number };
-                });
-
-                showToast(`Uploading ${cards.length} cards...`, "info");
-
-                // Send to backend
-                const res = await fetch(`${BACKEND_URL}/api/admin/cards/bulk`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
-                    },
-                    body: JSON.stringify({ cards }),
-                    credentials: 'include'
-                });
-
-                if (res.ok) {
-                    showToast(`✅ Successfully uploaded ${cards.length} cards!`, "success");
-                    if (fileInput) fileInput.value = '';
-                    loadAdminCards();
-                } else {
-                    const error = await res.json();
-                    showToast(`Failed: ${error.error}`, "error");
-                }
-            } catch (err) {
-                showToast("Error processing CSV: " + err.message, "error");
-            }
-        };
-        reader.readAsText(file);
-    };
-}
+// Handled in initCreatorDashboardEvents
 
 // --- ADMIN CONFIG LOGIC ---
 async function loadAdminConfig() {
@@ -7053,93 +7107,12 @@ function updateRarityTotal() {
     }
 }
 
-// Attach event listeners for rarity inputs
-['cfg-rarity-common', 'cfg-rarity-rare', 'cfg-rarity-epic', 'cfg-rarity-legendary'].forEach(id => {
-    const element = document.getElementById(id);
-    if (element) element.addEventListener('input', updateRarityTotal);
-});
+// Handled in initCreatorDashboardEvents
 
-const saveConfigBtn = document.getElementById('save-config-btn');
-if (saveConfigBtn) {
-    saveConfigBtn.onclick = async () => {
-        const commonInput = document.getElementById('cfg-rarity-common');
-        const common = commonInput ? parseInt(commonInput.value) : 0;
-        const rareInput = document.getElementById('cfg-rarity-rare');
-        const rare = rareInput ? parseInt(rareInput.value) : 0;
-        const epicInput = document.getElementById('cfg-rarity-epic');
-        const epic = epicInput ? parseInt(epicInput.value) : 0;
-        const legendaryInput = document.getElementById('cfg-rarity-legendary');
-        const legendary = legendaryInput ? parseInt(legendaryInput.value) : 0;
-
-        if (common + rare + epic + legendary !== 100) {
-            showToast("Rarity probabilities must sum to 100%", "error");
-            return;
-        }
-
-        const cfgGiftPerSub = document.getElementById('cfg-gift-per-sub');
-        const cfgGiftBonus = document.getElementById('cfg-gift-bonus');
-        const cfgGlobalBack = document.getElementById('cfg-global-back');
-
-        const configs = [
-            { id: 'rarity_weights', data: { common, rare, epic, legendary } },
-            {
-                id: 'gifting_rules', data: {
-                    cards_per_sub: cfgGiftPerSub ? parseInt(cfgGiftPerSub.value) : 0,
-                    bonus_per_5: cfgGiftBonus ? parseInt(cfgGiftBonus.value) : 0
-                }
-            },
-            { id: 'visuals', data: { global_card_back_url: cfgGlobalBack ? cfgGlobalBack.value : '' } }
-        ];
-
-        try {
-            showToast("Saving configuration...", "info");
-            for (const cfg of configs) {
-                await fetch(`${BACKEND_URL}/api/admin/config`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                    body: JSON.stringify(cfg),
-                    credentials: 'include'
-                });
-            }
-            showToast("Configuration saved successfully!", "success");
-        } catch (err) {
-            showToast("Failed to save configuration", "error");
-        }
-    };
-}
+// Handled in initCreatorDashboardEvents
 
 // File upload for global card back
-const cfgBackUpload = document.getElementById('cfg-back-upload');
-if (cfgBackUpload) {
-    cfgBackUpload.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            showToast("Uploading card back...", "info");
-            const res = await fetch(`${BACKEND_URL}/api/admin/upload`, {
-                method: 'POST',
-                headers: { 'X-CSRF-Token': csrfToken },
-                body: formData,
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                const cfgGlobalBack = document.getElementById('cfg-global-back');
-                if (cfgGlobalBack) cfgGlobalBack.value = data.url;
-                showToast("Card back uploaded!", "success");
-            } else {
-                showToast("Upload failed", "error");
-            }
-        } catch (err) {
-            showToast("Connection error", "error");
-        }
-    };
-}
+// Handled in initCreatorDashboardEvents
 
 async function loadAdminStats() {
     try {
@@ -7196,10 +7169,7 @@ function renderAdminUsers() {
 }
 
 // Add search listener
-const adminUserSearch = document.getElementById('admin-user-search');
-if (adminUserSearch) {
-    adminUserSearch.addEventListener('input', renderAdminUsers);
-}
+// Handled in initCreatorDashboardEvents
 
 async function loadAdminCards() {
     const list = document.getElementById('card-list');
@@ -7765,8 +7735,13 @@ function renderBattlesLeaderboard() {
 // --- TAB SWITCHING ---
 // --- NAVIGATION ---
 // --- NAVIGATION ---
-function switchView(viewName) {
+async function switchView(viewName) {
     const views = ['collection', 'leaderboard', 'trading', 'admin', 'profile', 'creator-dashboard', 'battle'];
+
+    // --- DYNAMIC LOADING: Special Subviews ---
+    if (viewName === 'creator-dashboard' && !document.getElementById('creator-dashboard-view')) {
+        await loadView('creator-dashboard');
+    }
 
     // Ensure dashboard view is visible when switching to any dashboard subview
     const dashboardView = document.getElementById('dashboard-view');
@@ -7784,11 +7759,11 @@ function switchView(viewName) {
         }
     });
 
-    // Hide landing if moving to a specific view
-    const landing = document.getElementById('landing-view');
-    if (landing && viewName !== 'landing') {
-        landing.classList.add('hidden');
-        landing.style.display = 'none';
+    // Hide/Show landing based on view
+    if (viewName === 'landing') {
+        showLanding();
+    } else {
+        hideLanding();
     }
 
     // Show selected view
@@ -7805,7 +7780,8 @@ function switchView(viewName) {
         'collection': 'nav-collection-btn',
         'leaderboard': 'nav-archive-btn',
         'trading': 'nav-exchange-btn',
-        'battle': 'nav-battle-btn-top'
+        'battle': 'nav-battle-btn-top',
+        'creator-dashboard': 'nav-creator-btn'
     };
 
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -7886,11 +7862,8 @@ if (navExchangeBtn) navExchangeBtn.onclick = () => switchView('trading');
 const navBattleBtn = document.getElementById('nav-battle-btn-top');
 if (navBattleBtn) navBattleBtn.onclick = () => switchView('battle');
 
-const navLogoutBtn = document.getElementById('nav-logout-btn');
-if (navLogoutBtn) navLogoutBtn.onclick = () => handleLogout();
-
 const navCreatorBtn = document.getElementById('nav-creator-btn');
-if (navCreatorBtn) navCreatorBtn.onclick = () => switchView('creator-dashboard');
+if (navCreatorBtn) navCreatorBtn.onclick = () => { window.location.href = '/dashboard'; };
 
 async function renderBattleDashboard() {
     const arenaEl = document.getElementById('battle-arena-streamer');

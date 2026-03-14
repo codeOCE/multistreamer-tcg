@@ -1,0 +1,98 @@
+<!-- ADMIN VIEW -->
+<section id="admin-view" class="hidden min-h-screen pt-28 px-6 lg:px-12 pb-32 max-w-[1700px] mx-auto void-fade space-y-12">
+    <div class="flex items-center gap-4 border-b border-white/5 pb-12">
+        <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">System Console</h3>
+        <span class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-red-500 italic">Root Access</span>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8 h-fit">
+            <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">User Management</h4>
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/50"></i>
+                <input type="text" id="admin-user-search" placeholder="Search accounts..." class="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-void-text focus:ring-1 ring-void-accent/30 transition-all">
+            </div>
+            <div id="admin-user-list" class="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                <!-- User list injected here -->
+            </div>
+        </div>
+
+        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8">
+            <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">System Logs</h4>
+            <div id="admin-activity-logs" class="space-y-3 font-mono text-[10px] text-void-muted max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                <!-- Logs injected here -->
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- MODALS -->
+
+<!-- Card Detail Modal -->
+<div id="card-modal" class="fixed inset-0 bg-void-bg/95 backdrop-blur-xl z-[2000] hidden flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
+    <div class="max-w-6xl w-full mx-auto relative void-fade">
+        <button onclick="closeCardModal()" class="absolute -top-12 right-0 md:-right-12 text-void-muted hover:text-white transition-colors duration-300">
+            <i class="fa-solid fa-xmark text-4xl"></i>
+        </button>
+        <div id="card-modal-content" class="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+            <!-- Dynamic content injected here -->
+        </div>
+    </div>
+</div>
+
+<!-- Create Binder Modal -->
+<div id="create-binder-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-md p-10 rounded-[2.5rem] border border-white/5 space-y-8">
+        <div class="space-y-2">
+            <h3 class="text-3xl font-display font-black uppercase italic tracking-tighter text-white">Initialize Binder</h3>
+            <p class="text-void-muted text-[10px] font-black uppercase tracking-widest">Create a specialized asset vault</p>
+        </div>
+        <div class="space-y-4">
+            <div class="space-y-2">
+                <label class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Binder Identifier</label>
+                <input type="text" id="binder-name-input" placeholder="e.g. Standard Collection" class="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm font-bold text-void-text focus:border-void-accent transition-all">
+            </div>
+            <button onclick="submitCreateBinder()" class="w-full saas-button rounded-2xl py-5 text-sm font-black uppercase tracking-widest">Initialize Protocol</button>
+            <button onclick="hideCreateBinderModal()" class="w-full py-4 text-[10px] font-black uppercase tracking-widest text-void-muted hover:text-white transition-colors">Abort</button>
+        </div>
+    </div>
+</div>
+
+<!-- Card Creator Modal -->
+<div id="card-creator-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto p-10 rounded-[2.5rem] border border-white/5 relative custom-scrollbar">
+        <button onclick="closeCardCreator()" class="absolute top-8 right-8 text-void-muted hover:text-white transition-colors"><i class="fa-solid fa-xmark text-2xl"></i></button>
+        <div class="flex flex-col md:flex-row gap-12">
+            <div class="w-full md:w-1/2 space-y-6">
+                <h3 id="card-form-title" class="text-3xl font-display font-black uppercase italic tracking-tighter text-white">New Asset</h3>
+                <div class="aspect-[2/3] w-full bg-black rounded-3xl border border-white/10 relative overflow-hidden group shadow-2xl flex items-center justify-center">
+                    <img id="card-image-preview" src="/pack.png" class="max-w-full max-h-full object-contain hidden z-10 relative">
+                    <div id="card-image-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-void-muted space-y-4">
+                        <i class="fa-solid fa-image text-4xl opacity-20"></i>
+                        <span class="text-[10px] uppercase font-black tracking-widest opacity-50">Upload Matrix Frame</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 space-y-4 pt-10">
+                <!-- Editor fields ... simplified for extract -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Modal -->
+<div id="confirm-action-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[3000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-sm p-10 rounded-[2.5rem] border border-white/5 text-center space-y-6">
+        <div id="confirm-modal-icon-wrap" class="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 text-2xl mx-auto border border-red-500/20">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <div class="space-y-1">
+            <h3 id="confirm-modal-title" class="text-2xl font-display font-black uppercase italic tracking-tighter text-white">Warning</h3>
+            <p id="confirm-modal-message" class="text-[10px] text-void-muted uppercase font-black tracking-widest leading-relaxed">Proceed with destructive action?</p>
+        </div>
+        <div class="flex gap-4">
+            <button onclick="closeConfirmModal()" class="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-xl font-black text-[10px] uppercase tracking-widest text-void-muted">Abort</button>
+            <button id="confirm-modal-action-btn" class="flex-1 py-4 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-all shadow-lg shadow-red-600/20">Execute</button>
+        </div>
+    </div>
+</div>
