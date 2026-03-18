@@ -47,14 +47,13 @@ function initViewerDashboardEvents() {
     
     const tabAdmin = document.getElementById('tab-admin');
     if (tabAdmin) tabAdmin.onclick = async () => {
-        const isCodeOce = currentUser.name.toLowerCase() === 'codeoce';
-        if (isCodeOce && !adminAuthenticated) {
-            showAdminLogin();
+        if (!currentUser.is_admin) {
+            showToast("Unauthorized", "error");
             return;
         }
         switchView('admin');
         loadAdminCards();
-        if (isCodeOce && adminAuthenticated) {
+        if (currentUser.is_admin) {
             // Show global admin panels
             const panels = ['admin-stats-panel', 'admin-users-panel', 'admin-grant-panel', 'admin-upload-panel', 'admin-bulk-panel', 'admin-config-panel'];
             panels.forEach(id => {
@@ -269,8 +268,6 @@ function initCreatorDashboardEvents() {
         };
     }
 
-    const adminUserSearch = document.getElementById('admin-user-search');
-    if (adminUserSearch) adminUserSearch.addEventListener('input', renderAdminUsers);
 }
 
 async function loadModals() {
@@ -316,6 +313,86 @@ function initModalEvents() {
 
     const obSkip = document.getElementById('onboarding-skip');
     if (obSkip) obSkip.onclick = window.closeOnboarding;
+
+    // Admin Console Events
+    const adminUserSearch = document.getElementById('admin-user-search');
+    if (adminUserSearch) adminUserSearch.addEventListener('input', renderAdminUsers);
+
+    const bulkDeleteCardsBtn = document.getElementById('bulk-delete-cards');
+    if (bulkDeleteCardsBtn) {
+        bulkDeleteCardsBtn.onclick = async () => {
+            if (!await showConfirm("⚠️ WARNING: This will DELETE ALL user cards! This cannot be undone.")) return;
+            if (!await showConfirm("FINAL WARNING: Are you absolutely sure?")) return;
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-cards`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-Token': csrfToken },
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    showToast("All cards deleted from database", "success");
+                    refreshAdminPanel();
+                } else {
+                    showToast("Failed to delete cards", "error");
+                }
+            } catch (e) {
+                showToast("Error: " + e.message, "error");
+            }
+        };
+    }
+
+    const bulkDeleteTradesBtn = document.getElementById('bulk-delete-trades');
+    if (bulkDeleteTradesBtn) {
+        bulkDeleteTradesBtn.onclick = async () => {
+            if (!await showConfirm("⚠️ WARNING: This will DELETE ALL trade records! This cannot be undone.")) return;
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-trades`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-Token': csrfToken },
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    showToast("All trades cleared", "success");
+                    if (typeof fetchTrades === 'function') fetchTrades();
+                    refreshAdminPanel();
+                } else {
+                    showToast("Failed to clear trades", "error");
+                }
+            } catch (e) {
+                showToast("Error: " + e.message, "error");
+            }
+        };
+    }
+
+    const exportDataBtn = document.getElementById('export-data');
+    if (exportDataBtn) {
+        exportDataBtn.onclick = async () => {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/admin/export`, {
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `tcg-export-${new Date().toISOString()}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                } else {
+                    showToast('Export failed', 'error');
+                }
+            } catch (e) {
+                showToast('Error: ' + e.message, 'error');
+            }
+        };
+    }
 }
 
 // --- GLOBAL IMAGE FALLBACK HANDLER ---
@@ -944,13 +1021,8 @@ if (window.Chart) {
 
 // --- ONBOARDING FLOW ---
 window.openOnboarding = () => {
-    console.log("[Onboarding] Opening modal...");
-    const modal = document.getElementById('onboarding-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        if (typeof window.backToRoles === 'function') window.backToRoles();
-        scrollLock();
-    }
+    console.log("[Onboarding] Redirecting to dedicated onboarding page...");
+    window.location.href = '/onboarding';
 };
 
 window.closeOnboarding = () => {
@@ -1025,7 +1097,7 @@ function parseRoute() {
         } else {
             routeInfo.view = 'home';
         }
-    } else if (parts.length === 1) {
+    } else if (parts.length === 1 && parts[0] !== 'obs-overlay') {
         // /codeoce, /lilypadlegends, etc. - skip profile page, go straight to binder
         window.location.replace(`/binder/${parts[0]}`);
         return;
@@ -1386,17 +1458,19 @@ function setLoadingState(elementId, isLoading, emptyMessage = 'No items yet') {
 // Helper: show/hide landing sections via inline style (HTML default is display:none)
 // Helper: show/hide landing sections via inline style (HTML default is display:none)
 function showLanding() {
+    // Show all landing sections first (removes display:none from all of them)
+    document.querySelectorAll('.landing-section').forEach(s => s.style.removeProperty('display'));
+    // Then explicitly set landing-view to flex AFTER the loop so it's not overwritten
     const landing = document.getElementById('landing-view');
     if (landing) landing.style.display = 'flex';
-    document.querySelectorAll('.landing-section').forEach(s => s.style.display = '');
 
     const landingToggle = document.getElementById('landing-mode-toggle');
     if (landingToggle) landingToggle.classList.remove('hidden');
 }
 function hideLanding() {
+    document.querySelectorAll('.landing-section').forEach(s => s.style.display = 'none');
     const landing = document.getElementById('landing-view');
     if (landing) landing.style.display = 'none';
-    document.querySelectorAll('.landing-section').forEach(s => s.style.display = 'none');
 
     const landingToggle = document.getElementById('landing-mode-toggle');
     if (landingToggle) landingToggle.classList.add('hidden');
@@ -1464,8 +1538,9 @@ async function initializeApp() {
         });
     }
 
-    // Build bootstrap URL: hub = all streamers, binder/dashboard = specific streamer
-    const bootstrapUrl = routeInfo.view === 'hub'
+    // Build bootstrap URL: hub/home = all streamers (home needs a valid 200 to detect session),
+    // binder/dashboard = specific streamer
+    const bootstrapUrl = (routeInfo.view === 'hub' || routeInfo.view === 'home')
         ? `${BACKEND_URL}/api/bootstrap?streamer=all`
         : routeInfo.slug
             ? `${BACKEND_URL}/api/bootstrap?streamer=${encodeURIComponent(routeInfo.slug)}`
@@ -1535,7 +1610,15 @@ async function initializeApp() {
         // Serve from cache immediately — fire fresh fetch in background
         try {
             bootstrap = JSON.parse(cached);
-            if (bootstrap) bootstrap.isFromCache = true;
+            if (bootstrap) {
+                bootstrap.isFromCache = true;
+                // Set APP_STREAMER from cache immediately so showDashboard routing works
+                if (bootstrap.streamer) {
+                    APP_STREAMER = bootstrap.streamer;
+                    applyBranding(APP_STREAMER);
+                }
+                if (bootstrap.csrf_token) csrfToken = bootstrap.csrf_token;
+            }
         } catch (e) { /* ignore bad cache */ }
         freshFetchPromise = doFetch()
             .then((fresh) => {
@@ -1764,8 +1847,10 @@ async function renderViewerHub(sections, favoriteIds = []) {
     // --- YOUR HUB (Self-Promotion for Creators) ---
     const selfContainer = document.getElementById('hub-self-container');
     if (selfContainer) {
-        if (currentUser && (currentUser.streamer?.is_active || currentUser.name?.toLowerCase() === 'codeoce')) {
-            const s = currentUser.streamer || { username: currentUser.name, display_name: currentUser.name, avatar_url: currentUser.avatar_url };
+        if (currentUser && currentUser.is_creator) {
+            const s = (currentUser.streamer && currentUser.streamer.username) 
+                ? currentUser.streamer 
+                : { username: currentUser.name, display_name: currentUser.name, avatar_url: currentUser.avatar_url };
             selfContainer.innerHTML = `
                 <div onclick="window.location.href='/binder/${s.username}'" 
                      class="group relative flex items-center gap-4 bg-void-accent/5 border border-void-accent/20 hover:bg-void-accent/10 hover:border-void-accent/40 px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 shadow-lg shadow-void-accent/5">
@@ -1807,7 +1892,7 @@ async function renderViewerHub(sections, favoriteIds = []) {
     });
 
     const emptyState = document.getElementById('hub-empty-state');
-    const isCreatorStatus = currentUser && (currentUser.streamer?.is_active || currentUser.name?.toLowerCase() === 'codeoce');
+    const isCreatorStatus = currentUser && currentUser.is_creator;
     if (totalStreamers === 0 && !isCreatorStatus) {
         if (emptyState) emptyState.classList.remove('hidden');
         if (container) container.classList.add('hidden');
@@ -6184,7 +6269,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     }
 
     // Show creator dashboard button in Navbar
-    if (currentUser.is_creator || (currentUser.name && currentUser.name.toLowerCase() === 'codeoce')) {
+    if (currentUser.is_creator) {
         const navCreatorBtn = document.getElementById('nav-creator-btn');
         if (navCreatorBtn) navCreatorBtn.classList.remove('hidden');
 
@@ -6210,7 +6295,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     // /hub/:id/:streamer (legacy) same as binder.
     // Creator-dashboard only when at dashboard with NO slug (your own context).
     const viewingOwnStreamer = routeInfo.slug && currentUser.name && routeInfo.slug.toLowerCase() === currentUser.name.toLowerCase();
-    const isCreator = currentUser.streamer?.is_active || currentUser.name?.toLowerCase() === 'codeoce';
+    const isCreator = currentUser.is_creator;
 
     if (initialView) {
         switchView(initialView);
@@ -6324,11 +6409,7 @@ function initButtons() {
         heroLogin.onclick = (e) => {
             e.preventDefault();
             console.log("[Buttons] Hero Get Started clicked");
-            if (typeof window.openOnboarding === 'function') {
-                window.openOnboarding();
-            } else {
-                console.error('[Buttons] openOnboarding function not found');
-            }
+            window.openOnboarding();
         };
     }
 
@@ -6338,7 +6419,7 @@ function initButtons() {
         navLogin.onclick = (e) => {
             e.preventDefault();
             console.log("[Buttons] Nav Get Started clicked");
-            if (typeof window.openOnboarding === 'function') window.openOnboarding();
+            window.openOnboarding();
         };
     }
 
@@ -6967,37 +7048,6 @@ window.filterBySet = (setName) => {
 };
 
 // --- ACHIEVEMENTS SYSTEM ---
-async function syncAchievements() {
-    console.log("[Achievements] Manual sync triggered...");
-    showToast("Scanning collection for landmarks...", "info");
-
-    try {
-        const streamerParam = APP_STREAMER ? `?streamer=${APP_STREAMER.username}` : '';
-        const res = await fetch(`${BACKEND_URL}/api/achievements/sync${streamerParam}`, {
-            method: 'POST',
-            credentials: 'include'
-        });
-
-        if (res.ok) {
-            const result = await res.json();
-            if (result.unlocked && result.unlocked.length > 0) {
-                showToast(`✅ Synced! Unlocked ${result.unlocked.length} achievement(s)!`, "success");
-                showAchievementCelebration();
-            } else {
-                showToast("Collection is already up to date!", "info");
-            }
-            // Refresh the list
-            await fetchAchievements();
-        } else {
-            showToast("Failed to sync achievements", "error");
-        }
-    } catch (err) {
-        console.error("Sync error:", err);
-        showToast("Error during achievement sync", "error");
-    }
-}
-
-window.syncAchievements = syncAchievements;
 
 function renderAchievements() {
     const list = document.getElementById('achievements-list');
@@ -7008,9 +7058,6 @@ function renderAchievements() {
             <div class="text-center py-8 opacity-40">
                 <div class="text-3xl mb-2">🏆</div>
                 <div class="text-[10px] uppercase font-black tracking-widest">No achievements discovered</div>
-                <button onclick="syncAchievements()" class="mt-4 px-4 py-2 bg-void-accent/20 hover:bg-void-accent/40 text-void-accent text-[8px] font-black uppercase tracking-widest rounded-lg border border-void-accent/30 transition-all">
-                    <i class="fa-solid fa-rotate mr-1"></i> Scan Collection
-                </button>
             </div>
         `;
         return;
@@ -7019,9 +7066,6 @@ function renderAchievements() {
     const syncBtnHtml = `
         <div class="mb-4 flex justify-between items-center px-1">
             <div class="text-[9px] font-black text-void-muted uppercase tracking-widest">Your Progress</div>
-            <button onclick="syncAchievements()" class="text-[8px] font-black text-void-accent uppercase tracking-widest hover:text-white transition-colors flex items-center gap-1">
-                <i class="fa-solid fa-rotate"></i> Sync
-            </button>
         </div>
     `;
 
@@ -7113,6 +7157,17 @@ function updateRarityTotal() {
 
 // File upload for global card back
 // Handled in initCreatorDashboardEvents
+
+async function refreshAdminPanel() {
+    console.log("[Admin] Refreshing Matrix data...");
+    await Promise.allSettled([
+        loadAdminStats(),
+        loadAdminUsers(),
+        loadAdminCards()
+    ]);
+}
+
+window.refreshAdminPanel = refreshAdminPanel;
 
 async function loadAdminStats() {
     try {
@@ -7285,93 +7340,24 @@ if (grantCardForm) {
     };
 }
 
-// Bulk Actions
-const bulkDeleteCardsBtn = document.getElementById('bulk-delete-cards');
-if (bulkDeleteCardsBtn) {
-    bulkDeleteCardsBtn.onclick = async () => {
-        if (!await showConfirm("⚠️ WARNING: This will DELETE ALL user cards! This cannot be undone.")) return;
-        if (!await showConfirm("FINAL WARNING: Are you absolutely sure?")) return;
-
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-cards`, {
-                method: 'DELETE',
-                headers: { 'X-CSRF-Token': csrfToken },
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                showToast("All cards deleted from database", "success");
-                loadAdminStats();
-            } else {
-                showToast("Failed to delete cards", "error");
-            }
-        } catch (e) {
-            showToast("Error: " + e.message, "error");
-        }
-    };
-}
-
-const bulkDeleteTradesBtn = document.getElementById('bulk-delete-trades');
-if (bulkDeleteTradesBtn) {
-    bulkDeleteTradesBtn.onclick = async () => {
-        if (!await showConfirm("⚠️ WARNING: This will DELETE ALL trade records! This cannot be undone.")) return;
-
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-trades`, {
-                method: 'DELETE',
-                headers: { 'X-CSRF-Token': csrfToken },
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                showToast("All trades cleared", "success");
-                fetchTrades();
-                loadAdminStats();
-            } else {
-                showToast("Failed to clear trades", "error");
-            }
-        } catch (e) {
-            showToast("Error: " + e.message, "error");
-        }
-    };
-}
-
-const exportDataBtn = document.getElementById('export-data');
-if (exportDataBtn) {
-    exportDataBtn.onclick = async () => {
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/admin/export`, {
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `tcg-export-${new Date().toISOString()}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-            } else {
-                showToast('Export failed', 'error');
-            }
-        } catch (e) {
-            showToast('Error: ' + e.message, 'error');
-        }
-    };
-}
+// Bulk Actions - Moved to initModalEvents to support dynamic loading
 
 // --- DATA (VIA BACKEND) ---
 
 async function fetchUserCollection(initialData = null) {
     try {
+        const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+        if (!filterParam) {
+            // No streamer context — clear skeleton and bail
+            const grid = document.getElementById('binder-grid');
+            if (grid) grid.innerHTML = '';
+            return;
+        }
+
         // If we don't have initial data, show skeletons
         if (!initialData) {
             showSkeletonCards();
         }
-
-        const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : 'codeoce');
         const resCards = await fetch(`${BACKEND_URL}/api/collection?streamer=${filterParam}`, {
             credentials: 'include'
         });
@@ -7419,7 +7405,8 @@ async function fetchUserCollection(initialData = null) {
 
         // Fetch Stats (only if not already provided)
         if (!initialData) {
-            const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : 'codeoce');
+            const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+            if (!filterParam) return;
             const resStats = await fetch(`${BACKEND_URL}/api/stats?streamer=${filterParam}`, {
                 credentials: 'include'
             });
@@ -7803,7 +7790,7 @@ async function switchView(viewName) {
     if (viewName === 'leaderboard') renderLeaderboard();
     if (viewName === 'trading') renderTradingHub();
     if (viewName === 'creator-dashboard') loadOverviewData();
-    if (viewName === 'admin') loadAdminStats();
+    if (viewName === 'admin') refreshAdminPanel();
     if (viewName === 'profile') populateProfileView();
 
     // Trigger state sync if needed
@@ -8321,35 +8308,7 @@ async function deleteBinder(id) {
     });
 }
 
-// Bulk Actions - Selected Cards Delete (only if button exists and handler not already set)
-if (bulkDeleteCardsBtn && !bulkDeleteCardsBtn.onclick) {
-    bulkDeleteCardsBtn.onclick = async () => {
-        const selectedIds = Array.from(document.querySelectorAll('.admin-card-checkbox:checked')).map(cb => cb.value);
-        if (selectedIds.length === 0) return showToast("No cards selected", "warn");
-
-        showCustomConfirm({
-            title: "Mass Purge",
-            message: `Decommission ${selectedIds.length} entities from the repository?`,
-            icon: "fa-trash-can",
-            onConfirm: async () => {
-                showToast("Purging...", "loading");
-                const res = await fetch(`${BACKEND_URL}/api/admin/cards/bulk-delete`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                    body: JSON.stringify({ ids: selectedIds }),
-                    credentials: 'include'
-                });
-
-                if (res.ok) {
-                    showToast("Entities purged", "success");
-                    loadAdminCards();
-                } else {
-                    showToast("Purge failed", "error");
-                }
-            }
-        });
-    };
-}
+// Bulk Actions - Selected Cards Delete handled in initModalEvents()
 
 function switchBinder(id) {
     activeBinderId = id;
@@ -8941,7 +8900,7 @@ const streamerFilterEl = document.getElementById('streamer-filter');
 if (streamerFilterEl) {
     streamerFilterEl.addEventListener('change', (e) => {
         const val = e.target.value;
-        window.activeStreamerFilter = val === 'current' ? (APP_STREAMER ? APP_STREAMER.username : 'codeoce') : val;
+        window.activeStreamerFilter = val === 'current' ? (APP_STREAMER ? APP_STREAMER.username : null) : val;
         currentPage = 1;
         fetchUserCollection();
     });

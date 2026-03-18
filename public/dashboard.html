@@ -65,7 +65,8 @@
             </div>
 
             <!-- LANDING MODE TOGGLE (Hidden on dashboard) -->
-            <div id="landing-mode-toggle" class="hidden relative flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md ml-4">
+            <div id="landing-mode-toggle"
+                class="hidden relative flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md ml-4">
                 <button onclick="setLandingMode('viewer')" id="mode-viewer-btn"
                     class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
                     I am a Viewer
@@ -74,7 +75,9 @@
                     class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
                     I am a Streamer
                 </button>
-                <div id="mode-indicator" class="absolute h-[calc(100%-8px)] rounded-xl bg-void-accent/20 transition-all duration-500 ease-premium"></div>
+                <div id="mode-indicator"
+                    class="absolute h-[calc(100%-8px)] rounded-xl bg-void-accent/20 transition-all duration-500 ease-premium">
+                </div>
             </div>
 
             <!-- CENTRALIZED NAVIGATION (PREMIUM STYLE) -->
@@ -95,7 +98,7 @@
             </div>
 
             <div class="flex items-center gap-6">
-                <div id="nav-user-preview" class="flex items-center gap-4">
+                <div id="nav-user-preview" class="flex items-center gap-4" role="status" aria-label="User Profile">
                     <div class="flex flex-col items-end">
                         <span id="nav-username"
                             class="text-xs font-black text-void-text uppercase tracking-widest hidden sm:block leading-none">---</span>
@@ -103,10 +106,10 @@
                             class="text-[10px] font-bold text-void-accent uppercase tracking-widest mt-1 opacity-70">Creator</span>
                     </div>
                     <div class="relative">
-                        <img id="nav-avatar" src=""
+                        <img id="nav-avatar" src="" alt="User Avatar"
                             class="w-10 h-10 rounded-2xl border border-white/10 shadow-lg p-0.5 bg-void-bg">
-                        <div
-                            class="absolute -bottom-1 -right-1 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full">
+                        <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"
+                            aria-label="Online Status">
                         </div>
                     </div>
                 </div>
@@ -136,6 +139,9 @@
 
                 <button onclick="switchTab('overlay')" id="tab-overlay" class="dashboard-tab-btn">
                     <i class="fa-solid fa-layer-group w-5"></i> Overlay
+                </button>
+                <button onclick="switchTab('queue')" id="tab-queue" class="dashboard-tab-btn">
+                    <i class="fa-solid fa-rectangle-list w-5"></i> Queue
                 </button>
                 <button onclick="switchTab('admin')" id="tab-admin" class="dashboard-tab-btn">
                     <i class="fa-solid fa-user-shield w-5"></i> Admin Panel
@@ -188,14 +194,14 @@
                                         <div class="space-y-4">
                                             <div class="flex flex-col">
                                                 <span
-                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent opacity-50 mb-1">Creator
-                                                    Identity</span>
+                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent opacity-50 mb-1">Stream
+                                                    Name</span>
                                                 <span id="read-brand-name"
                                                     class="text-lg font-black uppercase text-white">---</span>
                                             </div>
                                             <div class="flex flex-col">
                                                 <span
-                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent opacity-50 mb-1">Pulse
+                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent opacity-50 mb-1">Stream
                                                     Tagline</span>
                                                 <span id="read-brand-tagline"
                                                     class="text-xs font-bold text-void-muted uppercase">---</span>
@@ -221,15 +227,16 @@
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div class="space-y-4">
                                             <div class="space-y-2">
-                                                <label
-                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Creator
+                                                <label for="brand-name"
+                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Stream
                                                     Name</label>
                                                 <input type="text" id="brand-name" placeholder="CREATOR NAME"
                                                     class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
                                             </div>
                                             <div class="space-y-2">
-                                                <label
-                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Tagline</label>
+                                                <label for="brand-tagline"
+                                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Stream
+                                                    Tagline</label>
                                                 <input type="text" id="brand-tagline"
                                                     placeholder="Brief tagline for your channel..."
                                                     class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
@@ -237,7 +244,7 @@
                                         </div>
                                         <div class="space-y-4">
                                             <div class="space-y-2">
-                                                <label
+                                                <label for="brand-color"
                                                     class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Brand
                                                     Color</label>
                                                 <div class="flex items-center gap-4">
@@ -436,10 +443,10 @@
                                 <i class="fa-solid fa-plus"></i>
                             </div>
                             <div>
-                                <h4 class="text-xl font-black uppercase italic tracking-tight text-white">Initialize New
-                                    Asset</h4>
-                                <p class="text-[10px] text-void-muted uppercase font-bold tracking-[0.2em] mt-2">Deploy
-                                    a new card to your collection</p>
+                                <h4 class="text-xl font-black uppercase italic tracking-tight text-white">Create New
+                                    Card</h4>
+                                <p class="text-[10px] text-void-muted uppercase font-bold tracking-[0.2em] mt-2">Design
+                                    and add a new card to your deck</p>
                             </div>
                             <button onclick="openCardCreator()"
                                 class="px-12 py-5 bg-void-accent text-void-bg rounded-2xl font-black uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-void-accent/20">Open
@@ -516,7 +523,7 @@
                                     <div>
                                         <label
                                             class="block text-[10px] font-black uppercase tracking-widest text-void-accent mb-4 pl-1">Animation
-                                            Protocol</label>
+                                            Style</label>
                                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <label
                                                 class="flex items-center justify-between p-4 bg-void-bg/50 border border-white/5 rounded-2xl cursor-pointer hover:border-void-accent transition-all"
@@ -524,7 +531,8 @@
                                                 <div class="flex items-center gap-3">
                                                     <div
                                                         class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
-                                                        <i class="fa-solid fa-sparkles"></i></div>
+                                                        <i class="fa-solid fa-sparkles"></i>
+                                                    </div>
                                                     <span
                                                         class="text-[11px] font-black uppercase tracking-widest">Standard</span>
                                                 </div>
@@ -537,7 +545,8 @@
                                                 <div class="flex items-center gap-3">
                                                     <div
                                                         class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
-                                                        <i class="fa-solid fa-globe"></i></div>
+                                                        <i class="fa-solid fa-globe"></i>
+                                                    </div>
                                                     <span
                                                         class="text-[11px] font-black uppercase tracking-widest">Cosmic
                                                         Burst</span>
@@ -551,7 +560,8 @@
                                                 <div class="flex items-center gap-3">
                                                     <div
                                                         class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
-                                                        <i class="fa-solid fa-bolt"></i></div>
+                                                        <i class="fa-solid fa-bolt"></i>
+                                                    </div>
                                                     <span
                                                         class="text-[11px] font-black uppercase tracking-widest">Brutalist
                                                         Jitter</span>
@@ -579,9 +589,9 @@
                                                         class="w-full h-1.5 bg-void-bg rounded-lg appearance-none cursor-pointer accent-void-accent"
                                                         oninput="document.getElementById('volume-display').textContent = this.value + '%'">
                                                 </div>
-                                                <button
-                                                    class="w-full py-4 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all border border-white/5">Test
-                                                    Preview Pulse</button>
+                                                <button onclick="testPackSound()"
+                                                    class="w-full py-4 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all border border-white/5">Preview
+                                                    Sound Effect</button>
                                             </div>
                                         </div>
                                     </div>
@@ -602,6 +612,132 @@
                             </div>
                             <div id="anim-preview-label"
                                 class="text-[9px] font-black uppercase tracking-widest text-void-accent">Standard</div>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- ════════════════════════ QUEUE TAB ════════════════════════ -->
+                <section id="content-queue" class="tab-content space-y-6">
+
+                    <!-- Header row -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <h2 class="text-2xl font-black uppercase italic tracking-tight">Overlay Queue</h2>
+                            <span id="queue-pending-badge"
+                                class="px-3 py-1 bg-void-accent/15 border border-void-accent/30 rounded-full text-[10px] font-black text-void-accent uppercase tracking-widest">0 Pending</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button id="queue-pause-btn" onclick="toggleQueuePause()"
+                                class="px-5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-amber-500/20 flex items-center gap-2"
+                                title="Pause the overlay — no new animations until resumed">
+                                <i class="fa-solid fa-pause"></i> <span id="queue-pause-label">Pause</span>
+                            </button>
+                            <button onclick="skipOverlayNow()"
+                                class="px-5 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-indigo-500/20 flex items-center gap-2"
+                                title="Skip the currently playing animation">
+                                <i class="fa-solid fa-forward-step"></i> Skip
+                            </button>
+                            <button onclick="openQueuePopout()"
+                                class="px-5 py-2.5 bg-void-accent/10 hover:bg-void-accent/20 text-void-accent rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-void-accent/20 flex items-center gap-2"
+                                title="Open as standalone page for OBS Custom Browser Dock">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Pop Out for OBS
+                            </button>
+                            <button onclick="loadObsQueue()"
+                                class="px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-white/5 flex items-center gap-2">
+                                <i class="fa-solid fa-rotate-right"></i> Refresh
+                            </button>
+                            <button onclick="clearObsQueue()"
+                                class="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-red-500/20 flex items-center gap-2">
+                                <i class="fa-solid fa-trash-can"></i> Clear All
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                        <!-- Left column: rarity filter + auto-refresh -->
+                        <div class="space-y-6">
+                            <!-- Rarity Filter -->
+                            <div class="glass-card space-y-5">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-base font-black uppercase italic tracking-tight">Display Filter</h3>
+                                    <span class="text-[9px] font-bold text-void-muted uppercase">OBS Shows</span>
+                                </div>
+                                <p class="text-[10px] text-void-muted leading-relaxed">Only selected rarities will trigger the on-screen animation. Others are silently consumed.</p>
+                                <div class="space-y-2" id="rarity-filter-toggles">
+                                    <label class="rarity-toggle-row" data-rarity="legendary">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50"></div>
+                                            <span class="text-[11px] font-black uppercase tracking-widest text-yellow-300">Legendary</span>
+                                        </div>
+                                        <input type="checkbox" value="legendary" class="rarity-filter-cb" checked>
+                                    </label>
+                                    <label class="rarity-toggle-row" data-rarity="epic">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-2 h-2 rounded-full bg-purple-400 shadow-lg shadow-purple-400/50"></div>
+                                            <span class="text-[11px] font-black uppercase tracking-widest text-purple-300">Epic</span>
+                                        </div>
+                                        <input type="checkbox" value="epic" class="rarity-filter-cb" checked>
+                                    </label>
+                                    <label class="rarity-toggle-row" data-rarity="rare">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-2 h-2 rounded-full bg-blue-400 shadow-lg shadow-blue-400/50"></div>
+                                            <span class="text-[11px] font-black uppercase tracking-widest text-blue-300">Rare</span>
+                                        </div>
+                                        <input type="checkbox" value="rare" class="rarity-filter-cb" checked>
+                                    </label>
+                                    <label class="rarity-toggle-row" data-rarity="common">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-2 h-2 rounded-full bg-gray-400"></div>
+                                            <span class="text-[11px] font-black uppercase tracking-widest text-gray-300">Common</span>
+                                        </div>
+                                        <input type="checkbox" value="common" class="rarity-filter-cb" checked>
+                                    </label>
+                                </div>
+                                <button onclick="saveObsSettings()"
+                                    class="w-full py-3 bg-void-accent text-void-bg rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-95">
+                                    Save Filter
+                                </button>
+                            </div>
+
+                        </div>
+
+                        <!-- Right column: queue lists -->
+                        <div class="lg:col-span-2 space-y-6">
+
+                            <!-- Pending Queue -->
+                            <div class="glass-card">
+                                <div class="flex items-center justify-between mb-5">
+                                    <h3 class="text-base font-black uppercase italic tracking-tight flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
+                                        Pending
+                                    </h3>
+                                    <span class="text-[9px] font-bold text-void-muted uppercase">Oldest first · Playing soon</span>
+                                </div>
+                                <div id="queue-pending-list" class="space-y-2">
+                                    <div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-50">
+                                        Loading…
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Consumed / Played -->
+                            <div class="glass-card">
+                                <div class="flex items-center justify-between mb-5">
+                                    <h3 class="text-base font-black uppercase italic tracking-tight flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-gray-500 inline-block"></span>
+                                        Recently Played
+                                    </h3>
+                                    <span class="text-[9px] font-bold text-void-muted uppercase">Last 30 · Replay available</span>
+                                </div>
+                                <div id="queue-consumed-list" class="space-y-2">
+                                    <div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-50">
+                                        Loading…
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </section>
@@ -631,22 +767,19 @@
                                     class="w-full bg-void-bg/50 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
                             </div>
 
-                            <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar"
-                                id="admin-user-list">
-
+                            <div id="admin-user-list" class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                             </div>
                         </div>
 
-
                         <div class="glass-card">
                             <div class="flex items-center justify-between mb-2">
-                                <h3 class="text-2xl font-black uppercase italic tracking-tight">Grant Assets</h3>
+                                <h3 class="text-2xl font-black uppercase italic tracking-tight">Send Cards</h3>
                                 <div class="p-2 bg-void-accent/10 border border-void-accent/20 rounded-lg">
                                     <i class="fa-solid fa-gift text-void-accent"></i>
                                 </div>
                             </div>
                             <p class="text-[11px] text-void-muted uppercase font-bold tracking-wider mb-8 italic">
-                                Manually distribute cards to any collector in your community.</p>
+                                Manually send specific cards directly to a user's collection.</p>
 
                             <div
                                 class="bg-void-accent/5 border border-void-accent/10 rounded-2xl p-8 flex flex-col items-center justify-center text-center space-y-4">
@@ -654,116 +787,119 @@
                                     class="w-16 h-16 rounded-full bg-void-accent/10 flex items-center justify-center text-void-accent text-2xl border border-void-accent/20 shadow-lg shadow-void-accent/5 mb-2">
                                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                                 </div>
-                                <h4 class="text-sm font-black uppercase tracking-tight text-white italic">Grant Cards
+                                <h4 class="text-sm font-black uppercase tracking-tight text-white italic">Send Cards
                                 </h4>
                                 <p
                                     class="text-[10px] text-void-muted uppercase font-bold max-w-[200px] mx-auto leading-relaxed">
                                     Manually grant a card to a specific user.</p>
                                 <button onclick="openGenericGrant()"
                                     class="mt-4 px-8 py-4 bg-void-accent text-void-bg rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-lg shadow-void-accent/20">Open
-                                    Grant Panel</button>
+                                    Send Panel</button>
                             </div>
                         </div>
 
-                        <!-- Grant Card Modal -->
-                        <div id="grant-card-modal"
-                            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1100] hidden flex items-center justify-center p-6">
-                            <div class="glass-card w-full max-w-md relative">
-                                <button onclick="closeGrantModal()"
-                                    class="absolute top-6 right-6 w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
-                                    <i class="fa-solid fa-xmark"></i>
-                                </button>
-                                <h3 class="text-2xl font-black uppercase italic tracking-tight mb-2">Grant Card</h3>
-                                <p id="grant-modal-username"
-                                    class="text-[10px] text-void-muted uppercase tracking-widest mb-8">Select a user and
-                                    card</p>
-                                <div class="space-y-4">
-                                    <div class="space-y-2">
-                                        <label
-                                            class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Recipient
-                                            Username</label>
-                                        <input type="text" id="grant-username-input" placeholder="Twitch username"
-                                            class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
+                            <!-- Grant Card Modal -->
+                            <div id="grant-card-modal"
+                                class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1100] hidden flex items-center justify-center p-6"
+                                role="dialog" aria-modal="true" aria-labelledby="grant-modal-title">
+                                <div class="glass-card w-full max-w-md relative">
+                                    <button onclick="closeGrantModal()" aria-label="Close Grant Modal"
+                                        class="absolute top-6 right-6 w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                    <h3 id="grant-modal-title"
+                                        class="text-2xl font-black uppercase italic tracking-tight mb-2">Grant Card</h3>
+                                    <p id="grant-modal-username"
+                                        class="text-[10px] text-void-muted uppercase tracking-widest mb-8">Select a user
+                                        and
+                                        card</p>
+                                    <div class="space-y-4">
+                                        <div class="space-y-2">
+                                            <label for="grant-username-input"
+                                                class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Recipient
+                                                Username</label>
+                                            <input type="text" id="grant-username-input" placeholder="Twitch username"
+                                                class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label for="grant-card-select"
+                                                class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Select
+                                                Card</label>
+                                            <select id="grant-card-select"
+                                                class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all appearance-none">
+                                                <option value="">Choose a card...</option>
+                                            </select>
+                                        </div>
+                                        <button onclick="submitGrant()"
+                                            class="w-full py-4 bg-void-accent text-void-bg rounded-xl font-black uppercase tracking-widest text-[11px] shadow-lg shadow-void-accent/20 hover:scale-[1.01] transition-all">Grant
+                                            Card</button>
                                     </div>
-                                    <div class="space-y-2">
-                                        <label
-                                            class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Select
-                                            Card</label>
-                                        <select id="grant-card-select"
-                                            class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all appearance-none">
-                                            <option value="">Choose a card...</option>
-                                        </select>
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <div class="glass-card">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                                <div class="flex items-center gap-4">
+                                    <div
+                                        class="w-12 h-12 bg-void-accent/10 border border-void-accent/20 rounded-xl flex items-center justify-center text-void-accent shadow-lg shadow-void-accent/10">
+                                        <i class="fa-solid fa-bolt-lightning text-xl"></i>
                                     </div>
-                                    <button onclick="submitGrant()"
-                                        class="w-full py-4 bg-void-accent text-void-bg rounded-xl font-black uppercase tracking-widest text-[11px] shadow-lg shadow-void-accent/20 hover:scale-[1.01] transition-all">Grant
-                                        Card</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                                    <div>
+                                       <h3 class="text-2xl font-black uppercase italic tracking-tight">Recent Activity Log</h3>
+                                    <p class="text-[11px] text-void-muted uppercase font-bold tracking-widest">Real-time update stream for your TCG network</p>
 
-
-                    <div class="glass-card">
-                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                            <div class="flex items-center gap-4">
-                                <div
-                                    class="w-12 h-12 bg-void-accent/10 border border-void-accent/20 rounded-xl flex items-center justify-center text-void-accent shadow-lg shadow-void-accent/10">
-                                    <i class="fa-solid fa-bolt-lightning text-xl"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-2xl font-black uppercase italic tracking-tight">System Activity Feed
-                                    </h3>
-                                    <p class="text-[11px] text-void-muted uppercase font-bold tracking-widest">Real-time
-                                        audit logs for the TCG engine</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap items-center gap-3">
-                                <div class="relative w-full md:w-[350px]">
-                                    <i
-                                        class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted text-xs"></i>
-                                    <input type="text" id="log-search"
-                                        placeholder="Search logs (username, card ID, action...)"
-                                        class="w-full bg-void-bg/50 border border-white/10 rounded-xl pl-10 pr-6 py-3 text-[11px] font-bold focus:border-void-accent transition-all">
+                                    </div>
                                 </div>
 
-                                <select id="log-category-filter"
-                                    class="bg-void-bg/50 border border-white/10 rounded-xl px-4 py-3 text-[11px] font-bold focus:border-void-accent transition-all appearance-none cursor-pointer">
-                                    <option value="all">All Categories</option>
-                                    <option value="grant">Grant</option>
-                                    <option value="system">System</option>
-                                    <option value="trade">Trade</option>
-                                    <option value="webhook">Webhook</option>
-                                </select>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <div class="relative w-full md:w-[350px]">
+                                        <i
+                                            class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted text-xs"></i>
+                                        <input type="text" id="log-search"
+                                            placeholder="Search logs (username, card ID, action...)"
+                                            class="w-full bg-void-bg/50 border border-white/10 rounded-xl pl-10 pr-6 py-3 text-[11px] font-bold focus:border-void-accent transition-all">
+                                    </div>
 
-                                <button onclick="fetchAdminLogs()"
-                                    class="px-5 py-3 bg-void-accent/10 border border-void-accent/20 text-void-accent hover:bg-void-accent hover:text-void-bg rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 group">
-                                    <i
-                                        class="fa-solid fa-rotate group-hover:rotate-180 transition-all duration-500"></i>
-                                    Refresh
-                                </button>
+                                    <select id="log-category-filter"
+                                        class="bg-void-bg/50 border border-white/10 rounded-xl px-4 py-3 text-[11px] font-bold focus:border-void-accent transition-all appearance-none cursor-pointer">
+                                        <option value="all">All Categories</option>
+                                        <option value="grant">Grant</option>
+                                        <option value="system">System</option>
+                                        <option value="trade">Trade</option>
+                                        <option value="webhook">Webhook</option>
+                                    </select>
+
+                                    <button onclick="fetchAdminLogs()"
+                                        class="px-5 py-3 bg-void-accent/10 border border-void-accent/20 text-void-accent hover:bg-void-accent hover:text-void-bg rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 group">
+                                        <i
+                                            class="fa-solid fa-rotate group-hover:rotate-180 transition-all duration-500"></i>
+                                        Refresh
+                                    </button>
+                                </div>
+                            </div>
+
+
+                            <div
+                                class="grid grid-cols-12 gap-4 px-6 py-4 bg-white/5 rounded-t-xl border-x border-t border-white/10">
+                                <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">
+                                    Time
+                                </div>
+                                <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">
+                                    Level</div>
+                                <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">
+                                    Category</div>
+                                <div class="col-span-6 text-[9px] font-black uppercase text-void-muted tracking-widest">
+                                    Message</div>
+                            </div>
+
+
+                            <div class="divide-y divide-white/5 border border-white/10 rounded-b-xl overflow-hidden bg-void-bg/20"
+                                id="admin-activity-logs">
+
                             </div>
                         </div>
-
-
-                        <div
-                            class="grid grid-cols-12 gap-4 px-6 py-4 bg-white/5 rounded-t-xl border-x border-t border-white/10">
-                            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">Time
-                            </div>
-                            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">
-                                Level</div>
-                            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">
-                                Category</div>
-                            <div class="col-span-6 text-[9px] font-black uppercase text-void-muted tracking-widest">
-                                Message</div>
-                        </div>
-
-
-                        <div class="divide-y divide-white/5 border border-white/10 rounded-b-xl overflow-hidden bg-void-bg/20"
-                            id="admin-activity-logs">
-
-                        </div>
-                    </div>
                 </section>
 
 
@@ -833,9 +969,10 @@
 
 
         <div id="card-creator-modal"
-            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6"
+            role="dialog" aria-modal="true" aria-labelledby="card-form-title">
             <div class="glass-card w-full max-w-4xl max-h-[90vh] overflow-y-auto relative custom-scrollbar">
-                <button onclick="closeCardCreator()"
+                <button onclick="closeCardCreator()" aria-label="Close Card Creator"
                     class="absolute top-8 right-8 text-void-muted hover:text-white transition-colors">
                     <i class="fa-solid fa-xmark text-2xl"></i>
                 </button>
@@ -869,7 +1006,7 @@
                         <input type="hidden" id="card-edit-id">
                         <div class="space-y-4">
                             <div class="space-y-2">
-                                <label
+                                <label for="card-creator-name"
                                     class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Card
                                     Name</label>
                                 <input type="text" id="card-creator-name" placeholder="NAME"
@@ -877,7 +1014,7 @@
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="space-y-2">
-                                    <label
+                                    <label for="card-creator-rarity"
                                         class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Rarity</label>
                                     <select id="card-creator-rarity"
                                         class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all appearance-none cursor-pointer">
@@ -888,7 +1025,7 @@
                                     </select>
                                 </div>
                                 <div class="space-y-2">
-                                    <label
+                                    <label for="card-creator-set"
                                         class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Card
                                         Set</label>
                                     <select id="card-creator-set"
@@ -900,7 +1037,7 @@
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="space-y-2">
                                     <div class="flex justify-between items-end ml-1">
-                                        <label
+                                        <label for="card-creator-attack"
                                             class="text-[9px] font-black uppercase tracking-widest text-void-accent">Attack</label>
                                         <button onclick="randomizeStats()"
                                             class="text-[8px] font-bold text-void-accent/50 hover:text-void-accent uppercase transition-colors"><i
@@ -910,14 +1047,14 @@
                                         class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
                                 </div>
                                 <div class="space-y-2">
-                                    <label
+                                    <label for="card-creator-defense"
                                         class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Defense</label>
                                     <input type="number" id="card-creator-defense" value="0"
                                         class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
                                 </div>
                             </div>
                             <div class="space-y-2">
-                                <label
+                                <label for="card-creator-description"
                                     class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Description</label>
                                 <textarea id="card-creator-description" placeholder="Describe this card..." rows="3"
                                     class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all placeholder:opacity-20 resize-none"></textarea>
@@ -963,9 +1100,10 @@
 
 
         <div id="set-manager-modal"
-            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6"
+            role="dialog" aria-modal="true" aria-labelledby="set-form-title">
             <div class="glass-card w-full max-w-2xl relative">
-                <button onclick="closeSetManager()"
+                <button onclick="closeSetManager()" aria-label="Close Set Manager"
                     class="absolute top-8 right-8 text-void-muted hover:text-white transition-colors">
                     <i class="fa-solid fa-xmark text-2xl"></i>
                 </button>
@@ -989,13 +1127,14 @@
                         </div>
                         <div class="flex-1 space-y-6">
                             <div class="space-y-2">
-                                <label class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Set
+                                <label for="set-name-input"
+                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Set
                                     Name</label>
                                 <input type="text" id="set-name-input" placeholder="SET NAME"
                                     class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
                             </div>
                             <div class="space-y-2">
-                                <label
+                                <label for="set-description-input"
                                     class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Description</label>
                                 <textarea id="set-description-input" placeholder="Describe this set..." rows="2"
                                     class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all resize-none"></textarea>
@@ -1031,7 +1170,8 @@
 
         <!-- Confirmation Modal -->
         <div id="confirm-action-modal"
-            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-6">
+            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-6"
+            role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
             <div class="glass-card w-full max-w-sm text-center space-y-6">
                 <div id="confirm-modal-icon-wrap"
                     class="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 text-2xl mx-auto">
@@ -1049,6 +1189,19 @@
                     <button id="confirm-modal-action-btn"
                         class="flex-1 py-4 bg-red-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-400 transition-all">Confirm</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Loading Veil -->
+        <div id="dashboard-loading-veil" aria-hidden="true">
+            <div class="veil-inner">
+                <div class="veil-icon">
+                    <i class="fa-solid fa-chess-rook"></i>
+                </div>
+                <div class="veil-dots">
+                    <span></span><span></span><span></span>
+                </div>
+                <p class="veil-label">Loading Dashboard</p>
             </div>
         </div>
 

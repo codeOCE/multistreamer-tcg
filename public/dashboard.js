@@ -27,6 +27,40 @@ let creatorCards = [];
 let creatorStats = {};
 let csrfToken = null;
 
+/**
+ * Drop-in fetch wrapper that:
+ * - Always sends credentials (cookies)
+ * - Automatically attaches the current CSRF token for mutating requests
+ * - On a 403 "CSRF blocked" response, refreshes the token and retries once
+ */
+async function apiFetch(url, options = {}) {
+    const method = (options.method || 'GET').toUpperCase();
+    const isMutation = method !== 'GET' && method !== 'HEAD';
+
+    const buildHeaders = () => ({
+        ...(options.headers || {}),
+        ...(isMutation && csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+    });
+
+    const res = await fetch(url, { ...options, credentials: 'include', headers: buildHeaders() });
+
+    if (res.status === 403 && isMutation) {
+        const body = await res.json().catch(() => ({}));
+        if (body?.error === 'CSRF blocked') {
+            console.warn('[CSRF] Token mismatch — refreshing and retrying...');
+            await fetchCSRFToken();
+            return fetch(url, { ...options, credentials: 'include', headers: buildHeaders() });
+        }
+        // Non-CSRF 403 — return a reconstructed response so callers can still read the body
+        return new Response(JSON.stringify(body), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
+    return res;
+}
+
 let collectorGrowthChartInstance = null;
 let packActivityChartInstance = null;
 let analyticsData = {
@@ -44,29 +78,68 @@ let cardToEdit = null;
 
 const CACHE_KEY = 'bootstrap_api_bootstrap';
 
+const SKELETON_IDS = [
+    'read-brand-name', 'read-brand-tagline', 'read-brand-color-hex',
+    'nav-username', 'read-brand-color-preview'
+];
+
+function setDashboardSkeleton(active) {
+    SKELETON_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (active) {
+            el.dataset.realContent = el.textContent;
+            el.classList.add('skeleton-pulse');
+        } else {
+            el.classList.remove('skeleton-pulse');
+        }
+    });
+}
+
+function hideDashboardVeil(instant = false) {
+    const veil = document.getElementById('dashboard-loading-veil');
+    if (!veil) return;
+    if (instant) {
+        veil.style.transition = 'none';
+    }
+    veil.classList.add('veil-hidden');
+    veil.addEventListener('transitionend', () => veil.remove(), { once: true });
+    if (instant) setTimeout(() => veil.remove(), 50);
+}
+
 async function initDashboard() {
-    // 1. Initial Snapshot from Cache (Instant Load)
     const cachedData = sessionStorage.getItem(CACHE_KEY);
-    let initialBootstrapPromise = null;
 
     if (cachedData) {
         try {
             const data = JSON.parse(cachedData);
-            console.log("[Dashboard] Loading from cache...");
             applyBootstrapData(data);
+            // Seed the in-memory token from cache so actions work immediately
+            if (data.csrf_token) csrfToken = data.csrf_token;
+            hideDashboardVeil(true);
         } catch (e) {
             console.error("[Dashboard] Cache parse error:", e);
+            setDashboardSkeleton(true);
         }
+    } else {
+        setDashboardSkeleton(true);
     }
 
-    // 2. Parallel Background/Blocking Fetch
-    // We run CSRF and Bootstrap in parallel to save time
-    const [csrfTokenLoaded, bootstrapData] = await Promise.all([
-        fetchCSRFToken(),
-        bootstrapDashboard()
-    ]);
+    // Bootstrap already sets the csrf cookie AND returns the token in its body.
+    // Fetching /api/csrf in parallel would race to overwrite that cookie with a
+    // different token, causing every subsequent mutation to get CSRF-blocked.
+    const bootstrapData = await bootstrapDashboard();
 
-    // 3. Final Revalidation (Complete the load)
+    if (bootstrapData?.csrf_token) {
+        // Use the token that matches the cookie bootstrap just set
+        csrfToken = bootstrapData.csrf_token;
+    } else if (!csrfToken) {
+        // Fallback: bootstrap failed or returned no token — fetch one explicitly
+        await fetchCSRFToken();
+    }
+
+    setDashboardSkeleton(false);
+    hideDashboardVeil(false);
     setupEventListeners();
     switchTab('branding');
 }
@@ -151,6 +224,9 @@ function loadTabData(tabId) {
             break;
         case 'overlay':
             populateOverlaySettings();
+            break;
+        case 'queue':
+            loadObsQueue();
             break;
         case 'admin':
             fetchAdminLogs();
@@ -248,7 +324,7 @@ function populateOverlaySettings() {
 
 async function bootstrapDashboard() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/bootstrap`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/bootstrap?streamer=all`, { credentials: 'include' });
         if (!res.ok) throw new Error("Initialization failed");
 
         const data = await res.json();
@@ -304,7 +380,7 @@ function applyBootstrapData(data) {
 
 async function fetchCSRFToken() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/csrf`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/csrf`, { credentials: 'include' });
         if (res.ok) {
             const data = await res.json();
             csrfToken = data.token;
@@ -430,7 +506,7 @@ async function handlePackArtUpload(file) {
         const formData = new FormData();
         formData.append('file', file);
 
-        const res = await fetch(`${BACKEND_URL}/api/creator/upload`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/upload`, {
             method: 'POST',
             headers: { 'X-CSRF-Token': csrfToken },
             body: formData,
@@ -471,7 +547,7 @@ async function saveBranding() {
 
 async function saveSettings(payload) {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/settings`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/settings`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
@@ -503,7 +579,7 @@ async function fetchCardsForGrid(gridId = 'cards-grid') {
     grid.innerHTML = `<div class="col-span-full py-12 text-center text-void-muted uppercase tracking-widest text-[10px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading Cards...</div>`;
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
         if (!res.ok) throw new Error("Access denied");
 
         creatorCards = await res.json();
@@ -580,7 +656,7 @@ async function toggleCardEligibility(cardId, field, element) {
     }
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             credentials: 'include',
@@ -604,115 +680,6 @@ async function toggleCardEligibility(cardId, field, element) {
 }
 
 
-async function fetchAdminLogs() {
-    const container = document.getElementById('admin-activity-logs');
-    if (!container) return;
-
-    const searchQuery = document.getElementById('log-search')?.value || "";
-    const category = document.getElementById('log-category-filter')?.value || "all";
-
-    container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase tracking-widest text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading Activity Feed...</div>`;
-
-    try {
-        const url = new URL(`${BACKEND_URL}/api/creator/analytics/overview`);
-        url.searchParams.set('days', '7');
-        const res = await fetch(url.toString(), { credentials: 'include' });
-
-        if (res.ok) {
-            const data = await res.json();
-
-
-            const events = [
-                { type: 'grant', level: 'INFO', message: 'Manually granted 1 x Neon Dragon to codeOCE', details: '{"card_id":"c_001","target_username":"codeOCE"}', timestamp: new Date() },
-                { type: 'grant', level: 'INFO', message: 'User codeOCE traded in 5 Commons for a Rare: Cyber Knight', details: '{"user_id":"96085876"}', timestamp: new Date(Date.now() - 300000) },
-                { type: 'system', level: 'INFO', message: '[Stripe] Checkout session created for codeOCE', details: '{"session_id":"cs_live_..."}', timestamp: new Date(Date.now() - 86400000) }
-            ];
-
-            const filtered = events.filter(ev => {
-                const matchesCategory = category === 'all' || ev.type === category;
-                const matchesSearch = !searchQuery ||
-                    ev.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    ev.type.toLowerCase().includes(searchQuery.toLowerCase());
-                return matchesCategory && matchesSearch;
-            });
-
-            if (filtered.length === 0) {
-                container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase text-[9px]">No matching activity found</div>`;
-                return;
-            }
-
-            container.innerHTML = filtered.map(event => `
-                <div class="log-row">
-                    <div class="col-span-2 text-[10px] text-void-muted flex flex-col">
-                        <span>${new Date(event.timestamp).toLocaleDateString()}</span>
-                        <span class="opacity-50">${new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                    <div class="col-span-2">
-                        <span class="badge-info">${event.level}</span>
-                    </div>
-                    <div class="col-span-2">
-                        <span class="text-[10px] font-black text-white italic">${event.type}</span>
-                    </div>
-                    <div class="col-span-6">
-                        <div class="text-[11px] font-bold text-white">${event.message}</div>
-                        <div class="text-[9px] text-void-muted font-mono mt-0.5 truncate opacity-60">${event.details}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-    } catch (err) {
-        container.innerHTML = `<div class="p-4 text-center text-red-500 uppercase text-[9px]">Failed to load activity</div>`;
-    }
-}
-
-async function fetchUserList(query = "") {
-    const container = document.getElementById('admin-user-list');
-    if (!container) return;
-
-    container.innerHTML = `<div class="py-8 text-center text-void-muted uppercase tracking-widest text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading members...</div>`;
-
-    try {
-        const url = new URL(`${BACKEND_URL}/api/creator/analytics/collectors`);
-        url.searchParams.set('days', '30');
-        if (query) url.searchParams.set('search', query);
-
-        const res = await fetch(url.toString(), { credentials: 'include' });
-        if (res.ok) {
-            const data = await res.json();
-            let users = data.top_collectors || [];
-
-            if (users.length === 0) {
-                container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase text-[9px]">No members found</div>`;
-                return;
-            }
-
-            container.innerHTML = users.map(u => `
-                <div class="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-void-accent/30 transition-all">
-                    <div class="flex items-center gap-4">
-                        ${u.avatar_url
-                    ? `<img src="${u.avatar_url}" class="w-10 h-10 rounded-xl border border-white/10 object-cover" onerror="this.outerHTML='<div class=\'w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20\'><i class=\'fa-solid fa-user text-xs\'></i></div>'">`
-                    : `<div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20"><i class="fa-solid fa-user text-xs"></i></div>`
-                }
-                        <div>
-                            <div class="text-[11px] font-black text-white uppercase">${u.username}</div>
-                            <div class="text-[9px] text-void-muted uppercase mt-1">Cards: ${u.total_cards} | Unique: ${u.unique_cards}</div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button class="px-3 py-2 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[8px] font-black uppercase transition-all" onclick="openUserGrant('${u.username}', '${u.twitch_id}')">
-                            Grant
-                        </button>
-                        <button class="px-3 py-2 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 border border-red-500/20 rounded-lg text-[8px] font-black uppercase transition-all" onclick="toggleUserBlock('${u.twitch_id}', true)">
-                            Block
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        }
-    } catch (err) {
-        container.innerHTML = `<div class="p-4 text-center text-red-500 uppercase text-[9px]">Failed to load members</div>`;
-    }
-}
 
 
 async function loadAnalytics() {
@@ -723,7 +690,7 @@ async function loadAnalytics() {
     renderAnalytics(); // Initial paint with placeholders/empty 
 
     const fetchEndpoint = (endpoint, key) => {
-        fetch(`${BACKEND_URL}/api/creator/analytics/${endpoint}?days=${timeRange}`, { credentials: 'include' })
+        apiFetch(`${BACKEND_URL}/api/creator/analytics/${endpoint}?days=${timeRange}`, { credentials: 'include' })
             .then(res => {
                 if (res.ok) return res.json();
                 throw new Error('Network error');
@@ -969,7 +936,7 @@ async function initiateEventPulse() {
     showToast("Starting Special Event...", "loading");
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/events`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/events`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -998,11 +965,11 @@ async function initiateEventPulse() {
 
 async function checkActiveEvent() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/profile`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/profile`, { credentials: 'include' });
         if (!res.ok) return;
         const streamer = await res.json();
 
-        const evRes = await fetch(`${BACKEND_URL}/api/creator/events/active`, { credentials: 'include' });
+        const evRes = await apiFetch(`${BACKEND_URL}/api/creator/events/active`, { credentials: 'include' });
         if (evRes.ok) {
             const data = await evRes.json();
             if (data && data.id) {
@@ -1228,7 +1195,7 @@ async function openUserGrant(username = null, twitchId = null) {
 
     if (isGeneric) {
         try {
-            const res = await fetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
+            const res = await apiFetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 allUsers = data.top_collectors || [];
@@ -1244,7 +1211,7 @@ async function executeGrant(twitchId, username, cardId, randomRarity = null, isS
     showToast("Granting card...", "loading");
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/grant`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/grant`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1279,7 +1246,7 @@ async function fetchUserList() {
     if (!container) return;
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
         if (res.ok) {
             const data = await res.json();
             const users = data.top_collectors || [];
@@ -1318,7 +1285,7 @@ async function fetchAdminLogs() {
     const category = document.getElementById('log-category-filter')?.value || 'all';
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/events?search=${search}&category=${category}`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/events?search=${search}&category=${category}`, { credentials: 'include' });
         if (res.ok) {
             const logs = await res.json();
             renderAdminLogs(logs);
@@ -1357,7 +1324,7 @@ function renderAdminLogs(logs) {
 async function fetchAllCreatorCards() {
     if (creatorCards && creatorCards.length > 0) return creatorCards;
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
         if (res.ok) {
             creatorCards = await res.json();
             return creatorCards;
@@ -1402,7 +1369,7 @@ function logout() {
 
 async function loadSets() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/sets`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/sets`, { credentials: 'include' });
         if (res.ok) {
             creatorSets = await res.json();
             renderSetsList();
@@ -1517,12 +1484,9 @@ async function saveSet() {
 
     try {
         const url = setId ? `${BACKEND_URL}/api/creator/sets/${setId}` : `${BACKEND_URL}/api/creator/sets`;
-        const res = await fetch(url, {
+        const res = await apiFetch(url, {
             method: setId ? 'PUT' : 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: setId || undefined, name, description, is_active: isActive }),
             credentials: 'include'
         });
@@ -1547,7 +1511,7 @@ async function deleteSet(setId) {
         async () => {
             showToast("Deleting set...", "loading");
             try {
-                const res = await fetch(`${BACKEND_URL}/api/creator/sets/${setId}`, {
+                const res = await apiFetch(`${BACKEND_URL}/api/creator/sets/${setId}`, {
                     method: 'DELETE',
                     headers: { 'X-CSRF-Token': csrfToken },
                     credentials: 'include'
@@ -1597,7 +1561,7 @@ async function bulkAssignSet() {
     try {
         let success = 0;
         for (const cardId of selectedCardIds) {
-            const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}/assign-set`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}/assign-set`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                 body: JSON.stringify({ set_id: setId }),
@@ -1623,7 +1587,7 @@ async function bulkDeleteCards() {
             try {
                 let success = 0;
                 for (const cardId of selectedCardIds) {
-                    const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+                    const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
                         method: 'DELETE',
                         headers: { 'X-CSRF-Token': csrfToken },
                         credentials: 'include'
@@ -1642,7 +1606,7 @@ async function bulkDeleteCards() {
 
 async function loadPackSettings() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/settings`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/settings`, { credentials: 'include' });
         if (res.ok) {
             const settings = await res.json();
             if (settings.pack_image_url) {
@@ -1663,7 +1627,7 @@ async function savePackCustomization() {
         if (imageFile) {
             const formData = new FormData();
             formData.append('file', imageFile);
-            const uploadRes = await fetch(`${BACKEND_URL}/api/admin/upload`, {
+            const uploadRes = await apiFetch(`${BACKEND_URL}/api/admin/upload`, {
                 method: 'POST',
                 headers: { 'X-CSRF-Token': csrfToken },
                 body: formData,
@@ -1675,7 +1639,7 @@ async function savePackCustomization() {
             }
         }
 
-        const res = await fetch(`${BACKEND_URL}/api/creator/settings`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/settings`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ pack_image_url: imageUrl }),
@@ -1694,26 +1658,65 @@ async function savePackCustomization() {
 }
 
 
+// --- ACCESSIBILITY HELPER: Keyboard Support ---
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modals = [
+            'card-creator-modal',
+            'set-manager-modal',
+            'grant-card-modal',
+            'confirm-action-modal'
+        ];
+        modals.forEach(id => {
+            const modal = document.getElementById(id);
+            if (modal && !modal.classList.contains('hidden')) {
+                // Determine which close function to call
+                if (id === 'card-creator-modal') closeCardCreator();
+                else if (id === 'set-manager-modal') closeSetManager();
+                else if (id === 'grant-card-modal') closeGrantModal();
+                else if (id === 'confirm-action-modal') closeConfirmModal();
+            }
+        });
+    }
+});
+
 window.openSetManager = () => {
-    document.getElementById('set-manager-modal')?.classList.remove('hidden');
-    resetSetForm();
+    const modal = document.getElementById('set-manager-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        resetSetForm();
+        // Focus management: focus the first input or the close button
+        setTimeout(() => {
+            const firstInput = document.getElementById('set-name-input');
+            if (firstInput) firstInput.focus();
+        }, 100);
+    }
 };
 window.closeSetManager = () => document.getElementById('set-manager-modal')?.classList.add('hidden');
+
 window.openCardCreator = () => {
-    document.getElementById('card-creator-modal')?.classList.remove('hidden');
-    document.getElementById('card-form-title').textContent = 'New Card';
-    document.getElementById('card-edit-id').value = '';
-    document.getElementById('card-creator-name').value = '';
-    document.getElementById('card-creator-rarity').value = 'common';
-    document.getElementById('card-creator-description').value = '';
-    document.getElementById('card-creator-attack').value = '0';
-    document.getElementById('card-creator-defense').value = '0';
-    document.getElementById('card-creator-set').value = '';
-    document.getElementById('card-image-preview').classList.add('hidden');
-    document.getElementById('card-image-placeholder').classList.remove('hidden');
+    const modal = document.getElementById('card-creator-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        document.getElementById('card-form-title').textContent = 'New Card';
+        document.getElementById('card-edit-id').value = '';
+        document.getElementById('card-creator-name').value = '';
+        document.getElementById('card-creator-rarity').value = 'common';
+        document.getElementById('card-creator-description').value = '';
+        document.getElementById('card-creator-attack').value = '0';
+        document.getElementById('card-creator-defense').value = '0';
+        document.getElementById('card-creator-set').value = '';
+        document.getElementById('card-image-preview').classList.add('hidden');
+        document.getElementById('card-image-placeholder').classList.remove('hidden');
+
+        // Focus management
+        setTimeout(() => {
+            const firstInput = document.getElementById('card-creator-name');
+            if (firstInput) firstInput.focus();
+        }, 100);
+    }
 };
 window.closeCardCreator = () => document.getElementById('card-creator-modal')?.classList.add('hidden');
-
 
 window.switchSubTab = switchSubTab;
 window.saveSet = saveSet;
@@ -1725,8 +1728,10 @@ window.bulkAssignSet = bulkAssignSet;
 window.bulkDeleteCards = bulkDeleteCards;
 window.savePackCustomization = savePackCustomization;
 window.resetPackImage = () => {
-    document.getElementById('pack-preview-image').src = '/pack.png';
-    document.getElementById('pack-image-upload').value = '';
+    const img = document.getElementById('pack-preview-image');
+    if (img) img.src = '/pack.png';
+    const input = document.getElementById('pack-image-upload');
+    if (input) input.value = '';
 };
 
 
@@ -1751,7 +1756,7 @@ async function saveCard() {
         if (imageFile) {
             const formData = new FormData();
             formData.append('file', imageFile);
-            const uploadRes = await fetch(`${BACKEND_URL}/api/creator/upload`, {
+            const uploadRes = await apiFetch(`${BACKEND_URL}/api/creator/upload`, {
                 method: 'POST',
                 headers: { 'X-CSRF-Token': csrfToken },
                 body: formData,
@@ -1780,7 +1785,7 @@ async function saveCard() {
             is_trading_eligible: isTradable
         };
 
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1809,7 +1814,7 @@ async function deleteCard(cardId) {
     showToast("Deleting card...", "loading");
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
             method: 'DELETE',
             headers: { 'X-CSRF-Token': csrfToken },
             credentials: 'include'
@@ -1862,7 +1867,7 @@ async function fetchCardBacks() {
     grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading card backs...</div>';
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/card-backs`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/card-backs`, { credentials: 'include' });
         if (res.ok) {
             const backs = await res.json();
             if (backs.length === 0) {
@@ -1970,7 +1975,7 @@ async function handleBulkImageUpload(files) {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            const uploadRes = await fetch(`${BACKEND_URL}/api/creator/upload`, {
+            const uploadRes = await apiFetch(`${BACKEND_URL}/api/creator/upload`, {
                 method: 'POST',
                 headers: { 'X-CSRF-Token': csrfToken },
                 body: formData,
@@ -1979,7 +1984,7 @@ async function handleBulkImageUpload(files) {
 
             if (uploadRes.ok) {
                 const uploadData = await uploadRes.json();
-                const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
+                const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                     body: JSON.stringify({
@@ -2054,3 +2059,268 @@ window.addEventListener('DOMContentLoaded', () => {
     setupCardFilters();
     setupBulkUpload();
 });
+
+// ════════════════════════════════════════════════════════════════
+//  OBS QUEUE MANAGEMENT
+// ════════════════════════════════════════════════════════════════
+
+let queueAutoRefreshTimer = null;
+
+const RARITY_META = {
+    legendary: { color: '#facc15', shadow: 'shadow-yellow-400/40', label: 'Legendary', dot: 'bg-yellow-400' },
+    epic:      { color: '#c084fc', shadow: 'shadow-purple-400/40', label: 'Epic',      dot: 'bg-purple-400' },
+    rare:      { color: '#60a5fa', shadow: 'shadow-blue-400/40',   label: 'Rare',      dot: 'bg-blue-400'   },
+    common:    { color: '#94a3b8', shadow: '',                     label: 'Common',    dot: 'bg-gray-400'   },
+};
+
+function rarityMeta(rarity) {
+    return RARITY_META[(rarity || 'common').toLowerCase()] || RARITY_META.common;
+}
+
+function timeAgo(isoString) {
+    const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    if (diff < 60)  return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function buildQueueRow(item, isPending, isFirst) {
+    const card  = item.cards  || {};
+    const user  = item.users  || {};
+    const meta  = rarityMeta(card.rarity);
+    const thumb = card.image_url
+        ? `<img src="${card.image_url}" class="queue-thumb" onerror="this.src='/pack.png'">`
+        : `<div class="queue-thumb flex items-center justify-center bg-white/5 text-void-muted text-xs"><i class="fa-solid fa-cards-blank"></i></div>`;
+
+    const actions = isPending
+        ? `<button class="queue-btn play-now" onclick="replayQueueItem('${item.id}', true)" title="Move to front"><i class="fa-solid fa-forward-fast"></i> Now</button>
+           <button class="queue-btn skip" onclick="skipQueueItem('${item.id}')"><i class="fa-solid fa-forward"></i> Skip</button>`
+        : `<button class="queue-btn replay" onclick="replayQueueItem('${item.id}', false)"><i class="fa-solid fa-rotate-left"></i> Replay</button>`;
+
+    return `
+        <div class="queue-card-row${isFirst ? ' is-first' : ''}" data-id="${item.id}">
+            ${thumb}
+            <div class="flex items-center gap-1.5 flex-shrink-0 w-[72px]">
+                <div class="queue-rarity-dot ${meta.dot}"></div>
+                <span class="text-[9px] font-black uppercase tracking-widest" style="color:${meta.color}">${meta.label}</span>
+            </div>
+            <div class="min-w-0 flex-1">
+                <div class="text-[11px] font-black text-white truncate">${card.name || 'Unknown Card'}</div>
+                <div class="text-[9px] font-bold text-void-muted truncate">
+                    ${user.username ? `<i class="fa-brands fa-twitch text-purple-400"></i> ${user.username} · ` : ''}${timeAgo(item.created_at)}
+                </div>
+            </div>
+            <div class="queue-actions">${actions}</div>
+        </div>`;
+}
+
+async function loadObsQueue() {
+    const pendingList  = document.getElementById('queue-pending-list');
+    const consumedList = document.getElementById('queue-consumed-list');
+    if (!pendingList || !consumedList) return;
+
+    const loadingHtml = `<div class="text-center py-6 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading…</div>`;
+    pendingList.innerHTML  = loadingHtml;
+    consumedList.innerHTML = loadingHtml;
+
+    try {
+        const res  = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue`);
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || 'Failed to load queue');
+
+        const { pending = [], consumed = [], obs_settings, obs_paused } = data;
+
+        // Update badge
+        const badge = document.getElementById('queue-pending-badge');
+        if (badge) badge.textContent = `${pending.length} Pending`;
+
+        // Sync pause button state
+        syncDashboardPauseBtn(!!obs_paused);
+
+        // Populate pending
+        if (pending.length === 0) {
+            pendingList.innerHTML = `<div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="fa-solid fa-check-circle mr-2 text-green-400 opacity-60"></i>Queue is empty</div>`;
+        } else {
+            pendingList.innerHTML = pending.map((item, i) => buildQueueRow(item, true, i === 0)).join('');
+        }
+
+        // Populate consumed
+        if (consumed.length === 0) {
+            consumedList.innerHTML = `<div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40">No recent animations</div>`;
+        } else {
+            consumedList.innerHTML = consumed.map(item => buildQueueRow(item, false, false)).join('');
+        }
+
+        // Apply rarity filter checkboxes from saved settings
+        if (obs_settings?.show_rarities) {
+            document.querySelectorAll('.rarity-filter-cb').forEach(cb => {
+                cb.checked = obs_settings.show_rarities.includes(cb.value);
+            });
+        }
+    } catch (err) {
+        const errHtml = `<div class="text-center py-6 text-red-400 text-[11px] font-bold uppercase tracking-widest">${err.message}</div>`;
+        pendingList.innerHTML  = errHtml;
+        consumedList.innerHTML = errHtml;
+    }
+}
+
+async function skipQueueItem(id) {
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue/skip`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to skip');
+        showToast('Card skipped', 'success');
+        await loadObsQueue();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function replayQueueItem(id, moveToFront) {
+    // moveToFront=true uses "Play Now" semantics — we still just re-queue it;
+    // the backend always pushes replayed items to the END (created_at = now).
+    // "Play Now" would require more complex re-ordering; for now both replay.
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue/replay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to replay');
+        showToast(moveToFront ? 'Added to queue' : 'Queued for replay', 'success');
+        await loadObsQueue();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function clearObsQueue() {
+    const confirmed = await new Promise(resolve => {
+        // use the existing custom confirm modal if available
+        if (typeof showCustomConfirm === 'function') {
+            showCustomConfirm({
+                title: 'Clear Queue',
+                message: 'Mark all pending animations as consumed? This cannot be undone.',
+                confirmText: 'Clear All',
+                cancelText: 'Cancel',
+                icon: 'fa-trash-can',
+                onConfirm: () => resolve(true),
+                onCancel:  () => resolve(false),
+            });
+        } else {
+            resolve(window.confirm('Clear all pending queue items?'));
+        }
+    });
+    if (!confirmed) return;
+
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue/clear`, { method: 'POST' });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to clear queue');
+        showToast('Queue cleared', 'success');
+        await loadObsQueue();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function saveObsSettings() {
+    const checkboxes = document.querySelectorAll('.rarity-filter-cb');
+    const showRarities = Array.from(checkboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+
+    if (showRarities.length === 0) {
+        showToast('Select at least one rarity to display', 'error');
+        return;
+    }
+
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ obs_settings: { show_rarities: showRarities } }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to save');
+        showToast('Display filter saved', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function toggleQueueAutoRefresh(enabled) {
+    clearInterval(queueAutoRefreshTimer);
+    queueAutoRefreshTimer = null;
+    if (enabled) {
+        queueAutoRefreshTimer = setInterval(() => {
+            // Only refresh if the queue tab is currently visible
+            const queuePanel = document.getElementById('content-queue');
+            if (queuePanel && queuePanel.classList.contains('active')) {
+                loadObsQueue();
+            }
+        }, 5000);
+    }
+}
+
+function openQueuePopout() {
+    if (!currentUser?.streamer?.obs_overlay_token) {
+        showToast('No overlay token found. Check your Overlay tab.', 'error');
+        return;
+    }
+    const streamer = currentUser.name || (currentUser.streamer && currentUser.streamer.username);
+    const token    = currentUser.streamer.obs_overlay_token;
+    const popoutUrl = `${window.location.origin}/queue-control?streamer=${encodeURIComponent(streamer)}&token=${encodeURIComponent(token)}`;
+    window.open(popoutUrl, 'queue-control', 'width=380,height=680,resizable=yes,scrollbars=yes');
+}
+
+// Expose to HTML
+/* ── Dashboard: Pause / Skip Now ─────────────────────────────────── */
+let _dashQueuePaused = false;
+
+function syncDashboardPauseBtn(paused) {
+    _dashQueuePaused = paused;
+    const btn   = document.getElementById('queue-pause-btn');
+    const label = document.getElementById('queue-pause-label');
+    if (!btn || !label) return;
+    if (paused) {
+        label.textContent = 'Resume';
+        btn.querySelector('i').className = 'fa-solid fa-play';
+        btn.classList.add('bg-amber-500/25', 'border-amber-400/40');
+    } else {
+        label.textContent = 'Pause';
+        btn.querySelector('i').className = 'fa-solid fa-pause';
+        btn.classList.remove('bg-amber-500/25', 'border-amber-400/40');
+    }
+}
+
+async function toggleQueuePause() {
+    const endpoint = _dashQueuePaused ? 'resume' : 'pause';
+    syncDashboardPauseBtn(!_dashQueuePaused); // optimistic
+    try {
+        const res = await fetch(`/api/creator/obs-queue/${endpoint}`, { method: 'POST', credentials: 'include' });
+        if (!res.ok) { syncDashboardPauseBtn(!_dashQueuePaused); throw new Error((await res.json()).error || 'Failed'); }
+        showToast(_dashQueuePaused ? 'Queue paused — overlay will hold' : 'Queue resumed', 'success');
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function skipOverlayNow() {
+    try {
+        const res = await fetch('/api/creator/obs-queue/skip-now', { method: 'POST', credentials: 'include' });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+        showToast('Skip signal sent to overlay', 'success');
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+window.loadObsQueue    = loadObsQueue;
+window.openQueuePopout = openQueuePopout;
+window.skipQueueItem   = skipQueueItem;
+window.replayQueueItem = replayQueueItem;
+window.clearObsQueue   = clearObsQueue;
+window.saveObsSettings = saveObsSettings;
+window.toggleQueueAutoRefresh = toggleQueueAutoRefresh;
+window.toggleQueuePause  = toggleQueuePause;
+window.skipOverlayNow    = skipOverlayNow;

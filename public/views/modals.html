@@ -1,26 +1,89 @@
 <!-- ADMIN VIEW -->
 <section id="admin-view" class="hidden min-h-screen pt-28 px-6 lg:px-12 pb-32 max-w-[1700px] mx-auto void-fade space-y-12">
-    <div class="flex items-center gap-4 border-b border-white/5 pb-12">
-        <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">System Console</h3>
-        <span class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-red-500 italic">Root Access</span>
+    <div class="flex items-center justify-between border-b border-white/5 pb-12">
+        <div class="flex items-center gap-4">
+            <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">System Console</h3>
+            <span class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-red-500 italic">Root Access</span>
+        </div>
+        <button onclick="refreshAdminPanel()" class="px-6 py-3 bg-void-accent/10 border border-void-accent/20 rounded-xl text-[10px] font-black text-void-accent uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all">
+            <i class="fa-solid fa-rotate mr-2"></i> Refresh Matrix
+        </button>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Total Users</div>
+            <div id="admin-stat-users" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Total Cards</div>
+            <div id="admin-stat-cards" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Unique Entities</div>
+            <div id="admin-stat-unique" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Legendary Items</div>
+            <div id="admin-stat-legendary" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
     </div>
     
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        <!-- User Management -->
         <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8 h-fit">
-            <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">User Management</h4>
+            <div class="flex items-center justify-between">
+                <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">User Management</h4>
+                <i class="fa-solid fa-users text-void-accent opacity-20"></i>
+            </div>
             <div class="relative">
                 <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/50"></i>
                 <input type="text" id="admin-user-search" placeholder="Search accounts..." class="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-void-text focus:ring-1 ring-void-accent/30 transition-all">
             </div>
-            <div id="admin-user-list" class="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            <div id="user-mod-list" class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                 <!-- User list injected here -->
             </div>
         </div>
 
-        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8">
-            <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">System Logs</h4>
-            <div id="admin-activity-logs" class="space-y-3 font-mono text-[10px] text-void-muted max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                <!-- Logs injected here -->
+        <!-- Card Management -->
+        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8 h-fit">
+            <div class="flex items-center justify-between">
+                <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">Global Registry</h4>
+                <i class="fa-solid fa-database text-void-accent opacity-20"></i>
+            </div>
+            <div id="card-list" class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                <!-- Card list injected here -->
+            </div>
+            <button onclick="openCardCreator()" class="w-full py-4 bg-void-accent/10 border border-void-accent/20 rounded-2xl text-[10px] font-black text-void-accent uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all">
+                <i class="fa-solid fa-plus mr-2"></i> Deploy New Card
+            </button>
+        </div>
+
+        <!-- System Maintenance -->
+        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8 h-fit">
+            <div class="flex items-center justify-between">
+                <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">Maintenance</h4>
+                <i class="fa-solid fa-screwdriver-wrench text-void-accent opacity-20"></i>
+            </div>
+            
+            <div class="space-y-3">
+                <button id="bulk-delete-cards" class="w-full py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                    Reset Collection Database
+                </button>
+                <button id="bulk-delete-trades" class="w-full py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                    Purge Trade History
+                </button>
+                <button id="export-data" class="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black text-void-muted uppercase tracking-widest hover:text-white transition-all">
+                    Extract Data Dump
+                </button>
+            </div>
+
+            <div class="pt-8 border-t border-white/5">
+                <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-4">Kernel Output</div>
+                <div id="admin-activity-logs" class="space-y-3 font-mono text-[10px] text-void-muted max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Logs injected here -->
+                </div>
             </div>
         </div>
     </div>
