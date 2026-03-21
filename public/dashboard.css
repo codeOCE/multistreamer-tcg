@@ -365,3 +365,34 @@ canvas {
     border-color: var(--void-accent);
     transform: translateX(4px);
 }
+
+/* Animation Preview Classes */
+.anim-standard {
+    animation: standard-float 4s ease-in-out infinite;
+}
+@keyframes standard-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.anim-cosmic {
+    animation: cosmic-burst 2s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite;
+    filter: drop-shadow(0 0 15px rgba(var(--void-accent-rgb), 0.8));
+}
+@keyframes cosmic-burst {
+    0% { transform: scale(1) rotate(0deg); opacity: 0.8; }
+    50% { transform: scale(1.1) rotate(5deg); opacity: 1; filter: drop-shadow(0 0 25px rgba(255, 255, 255, 0.9)); }
+    100% { transform: scale(1) rotate(0deg); opacity: 0.8; }
+}
+
+.anim-brutalist {
+    animation: brutalist-jitter 0.5s steps(3, end) infinite;
+    transform-origin: center;
+}
+@keyframes brutalist-jitter {
+    0% { transform: translate(0, 0) scale(1) skew(0deg); }
+    25% { transform: translate(-2px, 2px) scale(1.02) skew(1deg); filter: contrast(150%); }
+    50% { transform: translate(2px, -1px) scale(0.98) skew(-1deg); }
+    75% { transform: translate(-1px, -2px) scale(1.01) skew(0.5deg); filter: hue-rotate(90deg); }
+    100% { transform: translate(0, 0) scale(1) skew(0deg); }
+}

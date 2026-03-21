@@ -1,33 +1,719 @@
-const BACKEND_URL = window.location.origin; // Use same domain for cookies to work
+const BACKEND_URL = window.location.origin;
 
-let APP_STREAMER = null; // Global streamer context
-window.activeStreamerFilter = null; // null = use APP_STREAMER context, 'all' = global binder
+
+const loadedViews = new Set();
+async function loadView(viewName) {
+    if (loadedViews.has(viewName)) return true;
+    
+    console.log(`[ViewEngine] Loading view: ${viewName}`);
+    try {
+        const response = await fetch(`/views/${viewName}.html`);
+        if (!response.ok) throw new Error(`Failed to load view: ${viewName}`);
+        
+        const html = await response.text();
+        const mount = document.getElementById('dynamic-view-mount');
+        if (mount) {
+
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            while (temp.firstChild) {
+                mount.appendChild(temp.firstChild);
+            }
+            loadedViews.add(viewName);
+
+            if (typeof initViewEvents === 'function') initViewEvents(viewName);
+            return true;
+        }
+    } catch (error) {
+        console.error(`[ViewEngine] Error loading view ${viewName}:`, error);
+    }
+    return false;
+}
+
+
+function initViewEvents(viewName) {
+    console.log(`[ViewEngine] Initializing events for: ${viewName}`);
+    if (viewName === 'viewer-dashboard') {
+        initViewerDashboardEvents();
+    } else if (viewName === 'creator-dashboard') {
+        initCreatorDashboardEvents();
+    }
+}
+
+function initViewerDashboardEvents() {
+    console.log("[ViewEngine] Initializing Viewer Dashboard events...");
+    
+    const tabAdmin = document.getElementById('tab-admin');
+    if (tabAdmin) tabAdmin.onclick = async () => {
+        if (!currentUser.is_admin) {
+            showToast("Unauthorized", "error");
+            return;
+        }
+        switchView('admin');
+        loadAdminCards();
+        if (currentUser.is_admin) {
+
+            const panels = ['admin-stats-panel', 'admin-users-panel', 'admin-grant-panel', 'admin-upload-panel', 'admin-bulk-panel', 'admin-config-panel'];
+            panels.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('hidden');
+            });
+            loadAdminStats();
+            loadAdminUsers();
+            loadAdminConfig();
+        } else {
+
+            const panels = ['admin-stats-panel', 'admin-users-panel', 'admin-grant-panel', 'admin-upload-panel', 'admin-bulk-panel', 'admin-config-panel'];
+            panels.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+        }
+    };
+
+    const viewLogsBtn = document.getElementById('view-logs');
+    if (viewLogsBtn) viewLogsBtn.onclick = () => {
+        const modal = document.getElementById('logs-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            scrollLock();
+            loadSystemLogs();
+        }
+    };
+
+    const closeLogsBtn = document.getElementById('close-logs-modal');
+    if (closeLogsBtn) closeLogsBtn.onclick = () => {
+        const modal = document.getElementById('logs-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            scrollUnlock();
+        }
+    };
+
+    const refreshLogsBtn = document.getElementById('refresh-logs-btn');
+    if (refreshLogsBtn) refreshLogsBtn.onclick = loadSystemLogs;
+
+    const logSearch = document.getElementById('log-search');
+    if (logSearch) logSearch.oninput = debounce(loadSystemLogs, 300);
+
+    const logCategoryFilter = document.getElementById('log-category-filter');
+    if (logCategoryFilter) logCategoryFilter.onchange = loadSystemLogs;
+
+    const refreshUsersBtn = document.getElementById('refresh-users');
+    if (refreshUsersBtn) refreshUsersBtn.onclick = loadAdminUsers;
+
+    const refreshCardsBtn = document.getElementById('refresh-cards');
+    if (refreshCardsBtn) refreshCardsBtn.onclick = loadAdminCards;
+
+    const helpBtn = document.getElementById('help-btn');
+    if (helpBtn) helpBtn.onclick = showHowToPlay;
+
+
+    document.querySelectorAll('.void-dropdown').forEach(el => {
+        if (!el.dataset.voidDropdownInit) initVoidDropdown(el);
+    });
+}
+
+function syncVoidDropdownMenu(wrapper) {
+    const select = wrapper.querySelector('.void-dropdown-native');
+    const menu = wrapper.querySelector('.void-dropdown-menu');
+    const label = wrapper.querySelector('.void-dropdown-label');
+    if (!select || !menu || !label) return;
+
+
+    const options = Array.from(select.options).map(opt => ({
+        value: opt.value,
+        text: opt.text
+    }));
+
+    menu.innerHTML = options.map(opt => `
+        <div class="void-dropdown-option" role="option" data-value="${opt.value}">${opt.text}</div>
+    `).join('');
+
+
+    menu.querySelectorAll('.void-dropdown-option').forEach(opt => {
+        opt.onclick = (e) => {
+            e.stopPropagation();
+            select.value = opt.dataset.value;
+            label.textContent = opt.textContent;
+            menu.hidden = true;
+            menu.setAttribute('aria-hidden', 'true');
+            wrapper.querySelector('.void-dropdown-trigger').setAttribute('aria-expanded', 'false');
+            wrapper.classList.remove('void-dropdown-open');
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+    });
+
+
+    const selectedOption = select.options[select.selectedIndex];
+    if (selectedOption) {
+        label.textContent = selectedOption.text;
+    }
+}
+
+function initVoidDropdown(wrapper) {
+    if (wrapper.dataset.voidDropdownInit === 'true') return;
+    wrapper.dataset.voidDropdownInit = 'true';
+
+    const select = wrapper.querySelector('.void-dropdown-native');
+    const trigger = wrapper.querySelector('.void-dropdown-trigger');
+    const menu = wrapper.querySelector('.void-dropdown-menu');
+    const label = wrapper.querySelector('.void-dropdown-label');
+    if (!select || !trigger || !menu || !label) return;
+
+    const open = () => {
+        syncVoidDropdownMenu(wrapper);
+        menu.hidden = false;
+        menu.setAttribute('aria-hidden', 'false');
+        trigger.setAttribute('aria-expanded', 'true');
+        wrapper.classList.add('void-dropdown-open');
+    };
+    const close = () => {
+        menu.hidden = true;
+        menu.setAttribute('aria-hidden', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+        wrapper.classList.remove('void-dropdown-open');
+    };
+
+    trigger.onclick = (e) => {
+        e.stopPropagation();
+        if (menu.hidden) {
+            open();
+            const handler = (e2) => {
+                if (!wrapper.contains(e2.target)) {
+                    close();
+                    document.removeEventListener('click', handler);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', handler), 0);
+        } else {
+            close();
+        }
+    };
+
+
+    select.addEventListener('change', () => {
+        const selectedOption = select.options[select.selectedIndex];
+        if (selectedOption) {
+            label.textContent = selectedOption.text;
+        }
+    });
+
+
+    syncVoidDropdownMenu(wrapper);
+}
+
+function initCreatorDashboardEvents() {
+    console.log("[ViewEngine] Initializing Creator Dashboard events...");
+
+    const addCardForm = document.getElementById('add-card-form');
+    if (addCardForm) {
+        addCardForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const setDropdown = document.getElementById('ac-set-dropdown');
+            const payload = {
+                id: document.getElementById('ac-id')?.value,
+                name: document.getElementById('ac-name')?.value,
+                image_url: document.getElementById('ac-image')?.value,
+                rarity: document.getElementById('ac-rarity')?.value,
+                set_id: setDropdown?.value,
+                card_number: document.getElementById('ac-card-number')?.value
+            };
+
+            const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            });
+
+            if (res.ok) {
+                showToast("Card Created!", "success");
+                e.target.reset();
+                loadAdminCards();
+            } else {
+                showToast("Failed. Check your session or card data.", "error");
+            }
+        };
+    }
+
+    const acUpload = document.getElementById('ac-upload');
+    if (acUpload) {
+        acUpload.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const preview = document.getElementById('ac-image-preview');
+            const reader = new FileReader();
+            reader.onload = (re) => { if (preview) preview.innerHTML = `<img src="${re.target.result}" class="w-full h-full object-cover">`; };
+            reader.readAsDataURL(file);
+            try {
+                const button = e.target.nextElementSibling;
+                if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>...'; }
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await fetch(`${BACKEND_URL}/api/admin/upload`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: formData, credentials: 'include' });
+                const data = await res.json();
+                if (data.success) {
+                    const acImage = document.getElementById('ac-image');
+                    if (acImage) acImage.value = data.url;
+                    if (button) { button.innerHTML = '<i class="fa-solid fa-check mr-2"></i>DONE'; }
+                }
+                if (button) button.disabled = false;
+            } catch (err) { if (button) button.disabled = false; }
+        };
+    }
+
+    const createSetForm = document.getElementById('create-set-form');
+    if (createSetForm) {
+        createSetForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const payload = {
+                id: document.getElementById('set-id')?.value,
+                name: document.getElementById('set-name')?.value,
+                code: document.getElementById('set-code')?.value,
+                release_date: document.getElementById('set-release-date')?.value || null,
+                icon_url: document.getElementById('set-icon-url')?.value || null,
+                description: document.getElementById('set-description')?.value || null,
+                total_cards: parseInt(document.getElementById('set-total-cards')?.value) || 0,
+                card_back_url: document.getElementById('set-back-url')?.value || null
+            };
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/creator/sets`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify(payload),
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    const setIdInput = document.getElementById('set-id');
+                    showToast(setIdInput && setIdInput.disabled ? "Set updated!" : "Set created successfully!", "success");
+                    e.target.reset();
+                    resetSetForm();
+                    loadSets();
+                } else {
+                    const error = await res.json();
+                    showToast(`Failed: ${error.error}`, "error");
+                }
+            } catch (err) {
+                showToast("Connection error", "error");
+            }
+        };
+    }
+
+    const cancelSetEditBtn = document.getElementById('cancel-set-edit');
+    if (cancelSetEditBtn) cancelSetEditBtn.onclick = window.cancelSetEdit;
+
+    const processCsvBtn = document.getElementById('process-csv-btn');
+    if (processCsvBtn) {
+        processCsvBtn.onclick = async () => {
+            const fileInput = document.getElementById('csv-upload');
+            const file = fileInput ? fileInput.files[0] : null;
+            if (!file) { showToast("Select CSV", "error"); return; }
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const text = e.target?.result;
+                const lines = text ? text.split('\n').filter(l => l.trim()) : [];
+                const cards = lines.slice(1).map(l => { const [id, name, img, rar, sid, num] = l.split(',').map(s => s.trim()); return { id, name, image_url: img, rarity: rar, set_id: sid, card_number: num }; });
+                const res = await fetch(`${BACKEND_URL}/api/admin/cards/bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ cards }), credentials: 'include' });
+                if (res.ok) { showToast("Bulk upload success!", "success"); loadAdminCards(); }
+            };
+            reader.readAsText(file);
+        };
+    }
+
+
+    ['cfg-rarity-common', 'cfg-rarity-rare', 'cfg-rarity-epic', 'cfg-rarity-legendary'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateRarityTotal);
+    });
+
+    const saveConfigBtn = document.getElementById('save-config-btn');
+    if (saveConfigBtn) {
+        saveConfigBtn.onclick = async () => {
+            const configs = [
+                { id: 'rarity_weights', data: { common: parseInt(document.getElementById('cfg-rarity-common').value), rare: parseInt(document.getElementById('cfg-rarity-rare').value), epic: parseInt(document.getElementById('cfg-rarity-epic').value), legendary: parseInt(document.getElementById('cfg-rarity-legendary').value) } },
+                { id: 'gifting_rules', data: { cards_per_sub: parseInt(document.getElementById('cfg-gift-per-sub').value), bonus_per_5: parseInt(document.getElementById('cfg-gift-bonus').value) } },
+                { id: 'visuals', data: { global_card_back_url: document.getElementById('cfg-global-back').value } }
+            ];
+            for (const cfg of configs) { await fetch(`${BACKEND_URL}/api/admin/config`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, body: JSON.stringify(cfg), credentials: 'include' }); }
+            showToast("Config saved!", "success");
+        };
+    }
+
+    const cfgBackUpload = document.getElementById('cfg-back-upload');
+    if (cfgBackUpload) {
+        cfgBackUpload.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(`${BACKEND_URL}/api/admin/upload`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: formData, credentials: 'include' });
+            if (res.ok) { const data = await res.json(); document.getElementById('cfg-global-back').value = data.url; showToast("Back uploaded!", "success"); }
+        };
+    }
+
+}
+
+async function loadModals() {
+    if (loadedViews.has('modals')) return;
+    console.log(`[ViewEngine] Loading modals...`);
+    try {
+        const response = await fetch('/views/modals.html');
+        if (response.ok) {
+            const html = await response.text();
+            document.body.insertAdjacentHTML('beforeend', html);
+            loadedViews.add('modals');
+            if (typeof initModalEvents === 'function') initModalEvents();
+        }
+    } catch (e) {
+        console.error("[ViewEngine] Failed to load modals:", e);
+    }
+}
+
+function initModalEvents() {
+    console.log("[ViewEngine] Initializing modal events...");
+    
+    const obNext = document.getElementById('onboarding-next');
+    if (obNext) {
+        obNext.onclick = () => {
+            if (currentOnboardingSlide < totalOnboardingSlides - 1) {
+                currentOnboardingSlide++;
+                updateOnboardingUI();
+            } else {
+                if (typeof window.closeOnboarding === 'function') window.closeOnboarding();
+            }
+        };
+    }
+
+    const obPrev = document.getElementById('onboarding-prev');
+    if (obPrev) {
+        obPrev.onclick = () => {
+            if (currentOnboardingSlide > 0) {
+                currentOnboardingSlide--;
+                updateOnboardingUI();
+            }
+        };
+    }
+
+    const obSkip = document.getElementById('onboarding-skip');
+    if (obSkip) obSkip.onclick = window.closeOnboarding;
+
+
+    const adminUserSearch = document.getElementById('admin-user-search');
+    if (adminUserSearch) adminUserSearch.addEventListener('input', renderAdminUsers);
+
+    const bulkDeleteCardsBtn = document.getElementById('bulk-delete-cards');
+    if (bulkDeleteCardsBtn) {
+        bulkDeleteCardsBtn.onclick = async () => {
+            if (!await showConfirm("⚠️ WARNING: This will DELETE ALL user cards! This cannot be undone.")) return;
+            if (!await showConfirm("FINAL WARNING: Are you absolutely sure?")) return;
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-cards`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-Token': csrfToken },
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    showToast("All cards deleted from database", "success");
+                    refreshAdminPanel();
+                } else {
+                    showToast("Failed to delete cards", "error");
+                }
+            } catch (e) {
+                showToast("Error: " + e.message, "error");
+            }
+        };
+    }
+
+    const bulkDeleteTradesBtn = document.getElementById('bulk-delete-trades');
+    if (bulkDeleteTradesBtn) {
+        bulkDeleteTradesBtn.onclick = async () => {
+            if (!await showConfirm("⚠️ WARNING: This will DELETE ALL trade records! This cannot be undone.")) return;
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-trades`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-Token': csrfToken },
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    showToast("All trades cleared", "success");
+                    if (typeof fetchTrades === 'function') fetchTrades();
+                    refreshAdminPanel();
+                } else {
+                    showToast("Failed to clear trades", "error");
+                }
+            } catch (e) {
+                showToast("Error: " + e.message, "error");
+            }
+        };
+    }
+
+    const exportDataBtn = document.getElementById('export-data');
+    if (exportDataBtn) {
+        exportDataBtn.onclick = async () => {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/admin/export`, {
+                    credentials: 'include'
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `tcg-export-${new Date().toISOString()}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                } else {
+                    showToast('Export failed', 'error');
+                }
+            } catch (e) {
+                showToast('Error: ' + e.message, 'error');
+            }
+        };
+    }
+
+
+    const activityLogSearch = document.getElementById('activity-log-search');
+    if (activityLogSearch) {
+        const debouncedFetchLogs = debounce(() => { if (typeof fetchAdminLogs === 'function') fetchAdminLogs(); }, 500);
+        activityLogSearch.oninput = () => debouncedFetchLogs();
+    }
+    const activityLogCategory = document.getElementById('activity-log-category-filter');
+    if (activityLogCategory) activityLogCategory.onchange = () => { if (typeof fetchAdminLogs === 'function') fetchAdminLogs(); };
+}
+
+function openActivityLogModal() {
+    const modal = document.getElementById('activity-log-modal-app') || document.getElementById('activity-log-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+    if (typeof fetchAdminLogs === 'function') fetchAdminLogs();
+    document.querySelectorAll('.void-dropdown').forEach(w => initVoidDropdown(w));
+    const onEscape = (e) => {
+        if (e.key === 'Escape') {
+            closeActivityLogModal();
+            document.removeEventListener('keydown', onEscape);
+        }
+    };
+    document.addEventListener('keydown', onEscape);
+    modal._escapeHandler = onEscape;
+}
+
+function closeActivityLogModal() {
+    const modal = document.getElementById('activity-log-modal-app') || document.getElementById('activity-log-modal');
+    if (!modal) return;
+    if (modal._escapeHandler) {
+        document.removeEventListener('keydown', modal._escapeHandler);
+        delete modal._escapeHandler;
+    }
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.style.overflow = '';
+}
+
+async function fetchAdminLogs() {
+    const container = document.getElementById('admin-activity-logs') || document.getElementById('admin-activity-logs-app');
+    if (!container) return;
+    const search = (document.getElementById('log-search') || document.getElementById('activity-log-search'))?.value || '';
+    const category = (document.getElementById('log-category-filter') || document.getElementById('activity-log-category-filter'))?.value || 'all';
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/creator/events?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}`, { credentials: 'include' });
+        if (res.ok) {
+            const logs = await res.json();
+            renderAdminLogs(logs);
+        }
+    } catch (err) {
+        console.error('Failed to fetch logs:', err);
+    }
+}
+
+function renderAdminLogs(logs) {
+    const container = document.getElementById('admin-activity-logs') || document.getElementById('admin-activity-logs-app');
+    if (!container) return;
+    if (!logs || logs.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase text-[10px] italic tracking-widest">No activity recorded</div>`;
+        return;
+    }
+    container.innerHTML = logs.map(log => {
+        const time = new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const levelClass = log.level === 'error' ? 'text-red-500' : (log.level === 'warn' ? 'text-amber-500' : 'text-void-accent');
+        return `<div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-white/5 transition-colors items-center">
+            <div class="col-span-2 text-[9px] font-mono text-void-muted">${time}</div>
+            <div class="col-span-2"><span class="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${levelClass} bg-current/10">${log.level || 'INFO'}</span></div>
+            <div class="col-span-2 text-[9px] font-black uppercase text-white/40 tracking-widest">${log.category || 'SYSTEM'}</div>
+            <div class="col-span-6 text-[10px] font-bold text-white/80 leading-relaxed truncate">${log.message}</div>
+        </div>`;
+    }).join('');
+}
+
+window.openActivityLogModal = openActivityLogModal;
+window.closeActivityLogModal = closeActivityLogModal;
+window.fetchAdminLogs = fetchAdminLogs;
+
+
+
+window.addEventListener('error', function (e) {
+    if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'img') {
+        if (e.target.dataset.fallbackApplied) return;
+        e.target.dataset.fallbackApplied = 'true';
+
+
+        const isAvatar = e.target.id.includes('avatar') || e.target.className.includes('rounded-full') || e.target.className.includes('rounded-[1.2rem]') || e.target.src.includes('twitchcdn');
+
+        if (isAvatar) {
+            e.target.src = 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback';
+        } else {
+            e.target.src = '/pack.png';
+        }
+    }
+}, true);
+
+let APP_STREAMER = null;
+window.activeStreamerFilter = null;
 
 let currentUser = null;
 let userCollection = [];
 let uniqueCards = [];
 let leaderboardData = [];
 let battlesData = [];
-// allMechanics removed
+
 let currentPage = 1;
-let currentView = 'collection'; // 'collection' or 'leaderboard'
+let currentView = 'collection';
 const ITEMS_PER_PAGE = 9;
 let lastCardId = null;
 let authInProgress = false;
-let csrfToken = null; // CSRF Token Storage
+let csrfToken = null;
 
-// Card image upload limits (must match server)
-const CARD_IMAGE_MAX_BYTES = 8 * 1024 * 1024;   // 8MB
-const CARD_IMAGE_MAX_EDGE_PX = 2000;            // max width or height
+
+const CARD_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+const CARD_IMAGE_MAX_EDGE_PX = 2000;
 const CARD_IMAGE_WEBP_QUALITY = 0.85;
 
-/**
- * Process a card image: validate size, resize to max edge, convert to WebP, strip metadata.
- * @param {File} file - Image file
- * @param {number} maxEdgePx - Max width or height in pixels (default 2000)
- * @param {number} quality - WebP quality 0–1 (default 0.85)
- * @returns {Promise<Blob>} WebP blob
- */
+
+const LANDING_COPY = {
+    viewer: {
+        'hero-title': 'SUPPORT.<br>COLLECT.<br><span class="text-void-accent">FLEX.</span>',
+        'hero-subtitle': 'Castle TCG is where streamers and fans collect together. Discover unique cards from your favorite creators and trade with the community to complete your collection.',
+        'hero-secondary-btn': 'View Platform',
+        'login-nav-btn': 'Start Setup',
+        'hero-login-btn': 'Get Started',
+        'how-tagline': 'The Community',
+        'how-title': 'How it Works',
+        'step-1-title': '01. Connect Twitch',
+        'step-1-desc': 'Join the community by linking your Twitch account to start your collecting journey.',
+        'step-2-title': '02. Collect Cards',
+        'step-2-desc': 'Support your favorite streamers and earn rare cards through drops and rewards.',
+        'step-3-title': '03. Trade & Battle',
+        'step-3-desc': 'Trade with friends to complete your sets and battle others to show off your best cards.',
+        'step-1-icon': 'fa-solid fa-link text-xl',
+        'step-2-icon': 'fa-solid fa-layer-group text-xl',
+        'step-3-icon': 'fa-solid fa-repeat text-xl'
+    },
+    streamer: {
+        'hero-title': 'CREATE.<br>REWARD.<br><span class="text-void-accent">GROW.</span>',
+        'hero-subtitle': 'Castle TCG is the ultimate engagement layer for your stream. Create custom digital collectibles, reward your most loyal fans, and watch your community grow.',
+        'hero-secondary-btn': 'Launch Collection',
+        'login-nav-btn': 'Start Setup',
+        'hero-login-btn': 'Start Setup',
+        'how-tagline': 'The Platform',
+        'how-title': 'Streamer Toolkit',
+        'step-1-title': '01. Connect Channel',
+        'step-1-desc': "Link your Twitch channel to get started. We'll automatically sync your rewards and subscriber data.",
+        'step-2-title': '02. Create Cards',
+        'step-2-desc': 'Design and create your own digital cards.',
+        'step-3-title': '03. Automate Drops',
+        'step-3-desc': "Set up automated card drops for subs, bits, and channel points.",
+        'step-1-icon': 'fa-solid fa-plug text-xl',
+        'step-2-icon': 'fa-solid fa-wand-magic-sparkles text-xl',
+        'step-3-icon': 'fa-solid fa-robot text-xl'
+    }
+};
+
+let currentLandingMode = localStorage.getItem('landing-mode') || 'viewer';
+
+function setLandingMode(mode, skipAnimation = false) {
+    if (skipAnimation) {
+        applyLandingMode(mode);
+        return;
+    }
+
+    const sections = document.querySelectorAll('.landing-section');
+
+
+    sections.forEach(s => {
+        s.classList.remove('landing-content-in');
+        s.classList.add('landing-content-out');
+    });
+
+
+    setTimeout(() => {
+        applyLandingMode(mode);
+
+        sections.forEach(s => {
+            s.classList.remove('landing-content-out');
+            void s.offsetWidth;
+            s.classList.add('landing-content-in');
+        });
+
+
+        setTimeout(() => {
+            sections.forEach(s => s.classList.remove('landing-content-in'));
+        }, 650);
+    }, 300);
+}
+
+function applyLandingMode(mode) {
+    currentLandingMode = mode;
+    localStorage.setItem('landing-mode', mode);
+    document.body.setAttribute('data-landing-mode', mode);
+
+
+    document.getElementById('mode-viewer-btn')?.classList.toggle('active', mode === 'viewer');
+    document.getElementById('mode-streamer-btn')?.classList.toggle('active', mode === 'streamer');
+
+    const indicator = document.getElementById('mode-indicator');
+    const activeBtn = mode === 'viewer' ? document.getElementById('mode-viewer-btn') : document.getElementById('mode-streamer-btn');
+    if (indicator && activeBtn) {
+        indicator.style.width = `${activeBtn.offsetWidth}px`;
+        indicator.style.left = `${activeBtn.offsetLeft}px`;
+    }
+
+
+    const copy = LANDING_COPY[mode];
+    for (const [id, text] of Object.entries(copy)) {
+        const el = document.getElementById(id);
+        if (el) {
+            if (id.includes('icon')) el.className = text;
+            else if (id.includes('btn')) el.firstChild.textContent = text;
+            else el.innerHTML = text;
+        }
+    }
+
+
+    const secondaryBtn = document.getElementById('hero-secondary-btn');
+    if (secondaryBtn) {
+        secondaryBtn.onclick = mode === 'viewer'
+            ? () => document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })
+            : () => window.location.href = '/onboarding.html';
+    }
+}
+
+
 function processCardImage(file, maxEdgePx = CARD_IMAGE_MAX_EDGE_PX, quality = CARD_IMAGE_WEBP_QUALITY) {
     if (file.size > CARD_IMAGE_MAX_BYTES) {
         return Promise.reject(new Error(`File too large. Max ${CARD_IMAGE_MAX_BYTES / (1024 * 1024)}MB.`));
@@ -77,10 +763,10 @@ function processCardImage(file, maxEdgePx = CARD_IMAGE_MAX_EDGE_PX, quality = CA
     });
 }
 
-// --- Card image CROP modal (position + zoom within card frame, real-time) ---
-// Pokémon / standard US trading card ratio: 2.5" x 3.5" = 5:7
+
+
 const CARD_CROP_EXPORT_W = 500;
-const CARD_CROP_EXPORT_H = 700; // 5:7
+const CARD_CROP_EXPORT_H = 700;
 
 let _cardCropState = null;
 
@@ -140,7 +826,7 @@ function openCardImageCropModal(file, onApply) {
         let frameH = frameRect.height;
         if (!frameW || !frameH) {
             frameW = 300;
-            frameH = 420; // 5:7
+            frameH = 420;
         }
         const iw = img.naturalWidth;
         const ih = img.naturalHeight;
@@ -360,7 +1046,7 @@ function openCardImageCropModal(file, onApply) {
     modal.classList.remove('hidden');
 }
 
-// --- Card image scaler modal (bulk / max edge) ---
+
 let _cardScalerState = null;
 
 function closeCardImageScalerModal() {
@@ -465,7 +1151,7 @@ function openCardImageScalerForCreator() {
         showToast(`File too large. Max ${CARD_IMAGE_MAX_BYTES / (1024 * 1024)}MB.`, 'error');
         return;
     }
-    // Re-open crop modal to reposition/zoom
+
     openCardImageCropModal(file, (blob) => {
         _cardCreatorProcessedBlob = blob;
         const preview = document.getElementById('card-image-preview');
@@ -480,15 +1166,15 @@ function openCardImageScalerForCreator() {
 
 window.openCardImageScalerForCreator = openCardImageScalerForCreator;
 
-// Chart.js global instances
+
 let collectorGrowthChartInstance = null;
 let packActivityChartInstance = null;
 
-// Configure Chart.js globals for the Void aesthetic
+
 if (window.Chart) {
-    Chart.defaults.color = '#9ca3af'; // text-void-muted
+    Chart.defaults.color = '#9ca3af';
     Chart.defaults.font.family = "'Inter', sans-serif";
-    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(10, 10, 12, 0.9)'; // void-bg
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(10, 10, 12, 0.9)';
     Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
     Chart.defaults.plugins.tooltip.bodyColor = '#9ca3af';
     Chart.defaults.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
@@ -497,15 +1183,10 @@ if (window.Chart) {
     Chart.defaults.plugins.tooltip.cornerRadius = 8;
 }
 
-// --- ONBOARDING FLOW ---
+
 window.openOnboarding = () => {
-    console.log("[Onboarding] Opening modal...");
-    const modal = document.getElementById('onboarding-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        if (typeof window.backToRoles === 'function') window.backToRoles();
-        scrollLock();
-    }
+    console.log("[Onboarding] Redirecting to dedicated onboarding page...");
+    window.location.href = '/onboarding';
 };
 
 window.closeOnboarding = () => {
@@ -536,13 +1217,13 @@ window.selectPlatform = (platform) => {
 
 window.selectedOnboardingRole = 'viewer';
 
-// Custom Binders State
+
 let userBinders = [];
-let activeBinderId = 'all'; // 'all' or UUID
+let activeBinderId = localStorage.getItem('activeBinderId') || 'all';
 let isEditingBinder = false;
 
 let routeInfo = {
-    view: 'home', // 'home', 'streamer-profile', 'hub', 'dashboard'
+    view: 'home',
     slug: null,
     viewerId: null
 };
@@ -561,27 +1242,27 @@ function parseRoute() {
         routeInfo.view = 'home';
         routeInfo.slug = null;
     } else if (parts[0] === 'binder' && parts.length === 2) {
-        // /binder/:streamerUsername - view YOUR collection for that creator's cards (clear, simple)
+
         routeInfo.view = 'binder';
         routeInfo.slug = parts[1];
     } else if (parts[0] === 'hub') {
         if (parts.length === 1 || parts.length === 2) {
-            // /hub or /hub/<ID> - hub home (list of creators)
+
             routeInfo.view = 'hub';
             routeInfo.viewerId = parts.length === 2 ? parts[1] : null;
         } else if (parts.length === 3) {
-            // /hub/<ID> - hub for that user (legacy, same as hub home when ID = you)
+
             routeInfo.view = 'hub';
             routeInfo.viewerId = parts[1];
         } else if (parts.length === 3) {
-            // /hub/<ID>/<streamer> - legacy, redirect to clean /binder/<streamer>
+
             window.location.replace(`/binder/${parts[2]}`);
             return;
         } else {
             routeInfo.view = 'home';
         }
-    } else if (parts.length === 1) {
-        // /codeoce, /lilypadlegends, etc. - skip profile page, go straight to binder
+    } else if (parts.length === 1 && parts[0] !== 'obs-overlay') {
+
         window.location.replace(`/binder/${parts[0]}`);
         return;
     } else {
@@ -591,20 +1272,16 @@ function parseRoute() {
     console.log("[Router] Path:", path, "Result:", routeInfo);
 }
 
-// --- CUSTOM CONFIRM MODAL LOGIC ---
+
 function showCustomConfirm(options) {
-    console.log("Modal Triggered:", options.title);
-    const modal = document.getElementById('confirm-modal');
+    const modal = document.getElementById('confirm-action-modal');
     const title = document.getElementById('confirm-modal-title');
     const message = document.getElementById('confirm-modal-message');
-    const icon = document.getElementById('confirm-modal-icon');
-    const iconContainer = document.getElementById('confirm-modal-icon-container');
-    const confirmBtn = document.getElementById('confirm-modal-confirm');
-    const cancelBtn = document.getElementById('confirm-modal-cancel');
+    const iconWrap = document.getElementById('confirm-modal-icon-wrap');
+    const confirmBtn = document.getElementById('confirm-modal-action-btn');
 
-    if (!modal || !confirmBtn || !cancelBtn) {
-        console.error("Critical Modal Elements Missing!", { modal, confirmBtn, cancelBtn });
-        // Fallback to native for safety
+    if (!modal || !confirmBtn) {
+
         if (confirm(options.message || "Confirm?")) {
             if (options.onConfirm) options.onConfirm();
         } else {
@@ -613,39 +1290,38 @@ function showCustomConfirm(options) {
         return;
     }
 
-    if (title) title.innerText = options.title || "Validate?";
-    if (message) message.innerText = options.message || "Submit this command to the network?";
+    if (title) title.innerText = options.title || "Are you sure?";
+    if (message) message.innerText = options.message || "Proceed with this action?";
 
-    // Icon Class
-    if (icon) {
-        icon.className = `fa-solid ${options.icon || 'fa-circle-nodes'}`;
+
+    if (iconWrap) {
+        iconWrap.className = `w-16 h-16 ${options.iconBg || 'bg-red-500/10'} rounded-2xl flex items-center justify-center text-2xl mx-auto border ${options.iconBorder || 'border-red-500/20'}`;
+        iconWrap.innerHTML = `<i class="fa-solid ${options.icon || 'fa-triangle-exclamation'} ${options.iconColor || 'text-red-500'}"></i>`;
     }
-    if (iconContainer) iconContainer.className = `w-16 h-16 ${options.iconBg || 'bg-white/5'} rounded-2xl flex items-center justify-center mx-auto mb-4 border ${options.iconBorder || 'border-white/10'}`;
+
 
     if (confirmBtn) {
         confirmBtn.innerText = options.confirmText || "Confirm";
-        confirmBtn.className = `flex-[2] py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all shadow-lg ${options.confirmClass || 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/20'}`;
-    }
-
-    if (modal) modal.classList.remove('hidden');
-    scrollLock();
-
-    if (confirmBtn) {
+        confirmBtn.className = `flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg ${options.confirmClass || 'bg-red-600 text-white hover:bg-red-500 shadow-red-600/20'}`;
         confirmBtn.onclick = () => {
-            console.log("Confirm Clicked");
-            if (modal) modal.classList.add('hidden');
+            modal.classList.add('hidden');
             scrollUnlock();
             if (options.onConfirm) options.onConfirm();
         };
     }
 
+
+    const cancelBtn = modal.querySelector('button[onclick="closeConfirmModal()"]');
     if (cancelBtn) {
         cancelBtn.onclick = () => {
-            if (modal) modal.classList.add('hidden');
+            modal.classList.add('hidden');
             scrollUnlock();
             if (options.onCancel) options.onCancel();
         };
     }
+
+    modal.classList.remove('hidden');
+    scrollLock();
 }
 let binderRearrangeMode = false;
 
@@ -657,10 +1333,10 @@ window.copyTradeCode = () => {
         showToast("Trade code copied!", "success");
     }
 };
-let shownNotificationIds = new Set(); // Track shown notifications to prevent duplicates
-let searchQuery = ''; // Card search query
-let rarityFilter = 'all'; // Rarity filter
-let totalUniqueCards = 0; // Total unique cards available
+let shownNotificationIds = new Set();
+let searchQuery = '';
+let rarityFilter = 'all';
+let totalUniqueCards = 0;
 
 const RARITY_RANK = {
     legendary: 5,
@@ -670,24 +1346,23 @@ const RARITY_RANK = {
     common: 1
 };
 
-// --- TRADING STATE ---
+
 let myTradeCode = '';
 let trades = [];
 let selectedMyCards = new Set();
 let selectedTheirCards = new Set();
-let selectedTradeInCards = new Set(); // For 5-for-1 upgrades
 let currentTradeTarget = null;
 
-// --- PACK OPENING STATE ---
+
 let packQueue = [];
 let isPackOpening = false;
 let currentPackCards = [];
 let currentRevealIndex = 0;
 
-// --- SCROLL MANAGEMENT ---
+
 function scrollLock() {
     document.body.style.overflow = 'hidden';
-    // Prevent layout shift if possible
+
     document.body.style.paddingRight = '8px';
 }
 
@@ -696,7 +1371,7 @@ function scrollUnlock() {
     document.body.style.paddingRight = '';
 }
 
-// --- TOAST NOTIFICATIONS ---
+
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -715,7 +1390,7 @@ function showToast(message, type = 'info') {
 
     container.appendChild(toast);
 
-    // Auto remove after 4 seconds
+
     setTimeout(() => {
         toast.classList.add('fade-out');
         setTimeout(() => toast.remove(), 300);
@@ -740,19 +1415,19 @@ function showCardToast(card) {
 
     container.appendChild(toast);
 
-    // Play a small sound or trigger celebration for legendary?
+
     if (rarity === 'legendary') showAchievementCelebration();
 
     setTimeout(() => {
         toast.classList.add('fade-out');
         setTimeout(() => toast.remove(), 300);
-    }, 6000); // 6 seconds for card reveals
+    }, 6000);
 }
 
-// --- ACHIEVEMENT CELEBRATION ---
+
 function showAchievementCelebration() {
-    // Create confetti effect
-    const colors = ['#00f2fe', '#3498db', '#ffffff', '#004e92', '#ffffff'];
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--void-accent').trim() || '#00f2fe';
+    const colors = [accent, '#3498db', '#ffffff', '#004e92', '#ffffff'];
     const confettiCount = 50;
 
     for (let i = 0; i < confettiCount; i++) {
@@ -783,7 +1458,7 @@ function showAchievementCelebration() {
     }
 }
 
-// --- PACK OPENING LOGIC ---
+
 function queuePackForReveal(cards) {
     console.log("Queuing pack for reveal:", Array.isArray(cards) ? cards.length : 1, "card(s)");
     packQueue.push(Array.isArray(cards) ? cards : [cards]);
@@ -798,7 +1473,7 @@ function checkPackQueue() {
 function startPackOpening(cards) {
     isPackOpening = true;
     currentPackCards = cards;
-    currentRevealIndex = -1; // -1 = pack not yet opened
+    currentRevealIndex = -1;
 
     const modal = document.getElementById('pack-opening-modal');
     const container = document.getElementById('pack-container');
@@ -807,7 +1482,7 @@ function startPackOpening(cards) {
     const closeBtn = document.getElementById('close-pack-btn');
     const slot = document.getElementById('card-reveal-slot');
 
-    // Reset UI
+
     modal.classList.remove('hidden');
     container.classList.remove('is-open');
     foil.classList.remove('hidden');
@@ -815,7 +1490,7 @@ function startPackOpening(cards) {
     closeBtn.classList.add('hidden');
     slot.innerHTML = '';
 
-    // Dynamically size the dots to match the card count
+
     const dotsContainer = progress.querySelector('.flex.gap-2');
     const count = Math.min(currentPackCards.length, 10);
     dotsContainer.innerHTML = Array(count).fill(0)
@@ -824,7 +1499,7 @@ function startPackOpening(cards) {
 
     scrollLock();
 
-    // Initial shake to invite a click
+
     setTimeout(() => {
         container.classList.add('pack-shake');
         setTimeout(() => container.classList.remove('pack-shake'), 800);
@@ -836,13 +1511,13 @@ window.handlePackClick = function () {
     const progress = document.getElementById('reveal-progress');
 
     if (currentRevealIndex === -1) {
-        // First click: RIPPING the pack
+
         container.classList.add('pack-shake');
         setTimeout(() => {
             container.classList.remove('pack-shake');
             container.classList.add('is-open');
             progress.classList.remove('hidden');
-            // Show first card after rip animation
+
             currentRevealIndex = 0;
             setTimeout(() => revealNextCard(), 800);
         }, 400);
@@ -858,17 +1533,17 @@ function revealNextCard() {
     const card = currentPackCards[currentRevealIndex];
     const rarity = (card.rarity || 'common').toLowerCase();
 
-    // Trigger confetti for epic/legendary
+
     if (rarity === 'legendary' || rarity === 'epic') {
         showAchievementCelebration();
     }
 
     const rarityColor = {
-        legendary: '#00f2ff', // void-accent
-        epic: '#22d3ee',      // cyan-400
-        rare: '#60a5fa',      // blue-400
-        uncommon: '#94a3b8',   // slate-400
-        common: '#64748b'     // slate-500
+        legendary: '#00f2ff',
+        epic: '#22d3ee',
+        rare: '#60a5fa',
+        uncommon: '#94a3b8',
+        common: '#64748b'
     }[rarity] || '#64748b';
 
     slot.innerHTML = `
@@ -885,7 +1560,7 @@ function revealNextCard() {
     currentRevealIndex++;
 
     if (currentRevealIndex >= currentPackCards.length) {
-        // Show close button after last card
+
         setTimeout(() => {
             document.getElementById('close-pack-btn').classList.remove('hidden');
             document.getElementById('reveal-progress').classList.add('hidden');
@@ -910,19 +1585,19 @@ window.closePackOpening = function () {
     document.getElementById('pack-opening-modal').classList.add('hidden');
     isPackOpening = false;
     scrollUnlock();
-    // Refresh binder with newcards
+
     fetchUserCollection();
-    // Process next pack in queue
+
     checkPackQueue();
 };
 
-// --- LOADING STATES ---
+
 function setLoadingState(elementId, isLoading, emptyMessage = 'No items yet') {
     const element = document.getElementById(elementId);
     if (!element) return;
 
     if (isLoading) {
-        // Show 5 skeleton rows if it's a list
+
         element.innerHTML = Array(5).fill(0).map(() => `
                 <div class="flex items-center gap-3 p-3 rounded-lg border border-white/5 bg-white/5 overflow-hidden">
                     <div class="w-10 h-10 rounded-full skeleton flex-shrink-0"></div>
@@ -938,43 +1613,73 @@ function setLoadingState(elementId, isLoading, emptyMessage = 'No items yet') {
 }
 
 
-// Helper: show/hide landing sections via inline style (HTML default is display:none)
+
+
 function showLanding() {
+
+    document.querySelectorAll('.landing-section').forEach(s => s.style.removeProperty('display'));
+
     const landing = document.getElementById('landing-view');
     if (landing) landing.style.display = 'flex';
-    document.querySelectorAll('.landing-section').forEach(s => s.style.display = '');
+
+    const landingToggle = document.getElementById('landing-mode-toggle');
+    if (landingToggle) landingToggle.classList.remove('hidden');
 }
 function hideLanding() {
+    document.querySelectorAll('.landing-section').forEach(s => s.style.display = 'none');
     const landing = document.getElementById('landing-view');
     if (landing) landing.style.display = 'none';
-    document.querySelectorAll('.landing-section').forEach(s => s.style.display = 'none');
+
+    const landingToggle = document.getElementById('landing-mode-toggle');
+    if (landingToggle) landingToggle.classList.add('hidden');
 }
 
-// --- AUTH & INIT ---
+
+
 async function initializeApp() {
     console.log("[App] initializeApp starting...");
+
+
+    if (typeof applyLandingMode === 'function') {
+        applyLandingMode(currentLandingMode);
+    }
     initButtons();
     setupDragAndDrop();
     window.scrollTo(0, 0);
     parseRoute();
-    // fetchMechanics(); // removed
 
-    // Pre-hide views unconditionally to prevent flashing
+
+    await loadModals();
+
+
+    if (routeInfo.view === 'hub') {
+        await loadView('hub');
+        await loadView('viewer-dashboard');
+    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
+        await loadView('viewer-dashboard');
+    } else if (routeInfo.view === 'streamer-profile') {
+        await loadView('streamer-profile');
+    }
+
+
     hideLanding();
     ['dashboard-view', 'hub-view', 'streamer-profile-view', 'login-view'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
 
-    // View visibility management
-    if (routeInfo.view === 'home') {
+    if (routeInfo.view === 'home' || routeInfo.view === 'landing') {
         showLanding();
+        const centralNav = document.getElementById('central-nav');
+        if (centralNav) { centralNav.classList.add('hidden'); centralNav.classList.remove('flex'); }
     } else if (routeInfo.view === 'hub') {
         const hub = document.getElementById('hub-view');
         if (hub) hub.classList.remove('hidden');
-        // Hub doesn't use the centralized collection/battle nav
         const centralNav = document.getElementById('central-nav');
-        if (centralNav) centralNav.classList.add('hidden');
+        if (centralNav) {
+            centralNav.classList.remove('hidden');
+            centralNav.classList.add('flex');
+        }
     } else if (routeInfo.view === 'streamer-profile') {
         const profile = document.getElementById('streamer-profile-view');
         if (profile) profile.classList.remove('hidden');
@@ -982,34 +1687,37 @@ async function initializeApp() {
         const dashboard = document.getElementById('dashboard-view');
         if (dashboard) dashboard.classList.remove('hidden');
 
-        // Dashboard uses the centralized nav
         const centralNav = document.getElementById('central-nav');
-        if (centralNav) centralNav.classList.remove('hidden');
+        if (centralNav) {
+            centralNav.classList.remove('hidden');
+            centralNav.classList.add('flex');
+        }
 
-        // Hide all subviews so nothing flashes
+
         ['collection-view', 'leaderboard-view', 'trading-view', 'creator-dashboard-view', 'admin-view', 'profile-view', 'battle-view'].forEach(id => {
             const el = document.getElementById(id);
             if (el) { el.classList.add('hidden'); el.style.display = 'none'; }
         });
     }
 
-    // Build bootstrap URL: hub = all streamers, binder/dashboard = specific streamer
-    const bootstrapUrl = routeInfo.view === 'hub'
+
+
+    const bootstrapUrl = (routeInfo.view === 'hub' || routeInfo.view === 'home')
         ? `${BACKEND_URL}/api/bootstrap?streamer=all`
         : routeInfo.slug
             ? `${BACKEND_URL}/api/bootstrap?streamer=${encodeURIComponent(routeInfo.slug)}`
             : `${BACKEND_URL}/api/bootstrap`;
 
-    // --- SESSION CACHE: serve immediately from cache, refresh in background ---
+
     const cacheKey = `bootstrap_${bootstrapUrl}`;
     let cached = sessionStorage.getItem(cacheKey);
-    // For binder view: don't use cache if streamer doesn't match (prevents wrong binder)
+
     if (cached && routeInfo.view === 'binder' && routeInfo.slug) {
         try {
             const parsed = JSON.parse(cached);
             const cachedUsername = parsed?.streamer?.username?.toLowerCase();
             const wantSlug = routeInfo.slug.toLowerCase();
-            if (cachedUsername !== wantSlug) cached = null; // Wrong streamer, fetch fresh
+            if (cachedUsername !== wantSlug) cached = null;
         } catch { cached = null; }
     }
     let bootstrap = null;
@@ -1020,7 +1728,7 @@ async function initializeApp() {
             try {
                 const res = await fetch(bootstrapUrl, { credentials: 'include' });
                 if (res.ok) {
-                    // LOG DEBUG HEADERS
+
                     const supabaseHost = res.headers.get('x-debug-supabase-host');
                     const streamersError = res.headers.get('x-debug-streamers-error');
                     const rawCount = res.headers.get('x-debug-follows-raw-count');
@@ -1061,11 +1769,19 @@ async function initializeApp() {
     };
 
     if (cached) {
-        // Serve from cache immediately — fire fresh fetch in background
+
         try {
             bootstrap = JSON.parse(cached);
-            if (bootstrap) bootstrap.isFromCache = true;
-        } catch (e) { /* ignore bad cache */ }
+            if (bootstrap) {
+                bootstrap.isFromCache = true;
+
+                if (bootstrap.streamer) {
+                    APP_STREAMER = bootstrap.streamer;
+                    applyBranding(APP_STREAMER);
+                }
+                if (bootstrap.csrf_token) csrfToken = bootstrap.csrf_token;
+            }
+        } catch (e) {  }
         freshFetchPromise = doFetch()
             .then((fresh) => {
                 if (fresh) {
@@ -1079,7 +1795,7 @@ async function initializeApp() {
                 return fresh;
             });
     } else {
-        // No cache — fire single bootstrap call
+
         bootstrap = await doFetch();
         if (bootstrap) {
             sessionStorage.setItem(cacheKey, JSON.stringify(bootstrap));
@@ -1092,7 +1808,7 @@ async function initializeApp() {
     }
 
     if (bootstrap && bootstrap.user) {
-        // === LOGGED IN ===
+
         currentUser = {
             twitch_id: bootstrap.user.twitch_id,
             name: bootstrap.user.username,
@@ -1105,35 +1821,35 @@ async function initializeApp() {
             is_onboarding_complete: bootstrap.user.is_onboarding_complete
         };
 
-        // Extract CSRF and Streamer if present
+
         if (bootstrap.csrf_token) csrfToken = bootstrap.csrf_token;
         if (bootstrap.streamer) {
             APP_STREAMER = bootstrap.streamer;
             applyBranding(APP_STREAMER);
         }
 
-        // Redirect unconfigured creators to onboarding
+
         if (currentUser.is_creator && !currentUser.streamer?.is_active && !window.location.pathname.includes('onboarding') && !bootstrap.isFromCache) {
             console.log("[App] Unconfigured creator detected. Redirecting to onboarding...");
             window.location.href = '/onboarding.html?role=creator';
             return;
         }
 
-        // Redirect unconfigured collectors to onboarding
+
         if (!currentUser.is_creator && !currentUser.is_onboarding_complete && !window.location.pathname.includes('onboarding') && !bootstrap.isFromCache) {
             console.log("[App] Unconfigured collector detected. Redirecting to onboarding...");
             window.location.href = '/onboarding.html?role=collector';
             return;
         }
 
-        // If creator is visiting their own profile, switch to dashboard early
+
         if (routeInfo.view === 'streamer-profile' && currentUser.is_creator && currentUser.name.toLowerCase() === routeInfo.slug?.toLowerCase()) {
             routeInfo.view = 'dashboard';
             const profile = document.getElementById('streamer-profile-view');
             if (profile) profile.classList.add('hidden');
         }
 
-        // Re-check unconfigured status after fresh fetch if we skipped it due to cache
+
         if (bootstrap.isFromCache && freshFetchPromise) {
             freshFetchPromise.then(async (freshBootstrap) => {
                 if (freshBootstrap) {
@@ -1144,7 +1860,7 @@ async function initializeApp() {
                         console.log("[App] Background fetch confirmed unconfigured collector. Redirecting...");
                         window.location.href = '/onboarding.html?role=collector';
                     } else {
-                        // Refresh UI with fresh data for a smooth update
+
                         console.log("[App] Background fetch complete. Refreshing UI snap...");
                         if (currentUser) {
                             currentUser.streamer = freshBootstrap.user.streamer;
@@ -1157,6 +1873,7 @@ async function initializeApp() {
                         } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
                             showDashboard(null, freshBootstrap, true);
                             fetchUserCollection(freshBootstrap.recent_drops);
+                            fetchUserBinders();
                         }
                     }
                 }
@@ -1164,7 +1881,7 @@ async function initializeApp() {
         }
 
         if (routeInfo.view === 'home') {
-            // Logged-in user at / → show landing but swap buttons to "Go to Hub"
+
             showLanding();
 
             const dashSlug = 'hub';
@@ -1175,9 +1892,12 @@ async function initializeApp() {
                 heroBtn.onclick = (e) => { e.preventDefault(); window.location.href = `/${dashSlug}`; };
             }
             if (navBtn) {
-                navBtn.textContent = 'Hub';
+                navBtn.textContent = 'Go to Hub';
                 navBtn.onclick = (e) => { e.preventDefault(); window.location.href = `/${dashSlug}`; };
             }
+            const centralNav = document.getElementById('central-nav');
+            if (centralNav) centralNav.classList.add('hidden');
+
             const navUser = document.getElementById('nav-user-preview');
             const navNick = document.getElementById('nav-username');
             const navImg = document.getElementById('nav-avatar');
@@ -1188,30 +1908,30 @@ async function initializeApp() {
             if (navNick) navNick.innerText = currentUser.name;
             if (navImg) navImg.src = currentUser.avatar;
 
-            // Updated Navbar Button Actions
-            if (navLogout) navLogout.onclick = () => logout();
             if (navCreator) {
+                const navRole = document.getElementById('nav-user-role');
                 if (currentUser.is_creator) {
                     navCreator.classList.remove('hidden');
-                    navCreator.onclick = () => { window.location.href = `/dashboard`; };
+                    if (navRole) navRole.innerText = "Creator";
                 } else {
                     navCreator.classList.add('hidden');
+                    if (navRole) navRole.innerText = "Collector";
                 }
             }
             return;
         } else if (routeInfo.view === 'hub') {
-            // Load Hub
+
             hideLanding();
             await renderViewerHub(bootstrap.sections || {}, bootstrap.favorite_ids || []);
             return;
         } else if (routeInfo.view === 'streamer-profile') {
-            // Load public Streamer Profile
+
             hideLanding();
             await renderStreamerProfile(bootstrap);
             return;
         }
 
-        // Dashboard or binder view → load full dashboard
+
         hideLanding();
         const dashboard = document.getElementById('dashboard-view');
         if (dashboard) dashboard.classList.remove('hidden');
@@ -1227,12 +1947,12 @@ async function initializeApp() {
         startPolling();
 
     } else {
-        // === NOT LOGGED IN ===
+
         if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
             window.location.href = `/auth/twitch?role=viewer`;
             return;
         } else if (routeInfo.view === 'hub') {
-            // Logged out Hub - show Discovery Landing or Login Callout
+
             hideLanding();
             const hub = document.getElementById('hub-view');
             if (hub) hub.classList.remove('hidden');
@@ -1266,15 +1986,24 @@ async function initializeApp() {
             if (profile) profile.classList.remove('hidden');
             await renderStreamerProfile(bootstrap);
         } else {
-            // Home - show landing page
+
             showLanding();
         }
     }
 }
 
-// --- HUB & PROFILE RENDERING ---
+
 async function renderViewerHub(sections, favoriteIds = []) {
     console.log("[App] Rendering Viewer Hub with Sections...");
+
+
+    if (!APP_STREAMER) {
+        const first = sections?.favorites?.[0] || sections?.followed?.[0];
+        if (first) {
+            APP_STREAMER = first;
+            applyBranding(APP_STREAMER);
+        }
+    }
 
     const loading = document.getElementById('hub-loading');
     const container = document.getElementById('hub-sections-container');
@@ -1287,11 +2016,13 @@ async function renderViewerHub(sections, favoriteIds = []) {
         { id: 'followed', el: document.getElementById('hub-followed-section'), grid: document.getElementById('hub-followed-grid') }
     ];
 
-    // --- YOUR HUB (Self-Promotion for Creators) ---
+
     const selfContainer = document.getElementById('hub-self-container');
     if (selfContainer) {
-        if (currentUser && (currentUser.streamer?.is_active || currentUser.name?.toLowerCase() === 'codeoce')) {
-            const s = currentUser.streamer || { username: currentUser.name, display_name: currentUser.name, avatar_url: currentUser.avatar_url };
+        if (currentUser && currentUser.is_creator) {
+            const s = (currentUser.streamer && currentUser.streamer.username) 
+                ? currentUser.streamer 
+                : { username: currentUser.name, display_name: currentUser.name, avatar_url: currentUser.avatar_url };
             selfContainer.innerHTML = `
                 <div onclick="window.location.href='/binder/${s.username}'" 
                      class="group relative flex items-center gap-4 bg-void-accent/5 border border-void-accent/20 hover:bg-void-accent/10 hover:border-void-accent/40 px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 shadow-lg shadow-void-accent/5">
@@ -1325,7 +2056,7 @@ async function renderViewerHub(sections, favoriteIds = []) {
                 conf.grid.classList.remove('hidden');
                 conf.grid.innerHTML = data.map(s => renderStreamerCard(s, favIdsSet.has(s.id))).join('');
             } else {
-                conf.el.classList.remove('hidden'); // ALWAYS keep these sections visible
+                conf.el.classList.remove('hidden');
                 if (emptyEl) emptyEl.classList.remove('hidden');
                 conf.grid.classList.add('hidden');
             }
@@ -1333,7 +2064,7 @@ async function renderViewerHub(sections, favoriteIds = []) {
     });
 
     const emptyState = document.getElementById('hub-empty-state');
-    const isCreatorStatus = currentUser && (currentUser.streamer?.is_active || currentUser.name?.toLowerCase() === 'codeoce');
+    const isCreatorStatus = currentUser && currentUser.is_creator;
     if (totalStreamers === 0 && !isCreatorStatus) {
         if (emptyState) emptyState.classList.remove('hidden');
         if (container) container.classList.add('hidden');
@@ -1397,7 +2128,7 @@ async function toggleFavorite(streamerId) {
         const data = await resp.json();
         if (data.success) {
             showVoidNotification(data.favorited ? "NODE PRIORITIZED" : "NODE DEPRIORITIZED", "success");
-            // Re-fetch bootstrap to update UI (simplest way to sync state)
+
             const updated = await fetch('/api/bootstrap?streamer=all').then(r => r.json());
             if (updated.sections) {
                 renderViewerHub(updated.sections, updated.favorite_ids);
@@ -1411,7 +2142,7 @@ async function toggleFavorite(streamerId) {
 async function renderStreamerProfile(bootstrap) {
     console.log("[App] Rendering Streamer Profile for:", routeInfo.slug);
 
-    // Resolve streamer context early if not already in bootstrap
+
     const streamerData = bootstrap?.streamer || null;
     if (streamerData) {
         APP_STREAMER = streamerData;
@@ -1443,6 +2174,19 @@ async function renderStreamerProfile(bootstrap) {
             }
         };
     }
+
+    const linksEl = document.getElementById('sp-social-links');
+    if (linksEl) {
+        const links = APP_STREAMER.social_links || {};
+        const icons = { kick: 'fa-solid fa-k', youtube: 'fa-brands fa-youtube', twitter: 'fa-brands fa-x-twitter', discord: 'fa-brands fa-discord', tiktok: 'fa-brands fa-tiktok' };
+        const labels = { kick: 'Kick', youtube: 'YouTube', twitter: 'X', discord: 'Discord', tiktok: 'TikTok' };
+        const entries = Object.entries(links).filter(([, url]) => url);
+        linksEl.innerHTML = entries.length ? entries.map(([key, url]) =>
+            `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:border-void-accent/50 hover:bg-void-accent/10 text-void-muted hover:text-void-accent transition-all text-sm font-bold">
+                <i class="${icons[key] || 'fa-solid fa-link'}"></i> ${labels[key] || key}
+            </a>`
+        ).join('') : '';
+    }
 }
 
 async function resolveStreamer() {
@@ -1471,38 +2215,44 @@ async function resolveStreamer() {
     }
 }
 
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!result) return '0, 242, 254';
+    return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
+}
+
 function applyBranding(streamer) {
     const settings = streamer.settings || {};
     const root = document.documentElement;
 
     console.log("Applying Branding for:", streamer.display_name || streamer.username);
 
-    // Support both direct columns (new schema) and nested settings (legacy/frontend expectation)
-    const brandColor = settings.binder_color || '#00f2fe';
+
+    const brandColor = streamer.binder_color || settings.binder_color || '#00f2fe';
     const logoUrl = settings.brand_logo_url || streamer.brand_logo_url || streamer.avatar_url;
     const brandName = settings.brand_name || streamer.brand_name || streamer.display_name || streamer.username;
 
-    // 1. Inject CSS Variables
+
     if (brandColor) {
         root.style.setProperty('--primary-legacy', brandColor);
-        // Also update the neon accent if possible
         root.style.setProperty('--void-accent', brandColor);
+        root.style.setProperty('--void-accent-rgb', hexToRgb(brandColor));
     }
 
-    // 2. Update Assets
+
     if (logoUrl) {
         const logos = document.querySelectorAll('.app-logo');
         logos.forEach(img => img.src = logoUrl);
     }
 
-    // 3. Update Meta & Title
+
     document.title = `${brandName} - StreamCards`;
 
-    // 4. Update UI Strings
+
     const brandDisplays = document.querySelectorAll('.brand-name-display');
     brandDisplays.forEach(el => el.innerText = brandName);
 
-    // 5. Update Twitch Integration Box
+
     const summonText = document.getElementById('summon-more-text');
     const summonBtn = document.getElementById('summon-channel-btn');
     if (summonText) {
@@ -1542,7 +2292,7 @@ async function checkCreatorSetupStatus() {
             const statusText = document.getElementById('cd-status-text');
 
             if (!data.setup_complete) {
-                // Show setup callout, but let the user decide when to start
+
                 if (callout) callout.classList.remove('hidden');
                 if (statusText) statusText.textContent = 'Setup incomplete – finish your creator setup to go live.';
             } else {
@@ -1583,19 +2333,19 @@ function updateCreatorStatsUI(stats) {
     if (packsEl) packsEl.innerText = (stats.packs_opened || 0).toLocaleString();
 }
 
-// Enhanced dashboard loading with error handling
+
 async function loadOverviewData() {
     const loadingEl = document.getElementById('cd-overview-loading');
     const contentEl = document.getElementById('cd-overview-content');
     const errorEl = document.getElementById('cd-overview-error');
 
-    // Show loading state
+
     if (loadingEl) loadingEl.classList.remove('hidden');
     if (contentEl) contentEl.classList.add('hidden');
     if (errorEl) errorEl.classList.add('hidden');
 
     try {
-        // Fetch all overview data in parallel
+
         const [statsRes, activityRes] = await Promise.all([
             fetch(`${BACKEND_URL}/api/creator/stats`, { credentials: 'include' }),
             fetch(`${BACKEND_URL}/api/creator/analytics/overview?days=7`, { credentials: 'include' })
@@ -1611,17 +2361,17 @@ async function loadOverviewData() {
             updateRecentActivity(activity);
         }
 
-        // Hide loading, show content
+
         if (loadingEl) loadingEl.classList.add('hidden');
         if (contentEl) contentEl.classList.remove('hidden');
 
-        // Update status text
+
         const statusText = document.getElementById('cd-status-text');
         if (statusText) statusText.textContent = 'Dashboard loaded successfully';
 
     } catch (err) {
         console.error("[Creator] Failed to load overview:", err);
-        // Show error state
+
         if (loadingEl) loadingEl.classList.add('hidden');
         if (contentEl) contentEl.classList.add('hidden');
         if (errorEl) {
@@ -1641,7 +2391,7 @@ function updateOverviewStats(stats) {
     if (mintedEl) mintedEl.textContent = (stats.minted || creatorCards.length || 0).toLocaleString();
     if (commEl) commEl.textContent = (stats.community || 0).toLocaleString();
 
-    // Update change indicators
+
     if (mintedChange && stats.cards_change !== undefined) {
         mintedChange.textContent = `${stats.cards_change >= 0 ? '+' : ''}${stats.cards_change} this week`;
         mintedChange.className = `text-[8px] mt-2 ${stats.cards_change > 0 ? 'text-void-accent' : stats.cards_change < 0 ? 'text-red-500' : 'text-void-muted'}`;
@@ -1706,14 +2456,14 @@ function formatTimeAgo(timestamp) {
 
 
 async function loadSettingsStatus() {
-    // Update integration statuses
+
     try {
         const [webhookRes, obsRes] = await Promise.all([
             fetch(`${BACKEND_URL}/api/creator/webhook-status`, { credentials: 'include' }),
             fetch(`${BACKEND_URL}/api/creator/obs-token`, { credentials: 'include' })
         ]);
 
-        // Update Twitch status
+
         const twitchStatus = document.getElementById('twitch-status');
         if (twitchStatus && webhookRes.ok) {
             const webhook = await webhookRes.json();
@@ -1723,7 +2473,7 @@ async function loadSettingsStatus() {
         `;
         }
 
-        // Update OBS status
+
         const obsStatus = document.getElementById('obs-status');
         if (obsStatus && obsRes.ok) {
             const obs = await obsRes.json();
@@ -1733,7 +2483,7 @@ async function loadSettingsStatus() {
         `;
         }
 
-        // Update account status
+
         const statsRes = await fetch(`${BACKEND_URL}/api/creator/stats`, { credentials: 'include' });
         if (statsRes.ok) {
             const stats = await statsRes.json();
@@ -1770,14 +2520,14 @@ function retryLoadDashboard() {
     loadOverviewData();
 }
 
-// Debounced search for better performance
+
 let searchTimeout;
 function debounceSearch(callback, delay = 300) {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(callback, delay);
 }
 
-// Settings tab functions
+
 async function deactivateAccount() {
     if (!await showConfirm("⚠️ WARNING: This will deactivate your account and make your cards unavailable to collectors. Are you sure?")) return;
     if (!await showConfirm("FINAL WARNING: This action cannot be easily undone. Continue?")) return;
@@ -1851,7 +2601,7 @@ async function fetchCreatorCards() {
     console.log("[Creator] Fetching Cards...");
     const grid = document.getElementById('creator-cards-grid');
 
-    // Show loading state ONLY if we don't have cards yet
+
     if (grid && creatorCards.length === 0) {
         grid.innerHTML = `
         <div class="col-span-full space-y-4">
@@ -1894,12 +2644,12 @@ function renderCreatorCardsGrid() {
     const grid = document.getElementById('creator-cards-grid');
     if (!grid) return;
 
-    // Get filters
+
     const searchTerm = document.getElementById('card-search-input')?.value.toLowerCase() || '';
     const rarityFilter = document.getElementById('card-filter-rarity')?.value || '';
     const setFilter = document.getElementById('card-filter-set')?.value || '';
 
-    // Filter cards
+
     let filteredCards = creatorCards.filter(card => {
         const matchesSearch = !searchTerm || card.name?.toLowerCase().includes(searchTerm) || card.description?.toLowerCase().includes(searchTerm);
         const matchesRarity = !rarityFilter || card.rarity?.toLowerCase() === rarityFilter.toLowerCase();
@@ -1918,7 +2668,7 @@ function renderCreatorCardsGrid() {
         return;
     }
 
-    // Render with lazy loading and bulk selection support
+
     grid.innerHTML = filteredCards.map(card => {
         const isSelected = selectedCardIds.has(card.id);
         return `
@@ -1971,7 +2721,7 @@ function switchCreatorDashboardTab(tabName) {
     const activeBtn = document.getElementById(`cd-tab-${tabName}`);
     if (activeSection) {
         activeSection.classList.remove('hidden');
-        // Load data when switching tabs
+
         if (tabName === 'analytics') {
             loadAnalytics();
         } else if (tabName === 'settings') {
@@ -1979,7 +2729,7 @@ function switchCreatorDashboardTab(tabName) {
         } else if (tabName === 'overview') {
             loadOverviewData();
         } else if (tabName === 'cards') {
-            // Switch to "All Cards" sub-tab by default
+
             switchCardsSubTab('all-cards');
         } else if (tabName === 'editor') {
             renderEditorView();
@@ -1991,7 +2741,7 @@ function switchCreatorDashboardTab(tabName) {
     }
 }
 
-// Cards sub-tab switching
+
 function switchCardsSubTab(subTabName) {
     const subTabs = ['all-cards', 'upload', 'sets', 'pack', 'branding', 'card-backs'];
     subTabs.forEach(t => {
@@ -2008,7 +2758,7 @@ function switchCardsSubTab(subTabName) {
     const activeBtn = document.getElementById(`cards-subtab-${subTabName}`);
     if (activeSection) {
         activeSection.classList.remove('hidden');
-        // Load data when switching sub-tabs
+
         if (subTabName === 'sets') {
             loadSets();
         } else if (subTabName === 'card-backs') {
@@ -2023,7 +2773,7 @@ function switchCardsSubTab(subTabName) {
 
 window.switchCardsSubTab = switchCardsSubTab;
 
-// Legacy function for backward compatibility
+
 function switchCreatorTab(tabName) {
     switchCreatorDashboardTab(tabName);
 }
@@ -2114,7 +2864,7 @@ async function creatorTriggerDrop() {
     }
 }
 
-// --- Integrated Editor Functions ---
+
 let editorCurrentSetId = null;
 let editorAllCards = [];
 
@@ -2147,13 +2897,13 @@ async function renderEditorView() {
             </button>
         `).join('');
 
-        // Expose to window for global access if needed
+
         window.creatorSets = sets;
 
         if (!editorCurrentSetId && sets.length > 0) {
             selectEditorSet(sets[0].id);
         } else if (editorCurrentSetId) {
-            // Re-select to refresh cards if needed
+
             selectEditorSet(editorCurrentSetId);
         }
     } catch (e) {
@@ -2164,15 +2914,15 @@ async function renderEditorView() {
 
 async function selectEditorSet(setId) {
     editorCurrentSetId = setId;
-    
-    // Update Sidebar UI
+
+
     const items = document.querySelectorAll('[id^="editor-set-item-"]');
     items.forEach(el => {
         el.classList.remove('bg-void-accent/20', 'border-void-accent/40', 'text-void-accent');
         el.classList.add('bg-white/5', 'border-white/5', 'text-void-muted');
         const chevron = el.querySelector('.fa-chevron-right');
         if (chevron) chevron.remove();
-        
+
         const title = el.querySelector('.font-black');
         if (title) title.classList.remove('text-white');
     });
@@ -2186,7 +2936,7 @@ async function selectEditorSet(setId) {
         if (title) title.classList.add('text-white');
     }
 
-    // Update Banner
+
     if (window.creatorSets) {
         const set = window.creatorSets.find(s => s.id === setId);
         if (set) {
@@ -2210,12 +2960,12 @@ async function loadEditorCards() {
         const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
         if (!res.ok) throw new Error('API Error');
         const cards = await res.json();
-        
-        // Filter by set
+
+
         editorAllCards = cards.filter(c => c.set_id === editorCurrentSetId);
-        
+
         document.getElementById('editor-card-count').textContent = `${editorAllCards.length} Cards`;
-        
+
         renderEditorGrid(editorAllCards);
     } catch (e) {
         console.error("[Editor] Error loading cards:", e);
@@ -2282,7 +3032,7 @@ async function updateCardInline(cardId, field, value) {
             showToast('Sync Successful', 'success');
             const card = editorAllCards.find(c => c.id === cardId);
             if (card) card[field] = value;
-            // Re-apply filters and re-render
+
             const queryInput = document.getElementById('editor-card-search');
             const rarityInput = document.getElementById('editor-rarity-filter');
             const query = queryInput?.value?.toLowerCase() || '';
@@ -2302,14 +3052,14 @@ async function updateCardInline(cardId, field, value) {
     }
 }
 
-window.openQuickAddCard = function() {
-    // We leverage the existing card creator modal but set the current set
+window.openQuickAddCard = function () {
+
     const modal = document.getElementById('card-creator-modal');
     if (modal) {
         modal.classList.remove('hidden');
         resetCardCreatorForm();
-        
-        // Ensure the dropdown for sets is present and set to current
+
+
         if (typeof populateSetDropdowns === 'function') {
             populateSetDropdowns();
         }
@@ -2320,36 +3070,36 @@ window.openQuickAddCard = function() {
     }
 };
 
-// Add filter listener for editor
+
 document.addEventListener('input', e => {
     if (e.target.id === 'editor-card-search' || e.target.id === 'editor-rarity-filter') {
         const queryInput = document.getElementById('editor-card-search');
         const rarityInput = document.getElementById('editor-rarity-filter');
         if (!queryInput || !rarityInput) return;
-        
+
         const query = queryInput.value.toLowerCase();
         const rarity = rarityInput.value;
-        
+
         const filtered = editorAllCards.filter(c => {
             const matchesQuery = c.name.toLowerCase().includes(query) || (c.description && c.description.toLowerCase().includes(query));
             const matchesRarity = !rarity || c.rarity.toLowerCase() === rarity.toLowerCase();
             return matchesQuery && matchesRarity;
         });
-        
+
         renderEditorGrid(filtered);
     }
 });
 
-// Global exports
+
 window.renderEditorView = renderEditorView;
 window.selectEditorSet = selectEditorSet;
 window.updateCardInline = updateCardInline;
 
-// ============================================
-// NEW CREATOR DASHBOARD FUNCTIONS
-// ============================================
 
-// Card Creator Modal
+
+
+
+
 function openCardCreator() {
     const modal = document.getElementById('card-creator-modal');
     if (modal) {
@@ -2363,7 +3113,7 @@ function closeCardCreator() {
     if (modal) modal.classList.add('hidden');
 }
 
-// Processed blob from card image scaler (used when saving card)
+
 let _cardCreatorProcessedBlob = null;
 
 function resetCardCreatorForm() {
@@ -2372,7 +3122,7 @@ function resetCardCreatorForm() {
     document.getElementById('card-creator-description').value = '';
     document.getElementById('card-creator-attack').value = '0';
     document.getElementById('card-creator-defense').value = '0';
-    // mechanic reset removed
+
     document.getElementById('card-image-preview').classList.add('hidden');
     document.getElementById('card-image-placeholder').classList.remove('hidden');
     document.getElementById('card-creator-image').value = '';
@@ -2388,14 +3138,14 @@ function resetCardCreatorForm() {
     updateCardBudget();
 }
 
-// Stat Budgeting Logic
+
 function getRarityBudget(rarity) {
     switch (rarity.toLowerCase()) {
-        case 'legendary': return 14; // Tightened
-        case 'epic': return 12;      // Smoothed
-        case 'rare': return 10;      // Smoothed
-        case 'uncommon': return 8;    // Balanced
-        default: return 6;           // Buffed
+        case 'legendary': return 14;
+        case 'epic': return 12;
+        case 'rare': return 10;
+        case 'uncommon': return 8;
+        default: return 6;
     }
 }
 
@@ -2409,11 +3159,11 @@ function updateCardBudget(changedInputId = null) {
     let atk = parseInt(atkInput.value) || 0;
     let def = parseInt(defInput.value) || 0;
 
-    // Minimums: Cards must have at least 1 HP to survive entry.
+
     if (atk < 0) atk = 0;
     if (def < 1) def = 1;
 
-    // Total cannot exceed budget
+
     let currentTotal = atk + def;
     if (currentTotal > budget) {
         if (changedInputId === 'card-creator-attack') {
@@ -2423,7 +3173,7 @@ function updateCardBudget(changedInputId = null) {
             def = Math.min(def, budget);
             atk = budget - def;
         } else {
-            // General re-balance (e.g. rarity changed)
+
             if (atk > budget) {
                 atk = budget;
                 def = 0;
@@ -2443,15 +3193,15 @@ function updateCardBudget(changedInputId = null) {
     }
 }
 
-// Mechanic Population Logic
 
 
-// Listeners for creator points re-calc
+
+
 document.getElementById('card-creator-rarity')?.addEventListener('change', () => updateCardBudget());
 document.getElementById('card-creator-attack')?.addEventListener('input', () => updateCardBudget('card-creator-attack'));
 document.getElementById('card-creator-defense')?.addEventListener('input', () => updateCardBudget('card-creator-defense'));
 
-// Card Image Preview
+
 const cardCreatorImageInput = document.getElementById('card-creator-image');
 if (cardCreatorImageInput) {
     cardCreatorImageInput.onchange = (e) => {
@@ -2463,7 +3213,7 @@ if (cardCreatorImageInput) {
                 e.target.value = '';
                 return;
             }
-            // Open crop modal: position + zoom within 5:7 card frame (real-time)
+
             openCardImageCropModal(file, (blob) => {
                 _cardCreatorProcessedBlob = blob;
                 const preview = document.getElementById('card-image-preview');
@@ -2483,7 +3233,7 @@ if (cardCreatorImageInput) {
     };
 }
 
-// Save Card
+
 async function saveCard() {
     const name = document.getElementById('card-creator-name').value;
     const rarity = document.getElementById('card-creator-rarity').value;
@@ -2500,9 +3250,9 @@ async function saveCard() {
     showToast("Creating card...", "loading");
 
     try {
-        let imageUrl = '/pack.png'; // Default placeholder
+        let imageUrl = '/pack.png';
 
-        // Upload image if provided (use processed blob from scaler or process file to WebP/max edge)
+
         let blobToUpload = _cardCreatorProcessedBlob;
         if (!blobToUpload && imageFile) {
             try {
@@ -2527,17 +3277,17 @@ async function saveCard() {
             }
             _cardCreatorProcessedBlob = null;
         } else {
-            // If editing without changing the image, keep the existing one
+
             const previewEl = document.getElementById('card-image-preview');
             if (previewEl && !previewEl.classList.contains('hidden')) {
                 imageUrl = previewEl.src;
             }
         }
 
-        // Get set_id if selected
+
         const setId = document.getElementById('card-creator-set')?.value || null;
 
-        // Get card ID if editing
+
         const cardId = document.getElementById('card-creator-modal').dataset.cardId || null;
 
         const payload = {
@@ -2551,7 +3301,7 @@ async function saveCard() {
         };
         if (cardId) payload.id = cardId;
 
-        // Create or update card
+
         const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
             method: 'POST',
             headers: {
@@ -2568,7 +3318,7 @@ async function saveCard() {
             closeCardCreator();
             fetchCreatorCards();
             fetchCreatorStats();
-            if (editorCurrentSetId) loadEditorCards(); // Refresh editor grid
+            if (editorCurrentSetId) loadEditorCards();
         } else {
             showToast(data.error || "Failed to create card", "error");
         }
@@ -2577,7 +3327,7 @@ async function saveCard() {
     }
 }
 
-// Delete Card
+
 async function deleteCard(cardId) {
     if (!await showConfirm('Are you sure you want to delete this card? This action cannot be undone.')) return;
 
@@ -2594,8 +3344,8 @@ async function deleteCard(cardId) {
             showToast("Card deleted successfully", "success");
             fetchCreatorCards();
             fetchCreatorStats();
-            loadOverviewData(); // Refresh overview stats
-            if (editorCurrentSetId) loadEditorCards(); // Refresh editor grid
+            loadOverviewData();
+            if (editorCurrentSetId) loadEditorCards();
         } else {
             const data = await res.json().catch(() => ({}));
             showToast(data.error || "Failed to delete card", "error");
@@ -2606,7 +3356,7 @@ async function deleteCard(cardId) {
     }
 }
 
-// Edit Card
+
 function editCard(cardId) {
     const card = creatorCards.find(c => c.id === cardId) || editorAllCards.find(c => c.id === cardId);
     if (!card) return;
@@ -2616,7 +3366,7 @@ function editCard(cardId) {
     document.getElementById('card-creator-description').value = card.description || '';
     document.getElementById('card-creator-attack').value = card.attack || 0;
     document.getElementById('card-creator-defense').value = card.defense || 0;
-    // mechanic populate removed
+
 
     updateCardBudget();
 
@@ -2636,13 +3386,13 @@ function editCard(cardId) {
     const modal = document.getElementById('card-creator-modal');
     if (modal) modal.classList.remove('hidden');
     document.getElementById('card-creator-modal').dataset.cardId = cardId;
-    // Pre-select set in dropdown
+
     if (typeof populateSetDropdowns === 'function') populateSetDropdowns();
     const setDropdown = document.getElementById('card-creator-set');
     if (setDropdown && card.set_id) setDropdown.value = card.set_id;
 }
 
-// Drag & Drop Upload
+
 function setupDragAndDrop() {
     const uploadZone = document.getElementById('card-upload-zone');
     const fileInput = document.getElementById('card-image-upload');
@@ -2730,7 +3480,7 @@ function handleBulkImageUpload(files) {
     });
 }
 
-// Bulk Upload Modal
+
 function openBulkUpload() {
     const modal = document.getElementById('bulk-upload-modal');
     if (modal) modal.classList.remove('hidden');
@@ -2741,10 +3491,10 @@ function closeBulkUpload() {
     if (modal) modal.classList.add('hidden');
 }
 
-// Pack Customization
+
 function updatePackPreview() {
     const preview = document.getElementById('pack-preview');
-    // Preview updates are now handled by pack image only
+
 }
 
 function toggleAdvancedPackOptions() {
@@ -2757,7 +3507,7 @@ function toggleAdvancedPackOptions() {
     }
 }
 
-// Animation speed slider
+
 const packAnimationSpeed = document.getElementById('pack-animation-speed');
 if (packAnimationSpeed) {
     packAnimationSpeed.oninput = (e) => {
@@ -2767,7 +3517,7 @@ if (packAnimationSpeed) {
     };
 }
 
-// Sound volume slider
+
 const packSoundVolume = document.getElementById('pack-sound-volume');
 if (packSoundVolume) {
     packSoundVolume.oninput = (e) => {
@@ -2821,7 +3571,7 @@ async function savePackCustomization() {
             }
         }
 
-        // Save to backend
+
         const res = await fetch(`${BACKEND_URL}/api/creator/settings`, {
             method: 'PATCH',
             headers: {
@@ -2855,7 +3605,7 @@ async function savePackCustomization() {
 }
 
 async function savePackThemePreset() {
-    // Pack emoji and colors removed
+
     const animationSpeed = parseFloat(document.getElementById('pack-animation-speed')?.value || '1');
     const soundVolume = parseInt(document.getElementById('pack-sound-volume')?.value || '50');
     const particlesEnabled = document.getElementById('pack-particles-enabled')?.checked || false;
@@ -2873,7 +3623,7 @@ async function savePackThemePreset() {
         savedAt: new Date().toISOString()
     };
 
-    // Save to localStorage (could be saved to backend later)
+
     const presets = JSON.parse(localStorage.getItem('packThemePresets') || '[]');
     presets.push(preset);
     localStorage.setItem('packThemePresets', JSON.stringify(presets));
@@ -2907,7 +3657,7 @@ function testPackSound() {
     }
 }
 
-// Pack Manager
+
 function openPackManager() {
     const modal = document.getElementById('pack-manager-modal');
     if (modal) {
@@ -2922,11 +3672,42 @@ function closePackManager() {
 }
 
 async function loadPacks() {
-    // TODO: Implement pack loading from API
-    const packsList = document.getElementById('packs-list');
-    if (packsList) {
-        packsList.innerHTML = '<p class="text-sm text-void-muted">No packs yet</p>';
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/creator/packs`, { credentials: 'include' });
+        if (res.ok) {
+            const packs = await res.json();
+            renderPacksList(packs);
+        }
+    } catch (err) {
+        console.error('Failed to load packs:', err);
     }
+}
+
+function renderPacksList(packs) {
+    const packsList = document.getElementById('packs-list');
+    if (!packsList) return;
+
+    if (!packs || packs.length === 0) {
+        packsList.innerHTML = '<p class="text-xs text-void-muted uppercase tracking-widest font-bold text-center py-4">No packs created yet</p>';
+        return;
+    }
+
+    packsList.innerHTML = packs.map(pack => `
+        <div class="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl group hover:border-void-accent/30 transition-all">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
+                    <i class="fa-solid fa-box-open text-xs"></i>
+                </div>
+                <div>
+                    <div class="text-[11px] font-black uppercase text-white">${pack.name}</div>
+                    <div class="text-[8px] font-bold text-void-muted uppercase tracking-widest">${pack.code || 'TCG'} • ${pack.is_active ? 'Active' : 'Inactive'}</div>
+                </div>
+            </div>
+            <button onclick="editPack('${pack.id}')" class="opacity-0 group-hover:opacity-100 p-2 text-void-accent hover:text-white transition-all">
+                <i class="fa-solid fa-pen-to-square text-xs"></i>
+            </button>
+        </div>
+    `).join('');
 }
 
 async function createPack() {
@@ -2938,7 +3719,7 @@ async function createPack() {
         return;
     }
 
-    showToast("Creating pack...", "loading");
+    showToast(editingPackId ? "Updating pack..." : "Creating pack...", "loading");
 
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/packs`, {
@@ -2947,24 +3728,45 @@ async function createPack() {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': csrfToken
             },
-            body: JSON.stringify({ name, cost }),
+            body: JSON.stringify({ id: editingPackId, name, cost }),
             credentials: 'include'
         });
 
         if (res.ok) {
-            showToast("Pack created!", "success");
+            showToast(editingPackId ? "Pack updated!" : "Pack created!", "success");
             document.getElementById('new-pack-name').value = '';
             document.getElementById('new-pack-cost').value = '';
+            editingPackId = null;
+            const btn = document.querySelector('button[onclick="createPack()"]');
+            if (btn) btn.textContent = 'Create Pack';
             loadPacks();
         } else {
-            showToast("Failed to create pack", "error");
+            showToast("Failed to save pack", "error");
         }
     } catch (err) {
         showToast("Connection error", "error");
     }
 }
 
-// Twitch Settings
+let editingPackId = null;
+
+function editPack(packId) {
+
+
+
+    const packsList = document.getElementById('packs-list');
+    const packDiv = Array.from(packsList.children).find(div => div.outerHTML.includes(`editPack('${packId}')`));
+    if (packDiv) {
+        const name = packDiv.querySelector('.text-\\[11px\\]').textContent;
+        document.getElementById('new-pack-name').value = name;
+        editingPackId = packId;
+
+        const btn = document.querySelector('button[onclick="createPack()"]');
+        if (btn) btn.textContent = 'Update Pack';
+    }
+}
+
+
 function openTwitchSettings() {
     const modal = document.getElementById('twitch-settings-modal');
     if (modal) {
@@ -3038,10 +3840,10 @@ async function autoCreateTwitchReward(targetInputId) {
                 'X-CSRF-Token': csrfToken
             },
             body: JSON.stringify({
-                // Defaults; creators can adjust cost/limits later in Twitch dashboard
+
                 title: 'Open a Card Pack',
                 cost: 500,
-                mode: 'once_per_stream' // safe default: only once per stream (global)
+                mode: 'once_per_stream'
             }),
             credentials: 'include'
         });
@@ -3106,7 +3908,7 @@ async function createStarterCardFromWizard() {
     }
 }
 
-// Update stats display
+
 async function updateCreatorStats() {
     const mintedEl = document.getElementById('cd-stat-minted');
     const commEl = document.getElementById('cd-stat-community');
@@ -3126,11 +3928,11 @@ async function updateCreatorStats() {
     }
 }
 
-// Initialize pack preview updates (removed emoji and color inputs)
 
-// ============================================
-// SET MANAGEMENT
-// ============================================
+
+
+
+
 let creatorSets = [];
 let selectedCardIds = new Set();
 let bulkSelectMode = false;
@@ -3276,7 +4078,7 @@ function editSet(setId) {
         document.getElementById('set-icon-preview').classList.remove('hidden');
     }
 
-    // Scroll to form
+
     document.getElementById('set-name').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -3370,7 +4172,7 @@ async function deleteSet(setId) {
     }
 }
 
-// Set icon preview
+
 const setIconUpload = document.getElementById('set-icon-upload');
 if (setIconUpload) {
     setIconUpload.onchange = (e) => {
@@ -3390,9 +4192,9 @@ if (setIconUpload) {
     };
 }
 
-// ============================================
-// BULK OPERATIONS
-// ============================================
+
+
+
 
 function toggleBulkSelect() {
     bulkSelectMode = !bulkSelectMode;
@@ -3506,18 +4308,18 @@ async function bulkDeleteCards() {
     }
 }
 
-// Update renderCreatorCardsGrid to support bulk selection and filtering
+
 const originalRenderCreatorCardsGrid = renderCreatorCardsGrid;
 renderCreatorCardsGrid = function () {
     const grid = document.getElementById('creator-cards-grid');
     if (!grid) return;
 
-    // Get filters
+
     const searchTerm = document.getElementById('card-search-input')?.value.toLowerCase() || '';
     const rarityFilter = document.getElementById('card-filter-rarity')?.value || '';
     const setFilter = document.getElementById('card-filter-set')?.value || '';
 
-    // Filter cards
+
     let filteredCards = creatorCards.filter(card => {
         const matchesSearch = !searchTerm || card.name.toLowerCase().includes(searchTerm);
         const matchesRarity = !rarityFilter || card.rarity === rarityFilter;
@@ -3563,7 +4365,7 @@ renderCreatorCardsGrid = function () {
 `}).join('');
 };
 
-// Search and filter handlers
+
 const cardSearchInput = document.getElementById('card-search-input');
 const cardFilterRarity = document.getElementById('card-filter-rarity');
 const cardFilterSet = document.getElementById('card-filter-set');
@@ -3580,7 +4382,7 @@ if (cardFilterSet) {
     cardFilterSet.onchange = () => renderCreatorCardsGrid();
 }
 
-// Expose functions to window
+
 window.openSetManager = openSetManager;
 window.closeSetManager = closeSetManager;
 window.saveSet = saveSet;
@@ -3596,8 +4398,8 @@ window.bulkDeleteCards = bulkDeleteCards;
 window.openCardCreator = openCardCreator;
 window.closeCardCreator = closeCardCreator;
 window.saveCard = saveCard;
-window.deleteCreatorCard = deleteCard; // Use different name to avoid conflict with admin
-window.deleteCard = deleteCard; // Keep for backward compatibility
+window.deleteCreatorCard = deleteCard;
+window.deleteCard = deleteCard;
 window.editCard = editCard;
 window.openBulkUpload = openBulkUpload;
 window.closeBulkUpload = closeBulkUpload;
@@ -3609,9 +4411,9 @@ window.closePackManager = closePackManager;
 window.createPack = createPack;
 window.openTwitchSettings = openTwitchSettings;
 window.closeTwitchSettings = closeTwitchSettings;
-// ============================================
-// BRANDING SYSTEM
-// ============================================
+
+
+
 
 async function saveBranding() {
     const logoFile = document.getElementById('brand-logo-upload')?.files[0];
@@ -3695,7 +4497,7 @@ async function saveBranding() {
     }
 }
 
-// Brand logo preview
+
 const brandLogoUpload = document.getElementById('brand-logo-upload');
 if (brandLogoUpload) {
     brandLogoUpload.onchange = (e) => {
@@ -3715,7 +4517,7 @@ if (brandLogoUpload) {
     };
 }
 
-// Brand banner preview
+
 const brandBannerUpload = document.getElementById('brand-banner-upload');
 if (brandBannerUpload) {
     brandBannerUpload.onchange = (e) => {
@@ -3735,9 +4537,9 @@ if (brandBannerUpload) {
     };
 }
 
-// ============================================
-// CARD BACK MANAGEMENT
-// ============================================
+
+
+
 let cardBacks = [];
 
 function openCardBackManager() {
@@ -3760,7 +4562,7 @@ async function loadCardBacks() {
             cardBacks = await res.json();
             renderCardBacks();
         } else {
-            // Fallback to single card back from settings
+
             const settingsRes = await fetch(`${BACKEND_URL}/api/creator/settings`, { credentials: 'include' });
             if (settingsRes.ok) {
                 const settings = await settingsRes.json();
@@ -3840,7 +4642,7 @@ async function saveCardBack() {
         if (uploadRes.ok) {
             const uploadData = await uploadRes.json();
 
-            // Save to card backs table
+
             const res = await fetch(`${BACKEND_URL}/api/creator/card-backs`, {
                 method: 'POST',
                 headers: {
@@ -3850,7 +4652,7 @@ async function saveCardBack() {
                 body: JSON.stringify({
                     name: name,
                     image_url: uploadData.url,
-                    is_default: cardBacks.length === 0 // Set as default if it's the first one
+                    is_default: cardBacks.length === 0
                 }),
                 credentials: 'include'
             });
@@ -3921,7 +4723,7 @@ async function deleteCardBack(backId) {
     }
 }
 
-// Card back upload preview
+
 const cardBackUpload = document.getElementById('card-back-upload');
 if (cardBackUpload) {
     cardBackUpload.onchange = (e) => {
@@ -3941,7 +4743,7 @@ if (cardBackUpload) {
     };
 }
 
-// Expose functions
+
 window.toggleAdvancedPackOptions = toggleAdvancedPackOptions;
 window.savePackThemePreset = savePackThemePreset;
 window.loadPackThemePreset = loadPackThemePreset;
@@ -3952,9 +4754,9 @@ window.saveCardBack = saveCardBack;
 window.setDefaultCardBack = setDefaultCardBack;
 window.deleteCardBack = deleteCardBack;
 
-// ============================================
-// ANALYTICS SYSTEM
-// ============================================
+
+
+
 
 let analyticsData = {
     overview: null,
@@ -3969,7 +4771,7 @@ async function loadAnalytics() {
     showToast("Loading analytics...", "loading");
 
     try {
-        // Load all analytics data
+
         const [overviewRes, cardsRes, collectorsRes, packsRes] = await Promise.all([
             fetch(`${BACKEND_URL}/api/creator/analytics/overview?days=${timeRange}`, { credentials: 'include' }),
             fetch(`${BACKEND_URL}/api/creator/analytics/cards?days=${timeRange}`, { credentials: 'include' }),
@@ -4001,7 +4803,7 @@ function renderOverviewStats() {
 
     const data = analyticsData.overview;
 
-    // Update stat displays
+
     const mintedEl = document.getElementById('cd-stat-minted');
     const communityEl = document.getElementById('cd-stat-community');
     const packsEl = document.getElementById('cd-stat-packs-opened');
@@ -4010,7 +4812,7 @@ function renderOverviewStats() {
     if (communityEl) communityEl.textContent = (data.total_collectors || 0).toLocaleString();
     if (packsEl) packsEl.textContent = (data.total_packs_opened || 0).toLocaleString();
 
-    // Update change indicators
+
     const mintedChange = document.getElementById('cd-stat-minted-change');
     const communityChange = document.getElementById('cd-stat-community-change');
     const packsChange = document.getElementById('cd-stat-packs-change');
@@ -4089,7 +4891,7 @@ function renderCollectorLeaderboard() {
 }
 
 function renderCharts() {
-    // Simple chart rendering (can be enhanced with Chart.js later)
+
     if (analyticsData.overview && analyticsData.overview.growth_data) {
         renderCollectorGrowthChart(analyticsData.overview.growth_data);
     }
@@ -4105,7 +4907,7 @@ function renderCollectorGrowthChart(data) {
     const canvas = document.getElementById('collector-growth-chart');
     if (!canvas || !data) return;
 
-    // Destroy existing chart if it exists
+
     if (collectorGrowthChartInstance) {
         collectorGrowthChartInstance.destroy();
     }
@@ -4160,7 +4962,7 @@ function renderPackActivityChart(data) {
     const canvas = document.getElementById('pack-activity-chart');
     if (!canvas || !data) return;
 
-    // Destroy existing chart if it exists
+
     if (packActivityChartInstance) {
         packActivityChartInstance.destroy();
     }
@@ -4179,9 +4981,9 @@ function renderPackActivityChart(data) {
             datasets: [{
                 label: 'Packs Opened',
                 data: values,
-                backgroundColor: '#00f2fe',
+                backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--void-accent').trim() || '#00f2fe',
                 borderRadius: 4,
-                hoverBackgroundColor: 'rgba(0, 242, 254, 0.8)'
+                hoverBackgroundColor: (() => { const rgb = getComputedStyle(document.documentElement).getPropertyValue('--void-accent-rgb').trim() || '0, 242, 254'; return `rgba(${rgb}, 0.8)`; })()
             }]
         },
         options: {
@@ -4245,19 +5047,19 @@ function renderCommunityDiscovery(data) {
     container.innerHTML = html;
 }
 
-// Time range change handler
+
 const analyticsTimeRange = document.getElementById('analytics-time-range');
 if (analyticsTimeRange) {
     analyticsTimeRange.onchange = () => loadAnalytics();
 }
 
-// Expose functions
+
 window.switchCreatorDashboardTab = switchCreatorDashboardTab;
 window.loadAnalytics = loadAnalytics;
 
-// ============================================
-// TWITCH INTEGRATION ENHANCEMENTS
-// ============================================
+
+
+
 
 async function validateRewardId(inputId) {
     const rewardId = document.getElementById(inputId)?.value;
@@ -4370,7 +5172,7 @@ async function refreshWebhookLogs() {
     }
 }
 
-// Load webhook status and logs when Twitch settings modal opens
+
 const originalOpenTwitchSettings = openTwitchSettings;
 openTwitchSettings = function () {
     originalOpenTwitchSettings();
@@ -4378,9 +5180,9 @@ openTwitchSettings = function () {
     refreshWebhookLogs();
 };
 
-// ============================================
-// STREAMELEMENTS INTEGRATION
-// ============================================
+
+
+
 
 function openStreamElementsSettings() {
     const modal = document.getElementById('streamelements-settings-modal');
@@ -4400,8 +5202,8 @@ async function loadStreamElementsSettings() {
         const res = await fetch(`${BACKEND_URL}/api/creator/settings`, { credentials: 'include' });
         if (res.ok) {
             const settings = await res.json();
-            // Settings are encrypted, so we can't display them
-            // Just load the UI state
+
+
         }
     } catch (err) {
         console.error("Failed to load StreamElements settings:", err);
@@ -4447,9 +5249,9 @@ async function saveStreamElementsSettings() {
     }
 }
 
-// ============================================
-// OBS INTEGRATION
-// ============================================
+
+
+
 
 function openOBSIntegration() {
     const modal = document.getElementById('obs-integration-modal');
@@ -4471,7 +5273,7 @@ async function updateOBSUrl() {
         return;
     }
 
-    // Fetch creator info to get streamer username
+
     try {
         const creatorRes = await fetch(`${BACKEND_URL}/api/creator/stats`, { credentials: 'include' });
         if (!creatorRes.ok) {
@@ -4483,7 +5285,7 @@ async function updateOBSUrl() {
         const creatorData = await creatorRes.json();
         const streamerName = creatorData.username || currentUser?.name || 'streamer';
 
-        // Fetch or generate overlay token
+
         let token = localStorage.getItem(`obs_token_${streamerName}`);
 
         if (!token) {
@@ -4511,12 +5313,12 @@ async function updateOBSUrl() {
             return;
         }
 
-        // Simplified URL - only streamer and token (width/height/position set in OBS)
+
         const overlayUrl = `${window.location.origin}/obs-overlay?streamer=${encodeURIComponent(streamerName)}&token=${encodeURIComponent(token)}`;
 
         urlInput.value = overlayUrl;
 
-        // Update preview with dimensions from settings
+
         const width = document.getElementById('obs-width')?.value || '1920';
         const height = document.getElementById('obs-height')?.value || '1080';
         const preview = document.getElementById('obs-preview-iframe');
@@ -4566,14 +5368,14 @@ async function copyOBSUrl() {
     }
 
     try {
-        // Use modern Clipboard API
+
         await navigator.clipboard.writeText(urlInput.value);
         showToast("URL copied to clipboard!", "success");
     } catch (err) {
-        // Fallback for older browsers
+
         try {
             urlInput.select();
-            urlInput.setSelectionRange(0, 99999); // For mobile devices
+            urlInput.setSelectionRange(0, 99999);
             document.execCommand('copy');
             showToast("URL copied to clipboard!", "success");
         } catch (fallbackErr) {
@@ -4583,7 +5385,7 @@ async function copyOBSUrl() {
     }
 }
 
-// OBS settings change handlers
+
 const obsWidth = document.getElementById('obs-width');
 const obsHeight = document.getElementById('obs-height');
 const obsPosition = document.getElementById('obs-position');
@@ -4600,9 +5402,9 @@ if (obsAnimationSpeed) {
     };
 }
 
-// ============================================
-// AUTOMATION FEATURES
-// ============================================
+
+
+
 
 function openAutomationSettings() {
     const modal = document.getElementById('automation-settings-modal');
@@ -4672,7 +5474,7 @@ function addScheduledDrop() {
 
     showToast("Adding scheduled drop...", "loading");
 
-    // This would be saved to backend
+
     showToast("Scheduled drop added!", "success");
     loadAutomationSettings();
 }
@@ -4680,7 +5482,7 @@ function addScheduledDrop() {
 function deleteScheduledDrop(index) {
     if (!confirm('Delete this scheduled drop?')) return;
     showToast("Deleting scheduled drop...", "loading");
-    // This would be deleted from backend
+
     showToast("Scheduled drop deleted", "success");
     loadAutomationSettings();
 }
@@ -4746,7 +5548,7 @@ async function saveAutomationSettings() {
     }
 }
 
-// Expose functions
+
 window.validateRewardId = validateRewardId;
 window.refreshWebhookStatus = refreshWebhookStatus;
 window.testWebhook = testWebhook;
@@ -4771,9 +5573,9 @@ window.creatorMintCard = creatorMintCard;
 window.creatorAssemblePack = creatorAssemblePack;
 window.creatorTriggerDrop = creatorTriggerDrop;
 
-// ============================================
-// SETUP WIZARD
-// ============================================
+
+
+
 let setupWizardCurrentStep = 1;
 let setupWizardData = {
     identity: {
@@ -4781,9 +5583,9 @@ let setupWizardData = {
         tagline: ''
     },
     twitch: { rewardId: '', battleRewardId: '' },
-    // Rarity config still gets saved with good defaults, even though it's not a dedicated step anymore
+
     rarity: { common: 70, rare: 20, epic: 8, legendary: 2 },
-    // Local-only list, not auto-created on the backend anymore (cards are managed from the dashboard)
+
     cards: []
 };
 
@@ -4793,7 +5595,7 @@ function openSetupWizard() {
         modal.classList.remove('hidden');
         setupWizardCurrentStep = 1;
         updateSetupWizardStep();
-        updateWizardLivePreview(); // Initial preview
+        updateWizardLivePreview();
     }
 }
 
@@ -4807,7 +5609,7 @@ function closeSetupWizard() {
 }
 
 function updateSetupWizardStep() {
-    // Hide all steps (4 steps)
+
     for (let i = 1; i <= 4; i++) {
         const stepContent = document.getElementById(`setup-step-${i}-content`);
         const stepBar = document.getElementById(`setup-step-${i}`);
@@ -4823,15 +5625,15 @@ function updateSetupWizardStep() {
         }
     }
 
-    // Show current step
+
     const currentStepContent = document.getElementById(`setup-step-${setupWizardCurrentStep}-content`);
     if (currentStepContent) currentStepContent.classList.remove('hidden');
 
-    // Update step label
+
     const stepLabel = document.getElementById('setup-step-label');
     if (stepLabel) stepLabel.innerText = `Step ${setupWizardCurrentStep} of 4`;
 
-    // Update navigation buttons
+
     const prevBtn = document.getElementById('setup-prev-btn');
     const nextBtn = document.getElementById('setup-next-btn');
     const completeBtn = document.getElementById('setup-complete-btn');
@@ -4855,7 +5657,7 @@ function updateSetupWizardStep() {
         }
     }
 
-    // Load step data if available
+
     loadSetupWizardStepData();
 }
 
@@ -4879,7 +5681,7 @@ function setupWizardPrevious() {
 
 function validateSetupWizardStep() {
     switch (setupWizardCurrentStep) {
-        case 1: { // Collection Identity
+        case 1: {
             const nameInput = document.getElementById('setup-collection-name');
             const rawName = nameInput?.value || '';
             const name = rawName.trim();
@@ -4900,19 +5702,19 @@ function validateSetupWizardStep() {
             return true;
         }
 
-        case 2: { // Twitch
+        case 2: {
             const rewardId = document.getElementById('setup-twitch-reward-id')?.value;
             if (!rewardId || rewardId.trim() === '') {
-                // Allow skipping here; Twitch can be configured later in the dashboard.
+
                 showToast('You can connect Twitch later from the dashboard. For now we will skip the reward ID.', 'info');
             }
             return true;
         }
 
-        case 3: // Add Cards (optional) – no blocking validation
+        case 3:
             return true;
 
-        case 4: // Review & Activate – no additional validation
+        case 4:
             return true;
 
         default:
@@ -4922,7 +5724,7 @@ function validateSetupWizardStep() {
 
 function saveSetupWizardStepData() {
     switch (setupWizardCurrentStep) {
-        case 1: { // Collection Identity
+        case 1: {
             const nameInput = document.getElementById('setup-collection-name');
             const taglineInput = document.getElementById('setup-collection-tagline');
             const primaryColor = document.getElementById('setup-brand-color-primary');
@@ -4937,15 +5739,15 @@ function saveSetupWizardStepData() {
             break;
         }
 
-        case 2: // Twitch
+        case 2:
             setupWizardData.twitch = {
                 rewardId: document.getElementById('setup-twitch-reward-id')?.value || '',
                 battleRewardId: document.getElementById('setup-twitch-battle-reward-id')?.value || ''
             };
             break;
 
-        case 3: { // Add Cards / Genesis
-            // Store genesis card names for processing at the end
+        case 3: {
+
             setupWizardData.genesis = [
                 { name: document.getElementById('setup-genesis-1-name')?.value || 'Genesis Common', rarity: 'common' },
                 { name: document.getElementById('setup-genesis-2-name')?.value || 'Genesis Rare', rarity: 'rare' },
@@ -4953,22 +5755,22 @@ function saveSetupWizardStepData() {
             ];
             break;
         }
-        case 4: // Review – nothing to save
+        case 4:
             break;
     }
 }
 
 function loadSetupWizardStepData() {
     switch (setupWizardCurrentStep) {
-        case 1: { // Collection Identity
+        case 1: {
             const nameInput = document.getElementById('setup-collection-name');
             const taglineInput = document.getElementById('setup-collection-tagline');
 
-            // If we already have data in memory, use that
+
             if (setupWizardData.identity.collectionName && nameInput) {
                 nameInput.value = setupWizardData.identity.collectionName;
             } else if (nameInput && !nameInput.value) {
-                // Default: "{username}'s Collection"
+
                 const base =
                     (window.currentUser && (window.currentUser.display_name || window.currentUser.username)) ||
                     'My Collection';
@@ -4982,7 +5784,7 @@ function loadSetupWizardStepData() {
             break;
         }
 
-        case 2: // Twitch
+        case 2:
             if (setupWizardData.twitch.rewardId) {
                 const rewardId = document.getElementById('setup-twitch-reward-id');
                 if (rewardId) rewardId.value = setupWizardData.twitch.rewardId;
@@ -4993,11 +5795,11 @@ function loadSetupWizardStepData() {
             }
             break;
 
-        case 3: // Add Cards – refresh card count summary
+        case 3:
             updateWizardCardCount();
             break;
 
-        case 4: // Review – populate checklist and OBS URL
+        case 4:
             populateReviewChecklist();
             updateWizardOBSUrl();
             break;
@@ -5088,7 +5890,7 @@ async function populateReviewChecklist() {
     const checklist = document.getElementById('setup-review-checklist');
     if (!checklist) return;
 
-    // Fetch current card count
+
     let cardCount = 0;
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
@@ -5162,7 +5964,7 @@ function updateWizardLivePreview() {
     const primary = document.getElementById('setup-brand-color-primary')?.value || '#00f2ff';
     const secondary = document.getElementById('setup-brand-color-secondary')?.value || '#001a2c';
 
-    // Update the card preview element
+
     const preview = document.querySelector('.wizard-card-preview');
     if (preview) {
         preview.style.setProperty('--card-glow', primary);
@@ -5186,7 +5988,7 @@ async function previewGenesisImage(index) {
         return;
     }
 
-    // 1. Show local preview immediately
+
     const reader = new FileReader();
     reader.onload = (e) => {
         preview.src = e.target.result;
@@ -5195,7 +5997,7 @@ async function previewGenesisImage(index) {
     };
     reader.readAsDataURL(file);
 
-    // 2. Process (resize max 2000px, WebP, strip metadata) then upload
+
     try {
         const blob = await processCardImage(file, CARD_IMAGE_MAX_EDGE_PX);
         const formData = new FormData();
@@ -5251,7 +6053,7 @@ async function updateWizardOBSUrl() {
         const creatorData = await creatorRes.json();
         const streamerName = creatorData.username || (currentUser && (currentUser.name || currentUser.username)) || 'streamer';
 
-        // Fetch or generate overlay token
+
         let token = localStorage.getItem(`obs_token_${streamerName}`);
 
         if (!token) {
@@ -5295,7 +6097,7 @@ async function setupWizardComplete() {
     try {
         if (!csrfToken) await fetchCSRFToken();
 
-        // Prepare the unified onboarding payload
+
         const payload = {
             identity: {
                 collectionName: document.getElementById('setup-collection-name')?.value || setupWizardData.identity.collectionName,
@@ -5314,10 +6116,10 @@ async function setupWizardComplete() {
             ]
         };
 
-        // Filter out cards if they don't have images (use defaults or skip)
+
         payload.genesis = payload.genesis.map(c => ({
             ...c,
-            image_url: c.image_url.startsWith('data:') ? '/pack.png' : c.image_url // Fallback if upload failed
+            image_url: c.image_url.startsWith('data:') ? '/pack.png' : c.image_url
         }));
 
         const res = await fetch(`${BACKEND_URL}/api/creator/onboarding/complete`, {
@@ -5338,7 +6140,7 @@ async function setupWizardComplete() {
         showToast('Onboarding complete! Your Genesis collection is ready.', 'success');
         closeSetupWizard();
 
-        // Reload to show the new creator dashboard state
+
         setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
         console.error('[Setup Wizard] Error:', error);
@@ -5376,7 +6178,7 @@ function useDefaultCollectionIdentity() {
         taglineInput.placeholder = "e.g., Collect cards while watching the stream";
     }
 
-    // Persist to wizard state and advance
+
     saveSetupWizardStepData();
     setupWizardNext();
 }
@@ -5401,7 +6203,7 @@ function skipCardsInWizard() {
 }
 
 function openEmojiPicker(target) {
-    // Simple emoji picker - in production, use a library like emoji-picker-element
+
     const emoji = prompt('Enter an emoji (or paste one):');
     if (emoji) {
         const input = document.getElementById(`setup-${target}`);
@@ -5424,7 +6226,7 @@ function processSetupCSV() {
         const text = e.target.result;
         const lines = text.split('\n').filter(line => line.trim());
 
-        // Skip header
+
         for (let i = 1; i < lines.length; i++) {
             const [name, rarity] = lines[i].split(',').map(s => s.trim());
             if (name && rarity) {
@@ -5450,7 +6252,7 @@ function downloadCSVTemplate() {
 }
 
 function openEmojiPicker(target) {
-    // Simple emoji picker - in production, use a library like emoji-picker-element
+
     const emoji = prompt('Enter an emoji (or paste one):');
     if (emoji) {
         const input = document.getElementById(`setup-${target}`);
@@ -5473,7 +6275,7 @@ function processSetupCSV() {
         const text = e.target.result;
         const lines = text.split('\n').filter(line => line.trim());
 
-        // Skip header
+
         for (let i = 1; i < lines.length; i++) {
             const [name, rarity] = lines[i].split(',').map(s => s.trim());
             if (name && rarity) {
@@ -5510,7 +6312,7 @@ window.skipCardsInWizard = skipCardsInWizard;
 window.createStarterCardFromWizard = createStarterCardFromWizard;
 window.removeSetupCard = removeSetupCard;
 
-// --- CREATOR HUB & MULTI-STREAMER LOGIC ---
+
 window.renderCreatorHub = function (streamers) {
     const list = document.getElementById('creator-streamer-list');
     if (!list) return;
@@ -5548,11 +6350,11 @@ window.switchStreamer = function (slug) {
 
     showToast(`Loading creator: ${slug}...`, 'info');
 
-    // Update URL without full refresh if possible, otherwise just redirect
+
     const newPath = `/${slug}`;
     if (window.history.pushState) {
         window.history.pushState({ path: newPath }, '', newPath);
-        // Re-initialize app with new streamer context
+
         initializeApp();
     } else {
         window.location.href = newPath;
@@ -5580,6 +6382,8 @@ window.toggleGlobalView = function () {
 
     currentPage = 1;
     fetchUserCollection();
+    fetchAchievements();
+    fetchLeaderboard();
 };
 window.openEmojiPicker = openEmojiPicker;
 window.processSetupCSV = processSetupCSV;
@@ -5596,7 +6400,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
         landing.classList.add('hidden');
         landing.classList.remove('flex');
     }
-    // Hide all landing page sections (like "How It Works")
+
     const landingSections = document.querySelectorAll('.landing-section');
     landingSections.forEach(section => {
         section.classList.add('hidden');
@@ -5605,19 +6409,19 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     if (dash) {
         dash.classList.remove('hidden');
         dash.classList.add('block');
-        // Ensure proper layout
+
         dash.style.display = 'block';
     }
 
-    // Explicitly hide all landing sections
+
     landingSections.forEach(section => {
         section.classList.add('hidden');
     });
 
-    // Hide auth/login views
+
     const dashLoginView = document.getElementById('login-view');
     if (dashLoginView) dashLoginView.classList.add('hidden');
-    // Unified Navbar user data
+
     const navNick = document.getElementById('nav-username');
     const navImg = document.getElementById('nav-avatar');
     const navUser = document.getElementById('nav-user-preview');
@@ -5631,7 +6435,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     }
     if (loginBtn) loginBtn.classList.add('hidden');
 
-    // Populate stats from bootstrap if available
+
     if (bootstrapData && bootstrapData.stats) {
         const stats = bootstrapData.stats;
         const totalEl = document.getElementById('stat-total');
@@ -5643,7 +6447,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
         totalUniqueCards = stats.total_available;
     }
 
-    // Auto-onboarding for new users
+
     if (!localStorage.getItem('seen_onboarding_v1')) {
         console.log("[Auth] New user detected, triggering onboarding...");
         if (typeof openOnboarding === 'function') openOnboarding();
@@ -5657,34 +6461,34 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
         updateCreatorStatsUI(bootstrapData.creator_stats);
     }
 
-    // Show creator dashboard button in Navbar
-    if (currentUser.is_creator || (currentUser.name && currentUser.name.toLowerCase() === 'codeoce')) {
+
+    if (currentUser.is_creator) {
         const navCreatorBtn = document.getElementById('nav-creator-btn');
         if (navCreatorBtn) navCreatorBtn.classList.remove('hidden');
 
-        // Check if creator needs setup
+
         checkCreatorSetupStatus();
 
-        // Load creator dashboard data ONLY if we don't have it yet and not a snap refresh
+
         if (!isSnap) {
             if (creatorCards.length === 0) fetchCreatorCards();
-            // Stats are now mostly bundled, but let's ensure we have them
+
             fetchCreatorStats();
             loadSets();
         }
 
-        // Load overview data if on overview tab
+
         if (routeInfo.view === 'dashboard' || !routeInfo.view) {
             loadOverviewData();
         }
     }
 
-    // --- ROUTING LOGIC ---
-    // /binder/:streamer always shows collection for that streamer.
-    // /hub/:id/:streamer (legacy) same as binder.
-    // Creator-dashboard only when at dashboard with NO slug (your own context).
+
+
+
+
     const viewingOwnStreamer = routeInfo.slug && currentUser.name && routeInfo.slug.toLowerCase() === currentUser.name.toLowerCase();
-    const isCreator = currentUser.streamer?.is_active || currentUser.name?.toLowerCase() === 'codeoce';
+    const isCreator = currentUser.is_creator;
 
     if (initialView) {
         switchView(initialView);
@@ -5693,9 +6497,9 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
             loadOverviewData();
         }
     } else if (routeInfo.view === 'binder' && APP_STREAMER) {
-        // /binder/codeoce - always show collection for that streamer
+
         switchView('collection');
-        window.activeStreamerFilter = null; // Use APP_STREAMER from bootstrap
+        window.activeStreamerFilter = null;
         const pageInd = document.getElementById('page-indicator');
         if (pageInd) pageInd.innerText = `${APP_STREAMER.brand_name || APP_STREAMER.username} Binder`;
         if (!bootstrapData) {
@@ -5703,6 +6507,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
             fetchUserBinders();
         } else {
             fetchUserCollection(bootstrapData.recent_drops);
+            fetchUserBinders();
         }
     } else if (routeInfo.view === 'dashboard' && viewingOwnStreamer && isCreator) {
         switchView('creator-dashboard');
@@ -5718,6 +6523,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
             fetchUserBinders();
         } else {
             fetchUserCollection(bootstrapData.recent_drops);
+            fetchUserBinders();
         }
     } else if (routeInfo.view === 'battle') {
         switchView('battle');
@@ -5725,7 +6531,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
         populateProfileView();
         switchView('profile');
     } else {
-        // Default View
+
         if (APP_STREAMER) {
             populateProfileView();
             switchView('profile');
@@ -5734,7 +6540,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
             switchCreatorDashboardTab('overview');
             loadOverviewData();
         } else {
-            // No context, no specific route, just show generic dashboard for now
+
             switchView('collection');
             if (!bootstrapData) {
                 fetchUserCollection();
@@ -5743,10 +6549,10 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
         }
     }
 
-    // If bootstrapData exists, we already have leaderboard/achievements in globals
+
     if (bootstrapData) {
         if (bootstrapData.recent_drops) {
-            // Partial render of cards if provided
+
             userCollection = bootstrapData.recent_drops.map(item => ({
                 id: item.card_id,
                 instanceId: item.user_card_id,
@@ -5756,7 +6562,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
                 type: item.type,
                 set_name: item.set_name || 'Ageless',
                 created_at: item.created_at,
-                // Battle Stats
+
                 attack: item.attack || 0,
                 defense: item.defense || 0,
                 max_hp: item.max_hp || 0,
@@ -5787,9 +6593,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     startPolling();
 }
 
-/**
- * Initialize Event Listeners for action buttons
- */
+
 function initButtons() {
     console.log("[Buttons] initButtons triggered");
     const heroLogin = document.getElementById('hero-login-btn');
@@ -5798,11 +6602,7 @@ function initButtons() {
         heroLogin.onclick = (e) => {
             e.preventDefault();
             console.log("[Buttons] Hero Get Started clicked");
-            if (typeof window.openOnboarding === 'function') {
-                window.openOnboarding();
-            } else {
-                console.error('[Buttons] openOnboarding function not found');
-            }
+            window.openOnboarding();
         };
     }
 
@@ -5812,7 +6612,7 @@ function initButtons() {
         navLogin.onclick = (e) => {
             e.preventDefault();
             console.log("[Buttons] Nav Get Started clicked");
-            if (typeof window.openOnboarding === 'function') window.openOnboarding();
+            window.openOnboarding();
         };
     }
 
@@ -5836,10 +6636,10 @@ function initButtons() {
 
 
 
-// --- ADMIN LOGIC ---
+
 let adminAuthenticated = false;
-let adminUsersData = []; // Store users for searching
-// Check admin session on load
+let adminUsersData = [];
+
 async function checkAdminSession() {
     try {
         const res = await fetch(`${BACKEND_URL}/api/admin/check`, {
@@ -5851,41 +6651,7 @@ async function checkAdminSession() {
         console.error('Admin check failed:', e);
     }
 }
-const tabAdmin = document.getElementById('tab-admin');
-if (tabAdmin) tabAdmin.onclick = async () => {
-    const isCodeOce = currentUser.name.toLowerCase() === 'codeoce';
-    const isCreator = APP_STREAMER && currentUser.twitch_id === APP_STREAMER.id;
 
-    if (isCodeOce && !adminAuthenticated) {
-        showAdminLogin();
-        return;
-    }
-
-    switchView('admin');
-    loadAdminCards();
-
-    if (isCodeOce && adminAuthenticated) {
-        // Show global admin panels
-        document.getElementById('admin-stats-panel').classList.remove('hidden');
-        document.getElementById('admin-users-panel').classList.remove('hidden');
-        document.getElementById('admin-grant-panel').classList.remove('hidden');
-        document.getElementById('admin-upload-panel').classList.remove('hidden');
-        document.getElementById('admin-bulk-panel').classList.remove('hidden');
-        document.getElementById('admin-config-panel').classList.remove('hidden');
-
-        loadAdminStats();
-        loadAdminUsers();
-        loadAdminConfig();
-    } else {
-        // Hide global admin panels for normal creators
-        document.getElementById('admin-stats-panel').classList.add('hidden');
-        document.getElementById('admin-users-panel').classList.add('hidden');
-        document.getElementById('admin-grant-panel').classList.add('hidden');
-        document.getElementById('admin-upload-panel').classList.add('hidden');
-        document.getElementById('admin-bulk-panel').classList.add('hidden');
-        document.getElementById('admin-config-panel').classList.add('hidden');
-    }
-};
 
 function showAdminLogin() {
     document.getElementById('admin-login-modal').classList.remove('hidden');
@@ -5936,7 +6702,7 @@ if (adminLoginForm) {
                 const adminLoginForm = document.getElementById('admin-login-form');
                 if (adminLoginForm) adminLoginForm.reset();
                 if (errorDiv) errorDiv.classList.add('hidden');
-                // Start Loading Data
+
                 await loadSets();
                 await Promise.all([
                     loadCollection(),
@@ -5946,13 +6712,13 @@ if (adminLoginForm) {
                     loadMyTradeCode()
                 ]);
 
-                // Auto-show onboarding if never seen
+
                 if (!localStorage.getItem('seen_onboarding_v1')) {
                     setTimeout(showHowToPlay, 1000);
                 }
                 switchView('admin');
 
-                // Show global panels for codeOCE upon login
+
                 const adminStatsPanel = document.getElementById('admin-stats-panel');
                 if (adminStatsPanel) adminStatsPanel.classList.remove('hidden');
                 const adminUsersPanel = document.getElementById('admin-users-panel');
@@ -6005,7 +6771,7 @@ if (exitAdmin) {
     };
 }
 
-// --- SYSTEM LOGS ---
+
 let adminLogsData = [];
 
 async function loadSystemLogs() {
@@ -6079,37 +6845,7 @@ function renderSystemLogs() {
     }
 }
 
-const viewLogsBtn = document.getElementById('view-logs');
-if (viewLogsBtn) {
-    viewLogsBtn.onclick = () => {
-        const modal = document.getElementById('logs-modal');
-        if (modal) {
-            modal.classList.remove('hidden');
-            scrollLock();
-            loadSystemLogs();
-        }
-    };
-}
 
-const closeLogsBtn = document.getElementById('close-logs-modal');
-if (closeLogsBtn) {
-    closeLogsBtn.onclick = () => {
-        const modal = document.getElementById('logs-modal');
-        if (modal) {
-            modal.classList.add('hidden');
-            scrollUnlock();
-        }
-    };
-}
-
-const refreshLogsBtn = document.getElementById('refresh-logs-btn');
-if (refreshLogsBtn) refreshLogsBtn.onclick = loadSystemLogs;
-
-const logSearch = document.getElementById('log-search');
-if (logSearch) logSearch.oninput = debounce(loadSystemLogs, 300);
-
-const logCategoryFilter = document.getElementById('log-category-filter');
-if (logCategoryFilter) logCategoryFilter.onchange = loadSystemLogs;
 
 function debounce(func, wait) {
     let timeout;
@@ -6123,107 +6859,9 @@ function debounce(func, wait) {
     };
 }
 
-const acUpload = document.getElementById('ac-upload');
-if (acUpload) {
-    acUpload.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Preview immediately
-        const preview = document.getElementById('ac-image-preview');
-        const reader = new FileReader();
-        reader.onload = (re) => {
-            if (preview) preview.innerHTML = `<img src="${re.target.result}" class="w-full h-full object-cover">`;
-        };
-        reader.readAsDataURL(file);
-
-        // Upload to server
-        try {
-            const button = e.target.nextElementSibling;
-            const originalText = button ? button.innerHTML : '';
-            if (button) {
-                button.disabled = true;
-                button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>UPLOADING...';
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const res = await fetch(`${BACKEND_URL}/api/admin/upload`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': csrfToken
-                },
-                body: formData,
-                credentials: 'include'
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-                const acImage = document.getElementById('ac-image');
-                if (acImage) acImage.value = data.url;
-                if (button) {
-                    button.innerHTML = '<i class="fa-solid fa-check mr-2"></i>UPLOADED!';
-                    button.classList.replace('bg-white/5', 'bg-void-accent/20');
-                    button.classList.add('text-void-accent/40');
-                }
-            } else {
-                alert('Upload failed: ' + data.error);
-                if (button) button.innerHTML = originalText;
-            }
-            if (button) button.disabled = false;
-        } catch (err) {
-            console.error('Upload error:', err);
-            alert('Connection error during upload');
-            const button = e.target.nextElementSibling;
-            if (button) button.disabled = false;
-        }
-    };
-}
-
-const addCardForm = document.getElementById('add-card-form');
-if (addCardForm) {
-    addCardForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const setDropdown = document.getElementById('ac-set-dropdown');
-        const payload = {
-            id: document.getElementById('ac-id')?.value,
-            name: document.getElementById('ac-name')?.value,
-            image_url: document.getElementById('ac-image')?.value,
-            rarity: document.getElementById('ac-rarity')?.value,
-            set_id: setDropdown?.value,
-            card_number: document.getElementById('ac-card-number')?.value
-        };
-
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
-            body: JSON.stringify(payload),
-            credentials: 'include'
-        });
 
 
-        if (res.ok) {
-            showToast("Card Created!", "success");
-            e.target.reset();
-            loadAdminCards();
-        } else {
-            showToast("Failed. Check your session or card data.", "error");
-        }
-    };
-}
 
-const refreshUsersBtn = document.getElementById('refresh-users');
-if (refreshUsersBtn) refreshUsersBtn.onclick = loadAdminUsers;
-
-const refreshCardsBtn = document.getElementById('refresh-cards');
-if (refreshCardsBtn) refreshCardsBtn.onclick = loadAdminCards;
-
-// --- SET MANAGEMENT ---
 let allSets = [];
 
 async function loadSets() {
@@ -6296,7 +6934,7 @@ function populateSetDropdown() {
 
 
 
-// --- ONBOARDING LOGIC ---
+
 let currentOnboardingSlide = 0;
 const totalOnboardingSlides = 4;
 
@@ -6314,12 +6952,12 @@ function updateOnboardingUI() {
         s.classList.toggle('block', i === currentOnboardingSlide);
     });
 
-    // Update Progress Bar
+
     const progress = ((currentOnboardingSlide + 1) / totalOnboardingSlides) * 100;
     const onboardingProgress = document.getElementById('onboarding-progress');
     if (onboardingProgress) onboardingProgress.style.width = `${progress}%`;
 
-    // Update Buttons
+
     const onboardingPrev = document.getElementById('onboarding-prev');
     if (onboardingPrev) onboardingPrev.classList.toggle('hidden', currentOnboardingSlide === 0);
 
@@ -6335,75 +6973,11 @@ function updateOnboardingUI() {
     }
 }
 
-const helpBtn = document.getElementById('help-btn');
-if (helpBtn) helpBtn.onclick = showHowToPlay;
 
-const obNext = document.getElementById('onboarding-next');
-if (obNext) {
-    obNext.onclick = () => {
-        if (currentOnboardingSlide < totalOnboardingSlides - 1) {
-            currentOnboardingSlide++;
-            updateOnboardingUI();
-        } else {
-            if (typeof window.closeOnboarding === 'function') window.closeOnboarding();
-        }
-    };
-}
 
-const obPrev = document.getElementById('onboarding-prev');
-if (obPrev) {
-    obPrev.onclick = () => {
-        if (currentOnboardingSlide > 0) {
-            currentOnboardingSlide--;
-            updateOnboardingUI();
-        }
-    };
-}
 
-const obSkip = document.getElementById('onboarding-skip');
-if (obSkip) obSkip.onclick = window.closeOnboarding;
 
-const createSetForm = document.getElementById('create-set-form');
-if (createSetForm) {
-    createSetForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const payload = {
-            id: document.getElementById('set-id')?.value,
-            name: document.getElementById('set-name')?.value,
-            code: document.getElementById('set-code')?.value,
-            release_date: document.getElementById('set-release-date')?.value || null,
-            icon_url: document.getElementById('set-icon-url')?.value || null,
-            description: document.getElementById('set-description')?.value || null,
-            total_cards: parseInt(document.getElementById('set-total-cards')?.value) || 0,
-            card_back_url: document.getElementById('set-back-url')?.value || null
-        };
 
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/creator/sets`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify(payload),
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const setIdInput = document.getElementById('set-id');
-                showToast(setIdInput && setIdInput.disabled ? "Set updated!" : "Set created successfully!", "success");
-                e.target.reset();
-                resetSetForm();
-                loadSets();
-            } else {
-                const error = await res.json();
-                showToast(`Failed: ${error.error}`, "error");
-            }
-        } catch (err) {
-            showToast("Connection error", "error");
-        }
-    };
-}
 
 window.resetSetForm = () => {
     const createSetForm = document.getElementById('create-set-form');
@@ -6418,8 +6992,7 @@ window.resetSetForm = () => {
     if (cancelSetEditBtn) cancelSetEditBtn.classList.add('hidden');
 };
 
-const cancelSetEditBtn = document.getElementById('cancel-set-edit');
-if (cancelSetEditBtn) cancelSetEditBtn.onclick = window.cancelSetEdit;
+
 
 window.editSet = (id) => {
     const set = allSets.find(s => s.id === id);
@@ -6428,7 +7001,7 @@ window.editSet = (id) => {
     const setIdInput = document.getElementById('set-id');
     if (setIdInput) {
         setIdInput.value = set.id;
-        setIdInput.disabled = true; // Prevent ID change during edit
+        setIdInput.disabled = true;
     }
     const setNameInput = document.getElementById('set-name');
     if (setNameInput) setNameInput.value = set.name;
@@ -6476,7 +7049,7 @@ window.deleteSet = async (setId) => {
     }
 };
 
-// --- SKELETON LOADING ---
+
 function showSkeletonCards() {
     const grid = document.getElementById('binder-grid');
     if (grid) {
@@ -6488,7 +7061,7 @@ function showSkeletonCards() {
     }
 }
 
-// --- PER-SET PROGRESS ---
+
 let activeSetFilter = 'all';
 
 async function loadSetProgress() {
@@ -6496,7 +7069,7 @@ async function loadSetProgress() {
     const focusedCard = document.getElementById('focused-set-card');
     const selector = document.getElementById('set-selector');
 
-    // Try to fetch sets if not already loaded
+
     if (!allSets || allSets.length === 0) {
         try {
             const res = await fetch(`${BACKEND_URL}/api/sets`, {
@@ -6517,7 +7090,7 @@ async function loadSetProgress() {
         return;
     }
 
-    // Group user's cards by set (using unique card IDs)
+
     const userCardsBySet = {};
     const uniqueOwnedCards = Array.from(new Set(userCollection.map(c => c.id)));
 
@@ -6529,7 +7102,7 @@ async function loadSetProgress() {
         }
     });
 
-    // Calculate progress per set
+
     const progress = allSets.map(set => {
         const owned = userCardsBySet[set.name] || 0;
         const total = set.total_cards || owned || 1;
@@ -6538,7 +7111,7 @@ async function loadSetProgress() {
     });
 
     try {
-        // 1. Update Sidebar Dropdown
+
         if (dropdown) {
             const currentVal = activeSetFilter;
             let dropdownHtml = '<option value="all">All Sets</option>';
@@ -6548,20 +7121,20 @@ async function loadSetProgress() {
                     </option>
                 `).join('');
             dropdown.innerHTML = dropdownHtml;
-            dropdown.value = activeSetFilter; // Force correct value
+            dropdown.value = activeSetFilter;
         }
 
-        // 2. Update Focused Card / Summary Area
+
         if (focusedCard) {
             if (activeSetFilter === 'all') {
                 focusedCard.classList.remove('hidden');
 
-                // Calculate global stats
+
                 const totalOwned = uniqueOwnedCards.length;
                 const totalPossible = totalUniqueCards || 1;
                 const globalPercent = Math.round((totalOwned / totalPossible) * 100);
 
-                // Update Sidebar Vitals
+
                 const globalBar = document.getElementById('stat-progress-bar');
                 const globalVal = document.getElementById('stat-progress-val');
                 const globalStatTotal = document.getElementById('stat-total');
@@ -6617,7 +7190,7 @@ async function loadSetProgress() {
             }
         }
 
-        // 3. Render Top Selector Chips (Legacy support / sync)
+
         if (selector) {
             const allActive = activeSetFilter === 'all';
             let selectorHtml = `
@@ -6641,7 +7214,7 @@ async function loadSetProgress() {
 
             selector.innerHTML = selectorHtml;
 
-            // Auto-scroll to active chip
+
             const activeChip = selector.querySelector('.set-chip.active');
             if (activeChip) {
                 activeChip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -6655,50 +7228,26 @@ async function loadSetProgress() {
 window.filterBySet = (setName) => {
     activeSetFilter = setName;
 
-    // Sync all filters
+
     const setFilter = document.getElementById('set-filter');
-    if (setFilter) setFilter.value = setName;
+    if (setFilter) {
+        setFilter.value = setName;
+        const wrapper = setFilter.closest('.void-dropdown');
+        if (wrapper) {
+            const label = wrapper.querySelector('.void-dropdown-label');
+            if (label) label.textContent = setFilter.options[setFilter.selectedIndex]?.text || setName;
+        }
+    }
 
     const sidebarDropdown = document.getElementById('set-progress-dropdown');
     if (sidebarDropdown) sidebarDropdown.value = setName;
 
     currentPage = 1;
-    loadSetProgress(); // Refresh visual highlights and card
+    loadSetProgress();
     renderBinder();
 };
 
-// --- ACHIEVEMENTS SYSTEM ---
-async function syncAchievements() {
-    console.log("[Achievements] Manual sync triggered...");
-    showToast("Scanning collection for landmarks...", "info");
 
-    try {
-        const streamerParam = APP_STREAMER ? `?streamer=${APP_STREAMER.username}` : '';
-        const res = await fetch(`${BACKEND_URL}/api/achievements/sync${streamerParam}`, {
-            method: 'POST',
-            credentials: 'include'
-        });
-
-        if (res.ok) {
-            const result = await res.json();
-            if (result.unlocked && result.unlocked.length > 0) {
-                showToast(`✅ Synced! Unlocked ${result.unlocked.length} achievement(s)!`, "success");
-                showAchievementCelebration();
-            } else {
-                showToast("Collection is already up to date!", "info");
-            }
-            // Refresh the list
-            await fetchAchievements();
-        } else {
-            showToast("Failed to sync achievements", "error");
-        }
-    } catch (err) {
-        console.error("Sync error:", err);
-        showToast("Error during achievement sync", "error");
-    }
-}
-
-window.syncAchievements = syncAchievements;
 
 function renderAchievements() {
     const list = document.getElementById('achievements-list');
@@ -6709,9 +7258,6 @@ function renderAchievements() {
             <div class="text-center py-8 opacity-40">
                 <div class="text-3xl mb-2">🏆</div>
                 <div class="text-[10px] uppercase font-black tracking-widest">No achievements discovered</div>
-                <button onclick="syncAchievements()" class="mt-4 px-4 py-2 bg-void-accent/20 hover:bg-void-accent/40 text-void-accent text-[8px] font-black uppercase tracking-widest rounded-lg border border-void-accent/30 transition-all">
-                    <i class="fa-solid fa-rotate mr-1"></i> Scan Collection
-                </button>
             </div>
         `;
         return;
@@ -6720,87 +7266,33 @@ function renderAchievements() {
     const syncBtnHtml = `
         <div class="mb-4 flex justify-between items-center px-1">
             <div class="text-[9px] font-black text-void-muted uppercase tracking-widest">Your Progress</div>
-            <button onclick="syncAchievements()" class="text-[8px] font-black text-void-accent uppercase tracking-widest hover:text-white transition-colors flex items-center gap-1">
-                <i class="fa-solid fa-rotate"></i> Sync
-            </button>
         </div>
     `;
 
     const achievementsHtml = achievementsData.map(ach => `
-        <div class="flex items-start gap-4 p-4 rounded-xl border ${ach.unlocked ? 'border-void-accent/30 bg-void-accent/5' : 'border-white/5 bg-white/[0.02]'} transition-all mb-3 last:mb-0">
-            <div class="w-10 h-10 shrink-0 rounded-lg ${ach.unlocked ? 'bg-void-accent/20 text-void-accent shadow-[0_0_10px_rgba(var(--void-accent-rgb),0.3)]' : 'bg-white/5 text-void-muted'} flex items-center justify-center text-lg">
-                <span class="achievement-icon">${ach.icon || '🏆'}</span>
+        <div class="flex items-center gap-4 p-4 rounded-xl transition-all mb-3 last:mb-0 ${ach.unlocked
+            ? 'bg-[rgba(var(--void-accent-rgb),0.06)]'
+            : 'bg-white/[0.02]'}">
+            <div class="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center text-lg ${ach.unlocked
+                ? 'bg-[rgba(var(--void-accent-rgb),0.12)] text-void-accent/90'
+                : 'bg-white/5 text-void-muted'}">
+                ${ach.unlocked ? `<span class="achievement-icon">${ach.icon || '🏆'}</span>` : '<i class="fa-solid fa-lock text-[12px]"></i>'}
             </div>
             <div class="flex-1 min-w-0">
-                <div class="text-[11px] font-black uppercase tracking-widest ${ach.unlocked ? 'text-white' : 'text-void-muted'} truncate">${ach.name}</div>
-                <div class="text-[9px] text-void-muted mt-1 leading-relaxed">${ach.description}</div>
+                <div class="text-[11px] font-black uppercase tracking-widest ${ach.unlocked ? 'text-void-text' : 'text-void-muted'} truncate">${ach.name}</div>
+                <div class="text-[9px] text-void-muted/80 mt-1 leading-relaxed">${ach.description}</div>
             </div>
-            ${ach.unlocked ? '<div class="shrink-0 text-void-accent"><i class="fa-solid fa-circle-check"></i></div>' : ''}
+            ${ach.unlocked ? '<div class="shrink-0 w-9 h-9 rounded-full grid place-items-center bg-void-accent/20 text-void-accent text-lg font-bold leading-none">✓</div>' : ''}
         </div>
     `).join('');
 
     list.innerHTML = syncBtnHtml + achievementsHtml;
 }
 
-// --- BULK CSV UPLOAD ---
-const processCsvBtn = document.getElementById('process-csv-btn');
-if (processCsvBtn) {
-    processCsvBtn.onclick = async () => {
-        const fileInput = document.getElementById('csv-upload');
-        const file = fileInput ? fileInput.files[0] : null;
 
-        if (!file) {
-            showToast("Please select a CSV file", "error");
-            return;
-        }
 
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const text = e.target?.result;
-                const lines = text ? text.split('\n').filter(l => l.trim()) : [];
 
-                if (lines.length < 2) {
-                    showToast("CSV file is empty", "error");
-                    return;
-                }
 
-                // Skip header, parse rows
-                const cards = lines.slice(1).map(line => {
-                    const [id, name, image_url, rarity, set_id, card_number] = line.split(',').map(s => s.trim());
-                    return { id, name, image_url, rarity, set_id, card_number };
-                });
-
-                showToast(`Uploading ${cards.length} cards...`, "info");
-
-                // Send to backend
-                const res = await fetch(`${BACKEND_URL}/api/admin/cards/bulk`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
-                    },
-                    body: JSON.stringify({ cards }),
-                    credentials: 'include'
-                });
-
-                if (res.ok) {
-                    showToast(`✅ Successfully uploaded ${cards.length} cards!`, "success");
-                    if (fileInput) fileInput.value = '';
-                    loadAdminCards();
-                } else {
-                    const error = await res.json();
-                    showToast(`Failed: ${error.error}`, "error");
-                }
-            } catch (err) {
-                showToast("Error processing CSV: " + err.message, "error");
-            }
-        };
-        reader.readAsText(file);
-    };
-}
-
-// --- ADMIN CONFIG LOGIC ---
 async function loadAdminConfig() {
     try {
         const res = await fetch(`${BACKEND_URL}/api/admin/config`, {
@@ -6810,7 +7302,7 @@ async function loadAdminConfig() {
 
         const configs = await res.json();
 
-        // Rarity Weights
+
         const rarity = configs.find(c => c.id === 'rarity_weights')?.data;
         if (rarity) {
             const cfgRarityCommon = document.getElementById('cfg-rarity-common');
@@ -6823,7 +7315,7 @@ async function loadAdminConfig() {
             if (cfgRarityLegendary) cfgRarityLegendary.value = rarity.legendary;
         }
 
-        // Gifting Rules
+
         const gifting = configs.find(c => c.id === 'gifting_rules')?.data;
         if (gifting) {
             const cfgGiftPerSub = document.getElementById('cfg-gift-per-sub');
@@ -6832,7 +7324,7 @@ async function loadAdminConfig() {
             if (cfgGiftBonus) cfgGiftBonus.value = gifting.bonus_per_5;
         }
 
-        // Visuals
+
         const visuals = configs.find(c => c.id === 'visuals')?.data;
         if (visuals) {
             const cfgGlobalBack = document.getElementById('cfg-global-back');
@@ -6863,93 +7355,23 @@ function updateRarityTotal() {
     }
 }
 
-// Attach event listeners for rarity inputs
-['cfg-rarity-common', 'cfg-rarity-rare', 'cfg-rarity-epic', 'cfg-rarity-legendary'].forEach(id => {
-    const element = document.getElementById(id);
-    if (element) element.addEventListener('input', updateRarityTotal);
-});
 
-const saveConfigBtn = document.getElementById('save-config-btn');
-if (saveConfigBtn) {
-    saveConfigBtn.onclick = async () => {
-        const commonInput = document.getElementById('cfg-rarity-common');
-        const common = commonInput ? parseInt(commonInput.value) : 0;
-        const rareInput = document.getElementById('cfg-rarity-rare');
-        const rare = rareInput ? parseInt(rareInput.value) : 0;
-        const epicInput = document.getElementById('cfg-rarity-epic');
-        const epic = epicInput ? parseInt(epicInput.value) : 0;
-        const legendaryInput = document.getElementById('cfg-rarity-legendary');
-        const legendary = legendaryInput ? parseInt(legendaryInput.value) : 0;
 
-        if (common + rare + epic + legendary !== 100) {
-            showToast("Rarity probabilities must sum to 100%", "error");
-            return;
-        }
 
-        const cfgGiftPerSub = document.getElementById('cfg-gift-per-sub');
-        const cfgGiftBonus = document.getElementById('cfg-gift-bonus');
-        const cfgGlobalBack = document.getElementById('cfg-global-back');
 
-        const configs = [
-            { id: 'rarity_weights', data: { common, rare, epic, legendary } },
-            {
-                id: 'gifting_rules', data: {
-                    cards_per_sub: cfgGiftPerSub ? parseInt(cfgGiftPerSub.value) : 0,
-                    bonus_per_5: cfgGiftBonus ? parseInt(cfgGiftBonus.value) : 0
-                }
-            },
-            { id: 'visuals', data: { global_card_back_url: cfgGlobalBack ? cfgGlobalBack.value : '' } }
-        ];
 
-        try {
-            showToast("Saving configuration...", "info");
-            for (const cfg of configs) {
-                await fetch(`${BACKEND_URL}/api/admin/config`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                    body: JSON.stringify(cfg),
-                    credentials: 'include'
-                });
-            }
-            showToast("Configuration saved successfully!", "success");
-        } catch (err) {
-            showToast("Failed to save configuration", "error");
-        }
-    };
+
+
+async function refreshAdminPanel() {
+    console.log("[Admin] Refreshing Matrix data...");
+    await Promise.allSettled([
+        loadAdminStats(),
+        loadAdminUsers(),
+        loadAdminCards()
+    ]);
 }
 
-// File upload for global card back
-const cfgBackUpload = document.getElementById('cfg-back-upload');
-if (cfgBackUpload) {
-    cfgBackUpload.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            showToast("Uploading card back...", "info");
-            const res = await fetch(`${BACKEND_URL}/api/admin/upload`, {
-                method: 'POST',
-                headers: { 'X-CSRF-Token': csrfToken },
-                body: formData,
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                const cfgGlobalBack = document.getElementById('cfg-global-back');
-                if (cfgGlobalBack) cfgGlobalBack.value = data.url;
-                showToast("Card back uploaded!", "success");
-            } else {
-                showToast("Upload failed", "error");
-            }
-        } catch (err) {
-            showToast("Connection error", "error");
-        }
-    };
-}
+window.refreshAdminPanel = refreshAdminPanel;
 
 async function loadAdminStats() {
     try {
@@ -7005,11 +7427,8 @@ function renderAdminUsers() {
         `).join('');
 }
 
-// Add search listener
-const adminUserSearch = document.getElementById('admin-user-search');
-if (adminUserSearch) {
-    adminUserSearch.addEventListener('input', renderAdminUsers);
-}
+
+
 
 async function loadAdminCards() {
     const list = document.getElementById('card-list');
@@ -7045,7 +7464,7 @@ async function loadAdminCards() {
     }
 }
 
-// --- CONFIRMATION UTIL ---
+
 function showConfirm(message) {
     return new Promise((resolve) => {
         showCustomConfirm({
@@ -7089,7 +7508,7 @@ window.deleteAdminCard = async (cardId) => {
     }
 };
 
-// Grant Card Form
+
 const grantCardForm = document.getElementById('grant-card-form');
 if (grantCardForm) {
     grantCardForm.onsubmit = async (e) => {
@@ -7125,93 +7544,24 @@ if (grantCardForm) {
     };
 }
 
-// Bulk Actions
-const bulkDeleteCardsBtn = document.getElementById('bulk-delete-cards');
-if (bulkDeleteCardsBtn) {
-    bulkDeleteCardsBtn.onclick = async () => {
-        if (!await showConfirm("⚠️ WARNING: This will DELETE ALL user cards! This cannot be undone.")) return;
-        if (!await showConfirm("FINAL WARNING: Are you absolutely sure?")) return;
 
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-cards`, {
-                method: 'DELETE',
-                headers: { 'X-CSRF-Token': csrfToken },
-                credentials: 'include'
-            });
 
-            if (res.ok) {
-                showToast("All cards deleted from database", "success");
-                loadAdminStats();
-            } else {
-                showToast("Failed to delete cards", "error");
-            }
-        } catch (e) {
-            showToast("Error: " + e.message, "error");
-        }
-    };
-}
 
-const bulkDeleteTradesBtn = document.getElementById('bulk-delete-trades');
-if (bulkDeleteTradesBtn) {
-    bulkDeleteTradesBtn.onclick = async () => {
-        if (!await showConfirm("⚠️ WARNING: This will DELETE ALL trade records! This cannot be undone.")) return;
-
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/admin/bulk/delete-all-trades`, {
-                method: 'DELETE',
-                headers: { 'X-CSRF-Token': csrfToken },
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                showToast("All trades cleared", "success");
-                fetchTrades();
-                loadAdminStats();
-            } else {
-                showToast("Failed to clear trades", "error");
-            }
-        } catch (e) {
-            showToast("Error: " + e.message, "error");
-        }
-    };
-}
-
-const exportDataBtn = document.getElementById('export-data');
-if (exportDataBtn) {
-    exportDataBtn.onclick = async () => {
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/admin/export`, {
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `tcg-export-${new Date().toISOString()}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-            } else {
-                showToast('Export failed', 'error');
-            }
-        } catch (e) {
-            showToast('Error: ' + e.message, 'error');
-        }
-    };
-}
-
-// --- DATA (VIA BACKEND) ---
 
 async function fetchUserCollection(initialData = null) {
     try {
-        // If we don't have initial data, show skeletons
+        const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+        if (!filterParam) {
+
+            const grid = document.getElementById('binder-grid');
+            if (grid) grid.innerHTML = '';
+            return;
+        }
+
+
         if (!initialData) {
             showSkeletonCards();
         }
-
-        const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : 'codeoce');
         const resCards = await fetch(`${BACKEND_URL}/api/collection?streamer=${filterParam}`, {
             credentials: 'include'
         });
@@ -7225,9 +7575,9 @@ async function fetchUserCollection(initialData = null) {
                 rarity: item.rarity,
                 image_url: item.image_url,
                 type: item.type,
-                set_name: item.set_name || 'Ageless', // Default if missing
+                set_name: item.set_name || 'Ageless',
                 created_at: item.created_at,
-                // Battle Stats
+
                 attack: item.attack || 0,
                 defense: item.defense || 0,
                 max_hp: item.max_hp || 0,
@@ -7245,21 +7595,22 @@ async function fetchUserCollection(initialData = null) {
 
             if (userCollection.length > 0) lastCardId = userCollection[0].instanceId;
 
-            stackCards(); // Process stacks
-            renderBinderList(); // Update "All Cards" count
-            updateSetFilter(); // New: Populate filter
+            stackCards();
+            renderBinderList();
+            updateSetFilter();
             renderBinder();
             renderRecentDrops();
             renderPrizedPossession();
-            loadSetProgress(); // NEW: Load per-set progress
-            renderAchievements(); // Populate mock achievements
+            loadSetProgress();
+            renderAchievements();
         } else if (!initialData) {
             console.error("API Error", await resCards.text());
         }
 
-        // Fetch Stats (only if not already provided)
+
         if (!initialData) {
-            const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : 'codeoce');
+            const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+            if (!filterParam) return;
             const resStats = await fetch(`${BACKEND_URL}/api/stats?streamer=${filterParam}`, {
                 credentials: 'include'
             });
@@ -7271,7 +7622,7 @@ async function fetchUserCollection(initialData = null) {
                 if (legendaryEl) legendaryEl.innerText = stats.legendary;
             }
 
-            // Fetch total unique cards available
+
             const resCount = await fetch(`${BACKEND_URL}/api/cards/count`, {
                 credentials: 'include'
             });
@@ -7283,7 +7634,7 @@ async function fetchUserCollection(initialData = null) {
                 updateCollectionProgress();
             }
         }
-        // Always try to load set progress
+
         loadSetProgress();
     } catch (err) {
         console.error("Fetch error:", err);
@@ -7291,59 +7642,62 @@ async function fetchUserCollection(initialData = null) {
     }
 }
 
-// --- POLLING FOR REAL-TIME UPDATES ---
+
 let pollingInterval = null;
+let pollingTickCount = 0;
 
 function startPolling() {
     if (pollingInterval) clearInterval(pollingInterval);
+    pollingTickCount = 0;
 
-    // Poll at a reasonable interval to avoid hammering the backend (15s)
+
     pollingInterval = setInterval(async () => {
-        // 1. Fetch Notifications
+        pollingTickCount++;
+
         try {
-            // Poll silently
+
             const res = await fetch(`${BACKEND_URL}/api/notifications`, {
                 credentials: 'include'
             });
 
             if (res.status === 429) {
-                // Back off on rate limit responses
+
                 console.warn('[Notifications] Rate limited (429). Slowing down polling.');
                 return;
             }
 
             if (res.ok) {
                 const notifications = await res.json();
-                // Filter out already-shown notifications
+
                 const newNotifications = notifications.filter(n => !shownNotificationIds.has(n.id));
 
                 if (newNotifications.length > 0) {
                     if (currentUser?.role === 'admin') console.log('New notifications:', newNotifications.length);
 
-                    // Show toast for each NEW notification
+
                     newNotifications.forEach(n => {
                         const type = n.type === 'achievement_unlock' ? 'success' : 'info';
                         showToast(n.message, type);
 
-                        // If it's a card drop, show a toast notification
+
                         if (n.type === 'card_drop' && n.data) {
                             showCardToast(n.data);
                         }
-                        // Mark as shown immediately to prevent duplicates
+
                         shownNotificationIds.add(n.id);
 
-                        // Trigger celebration for achievements
+
                         if (n.type === 'achievement_unlock') {
                             showAchievementCelebration();
                         }
 
-                        // Refresh trades if trade-related
+
                         if (n.type.startsWith('trade_')) {
                             fetchTrades();
                         }
                     });
 
-                    // Mark them as read (Delete from DB) - AWAIT this
+
                     const notificationIds = newNotifications.map(n => n.id);
                     try {
                         const deleteRes = await fetch(`${BACKEND_URL}/api/notifications`, {
@@ -7365,26 +7719,40 @@ function startPolling() {
                         console.error('Error marking notifications as read:', deleteError);
                     }
 
-                    // Refresh data since something changed
+
                     await fetchUserCollection();
 
-                    // Also refresh achievements list if needed
-                    const achRes = await fetch(`${BACKEND_URL}/api/achievements`, { credentials: 'include' });
+
+                    const effStreamer = window.activeStreamerFilter && window.activeStreamerFilter !== 'all'
+                        ? window.activeStreamerFilter
+                        : (APP_STREAMER ? APP_STREAMER.username : null);
+                    const achParam = effStreamer ? `?streamer=${encodeURIComponent(effStreamer)}` : '';
+                    const achRes = await fetch(`${BACKEND_URL}/api/achievements${achParam}`, { credentials: 'include' });
                     if (achRes.ok) {
                         achievementsData = await achRes.json();
                         renderAchievements();
                     }
                 }
             } else {
-                // Only log errors if not 401 (session expired)
+
                 if (res.status !== 401) console.error("Notification polling failed:", res.status);
             }
         } catch (e) {
-            // Silent fail
+
         }
 
-        // Still do a silent refresh of collection occasionally just in case
-        // But mainly rely on notifications for triggers
+
+
+        if (pollingTickCount % 3 === 0 && document.getElementById('achievements-list')) {
+            const eff = window.activeStreamerFilter && window.activeStreamerFilter !== 'all'
+                ? window.activeStreamerFilter
+                : (APP_STREAMER ? APP_STREAMER.username : null);
+            const param = eff ? `?streamer=${encodeURIComponent(eff)}` : '';
+            fetch(`${BACKEND_URL}/api/achievements${param}`, { credentials: 'include' })
+                .then(r => r.ok ? r.json() : null)
+                .then(data => { if (data) { achievementsData = data; renderAchievements(); } })
+                .catch(() => {});
+        }
     }, 15000);
 }
 
@@ -7396,13 +7764,17 @@ function stopPolling() {
 }
 
 
-// --- LEADERBOARD ---
+
 async function fetchLeaderboard() {
     if (document.getElementById('leaderboard-list')) {
         setLoadingState('leaderboard-list', true);
     }
     try {
-        const res = await fetch(`${BACKEND_URL}/api/leaderboard`);
+        const effectiveStreamer = window.activeStreamerFilter && window.activeStreamerFilter !== 'all'
+            ? window.activeStreamerFilter
+            : (APP_STREAMER ? APP_STREAMER.username : null);
+        const streamerParam = effectiveStreamer ? `?streamer=${encodeURIComponent(effectiveStreamer)}` : '';
+        const res = await fetch(`${BACKEND_URL}/api/leaderboard${streamerParam}`);
         if (res.ok) {
             leaderboardData = await res.json();
             renderLeaderboard();
@@ -7417,7 +7789,7 @@ async function fetchLeaderboard() {
     }
 }
 
-// --- ACHIEVEMENTS ---
+
 let achievementsData = [];
 
 async function fetchAchievements() {
@@ -7425,7 +7797,11 @@ async function fetchAchievements() {
         setLoadingState('achievements-list', true);
     }
     try {
-        const streamerParam = APP_STREAMER ? `?streamer=${APP_STREAMER.username}` : '';
+
+        const effectiveStreamer = window.activeStreamerFilter && window.activeStreamerFilter !== 'all'
+            ? window.activeStreamerFilter
+            : (APP_STREAMER ? APP_STREAMER.username : null);
+        const streamerParam = effectiveStreamer ? `?streamer=${encodeURIComponent(effectiveStreamer)}` : '';
         const res = await fetch(`${BACKEND_URL}/api/achievements${streamerParam}`, { credentials: 'include' });
         if (res.ok) {
             achievementsData = await res.json();
@@ -7439,7 +7815,7 @@ async function fetchAchievements() {
     }
 }
 
-// --- BATTLES LEADERBOARD ---
+
 async function fetchBattlesLeaderboard() {
     setLoadingState('battles-leaderboard-list', true);
     try {
@@ -7458,7 +7834,7 @@ async function fetchBattlesLeaderboard() {
     }
 }
 
-// Consolidated renderAchievements moved to top section
+
 
 function renderLeaderboard() {
     const list = document.getElementById('leaderboard-list');
@@ -7520,10 +7896,12 @@ function renderBattlesLeaderboard() {
 
     if (battlesData.length === 0) {
         list.innerHTML = `
-                <div class="text-center py-12">
-                    <div class="text-4xl mb-3">⚔️</div>
-                    <div class="text-gray-400 text-sm">No battles fought yet!</div>
-                    <div class="text-gray-600 text-xs mt-1">Be the first to challenge someone!</div>
+                <div class="p-12 text-center flex flex-col items-center justify-center space-y-4 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
+                    <div class="w-16 h-16 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2">
+                        <i class="fa-solid fa-khanda"></i>
+                    </div>
+                    <h3 class="text-xl font-black uppercase text-void-text tracking-widest italic">No Battles Fought</h3>
+                    <p class="text-void-muted text-xs">Be the first to challenge a rival and climb the ranks!</p>
                 </div>
             `;
         return;
@@ -7570,20 +7948,27 @@ function renderBattlesLeaderboard() {
     }).join('');
 }
 
-// --- TAB SWITCHING ---
-// --- NAVIGATION ---
-// --- NAVIGATION ---
-function switchView(viewName) {
+
+
+
+async function switchView(viewName) {
     const views = ['collection', 'leaderboard', 'trading', 'admin', 'profile', 'creator-dashboard', 'battle'];
 
-    // Ensure dashboard view is visible when switching to any dashboard subview
+
+    if (viewName === 'creator-dashboard' && !document.getElementById('creator-dashboard-view')) {
+        await loadView('creator-dashboard');
+    }
+
+
     const dashboardView = document.getElementById('dashboard-view');
+    const hubView = document.getElementById('hub-view');
     if (views.includes(viewName) && dashboardView) {
         dashboardView.classList.remove('hidden');
         dashboardView.style.display = 'block';
+        if (hubView) hubView.classList.add('hidden');
     }
 
-    // Hide all main views (dashboard subviews)
+
     views.forEach(v => {
         const el = document.getElementById(`${v}-view`);
         if (el) {
@@ -7592,14 +7977,14 @@ function switchView(viewName) {
         }
     });
 
-    // Hide landing if moving to a specific view
-    const landing = document.getElementById('landing-view');
-    if (landing && viewName !== 'landing') {
-        landing.classList.add('hidden');
-        landing.style.display = 'none';
+
+    if (viewName === 'landing') {
+        showLanding();
+    } else {
+        hideLanding();
     }
 
-    // Show selected view
+
     const target = document.getElementById(`${viewName}-view`);
     if (target) {
         target.classList.remove('hidden');
@@ -7607,13 +7992,14 @@ function switchView(viewName) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // Update global navbar navigation items (System Style)
-    // Update global navbar navigation items (Premium Style)
+
+
     const navMapping = {
         'collection': 'nav-collection-btn',
         'leaderboard': 'nav-archive-btn',
         'trading': 'nav-exchange-btn',
-        'battle': 'nav-battle-btn-top'
+        'battle': 'nav-battle-btn-top',
+        'creator-dashboard': 'nav-creator-btn'
     };
 
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -7630,32 +8016,32 @@ function switchView(viewName) {
         }
     }
 
-    // Refresh specific view data as needed
+
     if (viewName === 'collection') renderBinder();
     if (viewName === 'leaderboard') renderLeaderboard();
     if (viewName === 'trading') renderTradingHub();
     if (viewName === 'creator-dashboard') loadOverviewData();
-    if (viewName === 'admin') loadAdminStats();
+    if (viewName === 'admin') refreshAdminPanel();
     if (viewName === 'profile') populateProfileView();
 
-    // Trigger state sync if needed
+
     if (bootstrapData) {
         updateOverviewStats(bootstrapData.stats);
     }
 
-    // Initialize Battle View if needed
+
     if (viewName === 'battle') {
         renderBattleDashboard();
     }
 
-    // Toggle to collector (player) view from creator dashboard
+
     function switchToCollectorView() {
         switchView('collection');
     }
 
     window.switchToCollectorView = switchToCollectorView;
 
-    // --- SUB-TAB SWITCHING ---
+
     function switchLeaderboardSubTab(tabName) {
         const tabs = ['collection', 'battles'];
         tabs.forEach(t => {
@@ -7681,7 +8067,7 @@ function switchView(viewName) {
     }
 }
 
-// Update Active Tab UI on Initialization
+
 const navCollectionBtn = document.getElementById('nav-collection-btn');
 if (navCollectionBtn) navCollectionBtn.onclick = () => switchView('collection');
 
@@ -7694,11 +8080,8 @@ if (navExchangeBtn) navExchangeBtn.onclick = () => switchView('trading');
 const navBattleBtn = document.getElementById('nav-battle-btn-top');
 if (navBattleBtn) navBattleBtn.onclick = () => switchView('battle');
 
-const navLogoutBtn = document.getElementById('nav-logout-btn');
-if (navLogoutBtn) navLogoutBtn.onclick = () => handleLogout();
-
 const navCreatorBtn = document.getElementById('nav-creator-btn');
-if (navCreatorBtn) navCreatorBtn.onclick = () => switchView('creator-dashboard');
+if (navCreatorBtn) navCreatorBtn.onclick = () => { window.location.href = '/dashboard'; };
 
 async function renderBattleDashboard() {
     const arenaEl = document.getElementById('battle-arena-streamer');
@@ -7709,16 +8092,24 @@ fetchCreatorCards();
 switchCreatorTab('overview');
 
 
-// --- CUSTOM BINDERS LOGIC ---
+
 async function fetchUserBinders() {
     try {
         const res = await fetch(`${BACKEND_URL}/api/binders`, { credentials: 'include' });
         if (res.ok) {
             userBinders = await res.json();
             renderBinderList();
-            // If we have an active binder that's not 'all', check if it still exists
-            if (activeBinderId !== 'all' && !userBinders.find(b => b.id === activeBinderId)) {
-                switchBinder('all');
+            
+
+            if (activeBinderId !== 'all') {
+                const found = userBinders.find(b => b.id === activeBinderId);
+                if (!found) {
+                    switchBinder('all');
+                } else {
+                    renderBinder();
+                }
+            } else {
+                renderBinder();
             }
         }
     } catch (err) {
@@ -7732,7 +8123,7 @@ function renderBinderList() {
 
     console.log("Rendering Binder List. Count:", userBinders.length);
 
-    // Keep the "All Cards" item
+
     const allItem = `
             <div class="binder-page-item ${activeBinderId === 'all' ? 'active' : ''}" onclick="switchBinder('all')">
                 <div class="flex-1 min-w-0">
@@ -7746,19 +8137,25 @@ function renderBinderList() {
     const customItems = userBinders.map(binder => {
         const count = binder.user_binder_cards?.length || 0;
         return `
-                                <div onclick="switchBinder('${binder.id}')" class="binder-page-item group ${activeBinderId === binder.id ? 'active' : ''}">
-                <div class="flex-1 min-w-0">
-                    <div class="text-[11px] font-black text-void-text uppercase tracking-widest truncate group-hover:translate-x-1 transition-transform">${binder.name}</div>
+            <div class="binder-page-item group ${activeBinderId === binder.id ? 'active' : ''}" style="display:flex;align-items:center;gap:8px">
+                <div onclick="switchBinder('${binder.id}')" style="flex:1;min-width:0;cursor:pointer">
+                    <div class="text-[11px] font-black text-void-text uppercase tracking-widest truncate">${binder.name}</div>
                     <div class="text-[9px] text-void-muted uppercase font-bold mt-0.5">${count} items</div>
                 </div>
-                <div class="w-2 h-2 rounded-full ${activeBinderId === binder.id ? 'bg-void-accent' : 'bg-void-text/10'} group-hover:scale-125 transition-all"></div>
+                <button onclick="event.stopPropagation();deleteBinder('${binder.id}')"
+                    title="Delete binder"
+                    style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:transparent;border:1px solid transparent;color:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;transition:all 0.2s;cursor:pointer"
+                    onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.borderColor='rgba(239,68,68,0.3)';this.style.color='rgba(239,68,68,0.8)'"
+                    onmouseout="this.style.background='transparent';this.style.borderColor='transparent';this.style.color='rgba(255,255,255,0.2)'">
+                    <i class="fa-solid fa-trash-can" style="font-size:10px"></i>
+                </button>
             </div>
         `;
     }).join('');
 
     list.innerHTML = allItem + customItems;
 
-    // Re-initialize Sidebar Sortable
+
     initBinderSortable();
 }
 
@@ -7783,8 +8180,8 @@ function toggleBinderRearrange() {
 }
 
 function toggleBinderEdit() {
-    // If we are currently editing, we always want to be able to stop
-    // But we only want to START editing if we are in a custom binder
+
+
     if (!isEditingBinder && activeBinderId === 'all') return;
 
     isEditingBinder = !isEditingBinder;
@@ -7793,6 +8190,7 @@ function toggleBinderEdit() {
     const grid = document.getElementById('binder-grid');
     const editActions = document.getElementById('binder-edit-actions');
 
+    document.getElementById('binder-grid')?.classList.toggle('binder-editing', isEditingBinder);
     if (isEditingBinder) {
         btn.classList.add('bg-void-accent', 'text-white');
         btn.classList.remove('bg-void-accent/10', 'text-void-accent/40');
@@ -7872,10 +8270,10 @@ function initBinderSortable() {
     binderSortable = new Sortable(list, {
         animation: 150,
         disabled: !isEditingBinder,
-        draggable: '.binder-page-item:not([onclick*="switchBinder(\'all\')"])', // Don't allow dragging "All Cards"
+        draggable: '.binder-page-item:not([onclick*="switchBinder(\'all\')"])',
         onEnd: async () => {
             const items = Array.from(list.querySelectorAll('.binder-page-item[onclick*="switchBinder(\'"]'));
-            // Filter out "all"
+
             const customItems = items.filter(el => !el.getAttribute('onclick').includes("'all'"));
 
             const order = customItems.map((el, index) => {
@@ -7893,7 +8291,7 @@ function initBinderSortable() {
                     body: JSON.stringify({ order }),
                     credentials: 'include'
                 });
-                // Update local userBinders state to reflect new order
+
                 userBinders.sort((a, b) => {
                     const oa = order.find(x => x.id === a.id)?.sort_order ?? 999;
                     const ob = order.find(x => x.id === b.id)?.sort_order ?? 999;
@@ -7915,9 +8313,10 @@ function initCardSortable() {
 
     cardSortable = new Sortable(grid, {
         animation: 200,
-        swap: true, // Enable swap plugin
+        swap: true,
         swapThreshold: 0.65,
         disabled: !isEditingBinder,
+        handle: '.binder-drag-handle',
         draggable: '.binder-slot',
         onEnd: async (evt) => {
             if (activeBinderId === 'all') return;
@@ -7929,7 +8328,7 @@ function initCardSortable() {
                 const cardEl = slot.querySelector('.binder-card');
                 const newSlotIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
 
-                // Update slot index dataset
+
                 slot.dataset.slotIndex = newSlotIndex;
 
                 if (cardEl) {
@@ -7950,7 +8349,7 @@ function initCardSortable() {
                         credentials: 'include'
                     });
 
-                    // Update local state for immediate feedback
+
                     const b = userBinders.find(x => x.id === activeBinderId);
                     if (b) {
                         updates.forEach(upd => {
@@ -8003,61 +8402,127 @@ async function removeCardFromBinder(instanceId) {
     });
 }
 
+function resolveBinderShareFetchUrl(src) {
+    try {
+        const u = new URL(src, window.location.href);
+        if (u.origin === window.location.origin) return { url: u.href, useCredentials: false };
+        return { url: `${BACKEND_URL}/api/share-image?url=${encodeURIComponent(u.href)}`, useCredentials: true };
+    } catch {
+        return null;
+    }
+}
+
+function syncBinderCardHoloMasks(cardEl, dataUrl) {
+    if (!cardEl || !dataUrl) return;
+    const safe = String(dataUrl).replace(/'/g, "\\'");
+    cardEl.querySelectorAll('.holo-layer, .holo-shine').forEach((el) => {
+        const st = el.getAttribute('style');
+        if (!st || !st.includes('mask-image')) return;
+        const next = st
+            .replace(/mask-image:\s*url\([^)]+\)/gi, `mask-image:url('${safe}')`)
+            .replace(/-webkit-mask-image:\s*url\([^)]+\)/gi, `-webkit-mask-image:url('${safe}')`);
+        el.setAttribute('style', next);
+    });
+}
+
 async function shareBinderPage() {
     const grid = document.getElementById('binder-grid');
     if (!grid) return;
 
+    const captureTarget = document.getElementById('binder-view');
+    if (!captureTarget) return;
+
     showToast("Preparing image generation...", "info");
 
+    const snEl = document.getElementById('share-streamer-name');
+    const binderNameEl = document.getElementById('share-binder-name');
+    const collNameEl = document.getElementById('share-collection-name');
+    const collTagEl = document.getElementById('share-collection-tagline');
+
+    const activeBinder =
+        typeof userBinders !== 'undefined' && activeBinderId !== 'all'
+            ? userBinders.find((x) => x.id === activeBinderId)
+            : null;
+    const streamer = typeof APP_STREAMER !== 'undefined' ? APP_STREAMER : null;
+
+    if (snEl) {
+        snEl.textContent =
+            (typeof currentUser !== 'undefined' && currentUser && (currentUser.display_name || currentUser.name)) ||
+            'Collector';
+    }
+    if (binderNameEl) {
+        binderNameEl.textContent = activeBinder ? activeBinder.name : 'Binder';
+    }
+    if (collNameEl) {
+        collNameEl.textContent = streamer
+            ? streamer.brand_name || streamer.display_name || streamer.username || 'Collection'
+            : 'Collection';
+    }
+    if (collTagEl) {
+        const line =
+            streamer && streamer.brand_tagline ? String(streamer.brand_tagline).trim() : '';
+        collTagEl.textContent = line;
+        collTagEl.classList.toggle('hidden', !line);
+    }
+
     try {
-        // FORCE crossorigin on all images recursively
-        const allImages = grid.querySelectorAll('img');
-        allImages.forEach(img => {
-            const currentSrc = img.src;
-            if (currentSrc && !currentSrc.startsWith('data:')) {
-                img.crossOrigin = "anonymous";
-                // Reset src to trigger CORS check if needed
-                img.src = currentSrc + (currentSrc.includes('?') ? '&' : '?') + 't=' + Date.now();
-            }
-        });
-
-        // Wait a bit for images to reload with CORS if needed
-        await new Promise(r => setTimeout(r, 600));
-
-        const shareFooter = document.getElementById('binder-share-footer');
-        const shareBrandingText = document.getElementById('share-branding-text');
-        const currentBinder = userBinders.find(b => b.id === activeBinderId);
-        const binderName = activeBinderId === 'all' ? 'Collector Edition' : (currentBinder ? currentBinder.name : 'card Binder');
-        const userName = currentUser ? currentUser.name : 'Anonymous';
-
-        if (shareBrandingText) {
-            shareBrandingText.innerText = `${userName}'s ${binderName}`;
-        }
-
-        const captureTarget = document.getElementById('binder-view');
         captureTarget.classList.add('sharing-mode');
 
-        const canvas = await html2canvas(captureTarget, {
-            backgroundColor: '#0a0f0d',
-            scale: 2,
-            logging: true,
-            useCORS: true,
-            allowTaint: false,
-            onclone: (clonedDoc) => {
-                const clonedTarget = clonedDoc.getElementById('binder-view');
-                if (clonedTarget) {
-                    clonedTarget.classList.add('sharing-mode');
-                    // Ensure the clone also has CORS set
-                    const clonedImgs = clonedTarget.querySelectorAll('img');
-                    clonedImgs.forEach(img => img.crossOrigin = "anonymous");
-                }
+        const allImages = captureTarget.querySelectorAll('img');
+        const imagePromises = Array.from(allImages).map(async (img) => {
+            const currentSrc = img.currentSrc || img.src;
+            if (!currentSrc || currentSrc.startsWith('data:') || currentSrc.includes('dicebear.com')) return;
+
+            img.dataset.shareOriginalSrc = currentSrc;
+
+            const resolved = resolveBinderShareFetchUrl(currentSrc);
+            if (!resolved) return;
+
+            try {
+                const res = await fetch(resolved.url, {
+                    mode: 'cors',
+                    credentials: resolved.useCredentials ? 'include' : 'omit',
+                });
+                if (!res.ok) throw new Error('Fetch failed');
+                const blob = await res.blob();
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+                img.src = dataUrl;
+                syncBinderCardHoloMasks(img.closest('.binder-card'), dataUrl);
+            } catch (e) {
+                console.warn('Binder share: could not inline image', currentSrc, e);
             }
         });
 
-        captureTarget.classList.remove('sharing-mode');
+        await Promise.all(imagePromises);
+        await new Promise((r) => setTimeout(r, 500));
+
+        document.getElementById('share-preview-container').innerHTML = '';
+
+        const canvas = await html2canvas(captureTarget, {
+            backgroundColor: '#050807',
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            allowTaint: false,
+            width: captureTarget.offsetWidth,
+            height: captureTarget.offsetHeight,
+            onclone: (clonedDoc) => {
+                const target = clonedDoc.getElementById('binder-view');
+                if (target) {
+                    target.classList.add('sharing-mode');
+                    target.style.padding = '2.5rem';
+                    target.style.background = '#050807';
+                }
+            },
+        });
 
         const dataUrl = canvas.toDataURL('image/png');
-        if (dataUrl === "data:,") throw new Error("Canvas generated an empty image. Check console for CORS errors.");
+        if (dataUrl === 'data:,') throw new Error('Canvas generated an empty image. Check console for CORS errors.');
 
         const previewContainer = document.getElementById('share-preview-container');
         previewContainer.innerHTML = `<img src="${dataUrl}" class="max-h-[50vh] max-w-full object-contain shadow-2xl border border-white/10 rounded-xl">`;
@@ -8068,12 +8533,42 @@ async function shareBinderPage() {
 
         document.getElementById('share-modal').classList.remove('hidden');
         scrollLock();
-        showToast("Image ready!", "success");
+        showToast('Image ready!', 'success');
     } catch (err) {
-        grid.classList.remove('sharing-mode');
-        console.error("CAPTURE ERROR:", err);
-        alert("SHARE FAILED: " + err.message + "\n\nCommon fixes:\n1. RELOAD the page\n2. Disable 'Incognito' mode\n3. Check if card set images are loading.");
-        showToast("Sharing failed", "error");
+        console.error('CAPTURE ERROR:', err);
+        alert(
+            'SHARE FAILED: ' +
+                err.message +
+                '\n\nCommon fixes:\n1. RELOAD the page\n2. Disable Incognito for session cookies\n3. Check if card images load in the binder.'
+        );
+        showToast('Sharing failed', 'error');
+    } finally {
+        captureTarget.classList.remove('sharing-mode');
+        captureTarget.querySelectorAll('img[data-share-original-src]').forEach((img) => {
+            const orig = img.dataset.shareOriginalSrc;
+            if (orig) img.src = orig;
+            delete img.dataset.shareOriginalSrc;
+        });
+        captureTarget.querySelectorAll('.binder-card').forEach((cardEl) => {
+            const inst = cardEl.getAttribute('data-instance-id');
+            const card =
+                typeof userCollection !== 'undefined' &&
+                inst &&
+                userCollection.find((c) => c.instanceId === inst);
+            if (!card) return;
+            const rawUrl = (card.image_url && String(card.image_url).trim()) ? String(card.image_url) : '/pack.png';
+            const imgSrc = rawUrl.replace(/"/g, '%22');
+            const rLow = (card.rarity || '').toLowerCase();
+            const holoClass = ['rare', 'epic', 'legendary'].includes(rLow) ? ` holo-${rLow}` : '';
+            const hasShine = ['epic', 'legendary'].includes(rLow);
+            const maskStyle =
+                holoClass || hasShine
+                    ? `mask-image:url('${imgSrc}');-webkit-mask-image:url('${imgSrc}');mask-size:cover;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha;-webkit-mask-size:cover;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;`
+                    : '';
+            cardEl.querySelectorAll('.holo-layer, .holo-shine').forEach((el) => {
+                if (maskStyle) el.setAttribute('style', maskStyle);
+            });
+        });
     }
 }
 
@@ -8156,60 +8651,33 @@ async function deleteBinder(id) {
     });
 }
 
-// Bulk Actions - Selected Cards Delete (only if button exists and handler not already set)
-if (bulkDeleteCardsBtn && !bulkDeleteCardsBtn.onclick) {
-    bulkDeleteCardsBtn.onclick = async () => {
-        const selectedIds = Array.from(document.querySelectorAll('.admin-card-checkbox:checked')).map(cb => cb.value);
-        if (selectedIds.length === 0) return showToast("No cards selected", "warn");
 
-        showCustomConfirm({
-            title: "Mass Purge",
-            message: `Decommission ${selectedIds.length} entities from the repository?`,
-            icon: "fa-trash-can",
-            onConfirm: async () => {
-                showToast("Purging...", "loading");
-                const res = await fetch(`${BACKEND_URL}/api/admin/cards/bulk-delete`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                    body: JSON.stringify({ ids: selectedIds }),
-                    credentials: 'include'
-                });
-
-                if (res.ok) {
-                    showToast("Entities purged", "success");
-                    loadAdminCards();
-                } else {
-                    showToast("Purge failed", "error");
-                }
-            }
-        });
-    };
-}
 
 function switchBinder(id) {
     activeBinderId = id;
+    localStorage.setItem('activeBinderId', id);
     currentPage = 1;
 
     const isCustomBinder = id !== 'all';
     const actionArea = document.getElementById('binder-actions-area');
     const filterRow = document.getElementById('binder-filter-row');
-    const setSelector = document.getElementById('set-selector');
+    const setSelector = document.getElementById('binder-set-selector-dropdown-wrapper');
 
     if (isCustomBinder) {
-        // Show binder controls, hide filters
+
         if (actionArea) actionArea.classList.remove('hidden');
         if (filterRow) filterRow.classList.add('hidden');
         if (setSelector) setSelector.classList.add('hidden');
         const binder = userBinders.find(b => b.id === activeBinderId);
         document.getElementById('page-indicator').innerText = binder?.name || "Custom Binder";
 
-        // Ensure edit actions are hidden if not editing
+
         const editActions = document.getElementById('binder-edit-actions');
         if (editActions && !isEditingBinder) editActions.classList.add('hidden');
         const editBtn = document.getElementById('edit-binder-btn');
         if (editBtn) editBtn.classList.remove('hidden');
     } else {
-        // Hide binder controls, show filters
+
         if (actionArea) actionArea.classList.add('hidden');
         if (filterRow) filterRow.classList.remove('hidden');
         if (setSelector) setSelector.classList.remove('hidden');
@@ -8218,7 +8686,7 @@ function switchBinder(id) {
         if (editBtn) editBtn.classList.add('hidden');
     }
 
-    // Reset edit mode when switching binders
+
     if (isEditingBinder) toggleBinderEdit();
 
     console.log(`Switching to binder: ${id}`);
@@ -8229,7 +8697,7 @@ function switchBinder(id) {
 
 
 
-// --- ADD CARDS TO BINDER MODAL LOGIC ---
+
 let modalSelectedCardIds = new Set();
 let modalSearchQuery = '';
 let modalRarityFilter = 'all';
@@ -8243,7 +8711,18 @@ function showAddCardsToBinderModal(slotIdx = null) {
     modalRarityFilter = 'all';
 
     document.getElementById('modal-card-search').value = '';
-    document.getElementById('modal-rarity-filter').value = 'all';
+
+    const raritySelect = document.getElementById('modal-rarity-filter');
+    if (raritySelect) {
+        raritySelect.value = 'all';
+
+        const dropdownWrapper = raritySelect.closest('.void-dropdown');
+        if (dropdownWrapper) {
+            const label = dropdownWrapper.querySelector('.void-dropdown-label');
+            if (label) label.textContent = 'All Rarities';
+            if (!dropdownWrapper.dataset.voidDropdownInit) initVoidDropdown(dropdownWrapper);
+        }
+    }
 
     updateModalSelectionCount();
     renderModalCardGrid();
@@ -8269,13 +8748,13 @@ function renderModalCardGrid() {
     const grid = document.getElementById('modal-card-grid');
     if (!grid) return;
 
-    // Get cards NOT in the current binder
+
     const activeBinder = userBinders.find(b => b.id === activeBinderId);
     const cardsInBinder = new Set(activeBinder?.user_binder_cards?.map(c => c.user_card_id) || []);
 
-    // We show INDIVIDUAL instances in the modal (so they can pick specific ones if they want, 
-    // or just show unique ones? The user said "add binders from the add binders button", 
-    // usually you'd select from your collection. Let's stack them for easier picking.)
+
+
+
 
     let displayCards = userCollection.filter(c => !cardsInBinder.has(c.instanceId));
 
@@ -8358,29 +8837,37 @@ async function confirmAddCards() {
     }
 }
 
-// --- RENDER HELPERS ---
+
+function getStackKey(card) {
+    const mechanicPart = card.mechanic_id || card.mechanic_name || 'none';
+    return `${card.id}|${mechanicPart}`;
+}
+
 function stackCards() {
     const cardMap = new Map();
     userCollection.forEach(card => {
-        if (cardMap.has(card.id)) {
-            cardMap.get(card.id).count++;
+        const key = getStackKey(card);
+        if (cardMap.has(key)) {
+            const entry = cardMap.get(key);
+            entry.count++;
+            entry.instanceIds.push(card.instanceId);
         } else {
-            cardMap.set(card.id, { ...card, count: 1 });
+            cardMap.set(key, { ...card, count: 1, instanceIds: [card.instanceId] });
         }
     });
 
     uniqueCards = Array.from(cardMap.values());
 }
 
-// --- FILTER LOGIC ---
+
 function updateSetFilter() {
     const filterInfo = document.getElementById('set-filter');
     if (!filterInfo) return;
 
-    // Get all unique sets from collection
+
     const sets = new Set(uniqueCards.map(c => c.set_name));
 
-    // Save current selection to restore if possible
+
     const current = filterInfo.value;
 
     let html = '<option value="all">All Sets</option>';
@@ -8390,7 +8877,7 @@ function updateSetFilter() {
 
     filterInfo.innerHTML = html;
 
-    // Restore or default to 'all'
+
     if (sets.has(current)) {
         filterInfo.value = current;
     } else {
@@ -8398,6 +8885,17 @@ function updateSetFilter() {
     }
 
     filterInfo.onchange = (e) => filterBySet(e.target.value);
+
+
+    const wrapper = filterInfo.closest('.void-dropdown');
+    if (wrapper) {
+        const menu = wrapper.querySelector('.void-dropdown-menu');
+        const opts = Array.from(filterInfo.options).map(o => ({ value: o.value, text: o.text }));
+        menu.innerHTML = opts.map(o => `<div class="void-dropdown-option" role="option" data-value="${o.value}">${o.text}</div>`).join('');
+        wrapper.querySelector('.void-dropdown-label').textContent = filterInfo.options[filterInfo.selectedIndex]?.text || 'All Sets';
+        delete wrapper.dataset.voidDropdownInit;
+        initVoidDropdown(wrapper);
+    }
 }
 
 function renderBinder() {
@@ -8410,19 +8908,19 @@ function renderBinder() {
     if (isCustomBinder) {
         const activeBinder = userBinders.find(p => p.id === activeBinderId);
         if (activeBinder) {
-            const pageCardMap = new Map(); // instanceId -> sort_order
-            activeBinder.user_binder_cards.forEach(c => {
+            const pageCardMap = new Map();
+            (activeBinder.user_binder_cards || []).forEach(c => {
                 pageCardMap.set(c.user_card_id, c.sort_order || 0);
             });
 
-            // Filter userCollection to only those in the binder
+
             const binderInstances = userCollection.filter(c => pageCardMap.has(c.instanceId));
 
-            // Use these instances as the basis for the grid
+
             const cardMap = new Map();
             binderInstances.forEach(card => {
                 const slotIdx = pageCardMap.get(card.instanceId);
-                // DO NOT STACK in custom binders - just put the instance in its slot
+
                 cardMap.set(slotIdx, card);
             });
 
@@ -8431,7 +8929,7 @@ function renderBinder() {
 
             document.getElementById('page-indicator').innerText = `${activeBinder.name} - PAGE ${currentPage}`;
 
-            // Always show 9 slots for custom binders
+
             for (let i = 0; i < totalSlots; i++) {
                 const slotIdx = startSlot + i;
                 const card = cardMap.get(slotIdx);
@@ -8440,31 +8938,42 @@ function renderBinder() {
                 div.dataset.slotIndex = slotIdx;
 
                 if (card) {
-                    renderCardInSlot(div, card);
+                    renderCardInSlot(div, card, true);
                 } else {
-                    // Inline add button for custom binders
+
                     div.innerHTML = `
-                            <div class="absolute inset-0 flex flex-col items-center justify-center relative group/slot">
-                                <div class="text-white/5 select-none transition-opacity"><i class="fa-solid fa-layer-group text-3xl"></i></div>
-                                <button onclick="showAddCardsToBinderModal(${slotIdx})" 
-                                    class="empty-slot-overlay absolute inset-0 flex flex-col items-center justify-center bg-void-accent/5 hover:bg-void-accent/10 border border-void-accent/0 hover:border-void-accent/20 rounded-2xl transition-all">
-                                    <div class="w-10 h-10 rounded-full bg-void-accent/20 text-void-accent/40 flex items-center justify-center mb-2 shadow-lg shadow-void-accent/10">
-                                        <i class="fa-solid fa-plus"></i>
-                                    </div>
-                                    <span class="text-[10px] font-black text-void-accent/40 uppercase tracking-widest">Add Card</span>
-                                </button>
+                        <button onclick="showAddCardsToBinderModal(${slotIdx})"
+                            style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+                                   border-radius:1rem;border:1px dashed rgba(255,255,255,0.1);background:transparent;
+                                   cursor:pointer;transition:all 0.25s"
+                            onmouseover="this.style.background='rgba(var(--void-accent-rgb),0.06)';this.style.borderColor='rgba(var(--void-accent-rgb),0.35)'"
+                            onmouseout="this.style.background='transparent';this.style.borderColor='rgba(255,255,255,0.1)'">
+                            <div style="width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center">
+                                <i class="fa-solid fa-plus" style="color:rgba(255,255,255,0.3);font-size:14px"></i>
                             </div>
-                        `;
+                            <span style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.12em;color:rgba(255,255,255,0.2)">Add Card</span>
+                        </button>
+                    `;
                 }
                 grid.appendChild(div);
             }
 
-            // Custom binders have infinite pages for now, or we can bound them
+
             document.getElementById('prev-page-btn').disabled = currentPage === 1;
-            document.getElementById('next-page-btn').disabled = false; // Always allow next for building
+            document.getElementById('next-page-btn').disabled = false;
+        } else {
+
+            grid.innerHTML = `
+                <div class="col-span-full py-20 text-center flex flex-col items-center justify-center space-y-4">
+                    <div class="w-16 h-16 rounded-full border-t-2 border-void-accent animate-spin mb-4"></div>
+                    <h3 class="text-xl font-black uppercase text-void-text tracking-widest">Initialising Binder...</h3>
+                    <p class="text-void-muted text-xs">Synchronising your custom collection with the matrix.</p>
+                </div>
+            `;
+            document.getElementById('page-indicator').innerText = "Loading...";
         }
     } else {
-        // "All Cards" view - normal reflowing
+
         if (searchQuery) {
             filteredCards = filteredCards.filter(card =>
                 card.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -8493,33 +9002,55 @@ function renderBinder() {
         document.getElementById('prev-page-btn').disabled = currentPage === 1;
         document.getElementById('next-page-btn').disabled = currentPage === totalPages;
 
-        for (let i = 0; i < ITEMS_PER_PAGE; i++) {
-            const card = filteredCards[start + i];
-            const div = document.createElement('div');
-            div.className = 'binder-slot relative aspect-[5/7] w-full';
+        if (filteredCards.length === 0) {
+            grid.innerHTML = `
+                    <div class="col-span-full py-20 text-center flex flex-col items-center justify-center space-y-4">
+                        <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2">
+                            <i class="fa-solid fa-ghost"></i>
+                        </div>
+                        <h3 class="text-xl font-black uppercase text-void-text tracking-widest">No Cards Found</h3>
+                        <p class="text-void-muted text-xs">There are no cards matching your current filters in this binder.</p>
+                    </div>
+                `;
+            document.getElementById('page-indicator').innerText = `All Cards`;
+            document.getElementById('prev-page-btn').disabled = true;
+            document.getElementById('next-page-btn').disabled = true;
+        } else {
+            for (let i = 0; i < ITEMS_PER_PAGE; i++) {
+                const card = filteredCards[start + i];
+                const div = document.createElement('div');
+                div.className = 'binder-slot relative aspect-[5/7] w-full';
 
-            if (card) {
-                renderCardInSlot(div, card);
-            } else {
-                div.innerHTML = `<div class="absolute inset-0 flex items-center justify-center bg-void-bg/20 rounded-md border border-white/5 border-dashed"><i class="fa-solid fa-layer-group text-3xl text-white/5 select-none"></i></div>`;
+                if (card) {
+                    renderCardInSlot(div, card, false);
+                } else {
+                    div.innerHTML = `<div class="absolute inset-0 flex items-center justify-center bg-void-bg/20 rounded-md border border-white/5 border-dashed"><i class="fa-solid fa-layer-group text-3xl text-white/5 select-none"></i></div>`;
+                }
+                grid.appendChild(div);
             }
-            grid.appendChild(div);
         }
     }
 
-    // Attach glare effects after DOM is ready
+
     requestAnimationFrame(initGlareCards);
-    // Initialize Sortable for the grid if in custom binder
+
     if (isCustomBinder) {
+        document.getElementById('binder-grid')?.classList.toggle('binder-editing', isEditingBinder);
         initCardSortable();
+    } else {
+        document.getElementById('binder-grid')?.classList.remove('binder-editing');
     }
 }
 
-function renderCardInSlot(container, card) {
+function renderCardInSlot(container, card, isCustomBinder = false) {
     container.classList.add('is-occupied');
-    const rarityClass = `rarity-${card.rarity.toLowerCase()}`;
+    const rLow = card.rarity.toLowerCase();
+    const rarityClass = `rarity-${rLow}`;
     const countBadge = (card.count && card.count > 1) ? `<div class="absolute top-3 right-3 bg-void-bg/90 backdrop-blur-md text-void-text text-[10px] font-black px-2 py-0.5 rounded-full border border-white/10 z-20 shadow-sm transition-transform group-hover:scale-110">×${card.count}</div>` : '';
     const isGlare = card.rarity === 'Epic' || card.rarity === 'Legendary';
+
+    const holoClass = ['rare', 'epic', 'legendary'].includes(rLow) ? ` holo-${rLow}` : '';
+    const hasShine  = ['epic', 'legendary'].includes(rLow);
 
     const removeBtn = (isEditingBinder && activeBinderId !== 'all') ? `<button onclick="removeCardFromBinder('${card.instanceId}')" class="delete-btn absolute top-3 left-3 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center z-30 transition-all shadow-lg hover:bg-black group-hover:scale-110"><i class="fa-solid fa-xmark text-[12px]"></i></button>` : '';
 
@@ -8535,49 +9066,44 @@ function renderCardInSlot(container, card) {
         mechanicBadge += `</div>`;
     }
 
-    // Global Streamer Origin Badge
+
     const isGlobalView = window.activeStreamerFilter === 'all';
     const creatorName = card.brand_name || card.streamer_username || 'Unknown';
     const originBadge = isGlobalView ? `<div class="absolute top-3 left-1/2 -translate-x-1/2 bg-void-bg/95 backdrop-blur-md border border-white/10 rounded-full py-1 px-3 z-20 flex items-center justify-center gap-1.5 shadow-xl shrink-0 whitespace-nowrap"><i class="fa-solid fa-satellite-dish text-[7px] text-void-accent animate-pulse"></i><span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/90">${creatorName}</span></div>` : '';
 
-    const statsBadge = `<div class="flex gap-1.5 w-full mt-1.5">
-        <div class="flex-1 bg-void-bg/90 backdrop-blur-md px-1.5 py-1 rounded border border-white/10 flex items-center justify-center gap-1 shadow-sm">
-            <span class="text-[9px] font-black text-white/50">⚔</span>
-            <span class="text-[10px] font-black text-void-text">${card.attack}</span>
-        </div>
-        <div class="flex-1 bg-void-bg/90 backdrop-blur-md px-1.5 py-1 rounded border border-white/10 flex items-center justify-center gap-1 shadow-sm">
-            <span class="text-[9px] font-black text-rose-500">❤</span>
-            <span class="text-[10px] font-black text-void-text">${card.defense}</span>
-        </div>
-    </div>`;
 
-    // Use placeholder when missing; escape " in URL so attribute doesn't break; no crossorigin so Cloudflare/R2 images load
     const rawUrl = (card.image_url && card.image_url.trim()) ? String(card.image_url) : '/pack.png';
     const imgSrc = rawUrl.replace(/"/g, '%22');
+    
+
+    const maskStyle = holoClass || hasShine
+        ? `mask-image:url('${imgSrc}');-webkit-mask-image:url('${imgSrc}');mask-size:cover;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha;-webkit-mask-size:cover;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;`
+        : '';
+
+    const dragHandle = isCustomBinder
+        ? `<div class="binder-drag-handle" onclick="event.stopPropagation()" title="Drag to reorder"><i class="fa-solid fa-grip-vertical"></i></div>`
+        : '';
 
     container.innerHTML = `
-            <div class="binder-card group cursor-pointer ${rarityClass}${isGlare ? ' glare-card' : ''}" 
+            ${dragHandle}
+            <div class="binder-card group cursor-pointer ${rarityClass}${holoClass}" 
                 data-instance-id="${card.instanceId}" 
-                onclick="if(!isEditingBinder) showCardDetail('${card.instanceId}')">
+                role="button" tabindex="0"
+                onclick="if(!isEditingBinder) showCardDetail('${card.instanceId}')"
+                onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); if(!isEditingBinder) showCardDetail('${card.instanceId}'); }">
+                <div class="binder-card-face">
+                    <img src="${imgSrc}" class="absolute inset-0 w-full h-full object-cover z-0" onerror="this.onerror=null;this.src='/pack.png';">
+                    ${holoClass ? `<div class="holo-layer" style="${maskStyle}"></div>` : ''}
+                    ${hasShine   ? `<div class="holo-shine" style="${maskStyle}"></div>`  : ''}
+                </div>
                 ${removeBtn}
                 ${mechanicBadge}
-                <img src="${imgSrc}" class="absolute inset-0 w-full h-full object-cover z-0 transition-all duration-1000 group-hover:scale-115" onerror="this.onerror=null;this.src='/pack.png';">
-                ${isGlare ? '<div class="glare-overlay"></div>' : ''}
                 ${countBadge}
                 ${originBadge}
-                <div class="binder-card-overlay absolute inset-0 z-[1] flex flex-col justify-end pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div class="binder-card-overlay-gradient"></div>
-                    <div class="relative z-10 p-3 flex flex-col justify-end">
-                        <div class="card-name text-[11px] font-black text-void-text truncate uppercase tracking-tight mb-2" style="text-shadow: 0 1px 3px rgba(0,0,0,0.9);">
-                            ${card.name}
-                        </div>
-                        ${statsBadge}
-                    </div>
-                </div>
             </div>`;
 }
 
-// --- CARD DETAIL MODAL LOGIC ---
+
 function showCardDetail(instanceId) {
     console.log("Showing card detail for:", instanceId);
     const card = userCollection.find(c => c.instanceId === instanceId) || uniqueCards.find(c => c.id === instanceId);
@@ -8587,6 +9113,10 @@ function showCardDetail(instanceId) {
     }
 
     const modal = document.getElementById('card-detail-modal');
+    if (!modal) {
+        console.error('Card detail modal not found — ensure modals are loaded');
+        return;
+    }
     const img = document.getElementById('card-detail-image');
     const name = document.getElementById('card-detail-name');
     const rarity = document.getElementById('card-detail-rarity');
@@ -8595,28 +9125,30 @@ function showCardDetail(instanceId) {
     const id = document.getElementById('card-detail-id');
     const glare = document.getElementById('card-detail-glare');
 
-    img.src = card.image_url || '/pack.png';
-    img.onerror = function () { this.onerror = null; this.src = '/pack.png'; };
-    name.innerText = card.name;
-    rarity.innerText = card.rarity;
+    if (img) {
+        img.src = card.image_url || '/pack.png';
+        img.onerror = function () { this.onerror = null; this.src = '/pack.png'; };
+    }
+    if (name) name.innerText = card.name;
     const rarityColor = getRarityColor(card.rarity);
-    rarity.innerText = card.rarity;
-    rarity.className = `text-[10px] font-black uppercase tracking-[0.2em] mb-1 text-${rarityColor}`;
-    set.innerText = card.set_name;
-    count.innerText = card.count || 1;
+    if (rarity) {
+        rarity.innerText = card.rarity;
+        rarity.className = `text-[10px] font-black uppercase tracking-[0.2em] mb-1 text-${rarityColor}`;
+    }
+    if (set) set.innerText = card.set_name;
+    if (count) count.innerText = card.count || 1;
 
-    // New Fields
     const numEl = document.getElementById('card-detail-number');
     const descEl = document.getElementById('card-detail-description');
     const atkEl = document.getElementById('card-detail-attack');
     const defEl = document.getElementById('card-detail-defense');
 
     if (numEl) numEl.innerText = card.card_number || '--';
-    descEl.innerText = card.description || 'No description available for this card.';
-    atkEl.innerText = card.attack || 0;
-    defEl.innerText = card.defense || 0;
+    if (descEl) descEl.innerText = card.description || 'No description available for this card.';
+    if (atkEl) atkEl.innerText = card.attack || 0;
+    if (defEl) defEl.innerText = card.defense || 0;
 
-    // Mechanic Logic
+
     const mechanicContainer = document.getElementById('card-detail-mechanic-container');
     if (mechanicContainer) {
         if (card.mechanic_name) {
@@ -8641,11 +9173,12 @@ function showCardDetail(instanceId) {
         }
     }
 
-    // Show glare if Epic/Legendary
-    if (card.rarity === 'Epic' || card.rarity === 'Legendary') {
-        glare.classList.remove('hidden');
-    } else {
-        glare.classList.add('hidden');
+    if (glare) {
+        if (card.rarity === 'Epic' || card.rarity === 'Legendary') {
+            glare.classList.remove('hidden');
+        } else {
+            glare.classList.add('hidden');
+        }
     }
 
     modal.classList.remove('hidden');
@@ -8653,11 +9186,50 @@ function showCardDetail(instanceId) {
 }
 
 function hideCardDetail() {
-    document.getElementById('card-detail-modal').classList.add('hidden');
+    const m = document.getElementById('card-detail-modal');
+    if (m) m.classList.add('hidden');
     scrollUnlock();
 }
 
-function initGlareCards() { /* shimmer is pure CSS — no JS needed */ }
+function initGlareCards() {
+    const grid = document.getElementById('binder-grid');
+    if (!grid) return;
+
+    grid.querySelectorAll('.binder-card').forEach(card => {
+
+        const holoMax   = parseFloat(getComputedStyle(card).getPropertyValue('--holo-max').trim()) || 0.18;
+        const shineMax  = parseFloat(getComputedStyle(card).getPropertyValue('--shine-max').trim()) || 0.5;
+        const holoIdle  = parseFloat(getComputedStyle(card).getPropertyValue('--holo-idle').trim()) || 0;
+        const shineIdle = parseFloat(getComputedStyle(card).getPropertyValue('--shine-idle').trim()) || 0;
+        const tiltRange = parseFloat(getComputedStyle(card).getPropertyValue('--tilt').trim()) || 15;
+
+        card.addEventListener('mousemove', e => {
+            const rect  = card.getBoundingClientRect();
+            const mx    = (e.clientX - rect.left)  / rect.width;
+            const my    = (e.clientY - rect.top)   / rect.height;
+            const rx    = (0.5 - my) * tiltRange;
+            const ry    = (mx - 0.5) * tiltRange;
+
+
+            card.style.transition = 'transform 0.05s linear, filter 0.3s ease';
+            card.style.transform  = `perspective(700px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(8px) scale(1.04)`;
+
+
+            card.style.setProperty('--holo-o',  holoMax);
+            card.style.setProperty('--shine-o', shineMax);
+            card.classList.add('is-tilting');
+        });
+
+        card.addEventListener('mouseleave', () => {
+
+            card.style.transition = 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), filter 0.3s ease';
+            card.style.transform  = '';
+            card.style.setProperty('--holo-o',  holoIdle);
+            card.style.setProperty('--shine-o', shineIdle);
+            card.classList.remove('is-tilting');
+        });
+    });
+}
 
 function renderRecentDrops() {
     const list = document.getElementById('recent-drops-list');
@@ -8738,7 +9310,7 @@ if (prevPageBtn) {
     };
 }
 
-// Search and Filter Event Listeners
+
 const cardSearch = document.getElementById('card-search');
 if (cardSearch) {
     cardSearch.addEventListener('input', (e) => {
@@ -8761,18 +9333,42 @@ const streamerFilterEl = document.getElementById('streamer-filter');
 if (streamerFilterEl) {
     streamerFilterEl.addEventListener('change', (e) => {
         const val = e.target.value;
-        window.activeStreamerFilter = val === 'current' ? (APP_STREAMER ? APP_STREAMER.username : 'codeoce') : val;
+        window.activeStreamerFilter = val === 'current' ? (APP_STREAMER ? APP_STREAMER.username : null) : val;
         currentPage = 1;
         fetchUserCollection();
+        fetchAchievements();
+        fetchLeaderboard();
     });
 }
 
 
 
-// --- TRADING LOGIC ---
+
+function renderTradingHub() {
+    switchTradingSubTab('inbox');
+    fetchTradeCode();
+    fetchTrades();
+
+    const inboxBtn = document.getElementById('subtab-inbox');
+    const dustBtn = document.getElementById('subtab-dust');
+    if (inboxBtn && !inboxBtn.dataset.bound) {
+        inboxBtn.dataset.bound = '1';
+        inboxBtn.onclick = () => switchTradingSubTab('inbox');
+    }
+    if (dustBtn && !dustBtn.dataset.bound) {
+        dustBtn.dataset.bound = '1';
+        dustBtn.onclick = () => switchTradingSubTab('dust');
+    }
+}
+
+function getTradeStreamerParam() {
+    const s = APP_STREAMER?.username || window.activeStreamerFilter;
+    return s && s !== 'all' ? `?streamer=${encodeURIComponent(s)}` : '';
+}
+
 async function fetchTradeCode() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/trade/code`, { credentials: 'include' });
+        const res = await fetch(`${BACKEND_URL}/api/trade/code${getTradeStreamerParam()}`, { credentials: 'include' });
         if (res.ok) {
             const data = await res.json();
             myTradeCode = data.trade_code;
@@ -8786,7 +9382,7 @@ async function fetchTradeCode() {
 
 async function fetchTrades() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/trades`, { credentials: 'include' });
+        const res = await fetch(`${BACKEND_URL}/api/trades${getTradeStreamerParam()}`, { credentials: 'include' });
         if (res.ok) {
             trades = await res.json();
             renderTrades();
@@ -8796,191 +9392,361 @@ async function fetchTrades() {
     }
 }
 
-// --- TRADE-IN LOGIC ---
-function renderTradeInGrid() {
-    const grid = document.getElementById('trade-in-grid');
-    if (!grid) return;
 
-    if (userCollection.length === 0) {
-        grid.innerHTML = '<div class="col-span-full py-20 text-center text-gray-500">Your collection is empty.</div>';
+let magicDustBalance = 0;
+let dustMechanics = [];
+let dustBuySelectedMechanic = null;
+let dustDraggingPayload = null;
+
+function playDustCollectAnimation(amount, fromBalance, toBalance) {
+    const overlay = document.createElement('div');
+    overlay.className = 'dust-collect-overlay';
+
+    const pop = document.createElement('div');
+    pop.className = 'dust-collect-pop';
+    const amountEl = document.createElement('span');
+    amountEl.className = 'dust-amount';
+    amountEl.textContent = `+${amount}`;
+    const labelEl = document.createElement('span');
+    labelEl.className = 'dust-label';
+    labelEl.textContent = 'Magic Dust';
+    pop.appendChild(amountEl);
+    pop.appendChild(labelEl);
+    overlay.appendChild(pop);
+
+    const particleCount = 12;
+    for (let i = 0; i < particleCount; i++) {
+        const angle = (i / particleCount) * Math.PI * 2;
+        const dist = 80 + Math.random() * 60;
+        const dx = Math.cos(angle) * dist;
+        const dy = Math.sin(angle) * dist;
+        const p = document.createElement('div');
+        p.className = 'dust-collect-particle';
+        p.style.setProperty('--dust-dx', `${dx}px`);
+        p.style.setProperty('--dust-dy', `${dy}px`);
+        p.style.animationDelay = `${0.05 + Math.random() * 0.1}s`;
+        overlay.appendChild(p);
+    }
+
+    document.body.appendChild(overlay);
+
+    const balanceEl = document.getElementById('dust-balance');
+    const wrapEl = document.getElementById('dust-balance-wrap');
+    if (wrapEl) wrapEl.classList.add('dust-balance-glow');
+
+    const duration = 800;
+    const startTime = performance.now();
+    function tick(now) {
+        const elapsed = now - startTime;
+        const t = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 2);
+        const current = Math.round(fromBalance + (toBalance - fromBalance) * eased);
+        if (balanceEl) balanceEl.textContent = current;
+        if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    setTimeout(() => {
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.4s ease-out';
+        if (wrapEl) wrapEl.classList.remove('dust-balance-glow');
+        setTimeout(() => overlay.remove(), 450);
+    }, 1200);
+}
+
+async function fetchDustBalance() {
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/dust/balance`, { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            magicDustBalance = data.magic_dust ?? 0;
+            const el = document.getElementById('dust-balance');
+            if (el) el.textContent = magicDustBalance;
+        }
+    } catch (e) { console.error('Failed to fetch dust balance:', e); }
+}
+
+async function fetchDustMechanics() {
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/dust/mechanics`, { credentials: 'include' });
+        if (res.ok) dustMechanics = await res.json();
+    } catch (e) { console.error('Failed to fetch mechanics:', e); }
+}
+
+function renderDustSection() {
+    fetchDustBalance();
+    fetchDustMechanics();
+    renderDustSellGrid();
+    renderDustBuyCards();
+    setupDustDragDrop();
+}
+
+function renderDustSellGrid() {
+    const grid = document.getElementById('dust-sell-grid');
+    if (!grid) return;
+    const withMechanic = (userCollection || []).filter(c => c.mechanic_id || c.mechanic_name);
+    if (withMechanic.length === 0) {
+        grid.innerHTML = '<div class="col-span-full py-6 text-center text-[var(--dust-muted)] text-[10px] font-bold uppercase tracking-widest">No mechanics to strip</div>';
         return;
     }
-
-    // Sort by rarity then name
-    const sorted = [...userCollection].sort((a, b) => {
-        const rarityA = (a.rarity || 'Common').toLowerCase();
-        const rarityB = (b.rarity || 'Common').toLowerCase();
-        const rA = RARITY_RANK[rarityA] || 1;
-        const rB = RARITY_RANK[rarityB] || 1;
-        if (rA !== rB) return rB - rA;
-        return a.name.localeCompare(b.name);
-    });
-
-    grid.innerHTML = sorted.map(card => {
-        const isSelected = selectedTradeInCards.has(card.instanceId);
-        const rarity = card.rarity.toLowerCase();
-
+    grid.innerHTML = withMechanic.slice(0, 24).map(card => {
+        const mechName = (card.mechanic_display_name || card.mechanic_name || 'Mechanic').replace(/</g, '&lt;');
         return `
-        <div class="relative group cursor-pointer" onclick="toggleTradeInCard('${card.instanceId}')">
-            <div class="card-aspect-ratio rounded-2xl overflow-hidden border-2 transition-all ${isSelected ? 'border-void-accent scale-95 void-shadow' : 'border-white/10 hover:border-white/30'}">
-                <img src="${card.image_url}" class="w-full h-full object-cover ${isSelected ? '' : 'opacity-80 group-hover:opacity-100'}">
-                <div class="absolute inset-0 bg-gradient-to-t from-void-bg/60 via-transparent to-transparent opacity-60"></div>
-            </div>
-            ${isSelected ? `
-                <div class="absolute -top-2 -right-2 w-7 h-7 bg-void-accent rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg z-10 border-2 border-void-bg">
-                    <i class="fa-solid fa-check"></i>
+        <div class="dust-sell-card cursor-grab active:cursor-grabbing rounded-xl overflow-hidden border border-white/10 transition-all group" draggable="true" data-user-card-id="${card.instanceId}" title="Drag to disenchant">
+            <div class="aspect-[2/3] relative">
+                <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-full object-cover pointer-events-none" onerror="this.src='/pack.png'">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
+                <div class="absolute bottom-1 left-1 right-1 pointer-events-none">
+                    <div class="dust-sell-chip rounded-lg px-2 py-1 inline-flex items-center gap-1.5 text-[8px] font-black uppercase">
+                        <span>${mechName}</span>
+                    </div>
+                    <div class="text-[7px] text-void-muted truncate mt-1">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
                 </div>
-            ` : ''}
+            </div>
         </div>
-    `;
-    }).join('');
-
-    updateTradeInSummary();
+    `}).join('');
+    attachDustSellDragListeners();
 }
 
-function toggleTradeInCard(cardInstanceId) {
-    if (selectedTradeInCards.has(cardInstanceId)) {
-        selectedTradeInCards.delete(cardInstanceId);
-    } else {
-        if (selectedTradeInCards.size >= 5) {
-            showToast('You can only select 5 cards for a trade-in!', 'warn');
-            return;
-        }
-
-        // Check if selection is legal (same rarity)
-        if (selectedTradeInCards.size > 0) {
-            const firstId = Array.from(selectedTradeInCards)[0];
-            const firstCard = userCollection.find(c => c.instanceId === firstId);
-            const newCard = userCollection.find(c => c.instanceId === cardInstanceId);
-
-            if (firstCard.rarity !== newCard.rarity) {
-                showToast('All 5 cards must be the same rarity!', 'warn');
-                return;
+function attachDustSellDragListeners() {
+    document.querySelectorAll('.dust-sell-card').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const userCardId = el.dataset.userCardId;
+            if (userCardId && confirm('Sell this mechanic for dust? The card is kept; only the mechanic is removed.')) {
+                sellMechanicForDust(userCardId);
             }
-        }
-
-        selectedTradeInCards.add(cardInstanceId);
-    }
-    renderTradeInGrid();
+        });
+        el.addEventListener('dragstart', (e) => {
+            dustDraggingPayload = { type: 'sell', user_card_id: el.dataset.userCardId };
+            e.dataTransfer.setData('application/json', JSON.stringify(dustDraggingPayload));
+            e.dataTransfer.effectAllowed = 'move';
+            el.classList.add('dust-dragging');
+        });
+        el.addEventListener('dragend', () => { el.classList.remove('dust-dragging'); dustDraggingPayload = null; });
+    });
 }
 
-function updateTradeInSummary() {
-    const countEl = document.getElementById('trade-in-count');
-    const banner = document.getElementById('trade-in-rarity-banner');
-    const targetLabel = document.getElementById('target-rarity-label');
-    const fromPill = document.getElementById('from-rarity-pill');
-    const toPill = document.getElementById('to-rarity-pill');
-    const btn = document.getElementById('process-trade-in-btn');
-
-    const size = selectedTradeInCards.size;
-    countEl.textContent = size;
-
-    if (size === 5) {
-        const sampleId = Array.from(selectedTradeInCards)[0];
-        const sample = userCollection.find(c => c.instanceId === sampleId);
-        const rarity = sample.rarity;
-
-        const rarityOrder = ['Common', 'Rare', 'Epic', 'Legendary'];
-        const idx = rarityOrder.indexOf(rarity);
-
-        if (idx !== -1 && idx < rarityOrder.length - 1) {
-            const nextRarity = rarityOrder[idx + 1];
-
-            banner.classList.remove('hidden');
-            targetLabel.textContent = nextRarity;
-            fromPill.textContent = rarity.toUpperCase();
-            toPill.textContent = nextRarity.toUpperCase();
-            btn.disabled = false;
+async function sellMechanicForDust(userCardId) {
+    showToast('Selling mechanic...', 'loading');
+    const balanceBefore = magicDustBalance;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/dust/sell-mechanic`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ user_card_id: userCardId }),
+            credentials: 'include'
+        });
+        const data = await res.json();
+        if (res.ok) {
+            magicDustBalance = data.magic_dust ?? 0;
+            const earned = data.dust_earned ?? 0;
+            playDustCollectAnimation(earned, balanceBefore, magicDustBalance);
+            showToast(`+${earned} dust!`, 'success');
+            fetchUserCollection();
+            renderDustSellGrid();
+            renderDustBuyCards();
         } else {
-            banner.classList.add('hidden');
-            fromPill.textContent = rarity.toUpperCase();
-            toPill.textContent = 'MAX';
-            btn.disabled = true;
-            if (idx === rarityOrder.length - 1) {
-                showToast('Legendary cards cannot be upgraded further!', 'info');
-            }
+            showToast(data.error || 'Failed to sell mechanic', 'error');
         }
-    } else {
-        banner.classList.add('hidden');
-        fromPill.textContent = '???';
-        toPill.textContent = '???';
-        btn.disabled = true;
+    } catch (e) {
+        showToast('Connection error', 'error');
     }
 }
 
-const clearTradeInBtn = document.getElementById('clear-trade-in');
-if (clearTradeInBtn) {
-    clearTradeInBtn.onclick = () => {
-        selectedTradeInCards.clear();
-        renderTradeInGrid();
-    };
-}
-
-const processTradeInBtn = document.getElementById('process-trade-in-btn');
-if (processTradeInBtn) {
-    processTradeInBtn.onclick = async () => {
-        if (selectedTradeInCards.size < 5) return showToast("Synthesis requires 5 identical entities", "error");
-
-        showToast("Initiating Synthesis...", "loading");
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/trade/trade-in`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                body: JSON.stringify({ user_card_ids: Array.from(selectedTradeInCards) }),
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                showToast("Synthesis Complete!", "success");
-                showCardToast(data.new_card);
-                selectedTradeInCards.clear();
-                fetchUserCollection();
-                renderTradeInGrid();
-            } else {
-                const error = await res.json();
-                showToast(error.error || "Synthesis Failed", "error");
-            }
-        } catch (err) {
-            showToast("Connection Error", "error");
+function setupDustDragDrop() {
+    const dustZone = document.getElementById('dust-balance-wrap');
+    if (!dustZone) return;
+    dustZone.ondragover = (e) => {
+        e.preventDefault();
+        if (dustDraggingPayload?.type === 'sell') {
+            e.dataTransfer.dropEffect = 'move';
+            dustZone.classList.add('dust-drop-active');
+        } else {
+            e.dataTransfer.dropEffect = 'none';
         }
     };
+    dustZone.ondragleave = () => dustZone.classList.remove('dust-drop-active');
+    dustZone.ondrop = (e) => {
+        e.preventDefault();
+        dustZone.classList.remove('dust-drop-active');
+        try {
+            const payload = JSON.parse(e.dataTransfer.getData('application/json'));
+            if (payload.type === 'sell' && payload.user_card_id) {
+                sellMechanicForDust(payload.user_card_id);
+            }
+        } catch (_) {}
+    };
+    dustZone.onclick = () => {
+        if (dustBuySelectedMechanic) return;
+        dustZone.blur();
+    };
 }
 
-// --- TRADING SUB-TABS ---
+function renderDustBuyCards() {
+    const grid = document.getElementById('dust-buy-cards');
+    const mechGrid = document.getElementById('dust-buy-mechanics');
+    if (!grid) return;
+    const noMechanic = (userCollection || []).filter(c => !c.mechanic_id && !c.mechanic_name);
+    if (noMechanic.length === 0) {
+        grid.innerHTML = '<div class="col-span-full py-6 text-center text-[var(--dust-muted)] text-[10px] font-bold uppercase tracking-widest">No cards to apply to</div>';
+        if (mechGrid) mechGrid.innerHTML = '';
+        return;
+    }
+    grid.innerHTML = noMechanic.slice(0, 16).map(card => {
+        return `
+        <div class="dust-buy-card rounded-xl overflow-hidden border border-white/10 transition-all"
+            data-user-card-id="${card.instanceId}" data-rarity="${(card.rarity || 'common').toLowerCase()}">
+            <div class="aspect-[2/3] relative">
+                <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-full object-cover" onerror="this.src='/pack.png'">
+            </div>
+            <div class="text-[7px] text-void-muted truncate px-1 py-0.5">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
+        </div>
+    `}).join('');
+    if (mechGrid) {
+        mechGrid.innerHTML = (dustMechanics || []).map(m => {
+            const baseCost = m.dust_buy_cost ?? 50;
+            const canAffordAny = magicDustBalance >= baseCost;
+            return `
+            <div class="dust-buy-mechanic cursor-grab active:cursor-grabbing rounded-lg border p-3 text-center transition-all ${canAffordAny ? 'border-white/20 dust-mechanic-hover' : 'border-white/5 opacity-50'}"
+                draggable="${canAffordAny}" data-mechanic-id="${m.id}" data-base-cost="${baseCost}"
+                data-mechanic-name="${(m.display_name || m.name || '').replace(/"/g, '&quot;')}"
+                data-mechanic-icon="${(m.icon || '⚙️').replace(/"/g, '&quot;')}"
+                title="Drag onto a card to add (or click then click card)">
+                <span class="text-xl">${m.icon || '⚙️'}</span>
+                <div class="text-[9px] font-black text-white mt-1">${(m.display_name || m.name || '').replace(/</g, '&lt;')}</div>
+                <div class="text-[8px] text-[var(--dust-muted)]">from ${baseCost} dust</div>
+            </div>
+        `}).join('');
+        attachDustBuyDragListeners();
+    }
+}
+
+function attachDustBuyDragListeners() {
+    document.querySelectorAll('.dust-buy-mechanic').forEach(el => {
+        const mechanicId = el.dataset.mechanicId;
+        const baseCost = parseInt(el.dataset.baseCost, 10) || 50;
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (el.getAttribute('draggable') !== 'true') return;
+            dustBuySelectedMechanic = dustBuySelectedMechanic?.id === mechanicId ? null : { id: mechanicId, baseCost };
+            document.querySelectorAll('.dust-buy-mechanic').forEach(m => m.classList.toggle('dust-mechanic-selected', m.dataset.mechanicId === mechanicId && !!dustBuySelectedMechanic));
+            document.querySelectorAll('.dust-buy-card').forEach(c => c.classList.toggle('dust-card-drop-ready', !!dustBuySelectedMechanic));
+        });
+        el.addEventListener('dragstart', (e) => {
+            dustDraggingPayload = { type: 'buy', mechanic_id: mechanicId, base_cost: baseCost };
+            e.dataTransfer.setData('application/json', JSON.stringify(dustDraggingPayload));
+            e.dataTransfer.effectAllowed = 'copy';
+            el.classList.add('dust-dragging');
+        });
+        el.addEventListener('dragend', () => { el.classList.remove('dust-dragging'); dustDraggingPayload = null; });
+    });
+    document.querySelectorAll('.dust-buy-card').forEach(el => {
+        el.addEventListener('click', () => {
+            if (dustBuySelectedMechanic) {
+                const userCardId = el.dataset.userCardId;
+                if (userCardId) buyMechanicWithDust(userCardId, dustBuySelectedMechanic.id);
+                dustBuySelectedMechanic = null;
+                document.querySelectorAll('.dust-buy-mechanic').forEach(m => m.classList.remove('dust-mechanic-selected'));
+                document.querySelectorAll('.dust-buy-card').forEach(c => c.classList.remove('dust-card-drop-ready'));
+                renderDustBuyCards();
+            }
+        });
+        el.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const payload = dustDraggingPayload;
+            if (!payload || payload.type !== 'buy' || !payload.mechanic_id) return;
+            const mult = { common: 1, rare: 2, epic: 3, legendary: 4 }[el.dataset.rarity || 'common'] || 1;
+            const cost = Math.max(1, Math.floor((payload.base_cost || 50) * mult));
+            if (magicDustBalance >= cost) {
+                e.dataTransfer.dropEffect = 'copy';
+                el.classList.add('dust-drop-active');
+            } else {
+                e.dataTransfer.dropEffect = 'none';
+            }
+        });
+        el.addEventListener('dragleave', () => el.classList.remove('dust-drop-active'));
+        el.addEventListener('drop', (e) => {
+            e.preventDefault();
+            el.classList.remove('dust-drop-active');
+            try {
+                const payload = JSON.parse(e.dataTransfer.getData('application/json'));
+                if (payload.type === 'buy' && payload.mechanic_id) {
+                    const userCardId = el.dataset.userCardId;
+                    if (userCardId) buyMechanicWithDust(userCardId, payload.mechanic_id);
+                }
+            } catch (_) {}
+        });
+    });
+    if (dustBuySelectedMechanic) {
+        document.querySelectorAll('.dust-buy-mechanic').forEach(m => m.classList.toggle('dust-mechanic-selected', m.dataset.mechanicId === dustBuySelectedMechanic.id));
+        document.querySelectorAll('.dust-buy-card').forEach(c => c.classList.add('dust-card-drop-ready'));
+    }
+}
+
+async function buyMechanicWithDust(userCardId, mechanicId) {
+    showToast('Adding mechanic...', 'loading');
+    dustBuySelectedMechanic = null;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/dust/buy-mechanic`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ user_card_id: userCardId, mechanic_id: mechanicId }),
+            credentials: 'include'
+        });
+        const data = await res.json();
+        if (res.ok) {
+            magicDustBalance = data.magic_dust ?? 0;
+            const el = document.getElementById('dust-balance');
+            if (el) el.textContent = magicDustBalance;
+            showToast('Mechanic added!', 'success');
+            fetchUserCollection();
+            renderDustSellGrid();
+            renderDustBuyCards();
+        } else {
+            showToast(data.error || 'Failed to buy mechanic', 'error');
+        }
+    } catch (e) {
+        showToast('Connection error', 'error');
+    }
+}
+
+
 function switchTradingSubTab(tab) {
     const inboxBtn = document.getElementById('subtab-inbox');
-    const upgradeBtn = document.getElementById('subtab-upgrade');
+    const dustBtn = document.getElementById('subtab-dust');
     const inboxSec = document.getElementById('inbox-section');
-    const upgradeSec = document.getElementById('upgrade-section');
+    const dustSec = document.getElementById('dust-section');
 
-    const active = 'border-void-accent text-void-text';
+    const active = 'border-void-accent text-void-text bg-void-accent/10';
     const inactive = 'border-transparent text-void-muted hover:text-void-text';
 
     if (tab === 'inbox') {
-        inboxBtn.className = `flex-1 py-4 text-xs font-black tracking-widest uppercase transition-all border-b-2 ${active}`;
-        upgradeBtn.className = `flex-1 py-4 text-xs font-black tracking-widest uppercase transition-all border-b-2 ${inactive}`;
-        inboxSec.classList.remove('hidden');
-        upgradeSec.classList.add('hidden');
+        if (inboxBtn) inboxBtn.className = `px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${active}`;
+        if (dustBtn) dustBtn.className = `px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${inactive}`;
+        if (inboxSec) inboxSec.classList.remove('hidden');
+        if (dustSec) dustSec.classList.add('hidden');
     } else {
-        inboxBtn.className = `flex-1 py-4 text-xs font-black tracking-widest uppercase transition-all border-b-2 ${inactive}`;
-        upgradeBtn.className = `flex-1 py-4 text-xs font-black tracking-widest uppercase transition-all border-b-2 ${active}`;
-        inboxSec.classList.add('hidden');
-        upgradeSec.classList.remove('hidden');
-        renderTradeInGrid();
+        if (inboxBtn) inboxBtn.className = `px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${inactive}`;
+        if (dustBtn) dustBtn.className = `px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${active}`;
+        if (inboxSec) inboxSec.classList.add('hidden');
+        if (dustSec) dustSec.classList.remove('hidden');
+        renderDustSection();
     }
 }
-
-const inboxSubTab = document.getElementById('subtab-inbox');
-if (inboxSubTab) inboxSubTab.onclick = () => switchTradingSubTab('inbox');
-
-const upgradeSubTab = document.getElementById('subtab-upgrade');
-if (upgradeSubTab) upgradeSubTab.onclick = () => switchTradingSubTab('upgrade');
 
 function renderTrades() {
     const list = document.getElementById('trade-list');
     if (trades.length === 0) {
-        list.innerHTML = '<div class="text-center text-gray-500 py-20">No active trades.</div>';
+        list.innerHTML = `
+            <div class="p-16 text-center flex flex-col items-center justify-center space-y-4 bg-white/[0.02] border border-white/5 border-dashed rounded-[3rem]">
+                <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2 hover:rotate-12 transition-transform">
+                    <i class="fa-solid fa-handshake-angle"></i>
+                </div>
+                <h3 class="text-xl font-black uppercase text-void-text tracking-widest italic">No Active Trades</h3>
+                <p class="text-void-muted text-xs">Initiate a trade from the 'All Cards' binder view, or check back later for offers.</p>
+            </div>
+        `;
         return;
     }
 
@@ -9127,7 +9893,7 @@ function copyTradeCode() {
 async function respondToTrade(tradeId, action) {
     console.log(`Responding to trade ${tradeId} with ${action} `);
     try {
-        const res = await fetch(`${BACKEND_URL} /api/trade / respond`, {
+        const res = await fetch(`${BACKEND_URL}/api/trade/respond${getTradeStreamerParam()}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ trade_id: tradeId, action }),
@@ -9150,34 +9916,34 @@ async function respondToTrade(tradeId, action) {
     }
 }
 
-const startTradeBtn = document.getElementById('start-trade-btn');
-if (startTradeBtn) {
-    startTradeBtn.onclick = async () => {
-        const codeInput = document.getElementById('target-trade-code');
-        if (!codeInput) return;
-        const code = codeInput.value.trim().toUpperCase();
-        if (!code) {
-            showToast("Please enter a trade code", "error");
+async function initiateTrade() {
+    const codeInput = document.getElementById('target-trade-code');
+    if (!codeInput) return;
+    const code = codeInput.value.trim().toUpperCase();
+    if (!code) {
+        showToast("Please enter a trade code", "error");
+        return;
+    }
+    if (code === myTradeCode) {
+        showToast("You cannot trade with yourself", "error");
+        return;
+    }
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/public/collection/${code}`, { credentials: 'include' });
+        if (!res.ok) {
+            showToast("Invalid trade code or user has no cards", "error");
             return;
         }
-        if (code === myTradeCode) {
-            showToast("You cannot trade with yourself", "error");
-            return;
-        }
-
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/public/collection/${code}`, { credentials: 'include' });
-            if (!res.ok) {
-                showToast("Invalid trade code or user has no cards", "error");
-                return;
-            }
-            const targetPublicCollection = await res.json();
-            openTradeBuilder(code, targetPublicCollection);
-        } catch (e) {
-            showToast("Could not find user", "error");
-        }
-    };
+        const targetPublicCollection = await res.json();
+        openTradeBuilder(code, targetPublicCollection);
+    } catch (e) {
+        showToast("Could not find user", "error");
+    }
 }
+window.initiateTrade = initiateTrade;
+
+const startTradeBtn = document.getElementById('start-trade-btn');
+if (startTradeBtn) startTradeBtn.onclick = initiateTrade;
 
 let tradeBuilderMode = 'init';
 let currentTradeId = null;
@@ -9185,7 +9951,7 @@ let currentTradeId = null;
 window.prepareTradeReply = (tradeId, senderName) => {
     currentTradeId = tradeId;
     tradeBuilderMode = 'reply';
-    // Find the trade to get the context (what A offered)
+
     const trade = trades.find(t => String(t.id) === String(tradeId));
     const offeredItems = trade ? trade.items.filter(i => String(i.owner_id) !== String(currentUser.twitch_id)).map(i => ({
         ...i.card,
@@ -9214,14 +9980,14 @@ function openTradeBuilder(targetCode, targetCards, isReply = false) {
         myHeader.innerText = "YOUR OFFER";
         theirHeader.innerText = "THEIR COLLECTION";
         mySection.classList.remove('hidden');
-        theirSection.classList.add('hidden'); // In Step 1, A only chooses their card
+        theirSection.classList.add('hidden');
         sendBtn.innerText = 'SEND TRADE INITIATION';
     } else {
         modalTitle.innerText = `Countering trade from: ${targetCode} `;
         myHeader.innerText = "YOUR COUNTER-OFFER";
         theirHeader.innerText = "THEIR INCOMING OFFER";
         mySection.classList.remove('hidden');
-        theirSection.classList.remove('hidden'); // In Step 2, B sees what they are getting
+        theirSection.classList.remove('hidden');
         sendBtn.innerText = 'SEND COUNTER OFFER';
     }
 
@@ -9229,22 +9995,20 @@ function openTradeBuilder(targetCode, targetCards, isReply = false) {
     scrollLock();
 
     const myCardsGrid = document.getElementById('trade-builder-my-cards');
-    myCardsGrid.innerHTML = userCollection.map(card => `
-< div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5"
-onclick = "toggleTradeSelection(this, 'my', '${card.instanceId}')" >
-<img src="${card.image_url}" crossorigin="anonymous" class="w-full h-24 object-cover rounded shadow-lg">
-    <div class="text-[8px] text-gray-500 truncate mt-1">${card.name}</div>
-</div>
-`).join('');
+    if (myCardsGrid) myCardsGrid.innerHTML = userCollection.map(card => `
+        <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'my', '${card.instanceId}')">
+            <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
+            <div class="text-[8px] text-gray-500 truncate mt-1">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
+        </div>
+    `).join('');
 
     const theirCardsGrid = document.getElementById('trade-builder-their-cards');
-    theirCardsGrid.innerHTML = targetCards.map(card => `
-< div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5"
-onclick = "toggleTradeSelection(this, 'their', '${card.user_card_id || card.id}')" >
-<img src="${card.image_url}" class="w-full h-24 object-cover rounded shadow-lg">
-    <div class="text-[8px] text-gray-500 truncate mt-1">${card.name}</div>
-</div>
-`).join('');
+    if (theirCardsGrid) theirCardsGrid.innerHTML = targetCards.map(card => `
+        <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'their', '${(card.user_card_id || card.id || '').toString().replace(/"/g, '')}')">
+            <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
+            <div class="text-[8px] text-gray-500 truncate mt-1">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
+        </div>
+    `).join('');
 
     updateTradeOfferCounts();
 }
@@ -9275,7 +10039,7 @@ if (sendTradeBtn) {
         }
 
         const isReply = tradeBuilderMode === 'reply';
-        const endpoint = isReply ? '/api/trade/offer-reply' : '/api/trade/offer';
+        const endpoint = (isReply ? '/api/trade/offer-reply' : '/api/trade/offer') + getTradeStreamerParam();
 
         const payload = isReply ? {
             trade_id: currentTradeId,
@@ -9320,31 +10084,31 @@ const cancelTradeBtn = document.getElementById('cancel-trade-builder');
 if (cancelTradeBtn) cancelTradeBtn.onclick = closeTradeBuilder;
 
 
-// ============================================================
-// ⚔️ BATTLE SYSTEM — Frontend Logic
-// ============================================================
 
-// --- State ---
-const battleDeckSlots = { 1: null, 2: null, 3: null }; // { user_card_id, card }
+
+
+
+
+const battleDeckSlots = { 1: null, 2: null, 3: null };
 let pickerTargetSlot = null;
-let allPickerCards = [];  // full collection used for card picker filtering
+let allPickerCards = [];
 
-// The switchView system now natively supports 'battle'
 
-// ---- Init Battle View ----
+
+
 async function initBattleView() {
     const streamerLabel = document.getElementById('battle-arena-streamer');
     if (APP_STREAMER && streamerLabel) {
         streamerLabel.textContent = (APP_STREAMER.brand_name || APP_STREAMER.username);
     }
 
-    // Load current deck from server
+
     await loadCurrentDeck();
-    // Load saved decks in background
+
     loadSavedDecks();
 }
 
-// ---- Load Current Deck ----
+
 async function loadCurrentDeck() {
     try {
         const streamerParam = APP_STREAMER ? `?streamer=${APP_STREAMER.username}` : '';
@@ -9353,7 +10117,7 @@ async function loadCurrentDeck() {
         const { deck } = await res.json();
         if (!deck) return;
 
-        // Restore slots from server data
+
         const slotMap = { 1: deck.slot_1, 2: deck.slot_2, 3: deck.slot_3 };
         for (const [slot, uc] of Object.entries(slotMap)) {
             if (uc) {
@@ -9377,7 +10141,7 @@ async function loadCurrentDeck() {
     }
 }
 
-// ---- Render a single deck slot ----
+
 function renderDeckSlot(slot) {
     const el = document.getElementById(`deck-slot-${slot}`);
     if (!el) return;
@@ -9428,7 +10192,7 @@ function clearDeckSlot(slot) {
     renderDeckSlot(slot);
 }
 
-// ---- Card Picker Modal ----
+
 window.openCardPicker = async function (slot) {
     pickerTargetSlot = slot;
     const modal = document.getElementById('card-picker-modal');
@@ -9439,7 +10203,7 @@ window.openCardPicker = async function (slot) {
     if (searchInput) searchInput.value = '';
     scrollLock();
 
-    // Load cards if not yet loaded
+
     if (allPickerCards.length === 0) {
         await loadPickerCards();
     } else {
@@ -9464,7 +10228,7 @@ async function loadPickerCards() {
         if (!res.ok) throw new Error('Failed to load collection');
         const data = await res.json();
 
-        // Map to standard internal format
+
         allPickerCards = data.map(item => ({
             instanceId: item.user_card_id,
             name: item.name,
@@ -9481,7 +10245,7 @@ async function loadPickerCards() {
 
         renderPickerGrid(allPickerCards);
     } catch (e) {
-        // Fallback to the in-memory collection
+
         allPickerCards = userCollection || [];
         if (allPickerCards.length > 0) {
             renderPickerGrid(allPickerCards);
@@ -9514,14 +10278,14 @@ function renderPickerGrid(cards) {
     const rarityColors = { legendary: '#fbbf24', epic: '#a855f7', rare: '#3b82f6', common: '#94a3b8', uncommon: '#94a3b8' };
 
     grid.innerHTML = cards.map(c => {
-        // PRIORITIZE instance UUID for identity (mapped as instanceId or user_card_id)
+
         const instanceId = c.instanceId || c.user_card_id || c.id;
 
         const name = c.name || (c.cards && c.cards.name) || 'Unknown';
         const imageUrl = c.image_url || (c.cards && c.cards.image_url) || '';
         const rarity = (c.rarity || (c.cards && c.cards.rarity) || 'Common').toLowerCase();
 
-        // Battle Stats (pull from raw or nested join)
+
         const attack = c.attack !== undefined ? c.attack : (c.cards && c.cards.attack) || 0;
         const defense = c.defense !== undefined ? c.defense : (c.cards && c.cards.defense) || 0;
         const mechanicIcon = c.mechanic_icon || (c.mechanics && c.mechanics.icon) || '';
@@ -9530,7 +10294,7 @@ function renderPickerGrid(cards) {
         const rarityColors = { legendary: '#fbbf24', epic: '#a855f7', rare: '#3b82f6', common: '#94a3b8', uncommon: '#94a3b8' };
         const borderColor = rarityColors[rarity] || '#94a3b8';
 
-        // Check if THIS EXACT INSTANCE is already in a slot
+
         const inSlot = Object.values(battleDeckSlots).find(s => s?.user_card_id === instanceId);
         const inSlotClass = inSlot ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-105 hover:ring-2 ring-void-accent';
 
@@ -9567,10 +10331,10 @@ window.selectPickerCard = function (id, name, imageUrl, rarity, attack, defense,
     };
     renderDeckSlot(pickerTargetSlot);
     closeCardPicker();
-    saveBattleDeck(); // Auto-saveactive deck when a card is swapped
+    saveBattleDeck();
 };
 
-// ---- Save Deck ----
+
 window.saveBattleDeck = async function () {
     console.log('[Battle] saveBattleDeck called. Slots:', battleDeckSlots);
     const btn = document.getElementById('battle-save-deck-btn');
@@ -9617,7 +10381,7 @@ window.saveBattleDeck = async function () {
     }
 };
 
-// ---- Saved Decks ----
+
 window.loadSavedDecks = async function () {
     const list = document.getElementById('saved-decks-list');
     if (!list) return;
@@ -9731,7 +10495,7 @@ window.submitSaveDeckModal = async function () {
         slot_3: battleDeckSlots[3]?.user_card_id || null,
     };
 
-    // Auto-save the active deck before saving as a named deck
+
     await saveBattleDeck();
 
     try {
@@ -9793,7 +10557,7 @@ window.loadDeckIntoActive = async function (id) {
     renderDeckSlot(2);
     renderDeckSlot(3);
 
-    await saveBattleDeck(); // auto-save the newly loaded active deck
+    await saveBattleDeck();
 };
 
 window.activateSavedDeck = async function (id) {
@@ -9809,7 +10573,7 @@ window.activateSavedDeck = async function (id) {
 
         if (res.ok) {
             showToast('Deck activated!', 'success');
-            // Also load it into UI
+
             await loadDeckIntoActive(id);
             await loadSavedDecks();
         } else {
@@ -9837,7 +10601,7 @@ window.initiateTestBattle = async function () {
 
         if (res.ok) {
             showToast('⚔️ test battle initiated! check your arena overlay.', 'success');
-            // Option: Open arena in new tab for testing convenience
+
             const arenaUrl = `${window.location.protocol}//${window.location.host}/arena.html${streamerParam}`;
             if (confirm('Battle initiated! Want to open the Arena Overlay to watch?')) {
                 window.open(arenaUrl, '_blank');
@@ -9877,17 +10641,17 @@ function mapNestedStatFields(dbCard) {
     };
 }
 
-// Global Init
-// ================================================================
-//  CARD LAYER EDITOR  (Fabric.js-based drag-and-drop layer editor)
-// ================================================================
+
+
+
+
 const LAYER_EDITOR_W = 500;
 const LAYER_EDITOR_H = 700;
 
 const LAYER_STICKERS = [
-    '😀','😎','🔥','💎','⚡','🌟','🎮','🃏','⚔️','🛡️','🎯','💫',
-    '🌈','🏆','👑','🐉','🦋','🌸','💜','🚀','🎉','🦊','🌙','❄️',
-    '💥','👾','🎸','🦁','🐺','🐸'
+    '😀', '😎', '🔥', '💎', '⚡', '🌟', '🎮', '🃏', '⚔️', '🛡️', '🎯', '💫',
+    '🌈', '🏆', '👑', '🐉', '🦋', '🌸', '💜', '🚀', '🎉', '🦊', '🌙', '❄️',
+    '💥', '👾', '🎸', '🦁', '🐺', '🐸'
 ];
 
 let _layerFabric = null;
@@ -9900,7 +10664,7 @@ let _layerSortable = null;
 let _layerCurrentTool = 'select';
 let _layerTextClickHandler = null;
 
-// ── Open / Close ──────────────────────────────────────────────
+
 function openCardLayerEditor(cardId, cardName, imageUrl, onSave) {
     _layerEditorCardId = cardId;
     _layerEditorOnSave = onSave;
@@ -9909,7 +10673,7 @@ function openCardLayerEditor(cardId, cardName, imageUrl, onSave) {
     const el = document.getElementById('card-layer-editor');
     if (!el) return;
     el.classList.remove('hidden');
-    // Hide navbar so editor has full screen
+
     const nav = document.getElementById('app-navbar');
     if (nav) nav.classList.add('hidden');
     scrollLock();
@@ -9920,7 +10684,7 @@ function openCardLayerEditor(cardId, cardName, imageUrl, onSave) {
 function closeCardLayerEditor() {
     const el = document.getElementById('card-layer-editor');
     if (el) el.classList.add('hidden');
-    // Restore navbar
+
     const nav = document.getElementById('app-navbar');
     if (nav) nav.classList.remove('hidden');
     scrollUnlock();
@@ -9934,10 +10698,10 @@ function closeCardLayerEditor() {
     if (sp) sp.classList.add('hidden');
 }
 
-// ── Init Fabric Canvas ────────────────────────────────────────
+
 function _initLayerFabric(bgImageUrl) {
     if (_layerFabric) { _layerFabric.dispose(); _layerFabric = null; }
-    // fabric needs the canvas element fresh
+
     const canvasEl = document.getElementById('layer-editor-canvas');
     if (!canvasEl) return;
 
@@ -9949,7 +10713,7 @@ function _initLayerFabric(bgImageUrl) {
         selection: true,
     });
 
-    // Scale canvas display to fit smaller screens
+
     const area = document.getElementById('layer-editor-canvas-area');
     if (area) {
         const maxH = area.clientHeight - 48;
@@ -9971,7 +10735,7 @@ function _initLayerFabric(bgImageUrl) {
     });
 
     if (bgImageUrl) {
-        // Load via HTMLImageElement first to handle CORS-cached images correctly
+
         const htmlImg = new Image();
         htmlImg.crossOrigin = 'anonymous';
         htmlImg.onload = () => {
@@ -9991,7 +10755,7 @@ function _initLayerFabric(bgImageUrl) {
             _renderLayerList();
         };
         htmlImg.onerror = () => {
-            // Fallback: try without crossOrigin (works for same-origin or non-CORS images)
+
             const htmlImg2 = new Image();
             htmlImg2.onload = () => {
                 if (!_layerFabric) return;
@@ -10008,7 +10772,7 @@ function _initLayerFabric(bgImageUrl) {
             htmlImg2.onerror = () => { _lePushHistory(); _renderLayerList(); };
             htmlImg2.src = bgImageUrl;
         };
-        // Add cache-bust only if needed to force CORS re-fetch
+
         htmlImg.src = bgImageUrl.includes('?') ? bgImageUrl : bgImageUrl + '?cb=' + Date.now();
     } else {
         _lePushHistory();
@@ -10018,9 +10782,9 @@ function _initLayerFabric(bgImageUrl) {
     setLayerEditorTool('select');
 }
 
-// ── One-time event wiring (re-called each open) ───────────────
+
 function _initLayerEditorEvents() {
-    // Image file input
+
     const imgInput = document.getElementById('layer-editor-image-input');
     if (imgInput) {
         imgInput.onchange = (e) => {
@@ -10045,7 +10809,7 @@ function _initLayerEditorEvents() {
         };
     }
 
-    // Build sticker grid
+
     const stickerGrid = document.getElementById('layer-editor-sticker-grid');
     if (stickerGrid) {
         stickerGrid.innerHTML = LAYER_STICKERS.map(s =>
@@ -10054,7 +10818,7 @@ function _initLayerEditorEvents() {
         ).join('');
     }
 
-    // Keyboard shortcuts
+
     const keyHandler = (e) => {
         if (!document.getElementById('card-layer-editor') || document.getElementById('card-layer-editor').classList.contains('hidden')) return;
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
@@ -10066,24 +10830,24 @@ function _initLayerEditorEvents() {
         if (e.key === 'd' || e.key === 'D') setLayerEditorTool('draw');
     };
     document.addEventListener('keydown', keyHandler);
-    // Remove on close (stored on element)
+
     const el = document.getElementById('card-layer-editor');
     if (el._leKeyHandler) document.removeEventListener('keydown', el._leKeyHandler);
     el._leKeyHandler = keyHandler;
 }
 
-// ── Tool Management ───────────────────────────────────────────
-window.setLayerEditorTool = function(tool) {
+
+window.setLayerEditorTool = function (tool) {
     _layerCurrentTool = tool;
     const c = _layerFabric;
     if (!c) return;
 
-    // Update toolbar highlight
+
     document.querySelectorAll('.layer-editor-tool-btn').forEach(b => b.classList.remove('le-active'));
     const btn = document.getElementById(`layer-tool-${tool}`);
     if (btn) btn.classList.add('le-active');
 
-    // Remove previous text-click handler
+
     if (_layerTextClickHandler) {
         c.off('mouse:down', _layerTextClickHandler);
         _layerTextClickHandler = null;
@@ -10103,7 +10867,7 @@ window.setLayerEditorTool = function(tool) {
         if (!c.freeDrawingBrush) c.freeDrawingBrush = new fabric.PencilBrush(c);
         c.freeDrawingBrush.color = '#ffffff';
         c.freeDrawingBrush.width = 6;
-        // Show brush props
+
         document.getElementById('layer-editor-props-content').innerHTML = _leBrushPropsHTML();
     }
 
@@ -10133,13 +10897,13 @@ window.setLayerEditorTool = function(tool) {
     c.renderAll();
 };
 
-// ── Add shapes / images / stickers ───────────────────────────
-window.layerEditorAddImage = function() {
+
+window.layerEditorAddImage = function () {
     const input = document.getElementById('layer-editor-image-input');
     if (input) input.click();
 };
 
-window.layerEditorAddShape = function(type) {
+window.layerEditorAddShape = function (type) {
     if (!_layerFabric) return;
     let shape;
     const cx = LAYER_EDITOR_W / 2, cy = LAYER_EDITOR_H / 2;
@@ -10158,7 +10922,7 @@ window.layerEditorAddShape = function(type) {
     setLayerEditorTool('select');
 };
 
-window.layerEditorAddSticker = function(emoji) {
+window.layerEditorAddSticker = function (emoji) {
     if (!_layerFabric) return;
     const t = new fabric.Text(emoji, { left: LAYER_EDITOR_W / 2, top: LAYER_EDITOR_H / 2, originX: 'center', originY: 'center', fontSize: 80 });
     t.data = { layerName: emoji + ' Sticker', layerType: 'sticker' };
@@ -10171,11 +10935,11 @@ window.layerEditorAddSticker = function(emoji) {
     setLayerEditorTool('select');
 };
 
-window.toggleLayerEditorStickerPicker = function() {
+window.toggleLayerEditorStickerPicker = function () {
     document.getElementById('layer-editor-sticker-picker').classList.toggle('hidden');
 };
 
-window.layerEditorDeleteSelected = function() {
+window.layerEditorDeleteSelected = function () {
     const c = _layerFabric;
     if (!c) return;
     const objs = c.getActiveObjects();
@@ -10187,7 +10951,7 @@ window.layerEditorDeleteSelected = function() {
     _renderLayerList();
 };
 
-// ── History ───────────────────────────────────────────────────
+
 function _lePushHistory() {
     if (_layerHistoryPaused || !_layerFabric) return;
     const json = JSON.stringify(_layerFabric.toJSON(['data']));
@@ -10197,7 +10961,7 @@ function _lePushHistory() {
     else _layerHistoryIdx++;
 }
 
-window.undoLayerEditor = function() {
+window.undoLayerEditor = function () {
     if (_layerHistoryIdx <= 0 || !_layerFabric) return;
     _layerHistoryIdx--;
     _layerHistoryPaused = true;
@@ -10208,7 +10972,7 @@ window.undoLayerEditor = function() {
     });
 };
 
-window.redoLayerEditor = function() {
+window.redoLayerEditor = function () {
     if (_layerHistoryIdx >= _layerHistory.length - 1 || !_layerFabric) return;
     _layerHistoryIdx++;
     _layerHistoryPaused = true;
@@ -10219,11 +10983,11 @@ window.redoLayerEditor = function() {
     });
 };
 
-// ── Layer List ────────────────────────────────────────────────
+
 function _renderLayerList() {
     const list = document.getElementById('layer-editor-layer-list');
     if (!list || !_layerFabric) return;
-    const objects = [..._layerFabric.getObjects()].reverse(); // top first
+    const objects = [..._layerFabric.getObjects()].reverse();
     if (objects.length === 0) {
         list.innerHTML = '<div class="text-white/20 text-[10px] px-2 py-1">No layers yet</div>';
         return;
@@ -10247,7 +11011,7 @@ function _renderLayerList() {
         </div>`;
     }).join('');
 
-    // Drag-to-reorder
+
     if (_layerSortable) _layerSortable.destroy();
     _layerSortable = Sortable.create(list, {
         animation: 120,
@@ -10268,7 +11032,7 @@ function _renderLayerList() {
     });
 }
 
-window._leSelectLayer = function(fabricIdx) {
+window._leSelectLayer = function (fabricIdx) {
     if (!_layerFabric) return;
     const objs = _layerFabric.getObjects();
     if (fabricIdx >= 0 && fabricIdx < objs.length) {
@@ -10279,13 +11043,13 @@ window._leSelectLayer = function(fabricIdx) {
     }
 };
 
-window._leToggleVis = function(fabricIdx) {
+window._leToggleVis = function (fabricIdx) {
     if (!_layerFabric) return;
     const obj = _layerFabric.getObjects()[fabricIdx];
     if (obj) { obj.visible = !obj.visible; _layerFabric.renderAll(); _renderLayerList(); }
 };
 
-// ── Selection Callbacks ───────────────────────────────────────
+
 function _onLESelect() {
     _renderLayerList();
     const obj = _layerFabric?.getActiveObject();
@@ -10297,14 +11061,14 @@ function _onLEDeselect() {
     if (p) p.innerHTML = '<div class="text-white/30">Select a layer</div>';
 }
 
-// ── Properties Panel ──────────────────────────────────────────
+
 function _renderPropsPanel(obj) {
     const panel = document.getElementById('layer-editor-props-content');
     if (!panel || !obj) return;
     const type = obj.data?.layerType || obj.type || '';
     let html = '';
 
-    // Opacity — universal
+
     html += `<div class="le-prop-row">
         <label class="le-prop-label">Opacity ${Math.round((obj.opacity ?? 1) * 100)}%</label>
         <input type="range" min="0" max="100" value="${Math.round((obj.opacity ?? 1) * 100)}"
@@ -10331,8 +11095,8 @@ function _renderPropsPanel(obj) {
         <div class="le-prop-row">
             <label class="le-prop-label">Font</label>
             <select onchange="_leSetProp('fontFamily', this.value)">
-                ${['Arial','Georgia','Impact','Courier New','Verdana','Trebuchet MS','Times New Roman','Palatino','Garamond','Comic Sans MS'].map(f =>
-                    `<option value="${f}" ${(obj.fontFamily || 'Arial') === f ? 'selected' : ''}>${f}</option>`).join('')}
+                ${['Arial', 'Georgia', 'Impact', 'Courier New', 'Verdana', 'Trebuchet MS', 'Times New Roman', 'Palatino', 'Garamond', 'Comic Sans MS'].map(f =>
+            `<option value="${f}" ${(obj.fontFamily || 'Arial') === f ? 'selected' : ''}>${f}</option>`).join('')}
             </select>
         </div>
         <div class="le-prop-btn-row">
@@ -10399,7 +11163,7 @@ function _leBrushPropsHTML() {
     </div>`;
 }
 
-window._leSetBrushMode = function(mode) {
+window._leSetBrushMode = function (mode) {
     if (!_layerFabric) return;
     if (mode === 'eraser') {
         _layerFabric.freeDrawingBrush.color = _layerFabric.backgroundColor || '#1a1025';
@@ -10410,22 +11174,22 @@ window._leSetBrushMode = function(mode) {
     event?.target?.classList?.add('le-active-prop');
 };
 
-// ── Prop helpers ──────────────────────────────────────────────
-window._leSetProp = function(prop, value) {
+
+window._leSetProp = function (prop, value) {
     const obj = _layerFabric?.getActiveObject();
     if (!obj) return;
     obj.set(prop, value);
     _layerFabric.renderAll();
 };
 
-window._leToggleProp = function(prop, onVal, offVal) {
+window._leToggleProp = function (prop, onVal, offVal) {
     const obj = _layerFabric?.getActiveObject();
     if (!obj) return;
     obj.set(prop, obj[prop] === onVal ? offVal : onVal);
     _layerFabric.renderAll();
 };
 
-window._leFlip = function(axis) {
+window._leFlip = function (axis) {
     const obj = _layerFabric?.getActiveObject();
     if (!obj) return;
     obj.set(axis === 'X' ? 'flipX' : 'flipY', !obj[axis === 'X' ? 'flipX' : 'flipY']);
@@ -10439,13 +11203,13 @@ function _leColorHex(color, fallback) {
     return fallback;
 }
 
-// ── Save ──────────────────────────────────────────────────────
-window.saveLayerEditor = async function() {
+
+window.saveLayerEditor = async function () {
     if (!_layerFabric) return;
     const btn = document.getElementById('layer-editor-save-btn');
     if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
     try {
-        // Temporarily reset zoom for full-res export
+
         const currentZoom = _layerFabric.getZoom();
         _layerFabric.setZoom(1);
         _layerFabric.setWidth(LAYER_EDITOR_W);
@@ -10454,7 +11218,7 @@ window.saveLayerEditor = async function() {
 
         const dataUrl = _layerFabric.toDataURL({ format: 'jpeg', quality: 0.95, multiplier: 1 });
 
-        // Restore zoom
+
         _layerFabric.setZoom(currentZoom);
         const area = document.getElementById('layer-editor-canvas-area');
         if (area) {
@@ -10477,7 +11241,7 @@ window.saveLayerEditor = async function() {
     }
 };
 
-// Helper: upload blob and patch card image_url
+
 async function _leUploadAndPatchCard(cardId, blob) {
     showToast('Uploading art…', 'loading');
     const formData = new FormData();
@@ -10502,8 +11266,8 @@ async function _leUploadAndPatchCard(cardId, blob) {
     if (editorCurrentSetId) loadEditorCards();
 }
 
-// ── Open from editor grid ─────────────────────────────────────
-window.openLayerEditorForCard = function(cardId) {
+
+window.openLayerEditorForCard = function (cardId) {
     const card = editorAllCards.find(c => c.id === cardId);
     if (!card) return;
     openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob) => {

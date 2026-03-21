@@ -4,10 +4,62 @@ const BACKEND_URL = window.location.origin === 'http://localhost:3000' || window
     ? 'http://localhost:8787'
     : '';
 
+// --- GLOBAL IMAGE FALLBACK HANDLER ---
+// Catches all 404/broken images automatically
+window.addEventListener('error', function(e) {
+    if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'img') {
+        if (e.target.dataset.fallbackApplied) return; // Prevent infinite loop
+        e.target.dataset.fallbackApplied = 'true';
+        
+        // Determine fallback based on visual context (avatar vs card vs logo)
+        const isAvatar = e.target.id.includes('avatar') || e.target.className.includes('rounded-full') || e.target.src.includes('twitchcdn');
+        
+        if (isAvatar) {
+            e.target.src = 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback';
+        } else {
+            e.target.src = '/pack.png'; // Main card fallback
+        }
+    }
+}, true); // useCapture = true is strictly required for 'error' events which don't bubble
+
 let currentUser = null;
 let creatorCards = [];
 let creatorStats = {};
 let csrfToken = null;
+
+/**
+ * Drop-in fetch wrapper that:
+ * - Always sends credentials (cookies)
+ * - Automatically attaches the current CSRF token for mutating requests
+ * - On a 403 "CSRF blocked" response, refreshes the token and retries once
+ */
+async function apiFetch(url, options = {}) {
+    const method = (options.method || 'GET').toUpperCase();
+    const isMutation = method !== 'GET' && method !== 'HEAD';
+
+    const buildHeaders = () => ({
+        ...(options.headers || {}),
+        ...(isMutation && csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+    });
+
+    const res = await fetch(url, { ...options, credentials: 'include', headers: buildHeaders() });
+
+    if (res.status === 403 && isMutation) {
+        const body = await res.json().catch(() => ({}));
+        if (body?.error === 'CSRF blocked') {
+            console.warn('[CSRF] Token mismatch — refreshing and retrying...');
+            await fetchCSRFToken();
+            return fetch(url, { ...options, credentials: 'include', headers: buildHeaders() });
+        }
+        // Non-CSRF 403 — return a reconstructed response so callers can still read the body
+        return new Response(JSON.stringify(body), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
+    return res;
+}
 
 let collectorGrowthChartInstance = null;
 let packActivityChartInstance = null;
@@ -24,13 +76,71 @@ let bulkSelectMode = false;
 let cardToEdit = null;
 
 
+const CACHE_KEY = 'bootstrap_api_bootstrap';
+
+const SKELETON_IDS = [
+    'read-brand-name', 'read-brand-tagline', 'read-brand-color-hex',
+    'nav-username', 'read-brand-color-preview'
+];
+
+function setDashboardSkeleton(active) {
+    SKELETON_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (active) {
+            el.dataset.realContent = el.textContent;
+            el.classList.add('skeleton-pulse');
+        } else {
+            el.classList.remove('skeleton-pulse');
+        }
+    });
+}
+
+function hideDashboardVeil(instant = false) {
+    const veil = document.getElementById('dashboard-loading-veil');
+    if (!veil) return;
+    if (instant) {
+        veil.style.transition = 'none';
+    }
+    veil.classList.add('veil-hidden');
+    veil.addEventListener('transitionend', () => veil.remove(), { once: true });
+    if (instant) setTimeout(() => veil.remove(), 50);
+}
+
 async function initDashboard() {
-    console.log("[Dashboard] Initializing Dashboard...");
-    await fetchCSRFToken();
-    await bootstrapDashboard();
+    const cachedData = sessionStorage.getItem(CACHE_KEY);
 
+    if (cachedData) {
+        try {
+            const data = JSON.parse(cachedData);
+            applyBootstrapData(data);
+            // Seed the in-memory token from cache so actions work immediately
+            if (data.csrf_token) csrfToken = data.csrf_token;
+            hideDashboardVeil(true);
+        } catch (e) {
+            console.error("[Dashboard] Cache parse error:", e);
+            setDashboardSkeleton(true);
+        }
+    } else {
+        setDashboardSkeleton(true);
+    }
+
+    // Bootstrap already sets the csrf cookie AND returns the token in its body.
+    // Fetching /api/csrf in parallel would race to overwrite that cookie with a
+    // different token, causing every subsequent mutation to get CSRF-blocked.
+    const bootstrapData = await bootstrapDashboard();
+
+    if (bootstrapData?.csrf_token) {
+        // Use the token that matches the cookie bootstrap just set
+        csrfToken = bootstrapData.csrf_token;
+    } else if (!csrfToken) {
+        // Fallback: bootstrap failed or returned no token — fetch one explicitly
+        await fetchCSRFToken();
+    }
+
+    setDashboardSkeleton(false);
+    hideDashboardVeil(false);
     setupEventListeners();
-
     switchTab('branding');
 }
 
@@ -81,7 +191,6 @@ function setupEventListeners() {
     }
 }
 function switchTab(tabId) {
-    console.log(`[Dashboard] Switching to tab: ${tabId}`);
 
     document.querySelectorAll('.dashboard-tab-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -97,7 +206,7 @@ function switchTab(tabId) {
 
     const contentArea = document.querySelector('.dashboard-content-area');
     if (contentArea) contentArea.scrollTop = 0;
-    
+
     loadTabData(tabId);
 }
 
@@ -115,6 +224,9 @@ function loadTabData(tabId) {
             break;
         case 'overlay':
             populateOverlaySettings();
+            break;
+        case 'queue':
+            loadObsQueue();
             break;
         case 'admin':
             fetchAdminLogs();
@@ -141,7 +253,7 @@ function switchSubTab(parentTab, subTabId) {
         btn.classList.remove('active', 'bg-void-accent', 'text-void-bg', 'shadow-lg', 'shadow-void-accent/20');
         btn.classList.add('bg-white/5', 'text-void-muted');
     });
-    
+
     const activeBtn = document.getElementById(`subtab-${parentTab}-${subTabId}`);
     if (activeBtn) {
         activeBtn.classList.add('active', 'bg-void-accent', 'text-void-bg', 'shadow-lg', 'shadow-void-accent/20');
@@ -152,7 +264,7 @@ function switchSubTab(parentTab, subTabId) {
         panel.classList.add('hidden');
         panel.classList.remove('active');
     });
-    
+
     const activePanel = document.getElementById(`${parentTab}-subcontent-${subTabId}`);
     if (activePanel) {
         activePanel.classList.remove('hidden');
@@ -176,19 +288,32 @@ function populateOverlaySettings() {
     const s = currentUser.streamer;
     const token = s.obs_overlay_token || "PENDING_TOKEN";
     const baseUrl = window.location.origin;
-    
-    const packsLink = document.getElementById('packs-obs-link');
-    const battlesLink = document.getElementById('battles-obs-link');
-    
-    if (packsLink) packsLink.textContent = `${baseUrl}/overlay/packs?token=${token}`;
-    if (battlesLink) battlesLink.textContent = `${baseUrl}/overlay/battles?token=${token}`;
+
+    const packsInput = document.getElementById('packs-obs-link');
+    const battlesInput = document.getElementById('battles-obs-link');
+
+    // Pass the streamer parameter to match what the backend expects
+    const authParams = `streamer=${encodeURIComponent(currentUser.name)}&token=${token}`;
+
+    if (packsInput) packsInput.value = `${baseUrl}/obs-overlay?${authParams}&type=pack`;
+    if (battlesInput) battlesInput.value = `${baseUrl}/obs-overlay?${authParams}&type=battle`;
 
     const animSelect = document.getElementById('pack-animation-style');
+    const iframe = document.getElementById('anim-preview-iframe');
+    const label = document.getElementById('anim-preview-label');
+
     if (animSelect) {
-        animSelect.value = s.pack_animation_style || 'default';
-        animSelect.onchange = (e) => saveSettings({ pack_animation_style: e.target.value });
+        animSelect.value = s.pack_animation_style || 'style1';
+        if (iframe) iframe.src = `/obs-overlay?${authParams}&preview=${animSelect.value}`;
+        if (label && animSelect.selectedIndex >= 0) label.textContent = animSelect.options[animSelect.selectedIndex].text;
+
+        animSelect.onchange = (e) => {
+            saveSettings({ pack_animation_style: e.target.value });
+            if (iframe) iframe.src = `/obs-overlay?${authParams}&preview=${e.target.value}`;
+            if (label && e.target.selectedIndex >= 0) label.textContent = e.target.options[e.target.selectedIndex].text;
+        };
     }
-    
+
     const soundSelect = document.getElementById('pack-sound-effect');
     if (soundSelect) {
         soundSelect.value = s.pack_open_sound_url || '/packopensound.wav';
@@ -199,48 +324,63 @@ function populateOverlaySettings() {
 
 async function bootstrapDashboard() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/bootstrap`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/bootstrap?streamer=all`, { credentials: 'include' });
         if (!res.ok) throw new Error("Initialization failed");
-        
+
         const data = await res.json();
-        if (!data.user || !data.user.is_creator) {
-            console.warn("[Dashboard] Unauthorized attempt. Redirecting...");
-            window.location.href = '/';
-            return;
-        }
-
-        currentUser = {
-            name: (data.user.streamer && data.user.streamer.brand_name) || data.user.username || 'Creator',
-            avatar: data.user.avatar_url,
-            is_creator: data.user.is_creator,
-            streamer: data.user.streamer || {}
-        };
-
-        const navUsername = document.getElementById('nav-username');
-        const navAvatar = document.getElementById('nav-avatar');
-        if (navUsername) navUsername.textContent = currentUser.name;
-        if (navAvatar) {
-            navAvatar.src = currentUser.avatar || '/default-avatar.png';
-            navAvatar.onerror = () => navAvatar.src = '/default-avatar.png';
-        }
-
-        creatorStats = data.stats || {};
-
-        populateBranding();
-        checkActiveEvent();
-        fetchUserList();
-        fetchAdminLogs();
         
+        // Save to cache for next time
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        
+        return applyBootstrapData(data);
     } catch (err) {
-        console.error("[Dashboard] Error:", err);
+        console.error("[Dashboard] Bootstrap error:", err);
         showToast("System error during initialization", "error");
+        return null;
     }
+}
+
+/**
+ * Applies bootstrap data to the global state and UI.
+ * Can be called multiple times (cache then fresh).
+ */
+function applyBootstrapData(data) {
+    if (!data.user || !data.user.is_creator) {
+        console.warn("[Dashboard] Unauthorized attempt. Redirecting...");
+        window.location.href = '/';
+        return null;
+    }
+
+    currentUser = {
+        name: data.user.username || (data.user.streamer && data.user.streamer.username) || (data.user.streamer && data.user.streamer.brand_name) || 'Creator',
+        avatar: data.user.avatar_url,
+        is_creator: data.user.is_creator,
+        streamer: data.user.streamer || {}
+    };
+
+    // Update Nav UI
+    const navUsername = document.getElementById('nav-username');
+    const navAvatar = document.getElementById('nav-avatar');
+    if (navUsername) navUsername.textContent = currentUser.name;
+    if (navAvatar) {
+        navAvatar.src = currentUser.avatar || '/default-avatar.png';
+        navAvatar.onerror = () => navAvatar.src = '/default-avatar.png';
+    }
+
+    creatorStats = data.stats || {};
+    
+    // Populate sections
+    populateBranding();
+    populateOverlaySettings();
+    checkActiveEvent();
+    
+    return data;
 }
 
 
 async function fetchCSRFToken() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/csrf`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/csrf`, { credentials: 'include' });
         if (res.ok) {
             const data = await res.json();
             csrfToken = data.token;
@@ -255,7 +395,7 @@ function populateBranding() {
     if (!currentUser) return;
     const s = currentUser.streamer || {};
 
-    const name = s.brand_name || s.display_name || s.username || currentUser.name;
+    const name = s.brand_name;
     const tagline = s.brand_tagline || 'No tagline set';
     const color = s.binder_color || s.brand_color_primary || '#00f2fe';
 
@@ -299,27 +439,74 @@ function toggleBrandingEdit() {
     }
 }
 
+function confirmResetPackArt() {
+    showConfirmModal(
+        'Reset Pack Art',
+        'Reset your pack art back to the default image? Your custom art will be removed.',
+        () => {
+            const preview = document.getElementById('pack-art-preview');
+            preview.src = '/pack.png';
+            saveSettings({ pack_image_url: null });
+            showToast('Pack art reset to default', 'success');
+        }
+    );
+}
+
 function resetPackArt() {
-    if (confirm("Reset pack art to default?")) {
-        const preview = document.getElementById('pack-art-preview');
-        const placeholder = document.getElementById('pack-art-placeholder');
-        preview.src = '/pack.png';
-        preview.classList.add('hidden');
-        placeholder.classList.remove('hidden');
-        saveSettings({ pack_image_url: null });
-    }
+    confirmResetPackArt();
+}
+
+function showConfirmModal(title, message, onConfirm, confirmLabel = 'Confirm') {
+    const modal = document.getElementById('confirm-action-modal');
+    if (!modal) { if (onConfirm && confirm(message)) onConfirm(); return; }
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-message').textContent = message;
+    const btn = document.getElementById('confirm-modal-action-btn');
+    btn.textContent = confirmLabel;
+    btn.onclick = () => { closeConfirmModal(); onConfirm(); };
+    modal.classList.remove('hidden');
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirm-action-modal')?.classList.add('hidden');
+}
+
+function copyOBSLink(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    navigator.clipboard.writeText(input.value).then(() => showToast('Copied to clipboard', 'success'));
+}
+
+function updateAnimPreview(style) {
+    const label = document.getElementById('anim-preview-label');
+    const box = document.getElementById('anim-preview-box');
+    if (!label || !box) return;
+
+    const labels = { standard: 'Standard', cosmic: 'Cosmic Burst', brutalist: 'Brutalist Jitter' };
+    label.textContent = labels[style] || style;
+
+    // Remove old anim classes
+    box.classList.remove('anim-standard', 'anim-cosmic', 'anim-brutalist');
+    void box.offsetWidth; // Force reflow
+    box.classList.add(`anim-${style}`);
+}
+
+function closeGrantModal() {
+    document.getElementById('grant-card-modal')?.classList.add('hidden');
+    const oldModal = document.getElementById('grant-modal');
+    if (oldModal) oldModal.remove();
 }
 
 async function handlePackArtUpload(file) {
     if (!file) return;
-    
+
     showToast("Uploading pack art...", "loading");
-    
+
     try {
         const formData = new FormData();
         formData.append('file', file);
-        
-        const res = await fetch(`${BACKEND_URL}/api/creator/upload`, {
+
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/upload`, {
             method: 'POST',
             headers: { 'X-CSRF-Token': csrfToken },
             body: formData,
@@ -360,7 +547,7 @@ async function saveBranding() {
 
 async function saveSettings(payload) {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/settings`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/settings`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
@@ -392,9 +579,9 @@ async function fetchCardsForGrid(gridId = 'cards-grid') {
     grid.innerHTML = `<div class="col-span-full py-12 text-center text-void-muted uppercase tracking-widest text-[10px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading Cards...</div>`;
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
         if (!res.ok) throw new Error("Access denied");
-        
+
         creatorCards = await res.json();
         renderCardGrid(gridId, creatorCards);
     } catch (err) {
@@ -417,8 +604,8 @@ function renderCardGrid(gridId, cards) {
             return `
                 <div class="card-select-item ${isSelected ? 'selected' : ''}" onclick="${bulkSelectMode ? `toggleCardSelection('${card.id}')` : `editCard('${card.id}')`}">
                     ${bulkSelectMode ? `<div class="card-select-check"></div>` : ''}
-                    <div class="aspect-[2/3] w-full bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center p-2">
-                        <img src="${card.image_url || '/pack.png'}" class="max-w-full max-h-full object-contain transition-all duration-500 scale-[1.05]">
+                    <div class="aspect-[2/3] w-full rounded-xl overflow-hidden shadow-2xl">
+                        <img src="${card.image_url || '/pack.png'}" class="w-full h-full object-cover transition-all duration-500 hover:scale-105">
                     </div>
                     <div class="p-4 bg-white/5 flex flex-col gap-2">
                         <div class="flex justify-between items-start">
@@ -448,8 +635,8 @@ function renderCardGrid(gridId, cards) {
     grid.innerHTML = cards.map(card => `
         <div class="card-select-item ${card[field] ? 'selected' : ''}" onclick="toggleCardEligibility('${card.id}', '${field}', this)">
             <div class="card-select-check"></div>
-            <div class="aspect-[2/3] w-full bg-void-bg flex items-center justify-center p-4">
-                <img src="${card.image_url || '/pack.png'}" class="max-w-full max-h-full object-contain ${card[field] ? '' : 'grayscale opacity-50'} transition-all duration-500">
+            <div class="aspect-[2/3] w-full flex items-center justify-center">
+                <img src="${card.image_url || '/pack.png'}" class="w-full h-full object-cover ${card[field] ? '' : 'grayscale opacity-50'} transition-all duration-500">
             </div>
             <div class="p-3 bg-white/5">
                 <div class="text-[9px] font-black text-white uppercase truncate">${card.name}</div>
@@ -469,7 +656,7 @@ async function toggleCardEligibility(cardId, field, element) {
     }
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             credentials: 'include',
@@ -493,137 +680,32 @@ async function toggleCardEligibility(cardId, field, element) {
 }
 
 
-async function fetchAdminLogs() {
-    const container = document.getElementById('admin-activity-logs');
-    if (!container) return;
-
-    const searchQuery = document.getElementById('log-search')?.value || "";
-    const category = document.getElementById('log-category-filter')?.value || "all";
-
-    container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase tracking-widest text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading Activity Feed...</div>`;
-
-    try {
-        const url = new URL(`${BACKEND_URL}/api/creator/analytics/overview`);
-        url.searchParams.set('days', '7');
-        const res = await fetch(url.toString(), { credentials: 'include' });
-        
-        if (res.ok) {
-            const data = await res.json();
-
-
-            const events = [
-                { type: 'grant', level: 'INFO', message: 'Manually granted 1 x Neon Dragon to codeOCE', details: '{"card_id":"c_001","target_username":"codeOCE"}', timestamp: new Date() },
-                { type: 'grant', level: 'INFO', message: 'User codeOCE traded in 5 Commons for a Rare: Cyber Knight', details: '{"user_id":"96085876"}', timestamp: new Date(Date.now() - 300000) },
-                { type: 'system', level: 'INFO', message: '[Stripe] Checkout session created for codeOCE', details: '{"session_id":"cs_live_..."}', timestamp: new Date(Date.now() - 86400000) }
-            ];
-
-            const filtered = events.filter(ev => {
-                const matchesCategory = category === 'all' || ev.type === category;
-                const matchesSearch = !searchQuery || 
-                    ev.message.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                    ev.type.toLowerCase().includes(searchQuery.toLowerCase());
-                return matchesCategory && matchesSearch;
-            });
-
-            if (filtered.length === 0) {
-                container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase text-[9px]">No matching activity found</div>`;
-                return;
-            }
-            
-            container.innerHTML = filtered.map(event => `
-                <div class="log-row">
-                    <div class="col-span-2 text-[10px] text-void-muted flex flex-col">
-                        <span>${new Date(event.timestamp).toLocaleDateString()}</span>
-                        <span class="opacity-50">${new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                    <div class="col-span-2">
-                        <span class="badge-info">${event.level}</span>
-                    </div>
-                    <div class="col-span-2">
-                        <span class="text-[10px] font-black text-white italic">${event.type}</span>
-                    </div>
-                    <div class="col-span-6">
-                        <div class="text-[11px] font-bold text-white">${event.message}</div>
-                        <div class="text-[9px] text-void-muted font-mono mt-0.5 truncate opacity-60">${event.details}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-    } catch (err) {
-        container.innerHTML = `<div class="p-4 text-center text-red-500 uppercase text-[9px]">Failed to load activity</div>`;
-    }
-}
-
-async function fetchUserList(query = "") {
-    const container = document.getElementById('admin-user-list');
-    if (!container) return;
-
-    container.innerHTML = `<div class="py-8 text-center text-void-muted uppercase tracking-widest text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading members...</div>`;
-
-    try {
-        const url = new URL(`${BACKEND_URL}/api/creator/analytics/collectors`);
-        url.searchParams.set('days', '30');
-        if (query) url.searchParams.set('search', query);
-        
-        const res = await fetch(url.toString(), { credentials: 'include' });
-        if (res.ok) {
-            const data = await res.json();
-            let users = data.top_collectors || [];
-            
-            if (users.length === 0) {
-                container.innerHTML = `<div class="p-8 text-center text-void-muted uppercase text-[9px]">No members found</div>`;
-                return;
-            }
-
-            container.innerHTML = users.map(u => `
-                <div class="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-void-accent/30 transition-all">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20">
-                            <i class="fa-solid fa-user text-xs"></i>
-                        </div>
-                        <div>
-                            <div class="text-[11px] font-black text-white uppercase">${u.username}</div>
-                            <div class="text-[9px] text-void-muted uppercase mt-1">Cards: ${u.total_cards} | Unique: ${u.unique_cards}</div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button class="px-3 py-2 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[8px] font-black uppercase transition-all" onclick="openUserGrant('${u.username}', '${u.twitch_id}')">
-                            Grant
-                        </button>
-                        <button class="px-3 py-2 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 border border-red-500/20 rounded-lg text-[8px] font-black uppercase transition-all" onclick="toggleUserBlock('${u.twitch_id}', true)">
-                            Block
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        }
-    } catch (err) {
-        container.innerHTML = `<div class="p-4 text-center text-red-500 uppercase text-[9px]">Failed to load members</div>`;
-    }
-}
 
 
 async function loadAnalytics() {
     const timeRange = document.getElementById('analytics-time-range')?.value || '30';
 
+    // Clear previous explicit data state
+    analyticsData = {};
+    renderAnalytics(); // Initial paint with placeholders/empty 
 
-    try {
-        const [overviewRes, cardsRes, collectorsRes, packsRes] = await Promise.all([
-            fetch(`${BACKEND_URL}/api/creator/analytics/overview?days=${timeRange}`, { credentials: 'include' }),
-            fetch(`${BACKEND_URL}/api/creator/analytics/cards?days=${timeRange}`, { credentials: 'include' }),
-            fetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=${timeRange}`, { credentials: 'include' }),
-            fetch(`${BACKEND_URL}/api/creator/analytics/packs?days=${timeRange}`, { credentials: 'include' })
-        ]);
+    const fetchEndpoint = (endpoint, key) => {
+        apiFetch(`${BACKEND_URL}/api/creator/analytics/${endpoint}?days=${timeRange}`, { credentials: 'include' })
+            .then(res => {
+                if (res.ok) return res.json();
+                throw new Error('Network error');
+            })
+            .then(data => {
+                analyticsData[key] = data;
+                renderAnalytics();
+            })
+            .catch(err => console.error(`Failed to load ${key} analytics:`, err));
+    };
 
-        if (overviewRes.ok) analyticsData.overview = await overviewRes.json();
-        if (cardsRes.ok) analyticsData.cards = await cardsRes.json();
-        if (collectorsRes.ok) analyticsData.collectors = await collectorsRes.json();
-        if (packsRes.ok) analyticsData.packs = await packsRes.json();
-
-        renderAnalytics();
-    } catch (err) {
-        console.error("Failed to load analytics:", err);
-    }
+    fetchEndpoint('overview', 'overview');
+    fetchEndpoint('packs', 'packs');
+    fetchEndpoint('cards', 'cards');
+    fetchEndpoint('collectors', 'collectors');
 }
 
 function renderAnalytics() {
@@ -798,7 +880,7 @@ function renderPackActivityChart(data) {
 
 let debounceTimer;
 function debounce(func, delay) {
-    return function() {
+    return function () {
         const context = this;
         const args = arguments;
         clearTimeout(debounceTimer);
@@ -809,10 +891,16 @@ function debounce(func, delay) {
 function showToast(msg, type = "info") {
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+
+    if (window.lastLoadingToast && type !== 'loading') {
+        window.lastLoadingToast.classList.add('translate-y-[-20px]', 'opacity-0');
+        setTimeout(() => window.lastLoadingToast.remove(), 500);
+        window.lastLoadingToast = null;
+    }
+
     const toast = document.createElement('div');
     toast.className = `px-6 py-3 rounded-xl border backdrop-blur-xl shadow-2xl transition-all duration-500 translate-y-20 opacity-0 flex items-center gap-3`;
-    
+
     if (type === 'error') toast.className += " bg-red-500/10 border-red-500/20 text-red-500";
     else if (type === 'success') toast.className += " bg-void-accent/10 border-void-accent/20 text-void-accent";
     else if (type === 'loading') toast.className += " bg-white/5 border-white/10 text-white";
@@ -824,7 +912,7 @@ function showToast(msg, type = "info") {
     `;
 
     container.appendChild(toast);
-    
+
     setTimeout(() => {
         toast.classList.remove('translate-y-20', 'opacity-0');
     }, 10);
@@ -848,7 +936,7 @@ async function initiateEventPulse() {
     showToast("Starting Special Event...", "loading");
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/events`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/events`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -877,11 +965,11 @@ async function initiateEventPulse() {
 
 async function checkActiveEvent() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/profile`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/profile`, { credentials: 'include' });
         if (!res.ok) return;
         const streamer = await res.json();
-        
-        const evRes = await fetch(`${BACKEND_URL}/api/creator/events/active`, { credentials: 'include' });
+
+        const evRes = await apiFetch(`${BACKEND_URL}/api/creator/events/active`, { credentials: 'include' });
         if (evRes.ok) {
             const data = await evRes.json();
             if (data && data.id) {
@@ -890,7 +978,7 @@ async function checkActiveEvent() {
                 updateEventUI(false);
             }
         }
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function updateEventUI(isActive, name = "", endsAt = null) {
@@ -903,13 +991,13 @@ function updateEventUI(isActive, name = "", endsAt = null) {
         statusIndicator.classList.add('text-void-accent');
         statusIndicator.parentElement.classList.remove('bg-red-500/10', 'border-red-500/20');
         statusIndicator.parentElement.classList.add('bg-void-accent/10', 'border-void-accent/20');
-        
+
         if (endsAt) {
             const timer = document.createElement('div');
             timer.id = 'event-countdown';
             timer.className = 'text-[8px] font-bold text-void-accent/50 uppercase mt-1 text-center';
             const end = new Date(endsAt).getTime();
-            
+
             const updateTimer = () => {
                 const now = Date.now();
                 const diff = end - now;
@@ -923,11 +1011,11 @@ function updateEventUI(isActive, name = "", endsAt = null) {
                 const s = Math.floor((diff % 60000) / 1000);
                 timer.textContent = `Ends in: ${h}h ${m}m ${s}s`;
             };
-            
+
             if (window.eventInterval) clearInterval(window.eventInterval);
             window.eventInterval = setInterval(updateTimer, 1000);
             updateTimer();
-            
+
             const parent = statusIndicator.parentElement.parentElement;
             const existingTimer = document.getElementById('event-countdown');
             if (existingTimer) existingTimer.remove();
@@ -949,7 +1037,7 @@ async function openUserGrant(username = null, twitchId = null) {
     const isGeneric = !twitchId;
     let allUsers = [];
     let allCards = [];
-    
+
     const modalHtml = `
         <div id="grant-modal" class="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-md">
             <div class="glass-card w-full max-w-lg p-10 animate-in fade-in zoom-in duration-300 border border-white/10 shadow-2xl">
@@ -1035,10 +1123,10 @@ async function openUserGrant(username = null, twitchId = null) {
     const userSearch = document.getElementById('grant-user-search');
 
     allCards = await fetchAllCreatorCards();
-    
+
     const populateCards = (filter = '') => {
-        let filtered = allCards.filter(c => 
-            c.name.toLowerCase().includes(filter.toLowerCase()) || 
+        let filtered = allCards.filter(c =>
+            c.name.toLowerCase().includes(filter.toLowerCase()) ||
             c.rarity.toLowerCase().includes(filter.toLowerCase())
         );
 
@@ -1059,18 +1147,18 @@ async function openUserGrant(username = null, twitchId = null) {
         options += '<optgroup label="SPECIFIC CARDS">';
         options += filtered.map(c => `<option value="${c.id}">${c.rarity.toUpperCase()} | ${c.name}</option>`).join('');
         options += '</optgroup>';
-        
+
         cardSelect.innerHTML = options;
     };
 
     const populateUsers = (filter = '') => {
         if (!userSelect) return;
-        let filtered = allUsers.filter(u => 
-            u.username.toLowerCase().includes(filter.toLowerCase()) || 
+        let filtered = allUsers.filter(u =>
+            u.username.toLowerCase().includes(filter.toLowerCase()) ||
             String(u.twitch_id).includes(filter)
         );
 
-        userSelect.innerHTML = '<option value="">-- SELECT SUBJECT --</option>' + 
+        userSelect.innerHTML = '<option value="">-- SELECT SUBJECT --</option>' +
             filtered.map(u => `<option value="${u.twitch_id}">${u.username} (${u.total_cards} CARDS)</option>`).join('');
     };
 
@@ -1096,7 +1184,7 @@ async function openUserGrant(username = null, twitchId = null) {
         if (!selection) return showToast("Please select a card", "error");
 
         const isSilent = document.getElementById('grant-silent').checked;
-        
+
         if (selection.startsWith('random')) {
             const parts = selection.split(':');
             executeGrant(targetTwitchId, targetUsername, 'random', parts[1] || null, isSilent);
@@ -1107,7 +1195,7 @@ async function openUserGrant(username = null, twitchId = null) {
 
     if (isGeneric) {
         try {
-            const res = await fetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
+            const res = await apiFetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 allUsers = data.top_collectors || [];
@@ -1123,7 +1211,7 @@ async function executeGrant(twitchId, username, cardId, randomRarity = null, isS
     showToast("Granting card...", "loading");
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/grant`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/grant`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1158,15 +1246,19 @@ async function fetchUserList() {
     if (!container) return;
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/analytics/collectors?days=90`, { credentials: 'include' });
         if (res.ok) {
             const data = await res.json();
             const users = data.top_collectors || [];
-            
-            container.innerHTML = users.map(u => `
+
+            container.innerHTML = users.map(u => {
+                const avatarHtml = u.avatar_url ?
+                    `<img src="${u.avatar_url}" class="w-10 h-10 rounded-xl border border-white/10 object-cover" onerror="this.outerHTML='<div class=\\'w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20\\'><i class=\\'fa-solid fa-user text-xs\\'></i></div>'">` :
+                    `<div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20"><i class="fa-solid fa-user text-xs"></i></div>`;
+                return `
                 <div class="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-void-accent/30 transition-all">
                     <div class="flex items-center gap-4">
-                        <img src="${u.avatar_url || ''}" class="w-10 h-10 rounded-xl border border-white/10">
+                        ${avatarHtml}
                         <div>
                             <div class="text-[11px] font-black text-white uppercase">${u.username}</div>
                             <div class="text-[9px] text-void-muted uppercase mt-1">Cards: ${u.total_cards} | Unique: ${u.unique_cards}</div>
@@ -1177,8 +1269,8 @@ async function fetchUserList() {
                             Grant
                         </button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
     } catch (err) {
         container.innerHTML = `<div class="p-4 text-center text-red-500 uppercase text-[9px]">Failed to load members</div>`;
@@ -1193,7 +1285,7 @@ async function fetchAdminLogs() {
     const category = document.getElementById('log-category-filter')?.value || 'all';
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/events?search=${search}&category=${category}`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/events?search=${search}&category=${category}`, { credentials: 'include' });
         if (res.ok) {
             const logs = await res.json();
             renderAdminLogs(logs);
@@ -1215,7 +1307,7 @@ function renderAdminLogs(logs) {
     container.innerHTML = logs.map(log => {
         const time = new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const levelClass = log.level === 'error' ? 'text-red-500' : (log.level === 'warn' ? 'text-amber-500' : 'text-void-accent');
-        
+
         return `
             <div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-white/5 transition-colors items-center">
                 <div class="col-span-2 text-[9px] font-mono text-void-muted">${time}</div>
@@ -1232,7 +1324,7 @@ function renderAdminLogs(logs) {
 async function fetchAllCreatorCards() {
     if (creatorCards && creatorCards.length > 0) return creatorCards;
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
         if (res.ok) {
             creatorCards = await res.json();
             return creatorCards;
@@ -1249,7 +1341,7 @@ async function openGenericGrant() {
 
 async function toggleUserBlock(twitchId, isBlocked) {
     if (!confirm(`Are you sure you want to ${isBlocked ? 'BLOCK' : 'UNBLOCK'} this user? they will no longer be able to earn cards.`)) return;
-    
+
     showToast("Updating member status...", "loading");
 
     setTimeout(() => {
@@ -1277,13 +1369,13 @@ function logout() {
 
 async function loadSets() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/sets`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/sets`, { credentials: 'include' });
         if (res.ok) {
             creatorSets = await res.json();
             renderSetsList();
             populateSetDropdowns();
         }
-    } catch (err) {}
+    } catch (err) { }
 }
 
 function renderSetsList() {
@@ -1314,7 +1406,10 @@ function renderSetsList() {
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="text-[11px] font-black text-white uppercase truncate">${set.name}</div>
-                    <div class="text-[9px] text-void-accent font-bold mt-1 uppercase tracking-widest">${set.total_cards || 0} Units</div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <div class="text-[9px] text-void-accent font-bold uppercase tracking-widest">${set.total_cards || 0} Units</div>
+                        ${set.is_active !== false ? `<span class="text-[7px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">ACTIVE</span>` : `<span class="text-[7px] font-black uppercase tracking-widest text-void-muted bg-white/5 px-1.5 py-0.5 rounded">INACTIVE</span>`}
+                    </div>
                 </div>
                 <button onclick="event.stopPropagation(); deleteSet('${set.id}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-400 p-2">
                     <i class="fa-solid fa-trash-can"></i>
@@ -1371,6 +1466,8 @@ function editSet(setId) {
     document.getElementById('set-name-input').value = set.name;
     document.getElementById('set-description-input').value = set.description || '';
     document.getElementById('set-form-title').textContent = 'Edit Set';
+    const isActiveToggle = document.getElementById('set-is-active');
+    if (isActiveToggle) isActiveToggle.checked = set.is_active !== false; // default true
     const deleteBtn = document.getElementById('set-delete-btn');
     if (deleteBtn) deleteBtn.classList.remove('hidden');
 }
@@ -1379,6 +1476,7 @@ async function saveSet() {
     const name = document.getElementById('set-name-input').value;
     const description = document.getElementById('set-description-input').value;
     const setId = document.getElementById('set-edit-id').value;
+    const isActive = document.getElementById('set-is-active')?.checked ?? true;
 
     if (!name) return showToast("Set name required", "error");
 
@@ -1386,13 +1484,10 @@ async function saveSet() {
 
     try {
         const url = setId ? `${BACKEND_URL}/api/creator/sets/${setId}` : `${BACKEND_URL}/api/creator/sets`;
-        const res = await fetch(url, {
+        const res = await apiFetch(url, {
             method: setId ? 'PUT' : 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
-            body: JSON.stringify({ id: setId || undefined, name, description }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: setId || undefined, name, description, is_active: isActive }),
             credentials: 'include'
         });
 
@@ -1410,26 +1505,23 @@ async function saveSet() {
 }
 
 async function deleteSet(setId) {
-    if (!confirm("Are you sure you want to delete this set?")) return;
-
-    showToast("Deleting set...", "loading");
-
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/sets/${setId}`, {
-            method: 'DELETE',
-            headers: { 'X-CSRF-Token': csrfToken },
-            credentials: 'include'
-        });
-
-        if (res.ok) {
-            showToast("Set deleted", "success");
-            loadSets();
-        } else {
-            showToast("Failed to delete set", "error");
-        }
-    } catch (err) {
-        showToast("Something went wrong", "error");
-    }
+    showConfirmModal(
+        'Delete Set',
+        'Are you sure you want to delete this set? Cards in this set will not be deleted.',
+        async () => {
+            showToast("Deleting set...", "loading");
+            try {
+                const res = await apiFetch(`${BACKEND_URL}/api/creator/sets/${setId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-Token': csrfToken },
+                    credentials: 'include'
+                });
+                if (res.ok) { showToast("Set deleted", "success"); loadSets(); }
+                else showToast("Failed to delete set", "error");
+            } catch (err) { showToast("Something went wrong", "error"); }
+        },
+        'Delete'
+    );
 }
 
 
@@ -1469,7 +1561,7 @@ async function bulkAssignSet() {
     try {
         let success = 0;
         for (const cardId of selectedCardIds) {
-            const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}/assign-set`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}/assign-set`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                 body: JSON.stringify({ set_id: setId }),
@@ -1487,32 +1579,34 @@ async function bulkAssignSet() {
 
 async function bulkDeleteCards() {
     if (selectedCardIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedCardIds.size} cards?`)) return;
-
-    showToast(`Deleting ${selectedCardIds.size} cards...`, "loading");
-
-    try {
-        let success = 0;
-        for (const cardId of selectedCardIds) {
-            const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
-                method: 'DELETE',
-                headers: { 'X-CSRF-Token': csrfToken },
-                credentials: 'include'
-            });
-            if (res.ok) success++;
-        }
-        showToast(`Deleted ${success} cards`, "success");
-        toggleBulkSelect();
-        fetchCardsForGrid('creator-cards-grid');
-    } catch (err) {
-        showToast("Something went wrong", "error");
-    }
+    showConfirmModal(
+        `Delete ${selectedCardIds.size} Cards`,
+        `Are you sure you want to permanently delete ${selectedCardIds.size} selected card(s)? This cannot be undone.`,
+        async () => {
+            showToast(`Deleting ${selectedCardIds.size} cards...`, "loading");
+            try {
+                let success = 0;
+                for (const cardId of selectedCardIds) {
+                    const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRF-Token': csrfToken },
+                        credentials: 'include'
+                    });
+                    if (res.ok) success++;
+                }
+                showToast(`Deleted ${success} cards`, "success");
+                toggleBulkSelect();
+                fetchCardsForGrid('creator-cards-grid');
+            } catch (err) { showToast("Something went wrong", "error"); }
+        },
+        'Delete All'
+    );
 }
 
 
 async function loadPackSettings() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/settings`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/settings`, { credentials: 'include' });
         if (res.ok) {
             const settings = await res.json();
             if (settings.pack_image_url) {
@@ -1533,7 +1627,7 @@ async function savePackCustomization() {
         if (imageFile) {
             const formData = new FormData();
             formData.append('file', imageFile);
-            const uploadRes = await fetch(`${BACKEND_URL}/api/admin/upload`, {
+            const uploadRes = await apiFetch(`${BACKEND_URL}/api/admin/upload`, {
                 method: 'POST',
                 headers: { 'X-CSRF-Token': csrfToken },
                 body: formData,
@@ -1545,7 +1639,7 @@ async function savePackCustomization() {
             }
         }
 
-        const res = await fetch(`${BACKEND_URL}/api/creator/settings`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/settings`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ pack_image_url: imageUrl }),
@@ -1564,26 +1658,65 @@ async function savePackCustomization() {
 }
 
 
+// --- ACCESSIBILITY HELPER: Keyboard Support ---
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modals = [
+            'card-creator-modal',
+            'set-manager-modal',
+            'grant-card-modal',
+            'confirm-action-modal'
+        ];
+        modals.forEach(id => {
+            const modal = document.getElementById(id);
+            if (modal && !modal.classList.contains('hidden')) {
+                // Determine which close function to call
+                if (id === 'card-creator-modal') closeCardCreator();
+                else if (id === 'set-manager-modal') closeSetManager();
+                else if (id === 'grant-card-modal') closeGrantModal();
+                else if (id === 'confirm-action-modal') closeConfirmModal();
+            }
+        });
+    }
+});
+
 window.openSetManager = () => {
-    document.getElementById('set-manager-modal')?.classList.remove('hidden');
-    resetSetForm();
+    const modal = document.getElementById('set-manager-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        resetSetForm();
+        // Focus management: focus the first input or the close button
+        setTimeout(() => {
+            const firstInput = document.getElementById('set-name-input');
+            if (firstInput) firstInput.focus();
+        }, 100);
+    }
 };
 window.closeSetManager = () => document.getElementById('set-manager-modal')?.classList.add('hidden');
+
 window.openCardCreator = () => {
-    document.getElementById('card-creator-modal')?.classList.remove('hidden');
-    document.getElementById('card-form-title').textContent = 'New Card';
-    document.getElementById('card-edit-id').value = '';
-    document.getElementById('card-creator-name').value = '';
-    document.getElementById('card-creator-rarity').value = 'common';
-    document.getElementById('card-creator-description').value = '';
-    document.getElementById('card-creator-attack').value = '0';
-    document.getElementById('card-creator-defense').value = '0';
-    document.getElementById('card-creator-set').value = '';
-    document.getElementById('card-image-preview').classList.add('hidden');
-    document.getElementById('card-image-placeholder').classList.remove('hidden');
+    const modal = document.getElementById('card-creator-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        document.getElementById('card-form-title').textContent = 'New Card';
+        document.getElementById('card-edit-id').value = '';
+        document.getElementById('card-creator-name').value = '';
+        document.getElementById('card-creator-rarity').value = 'common';
+        document.getElementById('card-creator-description').value = '';
+        document.getElementById('card-creator-attack').value = '0';
+        document.getElementById('card-creator-defense').value = '0';
+        document.getElementById('card-creator-set').value = '';
+        document.getElementById('card-image-preview').classList.add('hidden');
+        document.getElementById('card-image-placeholder').classList.remove('hidden');
+
+        // Focus management
+        setTimeout(() => {
+            const firstInput = document.getElementById('card-creator-name');
+            if (firstInput) firstInput.focus();
+        }, 100);
+    }
 };
 window.closeCardCreator = () => document.getElementById('card-creator-modal')?.classList.add('hidden');
-
 
 window.switchSubTab = switchSubTab;
 window.saveSet = saveSet;
@@ -1595,8 +1728,10 @@ window.bulkAssignSet = bulkAssignSet;
 window.bulkDeleteCards = bulkDeleteCards;
 window.savePackCustomization = savePackCustomization;
 window.resetPackImage = () => {
-    document.getElementById('pack-preview-image').src = '/pack.png';
-    document.getElementById('pack-image-upload').value = '';
+    const img = document.getElementById('pack-preview-image');
+    if (img) img.src = '/pack.png';
+    const input = document.getElementById('pack-image-upload');
+    if (input) input.value = '';
 };
 
 
@@ -1609,6 +1744,8 @@ async function saveCard() {
     const setId = document.getElementById('card-creator-set').value;
     const cardId = document.getElementById('card-edit-id').value;
     const imageFile = document.getElementById('card-image-upload')?.files[0];
+    const isBattleable = document.getElementById('card-creator-battleable')?.checked ?? true;
+    const isTradable = document.getElementById('card-creator-tradable')?.checked ?? true;
 
     if (!name) return showToast("Card name required", "error");
 
@@ -1619,7 +1756,7 @@ async function saveCard() {
         if (imageFile) {
             const formData = new FormData();
             formData.append('file', imageFile);
-            const uploadRes = await fetch(`${BACKEND_URL}/api/creator/upload`, {
+            const uploadRes = await apiFetch(`${BACKEND_URL}/api/creator/upload`, {
                 method: 'POST',
                 headers: { 'X-CSRF-Token': csrfToken },
                 body: formData,
@@ -1643,10 +1780,12 @@ async function saveCard() {
             attack,
             defense,
             set_id: setId || null,
-            image_url: imageUrl || '/pack.png'
+            image_url: imageUrl || '/pack.png',
+            is_battle_eligible: isBattleable,
+            is_trading_eligible: isTradable
         };
 
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1675,7 +1814,7 @@ async function deleteCard(cardId) {
     showToast("Deleting card...", "loading");
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
             method: 'DELETE',
             headers: { 'X-CSRF-Token': csrfToken },
             credentials: 'include'
@@ -1704,7 +1843,11 @@ function editCard(cardId) {
     document.getElementById('card-creator-attack').value = card.attack || 0;
     document.getElementById('card-creator-defense').value = card.defense || 0;
     document.getElementById('card-creator-set').value = card.set_id || '';
-    
+    const battleToggle = document.getElementById('card-creator-battleable');
+    if (battleToggle) battleToggle.checked = card.is_battle_eligible !== false;
+    const tradeToggle = document.getElementById('card-creator-tradable');
+    if (tradeToggle) tradeToggle.checked = card.is_trading_eligible !== false;
+
     const preview = document.getElementById('card-image-preview');
     const placeholder = document.getElementById('card-image-placeholder');
     if (card.image_url) {
@@ -1712,7 +1855,7 @@ function editCard(cardId) {
         preview.classList.remove('hidden');
         placeholder.classList.add('hidden');
     }
-    
+
     document.getElementById('card-form-title').textContent = 'Edit Card';
 }
 
@@ -1720,11 +1863,11 @@ function editCard(cardId) {
 async function fetchCardBacks() {
     const grid = document.getElementById('card-backs-grid');
     if (!grid) return;
-    
+
     grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading card backs...</div>';
-    
+
     try {
-        const res = await fetch(`${BACKEND_URL}/api/creator/card-backs`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/card-backs`, { credentials: 'include' });
         if (res.ok) {
             const backs = await res.json();
             if (backs.length === 0) {
@@ -1733,7 +1876,7 @@ async function fetchCardBacks() {
             }
 
         }
-    } catch (e) {}
+    } catch (e) { }
 }
 
 
@@ -1832,7 +1975,7 @@ async function handleBulkImageUpload(files) {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            const uploadRes = await fetch(`${BACKEND_URL}/api/creator/upload`, {
+            const uploadRes = await apiFetch(`${BACKEND_URL}/api/creator/upload`, {
                 method: 'POST',
                 headers: { 'X-CSRF-Token': csrfToken },
                 body: formData,
@@ -1841,7 +1984,7 @@ async function handleBulkImageUpload(files) {
 
             if (uploadRes.ok) {
                 const uploadData = await uploadRes.json();
-                const res = await fetch(`${BACKEND_URL}/api/creator/cards`, {
+                const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                     body: JSON.stringify({
@@ -1883,11 +2026,17 @@ window.previewCardImage = previewCardImage;
 window.previewSetIcon = previewSetIcon;
 window.switchSubTab = switchSubTab;
 window.resetPackArt = resetPackArt;
+window.confirmResetPackArt = confirmResetPackArt;
+window.showConfirmModal = showConfirmModal;
+window.closeConfirmModal = closeConfirmModal;
+window.copyOBSLink = copyOBSLink;
+window.updateAnimPreview = updateAnimPreview;
+window.closeGrantModal = closeGrantModal;
 window.saveBranding = saveBranding;
 window.toggleBrandingEdit = toggleBrandingEdit;
 window.fetchAdminLogs = fetchAdminLogs;
 window.openGenericGrant = openGenericGrant;
-window.randomizeStats = function() {
+window.randomizeStats = function () {
     const rarity = document.getElementById('card-creator-rarity').value;
     let budget = 6;
     if (rarity === 'rare') budget = 10;
@@ -1902,6 +2051,8 @@ window.randomizeStats = function() {
     document.getElementById('card-creator-defense').value = defense;
     showToast(`Stats randomized (Budget: ${budget})`, "success");
 };
+window.initiateEventPulse = initiateEventPulse;
+window.logout = logout;
 
 window.addEventListener('DOMContentLoaded', () => {
     initDashboard();
@@ -1909,3 +2060,267 @@ window.addEventListener('DOMContentLoaded', () => {
     setupBulkUpload();
 });
 
+// ════════════════════════════════════════════════════════════════
+//  OBS QUEUE MANAGEMENT
+// ════════════════════════════════════════════════════════════════
+
+let queueAutoRefreshTimer = null;
+
+const RARITY_META = {
+    legendary: { color: '#facc15', shadow: 'shadow-yellow-400/40', label: 'Legendary', dot: 'bg-yellow-400' },
+    epic:      { color: '#c084fc', shadow: 'shadow-purple-400/40', label: 'Epic',      dot: 'bg-purple-400' },
+    rare:      { color: '#60a5fa', shadow: 'shadow-blue-400/40',   label: 'Rare',      dot: 'bg-blue-400'   },
+    common:    { color: '#94a3b8', shadow: '',                     label: 'Common',    dot: 'bg-gray-400'   },
+};
+
+function rarityMeta(rarity) {
+    return RARITY_META[(rarity || 'common').toLowerCase()] || RARITY_META.common;
+}
+
+function timeAgo(isoString) {
+    const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    if (diff < 60)  return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function buildQueueRow(item, isPending, isFirst) {
+    const card  = item.cards  || {};
+    const user  = item.users  || {};
+    const meta  = rarityMeta(card.rarity);
+    const thumb = card.image_url
+        ? `<img src="${card.image_url}" class="queue-thumb" onerror="this.src='/pack.png'">`
+        : `<div class="queue-thumb flex items-center justify-center bg-white/5 text-void-muted text-xs"><i class="fa-solid fa-cards-blank"></i></div>`;
+
+    const actions = isPending
+        ? `<button class="queue-btn play-now" onclick="replayQueueItem('${item.id}', true)" title="Move to front"><i class="fa-solid fa-forward-fast"></i> Now</button>
+           <button class="queue-btn skip" onclick="skipQueueItem('${item.id}')"><i class="fa-solid fa-forward"></i> Skip</button>`
+        : `<button class="queue-btn replay" onclick="replayQueueItem('${item.id}', false)"><i class="fa-solid fa-rotate-left"></i> Replay</button>`;
+
+    return `
+        <div class="queue-card-row${isFirst ? ' is-first' : ''}" data-id="${item.id}">
+            ${thumb}
+            <div class="flex items-center gap-1.5 flex-shrink-0 w-[72px]">
+                <div class="queue-rarity-dot ${meta.dot}"></div>
+                <span class="text-[9px] font-black uppercase tracking-widest" style="color:${meta.color}">${meta.label}</span>
+            </div>
+            <div class="min-w-0 flex-1">
+                <div class="text-[11px] font-black text-white truncate">${card.name || 'Unknown Card'}</div>
+                <div class="text-[9px] font-bold text-void-muted truncate">
+                    ${user.username ? `<i class="fa-brands fa-twitch text-purple-400"></i> ${user.username} · ` : ''}${timeAgo(item.created_at)}
+                </div>
+            </div>
+            <div class="queue-actions">${actions}</div>
+        </div>`;
+}
+
+async function loadObsQueue() {
+    const pendingList  = document.getElementById('queue-pending-list');
+    const consumedList = document.getElementById('queue-consumed-list');
+    if (!pendingList || !consumedList) return;
+
+    const loadingHtml = `<div class="text-center py-6 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading…</div>`;
+    pendingList.innerHTML  = loadingHtml;
+    consumedList.innerHTML = loadingHtml;
+
+    try {
+        const res  = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue`);
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || 'Failed to load queue');
+
+        const { pending = [], consumed = [], obs_settings, obs_paused } = data;
+
+        // Update badge
+        const badge = document.getElementById('queue-pending-badge');
+        if (badge) badge.textContent = `${pending.length} Pending`;
+
+        // Sync pause button state
+        syncDashboardPauseBtn(!!obs_paused);
+
+        // Populate pending
+        if (pending.length === 0) {
+            pendingList.innerHTML = `<div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="fa-solid fa-check-circle mr-2 text-green-400 opacity-60"></i>Queue is empty</div>`;
+        } else {
+            pendingList.innerHTML = pending.map((item, i) => buildQueueRow(item, true, i === 0)).join('');
+        }
+
+        // Populate consumed
+        if (consumed.length === 0) {
+            consumedList.innerHTML = `<div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40">No recent animations</div>`;
+        } else {
+            consumedList.innerHTML = consumed.map(item => buildQueueRow(item, false, false)).join('');
+        }
+
+        // Apply rarity filter checkboxes from saved settings
+        if (obs_settings?.show_rarities) {
+            document.querySelectorAll('.rarity-filter-cb').forEach(cb => {
+                cb.checked = obs_settings.show_rarities.includes(cb.value);
+            });
+        }
+    } catch (err) {
+        const errHtml = `<div class="text-center py-6 text-red-400 text-[11px] font-bold uppercase tracking-widest">${err.message}</div>`;
+        pendingList.innerHTML  = errHtml;
+        consumedList.innerHTML = errHtml;
+    }
+}
+
+async function skipQueueItem(id) {
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue/skip`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to skip');
+        showToast('Card skipped', 'success');
+        await loadObsQueue();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function replayQueueItem(id, moveToFront) {
+    // moveToFront=true uses "Play Now" semantics — we still just re-queue it;
+    // the backend always pushes replayed items to the END (created_at = now).
+    // "Play Now" would require more complex re-ordering; for now both replay.
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue/replay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to replay');
+        showToast(moveToFront ? 'Added to queue' : 'Queued for replay', 'success');
+        await loadObsQueue();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function clearObsQueue() {
+    const confirmed = await new Promise(resolve => {
+        // use the existing custom confirm modal if available
+        if (typeof showCustomConfirm === 'function') {
+            showCustomConfirm({
+                title: 'Clear Queue',
+                message: 'Mark all pending animations as consumed? This cannot be undone.',
+                confirmText: 'Clear All',
+                cancelText: 'Cancel',
+                icon: 'fa-trash-can',
+                onConfirm: () => resolve(true),
+                onCancel:  () => resolve(false),
+            });
+        } else {
+            resolve(window.confirm('Clear all pending queue items?'));
+        }
+    });
+    if (!confirmed) return;
+
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-queue/clear`, { method: 'POST' });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to clear queue');
+        showToast('Queue cleared', 'success');
+        await loadObsQueue();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function saveObsSettings() {
+    const checkboxes = document.querySelectorAll('.rarity-filter-cb');
+    const showRarities = Array.from(checkboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+
+    if (showRarities.length === 0) {
+        showToast('Select at least one rarity to display', 'error');
+        return;
+    }
+
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/obs-settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ obs_settings: { show_rarities: showRarities } }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to save');
+        showToast('Display filter saved', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function toggleQueueAutoRefresh(enabled) {
+    clearInterval(queueAutoRefreshTimer);
+    queueAutoRefreshTimer = null;
+    if (enabled) {
+        queueAutoRefreshTimer = setInterval(() => {
+            // Only refresh if the queue tab is currently visible
+            const queuePanel = document.getElementById('content-queue');
+            if (queuePanel && queuePanel.classList.contains('active')) {
+                loadObsQueue();
+            }
+        }, 5000);
+    }
+}
+
+function openQueuePopout() {
+    if (!currentUser?.streamer?.obs_overlay_token) {
+        showToast('No overlay token found. Check your Overlay tab.', 'error');
+        return;
+    }
+    const streamer = currentUser.name || (currentUser.streamer && currentUser.streamer.username);
+    const token    = currentUser.streamer.obs_overlay_token;
+    const popoutUrl = `${window.location.origin}/queue-control?streamer=${encodeURIComponent(streamer)}&token=${encodeURIComponent(token)}`;
+    window.open(popoutUrl, 'queue-control', 'width=380,height=680,resizable=yes,scrollbars=yes');
+}
+
+// Expose to HTML
+/* ── Dashboard: Pause / Skip Now ─────────────────────────────────── */
+let _dashQueuePaused = false;
+
+function syncDashboardPauseBtn(paused) {
+    _dashQueuePaused = paused;
+    const btn   = document.getElementById('queue-pause-btn');
+    const label = document.getElementById('queue-pause-label');
+    if (!btn || !label) return;
+    if (paused) {
+        label.textContent = 'Resume';
+        btn.querySelector('i').className = 'fa-solid fa-play';
+        btn.classList.add('bg-amber-500/25', 'border-amber-400/40');
+    } else {
+        label.textContent = 'Pause';
+        btn.querySelector('i').className = 'fa-solid fa-pause';
+        btn.classList.remove('bg-amber-500/25', 'border-amber-400/40');
+    }
+}
+
+async function toggleQueuePause() {
+    const endpoint = _dashQueuePaused ? 'resume' : 'pause';
+    syncDashboardPauseBtn(!_dashQueuePaused); // optimistic
+    try {
+        const res = await fetch(`/api/creator/obs-queue/${endpoint}`, { method: 'POST', credentials: 'include' });
+        if (!res.ok) { syncDashboardPauseBtn(!_dashQueuePaused); throw new Error((await res.json()).error || 'Failed'); }
+        showToast(_dashQueuePaused ? 'Queue paused — overlay will hold' : 'Queue resumed', 'success');
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function skipOverlayNow() {
+    try {
+        const res = await fetch('/api/creator/obs-queue/skip-now', { method: 'POST', credentials: 'include' });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+        showToast('Skip signal sent to overlay', 'success');
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+window.loadObsQueue    = loadObsQueue;
+window.openQueuePopout = openQueuePopout;
+window.skipQueueItem   = skipQueueItem;
+window.replayQueueItem = replayQueueItem;
+window.clearObsQueue   = clearObsQueue;
+window.saveObsSettings = saveObsSettings;
+window.toggleQueueAutoRefresh = toggleQueueAutoRefresh;
+window.toggleQueuePause  = toggleQueuePause;
+window.skipOverlayNow    = skipOverlayNow;

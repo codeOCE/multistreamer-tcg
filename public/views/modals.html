@@ -1,0 +1,386 @@
+
+<section id="admin-view" class="hidden min-h-screen pt-28 px-6 lg:px-12 pb-32 max-w-[1700px] mx-auto void-fade space-y-12">
+    <div class="flex items-center justify-between border-b border-white/5 pb-12">
+        <div class="flex items-center gap-4">
+            <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">System Console</h3>
+            <span class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-red-500 italic">Root Access</span>
+        </div>
+        <button onclick="refreshAdminPanel()" class="px-6 py-3 bg-void-accent/10 border border-void-accent/20 rounded-xl text-[10px] font-black text-void-accent uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all">
+            <i class="fa-solid fa-rotate mr-2"></i> Refresh Matrix
+        </button>
+    </div>
+
+    
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Total Users</div>
+            <div id="admin-stat-users" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Total Cards</div>
+            <div id="admin-stat-cards" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Unique Entities</div>
+            <div id="admin-stat-unique" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Legendary Items</div>
+            <div id="admin-stat-legendary" class="text-3xl font-display font-black text-white italic">0</div>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        
+        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8 h-fit">
+            <div class="flex items-center justify-between">
+                <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">User Management</h4>
+                <i class="fa-solid fa-users text-void-accent opacity-20"></i>
+            </div>
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/50"></i>
+                <input type="text" id="admin-user-search" placeholder="Search accounts..." class="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-void-text focus:ring-1 ring-void-accent/30 transition-all">
+            </div>
+            <div id="user-mod-list" class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                
+            </div>
+        </div>
+
+        
+        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8 h-fit">
+            <div class="flex items-center justify-between">
+                <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">Global Registry</h4>
+                <i class="fa-solid fa-database text-void-accent opacity-20"></i>
+            </div>
+            <div id="card-list" class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                
+            </div>
+            <button onclick="openCardCreator()" class="w-full py-4 bg-void-accent/10 border border-void-accent/20 rounded-2xl text-[10px] font-black text-void-accent uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all">
+                <i class="fa-solid fa-plus mr-2"></i> Deploy New Card
+            </button>
+        </div>
+
+        
+        <div class="glass-panel p-10 rounded-3xl border border-white/5 bg-white/[0.01] space-y-8 h-fit">
+            <div class="flex items-center justify-between">
+                <h4 class="text-xl font-black uppercase italic tracking-tight text-white font-display">Maintenance</h4>
+                <i class="fa-solid fa-screwdriver-wrench text-void-accent opacity-20"></i>
+            </div>
+            
+            <div class="space-y-3">
+                <button id="bulk-delete-cards" class="w-full py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                    Reset Collection Database
+                </button>
+                <button id="bulk-delete-trades" class="w-full py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                    Purge Trade History
+                </button>
+                <button id="export-data" class="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black text-void-muted uppercase tracking-widest hover:text-white transition-all">
+                    Extract Data Dump
+                </button>
+            </div>
+
+            <div class="pt-8 border-t border-white/5">
+                <button onclick="typeof openActivityLogModal==='function'&&openActivityLogModal()"
+                    class="w-full py-4 bg-void-accent/10 border border-void-accent/20 rounded-2xl text-[10px] font-black text-void-accent uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-bolt-lightning"></i> View Activity Log
+                </button>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+
+
+<div id="activity-log-modal-app"
+    class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1100] hidden items-center justify-center p-6"
+    role="dialog" aria-modal="true" aria-labelledby="activity-log-modal-title-app"
+    onclick="if(event.target===this&&typeof closeActivityLogModal==='function') closeActivityLogModal()">
+    <div class="glass-card w-full max-w-4xl max-h-[85vh] flex flex-col" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-6">
+            <h3 id="activity-log-modal-title-app" class="text-2xl font-black uppercase italic tracking-tight">Recent Activity Log</h3>
+            <button onclick="typeof closeActivityLogModal==='function'&&closeActivityLogModal()" aria-label="Close Activity Log"
+                class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="relative flex-1 min-w-[200px]">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted text-xs"></i>
+                <input type="text" id="activity-log-search"
+                    placeholder="Search logs (username, card ID, action...)"
+                    class="w-full bg-void-bg/50 border border-white/10 rounded-xl pl-10 pr-6 py-3 text-[11px] font-bold focus:border-void-accent transition-all">
+            </div>
+            <div class="void-dropdown" data-select-id="activity-log-category-filter">
+                <select id="activity-log-category-filter" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                    <option value="all">All Categories</option>
+                    <option value="grant">Grant</option>
+                    <option value="system">System</option>
+                    <option value="trade">Trade</option>
+                    <option value="webhook">Webhook</option>
+                </select>
+                <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="void-dropdown-label">All Categories</span>
+                    <i class="fa-solid fa-chevron-down void-dropdown-chevron"></i>
+                </button>
+                <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                    <div class="void-dropdown-option" role="option" data-value="all">All Categories</div>
+                    <div class="void-dropdown-option" role="option" data-value="grant">Grant</div>
+                    <div class="void-dropdown-option" role="option" data-value="system">System</div>
+                    <div class="void-dropdown-option" role="option" data-value="trade">Trade</div>
+                    <div class="void-dropdown-option" role="option" data-value="webhook">Webhook</div>
+                </div>
+            </div>
+            <button onclick="typeof fetchAdminLogs==='function'&&fetchAdminLogs()"
+                class="px-5 py-3 bg-void-accent/10 border border-void-accent/20 text-void-accent hover:bg-void-accent hover:text-void-bg rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 group">
+                <i class="fa-solid fa-rotate group-hover:rotate-180 transition-all duration-500"></i>
+                Refresh
+            </button>
+        </div>
+        <div class="grid grid-cols-12 gap-4 px-6 py-4 bg-white/5 rounded-t-xl border-x border-t border-white/10">
+            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">Time</div>
+            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">Level</div>
+            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">Category</div>
+            <div class="col-span-6 text-[9px] font-black uppercase text-void-muted tracking-widest">Message</div>
+        </div>
+        <div class="divide-y divide-white/5 border border-white/10 rounded-b-xl overflow-hidden bg-void-bg/20 flex-1 min-h-0 overflow-y-auto custom-scrollbar"
+            id="admin-activity-logs-app"></div>
+    </div>
+</div>
+
+
+<div id="card-detail-modal" class="fixed inset-0 bg-void-bg/95 backdrop-blur-xl z-[2000] hidden flex items-center justify-center p-6 lg:p-12 overflow-y-auto" onclick="if(event.target===this) hideCardDetail()">
+    <div class="max-w-2xl w-full mx-auto relative void-fade bg-void-bg-alt/90 border border-white/10 rounded-3xl overflow-hidden shadow-2xl" onclick="event.stopPropagation()">
+        <button onclick="hideCardDetail()" class="absolute top-4 right-4 z-10 w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-colors">
+            <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 md:p-10">
+            <div class="relative">
+                <img id="card-detail-image" src="/pack.png" alt="" class="w-full aspect-[5/7] object-cover rounded-2xl border border-white/10 shadow-xl">
+                <div id="card-detail-glare" class="hidden absolute inset-0 rounded-2xl pointer-events-none bg-gradient-to-br from-transparent via-white/5 to-transparent"></div>
+            </div>
+            <div class="flex flex-col justify-center space-y-4">
+                <div>
+                    <div id="card-detail-rarity" class="text-[10px] font-black uppercase tracking-[0.2em] mb-1 text-void-muted">—</div>
+                    <h3 id="card-detail-name" class="text-2xl font-display font-black uppercase italic tracking-tight text-white">—</h3>
+                    <div class="flex gap-4 mt-2 text-[10px] font-bold text-void-muted">
+                        <span>Set: <span id="card-detail-set">—</span></span>
+                        <span>#<span id="card-detail-number">—</span></span>
+                        <span>×<span id="card-detail-count">1</span></span>
+                    </div>
+                </div>
+                <p id="card-detail-description" class="text-sm text-void-muted leading-relaxed">—</p>
+                <div class="flex gap-4">
+                    <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                        <span class="text-[9px] text-void-muted uppercase font-black">Attack</span>
+                        <div id="card-detail-attack" class="text-lg font-black text-white">0</div>
+                    </div>
+                    <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                        <span class="text-[9px] text-void-muted uppercase font-black">Defense</span>
+                        <div id="card-detail-defense" class="text-lg font-black text-white">0</div>
+                    </div>
+                </div>
+                <div id="card-detail-mechanic-container" class="hidden p-4 rounded-xl bg-void-accent/10 border border-void-accent/20 space-y-2">
+                    <div class="text-[9px] font-black text-void-accent uppercase tracking-widest">Mechanic</div>
+                    <div class="flex items-center gap-2">
+                        <span id="card-detail-mechanic-icon" class="text-xl">⚙️</span>
+                        <span id="card-detail-mechanic-name" class="font-black text-white">—</span>
+                    </div>
+                    <p id="card-detail-mechanic-desc" class="text-[10px] text-void-muted">—</p>
+                </div>
+                <div id="card-detail-genesis-mechanic-container" class="hidden p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+                    <div class="text-[9px] font-black text-amber-400 uppercase tracking-widest">Genesis Trait</div>
+                    <div class="flex items-center gap-2">
+                        <span id="card-detail-genesis-mechanic-icon" class="text-xl">✨</span>
+                        <span id="card-detail-genesis-mechanic-name" class="font-black text-white">—</span>
+                    </div>
+                    <p id="card-detail-genesis-mechanic-desc" class="text-[10px] text-void-muted">—</p>
+                </div>
+                <div id="card-detail-id" class="text-[8px] text-void-muted/50 font-mono hidden"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div id="card-modal" class="fixed inset-0 bg-void-bg/95 backdrop-blur-xl z-[2000] hidden flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
+    <div class="max-w-6xl w-full mx-auto relative void-fade">
+        <button onclick="closeCardModal()" class="absolute -top-12 right-0 md:-right-12 text-void-muted hover:text-white transition-colors duration-300">
+            <i class="fa-solid fa-xmark text-4xl"></i>
+        </button>
+        <div id="card-modal-content" class="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+            
+        </div>
+    </div>
+</div>
+
+
+<div id="create-binder-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-md p-10 rounded-[2.5rem] border border-white/5 space-y-8">
+        <div class="space-y-2">
+            <h3 class="text-3xl font-display font-black uppercase italic tracking-tighter text-white">Create New Binder</h3>
+            <p class="text-void-muted text-[10px] font-black uppercase tracking-widest">Organize your cards into a custom binder</p>
+        </div>
+        <div class="space-y-4">
+            <div class="space-y-2">
+                <label class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Binder Name</label>
+                <input type="text" id="new-binder-name" placeholder="e.g. Standard Collection" class="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm font-bold text-void-text focus:border-void-accent transition-all">
+            </div>
+            <button onclick="submitCreateBinder()" class="w-full saas-button rounded-2xl py-5 text-sm font-black uppercase tracking-widest">Save Binder</button>
+            <button onclick="hideCreateBinderModal()" class="w-full py-4 text-[10px] font-black uppercase tracking-widest text-void-muted hover:text-white transition-colors">Abort</button>
+        </div>
+    </div>
+</div>
+
+
+<div id="trade-builder-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto p-10 rounded-[2.5rem] border border-white/5 relative custom-scrollbar">
+        <button id="close-trade-builder" onclick="closeTradeBuilder()" class="absolute top-8 right-8 text-void-muted hover:text-white transition-colors"><i class="fa-solid fa-xmark text-2xl"></i></button>
+        <h3 class="text-2xl font-display font-black uppercase italic tracking-tighter text-white mb-6">Trade with <span id="trade-builder-target-info">—</span></h3>
+        <div class="grid grid-cols-2 gap-8">
+            <div>
+                <h4 class="text-sm font-black uppercase tracking-widest text-void-muted mb-2">Your offer <span id="my-offer-count">(0)</span></h4>
+                <div id="trade-builder-my-section" class="min-h-[120px] border border-dashed border-white/10 rounded-xl p-4">
+                    <div id="trade-builder-my-cards" class="grid grid-cols-4 gap-2"></div>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-sm font-black uppercase tracking-widest text-void-muted mb-2">Their offer <span id="their-offer-count">(0)</span></h4>
+                <div id="trade-builder-their-section" class="min-h-[120px] border border-dashed border-white/10 rounded-xl p-4">
+                    <div id="trade-builder-their-cards" class="grid grid-cols-4 gap-2"></div>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-4 mt-6">
+            <button id="send-trade-offer-btn" onclick="sendTradeOffer()" class="saas-button px-6 py-3 text-sm font-black uppercase tracking-widest">Send Offer</button>
+            <button id="cancel-trade-builder" onclick="closeTradeBuilder()" class="py-3 px-6 text-[10px] font-black uppercase tracking-widest text-void-muted hover:text-white transition-colors">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<div id="card-creator-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto p-10 rounded-[2.5rem] border border-white/5 relative custom-scrollbar">
+        <button onclick="closeCardCreator()" class="absolute top-8 right-8 text-void-muted hover:text-white transition-colors"><i class="fa-solid fa-xmark text-2xl"></i></button>
+        <div class="flex flex-col md:flex-row gap-12">
+            <div class="w-full md:w-1/2 space-y-6">
+                <h3 id="card-form-title" class="text-3xl font-display font-black uppercase italic tracking-tighter text-white">New Asset</h3>
+                <div class="aspect-[2/3] w-full bg-black rounded-3xl border border-white/10 relative overflow-hidden group shadow-2xl flex items-center justify-center">
+                    <img id="card-image-preview" src="/pack.png" class="max-w-full max-h-full object-contain hidden z-10 relative">
+                    <div id="card-image-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-void-muted space-y-4">
+                        <i class="fa-solid fa-image text-4xl opacity-20"></i>
+                        <span class="text-[10px] uppercase font-black tracking-widest opacity-50">Upload Matrix Frame</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 space-y-4 pt-10">
+                
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div id="confirm-action-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[3000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-sm p-10 rounded-[2.5rem] border border-white/5 text-center space-y-6">
+        <div id="confirm-modal-icon-wrap" class="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 text-2xl mx-auto border border-red-500/20">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <div class="space-y-1">
+            <h3 id="confirm-modal-title" class="text-2xl font-display font-black uppercase italic tracking-tighter text-white">Warning</h3>
+            <p id="confirm-modal-message" class="text-[10px] text-void-muted uppercase font-black tracking-widest leading-relaxed">Proceed with destructive action?</p>
+        </div>
+        <div class="flex gap-4">
+            <button onclick="closeConfirmModal()" class="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-xl font-black text-[10px] uppercase tracking-widest text-void-muted">Abort</button>
+            <button id="confirm-modal-action-btn" class="flex-1 py-4 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-all shadow-lg shadow-red-600/20">Execute</button>
+        </div>
+    </div>
+</div>
+
+
+<div id="add-cards-to-binder-modal" class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6">
+    <div class="glass-panel w-full max-w-2xl max-h-[85vh] flex flex-col rounded-[2rem] border border-white/5 overflow-hidden">
+        
+        <div class="flex items-center justify-between px-8 pt-8 pb-4 border-b border-white/5 flex-shrink-0">
+            <div>
+                <h3 class="text-2xl font-display font-black uppercase italic tracking-tighter text-white">Add to Binder</h3>
+                <p class="text-[10px] font-black uppercase tracking-widest text-void-muted mt-1">Select cards from your collection</p>
+            </div>
+            <button onclick="hideAddCardsToBinderModal()" class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-all">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+        
+        <div class="flex gap-3 px-8 py-4 flex-shrink-0">
+            <div class="relative flex-1">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/40 text-xs"></i>
+                <input type="text" id="modal-card-search" placeholder="Search cards..."
+                    class="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm font-bold text-void-text focus:border-void-accent transition-all placeholder:text-void-muted/40">
+            </div>
+            <div class="void-dropdown" data-select-id="modal-rarity-filter">
+                <select id="modal-rarity-filter" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                    <option value="all">All Rarities</option>
+                    <option value="common">Common</option>
+                    <option value="rare">Rare</option>
+                    <option value="epic">Epic</option>
+                    <option value="legendary">Legendary</option>
+                </select>
+                <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="void-dropdown-label">All Rarities</span>
+                    <i class="fa-solid fa-chevron-down void-dropdown-chevron"></i>
+                </button>
+                <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                    <div class="void-dropdown-option" role="option" data-value="all">All Rarities</div>
+                    <div class="void-dropdown-option" role="option" data-value="common">Common</div>
+                    <div class="void-dropdown-option" role="option" data-value="rare">Rare</div>
+                    <div class="void-dropdown-option" role="option" data-value="epic">Epic</div>
+                    <div class="void-dropdown-option" role="option" data-value="legendary">Legendary</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto px-8 pb-4 custom-scrollbar min-h-0">
+            <div id="modal-card-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
+        </div>
+        
+        <div class="flex gap-3 px-8 py-5 border-t border-white/5 flex-shrink-0">
+            <button onclick="hideAddCardsToBinderModal()" class="flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest text-void-muted hover:text-white bg-white/5 hover:bg-white/10 transition-all">
+                Cancel
+            </button>
+            <button id="confirm-add-cards-btn" class="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-800 text-gray-500 cursor-not-allowed transition-all shadow-lg" disabled>
+                Add Selected (0)
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<div id="share-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md hidden">
+    <div class="glass-panel w-full max-w-2xl rounded-2xl border border-white/10 overflow-hidden void-fade">
+        <div class="flex items-center justify-between p-6 border-b border-white/5 bg-white/[0.02]">
+            <div>
+                <h3 class="text-xl font-display font-black uppercase tracking-widest text-void-accent">Export Binder</h3>
+                <p class="text-[10px] text-void-muted uppercase tracking-widest mt-1">Right-click or hold to save image</p>
+            </div>
+            <button onclick="document.getElementById('share-modal').classList.add('hidden'); scrollUnlock();" 
+                class="w-10 h-10 rounded-full hover:bg-white/5 transition-all flex items-center justify-center">
+                <i class="fa-solid fa-xmark text-void-muted"></i>
+            </button>
+        </div>
+        <div class="p-8 flex flex-col items-center">
+            <div id="share-preview-container" class="w-full flex justify-center bg-black/40 p-4 rounded-xl border border-white/5 mb-8 overflow-hidden">
+                
+            </div>
+            <div class="flex gap-4 w-full">
+                <a id="download-share-btn" href="#" download="my-binder.png"
+                    class="flex-1 py-4 bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all text-center flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-download"></i> Save Image
+                </a>
+                <button onclick="document.getElementById('share-modal').classList.add('hidden'); scrollUnlock();" 
+                    class="flex-1 py-4 bg-white/5 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/10 transition-all font-black">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

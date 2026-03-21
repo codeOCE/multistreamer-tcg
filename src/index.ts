@@ -32,28 +32,23 @@ interface Env {
   TWITCH_CLIENT_SECRET: string;
   TWITCH_WEBHOOK_SECRET: string;
   FRONTEND_URL: string;
-  ADMIN_PASSWORD: string;
   SESSION_SECRET: string;
+  CREATOR_CDN_BASE: string; // The URL for serve R2 assets
+  PLATFORM_ADMIN_IDS?: string; // Comma-separated Twitch IDs
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
   CARD_IMAGES: any; // R2Bucket
 }
 
-// Card image upload limits (storage conservation)
 const CARD_IMAGE_MAX_BYTES = 8 * 1024 * 1024; // 8MB
 const CARD_IMAGE_MAX_EDGE_PX = 2000;
 
-// CDN base for creator card art (R2); used to detect and delete old art on re-upload
-const CREATOR_CDN_BASE = 'https://cdn.codeoce.com/';
-
-/** If image_url is from our R2-backed CDN, return the R2 object key; else null. */
-function getR2KeyFromImageUrl(imageUrl: string | null | undefined): string | null {
+function getR2KeyFromImageUrl(imageUrl: string | null | undefined, cdnBase: string): string | null {
   if (!imageUrl || typeof imageUrl !== 'string') return null;
-  if (!imageUrl.startsWith(CREATOR_CDN_BASE)) return null;
-  const key = imageUrl.slice(CREATOR_CDN_BASE.length).split('?')[0].trim();
+  if (!imageUrl.startsWith(cdnBase)) return null;
+  const key = imageUrl.slice(cdnBase.length).split('?')[0].trim();
   return key.length > 0 ? key : null;
 }
 
-// Security & Type Hardening Interfaces
 interface AdminCardBody {
   id: string;
   streamer_id?: string;
@@ -124,6 +119,12 @@ interface CardUploadBody {
   type?: string;
 }
 // --- SECURE CREATOR HELPERS ---
+
+// Basic in-memory rate limiting for Admin Login
+// In a distributed Worker environment, this map is per-isolate.
+// For a 10 requests / 60 seconds limit, this provides adequate protection against basic brute-force.
+const adminLoginAttempts = new Map<string, { count: number, resetAt: number }>();
+const globalRateLimiter = new Map<string, { count: number, resetAt: number }>();
 
 async function getUserFromSession(request: Request, env: Env, supabase: any) {
   const cookie = request.headers.get('Cookie') || '';
@@ -242,8 +243,7 @@ async function resolveStreamerContext(request: Request, supabase: any, url: URL)
     const { data: streamerByNick } = await supabase.from('streamers').select('*').ilike('username', streamerId).maybeSingle();
     if (streamerByNick) return streamerByNick;
   }
-  const { data: defaultStreamer } = await supabase.from('streamers').select('*').ilike('username', 'codeoce').maybeSingle();
-  return defaultStreamer;
+  return null;
 }
 
 // --- TWITCH SIGNATURE VERIFIER ---
@@ -275,18 +275,47 @@ async function handleTwitchWebhook(req: Request, env: Env): Promise<Response> {
     return new Response('Missing headers', { status: 403 });
   }
 
-  const isValidSignature = await verifyTwitchSignature(env.TWITCH_WEBHOOK_SECRET, signature, id, timestamp, body);
-  if (!isValidSignature) {
-    console.error('[Webhook] Invalid signature');
-    return new Response('Invalid Signature', { status: 403 });
-  }
-
   let json: any;
   try {
     json = JSON.parse(body);
   } catch (e: any) {
     console.error('[Webhook] Failed to parse JSON:', e);
     return new Response('Invalid JSON', { status: 400 });
+  }
+
+  // --- RESOLVE STREAMER & SECRET ---
+  const broadcasterId = json.subscription?.condition?.broadcaster_user_id;
+  let verificationSecret = env.TWITCH_WEBHOOK_SECRET;
+  let resolvedStreamer = null;
+
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+
+  if (broadcasterId) {
+    const { data: streamer } = await supabase
+      .from('streamers')
+      .select('*')
+      .eq('twitch_id', broadcasterId)
+      .maybeSingle();
+
+    if (streamer) {
+      resolvedStreamer = streamer;
+      if (streamer.webhook_secret) {
+        console.log(`[Webhook] Using dynamic secret for broadcaster ${broadcasterId}`);
+        verificationSecret = streamer.webhook_secret;
+      }
+    }
+  }
+
+  if (!verificationSecret) {
+    console.error('[Webhook] No verification secret available (global or dynamic)');
+    return new Response('Configuration Error', { status: 500 });
+  }
+
+  // --- VERIFY SIGNATURE ---
+  const isValidSignature = await verifyTwitchSignature(verificationSecret, signature, id, timestamp, body);
+  if (!isValidSignature) {
+    console.error('[Webhook] Invalid signature');
+    return new Response('Invalid Signature', { status: 403 });
   }
 
   // Handle verification challenge
@@ -301,49 +330,119 @@ async function handleTwitchWebhook(req: Request, env: Env): Promise<Response> {
     return new Response('OK', { status: 200 });
   }
 
-  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+  // --- TWITCH EVENTSUB HANDLERS ---
+  const type = json.subscription.type;
+  const event = json.event;
+  const userId = event.user_id;
+  const userName = event.user_name || event.user_login;
 
-  // Handle Channel Points Redemption
-  if (json.subscription.type === 'channel.channel_points_custom_reward_redemption.add') {
-    const redeemedRewardId = json.event.reward.id;
-    const broadcasterId = json.event.broadcaster_user_id;
-    const userId = json.event.user_id;
-    const userName = json.event.user_name || json.event.user_login;
+  if (!resolvedStreamer) {
+    console.error(`[Webhook] Streamer not found for broadcaster_id: ${broadcasterId}`);
+    return new Response('Streamer not found', { status: 200 });
+  }
+  const streamer = resolvedStreamer;
 
-    console.log(`[Webhook] Reward redemption: ${json.event.reward.title} by ${userName}`);
+  // 1. Handle Channel Points Redemption
+  if (type === 'channel.channel_points_custom_reward_redemption.add') {
+    const redeemedRewardId = event.reward.id;
+    console.log(`[Webhook] Reward redemption: ${event.reward.title} by ${userName}`);
 
-    const { data: streamer, error: sErr } = await supabase
-      .from('streamers')
-      .select('*')
-      .eq('twitch_id', broadcasterId)
-      .maybeSingle();
-
-    if (sErr || !streamer) {
-      console.error(`[Webhook] Streamer not found for broadcaster_id: ${broadcasterId}`);
-      return new Response('Streamer not found', { status: 200 });
-    }
-
-    // 1. Grant Random Card
+    // Grant Card
     if (redeemedRewardId === streamer.twitch_reward_id) {
       console.log(`[Webhook] Granting card for ${userName} in ${streamer.username}'s stream`);
-      await grantRandomCard(supabase, userId, userName, streamer.id, `🏰 Redemption: ${json.event.reward.title}!`, env);
+      await grantRandomCard(supabase, userId, userName, streamer.id, `🏰 Redemption: ${event.reward.title}!`, env);
     }
 
-    // 2. Battle Initiation
+    // Battle Initiation
     if (streamer.twitch_battle_reward_id && redeemedRewardId === streamer.twitch_battle_reward_id) {
       console.log(`[Webhook] Battle redemption by ${userName}`);
-      const userInput = json.event.user_input || '';
+      const userInput = event.user_input || '';
       const targetUser = userInput.replace('@', '').trim();
-
       if (targetUser) {
-        // Trigger battle logic
         console.log(`[Webhook] Battle: ${userName} vs ${targetUser}`);
-        // Here we would ideally trigger the battle initiation logic
       }
     }
   }
 
+  // 2. Handle Subscriptions (Recipients)
+  // We only reward recipients if it's NOT a gift (standard subs)
+  if (type === 'channel.subscribe') {
+    if (event.is_gift === true || event.is_gift === 'true') {
+      console.log(`[Webhook] Sub received by ${userName} (GIFT) - No reward granted to recipient per settings.`);
+    } else {
+      console.log(`[Webhook] New sub by ${userName} - Granting card!`);
+      await grantRandomCard(supabase, userId, userName, streamer.id, `💜 Welcome to the community! (Sub Reward)`, env);
+    }
+  }
+
+  // 3. Handle Subscription Messages (Re-subs)
+  if (type === 'channel.subscription.message') {
+    console.log(`[Webhook] Re-sub message by ${userName} - Granting card!`);
+    await grantRandomCard(supabase, userId, userName, streamer.id, `✨ Thanks for staying with us! (Re-sub Reward)`, env);
+  }
+
+  // 4. Handle Gift Multiplier (The Gifter gets the reward)
+  if (type === 'channel.subscription.gift') {
+    const giftCount = event.total || 1;
+    console.log(`[Webhook] ${userName} gifted ${giftCount} subs! Granting ${giftCount} cards to gifter.`);
+
+    for (let i = 0; i < giftCount; i++) {
+      await grantRandomCard(
+        supabase,
+        userId,
+        userName,
+        streamer.id,
+        `🎁 Gift Expansion! (${i + 1}/${giftCount})`,
+        env,
+        { isSilent: i > 0 } // Only alert for the first card to avoid spam
+      );
+    }
+  }
+
   return new Response('OK', { status: 200 });
+}
+
+// ── CARD GRADING ─────────────────────────────────────────────────────────────
+//
+// Grade distribution (mirrors the weightings table):
+//   Grades 1-3  → 5.00% each  (damaged / poor)
+//   Grades 4-5  → 8.33% each  (heavily played / moderately played)
+//   Grades 6-8  → 18.33% each (lightly played / near mint range)
+//   Grade  9    → 8.33%       (near mint+)
+//   Grade  10   → 5.00%       (gem mint)
+//
+// Genesis Mint: a 1-in-100 special that overrides the grade to 10 and is
+//   flagged separately (comparable to CGC Black Label / PSA Pristine).
+
+const GRADE_WEIGHTS: { grade: number; weight: number }[] = [
+  { grade: 1,  weight: 5.00  },
+  { grade: 2,  weight: 5.00  },
+  { grade: 3,  weight: 5.00  },
+  { grade: 4,  weight: 8.33  },
+  { grade: 5,  weight: 8.33  },
+  { grade: 6,  weight: 18.33 },
+  { grade: 7,  weight: 18.33 },
+  { grade: 8,  weight: 18.33 },
+  { grade: 9,  weight: 8.33  },
+  { grade: 10, weight: 5.00  },
+];
+
+const GRADE_WEIGHT_TOTAL = GRADE_WEIGHTS.reduce((s, w) => s + w.weight, 0);
+
+function generateGrade(): { grade: number; isGenesisMint: boolean } {
+  // 1-in-100 chance of Genesis Mint.
+  // Stored as grade 11 internally so it sorts above a standard gem-mint 10.
+  // Frontend should render 11 as "10 Genesis Mint".
+  if (Math.random() < 0.01) {
+    return { grade: 11, isGenesisMint: true };
+  }
+
+  let rand = Math.random() * GRADE_WEIGHT_TOTAL;
+  for (const { grade, weight } of GRADE_WEIGHTS) {
+    rand -= weight;
+    if (rand <= 0) return { grade, isGenesisMint: false };
+  }
+  return { grade: 10, isGenesisMint: false }; // floating-point safety fallback
 }
 
 // --- BATTLE SYSTEM HELPERS ---
@@ -433,7 +532,7 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
     const traits = [];
     if (card.mechanic_name) traits.push({ name: card.mechanic_name, icon: card.mechanic_icon });
     if (card.genesis_mechanic_name) traits.push({ name: card.genesis_mechanic_name, icon: card.genesis_mechanic_icon });
-    
+
     return {
       id: card.id,
       name: card.name,
@@ -470,9 +569,9 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
           // We'll append the right slot's first trait if not already present
           const newTrait = right.traits[0];
           if (!card.traits.some((t: any) => t.name === newTrait.name)) {
-             // In dual trait context, mimic keeps 'mimic' but adds the target trait
-             card.traits.push({ ...newTrait });
-             triggered = true;
+            // In dual trait context, mimic keeps 'mimic' but adds the target trait
+            card.traits.push({ ...newTrait });
+            triggered = true;
           }
         }
         if (triggered && typeof eventLog !== 'undefined' && eventLog) {
@@ -630,7 +729,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
   try {
     const { forcedCardId, forcedRarity, isSilent } = options;
     const now = new Date().toISOString();
-    
+
     let randomCard: any = null;
     let selectedRarity = 'Common';
 
@@ -641,7 +740,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
       selectedRarity = c.rarity;
     } else {
       let rarityWeights = null;
-      
+
       if (forcedRarity) {
         selectedRarity = forcedRarity.charAt(0).toUpperCase() + forcedRarity.slice(1);
       } else {
@@ -664,7 +763,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
             .select('common_weight, rare_weight, epic_weight, legendary_weight')
             .eq('streamer_id', creatorId)
             .maybeSingle();
-          
+
           if (customConfig) {
             rarityWeights = {
               common: customConfig.common_weight,
@@ -677,8 +776,9 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
 
         // 3. Fallback to global matrix config
         if (!rarityWeights) {
-          const { data: configData } = await supabase.from('system_config').select('*');
-          rarityWeights = configData?.find((c: any) => c.id === 'rarity_weights')?.data || { common: 70, rare: 20, epic: 8, legendary: 2 };
+          const { data: configData } = await supabase.from('platform_config').select('*');
+          const weightingConfig = configData?.find((c: any) => c.id === 'rarity_weights')?.data;
+          rarityWeights = weightingConfig || { common: 70, rare: 20, epic: 8, legendary: 2 };
         }
 
         const roll = Math.random() * 100;
@@ -689,26 +789,67 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
         }
       }
 
-      const { data: pool } = await supabase.from('cards').select('*').eq('rarity', selectedRarity).eq('streamer_id', creatorId);
+      // Fetch active sets to filter the card pool
+      const { data: activeSets, error: setErr } = await supabase
+        .from('streamer_sets')
+        .select('id, is_active, is_always_active')
+        .eq('streamer_id', creatorId);
+
+      if (setErr) console.error('[Grant] Set fetch error:', setErr.message);
+
+      const activeSetIds = activeSets?.filter((s: any) => s.is_active || s.is_always_active).map((s: any) => s.id) || [];
+
+      // Query cards with case-insensitive rarity check
+      const { data: allCardsInRarity, error: cardErr } = await supabase
+        .from('cards')
+        .select('*')
+        .ilike('rarity', selectedRarity)
+        .eq('streamer_id', creatorId);
+
+      if (cardErr) {
+        console.error('[Grant] Card fetch error:', cardErr.message);
+        throw new Error('Database error during card fetch');
+      }
+
+      // A card is eligible if it has no set OR its set is active (or always active)
+      let pool = (allCardsInRarity || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+
       if (!pool || pool.length === 0) {
+        console.log(`[Grant] Pool empty for ${selectedRarity} (Streamer: ${creatorId})`);
         // If we forced a rarity that doesn't exist, we fallback
         if (forcedRarity) {
-           // If forced rarity has no cards, fallback to ANY card from streamer
-           const { data: anyPool } = await supabase.from('cards').select('*').eq('streamer_id', creatorId).limit(1);
-           if (!anyPool || anyPool.length === 0) throw new Error('No cards available for this streamer');
-           randomCard = anyPool[0];
+          const { data: anyPoolRaw } = await supabase.from('cards').select('*').eq('streamer_id', creatorId);
+          const anyPool = (anyPoolRaw || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+
+          if (!anyPool || anyPool.length === 0) throw new Error('No cards available for this streamer');
+          randomCard = anyPool[Math.floor(Math.random() * anyPool.length)];
         } else {
-           if (selectedRarity !== 'Common') return grantRandomCard(supabase, userId, userName, creatorId, customMessage, env, options);
-           return;
+          // If common is empty, try to find ANY card before giving up
+          if (selectedRarity.toLowerCase() === 'common') {
+            const { data: allCards } = await supabase.from('cards').select('*').eq('streamer_id', creatorId).limit(10);
+            const fallbackPool = (allCards || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+            if (fallbackPool.length > 0) {
+              randomCard = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
+            } else {
+              console.error('[Grant] Completely empty card pool for streamer:', creatorId);
+              return;
+            }
+          } else {
+            // Fallback to common roll
+            return grantRandomCard(supabase, userId, userName, creatorId, customMessage, env, options);
+          }
         }
       } else {
         randomCard = pool[Math.floor(Math.random() * pool.length)];
       }
     }
-    
+
     const { data: user } = await supabase.from('users').select('is_linked').eq('twitch_id', userId).maybeSingle();
 
     if (user?.is_linked) {
+      // Generate card grade (independent of genesis trait roll)
+      const { grade: cardGrade, isGenesisMint } = generateGrade();
+
       // Genesis Trait System (1% chance for dual traits)
       const isGenesis = Math.random() < 0.01;
       const primaryMechanicId = await assignMechanic(supabase);
@@ -724,7 +865,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
         }
       }
 
-      await supabase.from('user_cards').insert({
+      const { error: cardErr } = await supabase.from('user_cards').insert({
         twitch_id: userId,
         card_id: randomCard.id,
         streamer_id: creatorId,
@@ -735,35 +876,59 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
         max_hp: randomCard.defense,
         mechanic_id: isGenesis ? secondaryMechanicId : primaryMechanicId,
         genesis_mechanic_id: isGenesis ? primaryMechanicId : null,
+        grade: cardGrade,
+        is_genesis_mint: isGenesisMint,
       });
 
-      const notificationMsg = isGenesis 
+      if (cardErr) {
+        console.error('[Grant] Error inserting user_card:', cardErr.message);
+      }
+
+      const notificationMsg = isGenesis
         ? `🌌 GENESIS CARD! ${customMessage || `You got a dual-trait card: ${randomCard.name}!`}`
         : customMessage || `🏰 You got a new card: ${randomCard.name}!`;
 
-      await supabase.from('notifications').insert({ 
-        twitch_id: userId, 
-        streamer_id: creatorId, 
-        type: 'card_drop', 
-        message: notificationMsg, 
-        data: { 
-          card_id: randomCard.id, 
-          name: randomCard.name, 
-          rarity: randomCard.rarity, 
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        twitch_id: userId,
+        streamer_id: creatorId,
+        type: 'card_drop',
+        message: notificationMsg,
+        data: {
+          card_id: randomCard.id,
+          name: randomCard.name,
+          rarity: randomCard.rarity,
           image_url: randomCard.image_url,
           is_genesis: isGenesis
-        } 
+        }
       });
+
+      if (notifErr) {
+        console.error('[Grant] Error inserting notification:', notifErr.message);
+      }
+
       await checkAndUnlockAchievements(supabase, userId, randomCard, creatorId);
     } else {
-      await supabase.from('pending_rewards').insert({ 
-        twitch_id: userId, 
-        card_id: randomCard.id, 
+      // Ensure the user row exists before inserting into pending_rewards (FK constraint)
+      if (!user) {
+        await supabase.from('users').upsert({ twitch_id: userId, username: userName, is_linked: false }, { onConflict: 'twitch_id' });
+      }
+
+      // Generate grade at reward time so it's locked in before account linking
+      const { grade: pendingGrade, isGenesisMint: pendingIsGenesisMint } = generateGrade();
+
+      const { error: rewardErr } = await supabase.from('pending_rewards').insert({
+        twitch_id: userId,
+        card_id: randomCard.id,
         streamer_id: creatorId,
-        is_obs_consumed: isSilent || false
+        is_obs_consumed: isSilent || false,
+        grade: pendingGrade,
+        is_genesis_mint: pendingIsGenesisMint,
       });
+
+      if (rewardErr) {
+        console.error('[Grant] Error inserting pending_reward:', rewardErr.message);
+      }
     }
-    if (!user) await supabase.from('users').upsert({ twitch_id: userId, username: userName, is_linked: false }, { onConflict: 'twitch_id' });
   } catch (e: any) { console.error('[Grant] Error:', e.message); }
 }
 
@@ -827,12 +992,33 @@ function failHtmlResponse(title: string, message: string, status: number = 500):
   });
 }
 
+function sanitizeMetadata(data: any): any {
+  if (!data) return data;
+  if (typeof data !== 'object') return data;
+
+  if (Array.isArray(data)) {
+    return data.map(sanitizeMetadata);
+  }
+
+  const sanitized = { ...data };
+  const sensitiveKeys = ['email', 'token', 'secret', 'password', 'jwt', 'code', 'access_token', 'refresh_token', 'obs_overlay_token', 'webhook_secret'];
+
+  for (const key of Object.keys(sanitized)) {
+    if (sensitiveKeys.some(sk => key.toLowerCase().includes(sk))) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof sanitized[key] === 'object') {
+      sanitized[key] = sanitizeMetadata(sanitized[key]);
+    }
+  }
+  return sanitized;
+}
+
 async function logSystem(supabase: any, level: 'info' | 'warn' | 'error', category: 'webhook' | 'grant' | 'admin' | 'auth' | 'system' | 'trade', message: string, streamerId?: string, metadata: any = {}) {
   const timestamp = new Date().toISOString();
   const logPrefix = `[${timestamp}] [${category.toUpperCase()}] [${level.toUpperCase()}]`;
   const streamerInfo = streamerId ? ` [${streamerId}]` : '';
-  
-  console.log(`${logPrefix}${streamerInfo} ${message}`, Object.keys(metadata).length ? metadata : '');
+
+  console.log(`${logPrefix}${streamerInfo} ${message}`, Object.keys(metadata).length ? sanitizeMetadata(metadata) : '');
 }
 
 // Rate limiting - in-memory store (resets on worker restart, but that's fine for basic protection)
@@ -1126,9 +1312,39 @@ export default {
     const url = new URL(request.url);
     const method = request.method;
     const path = url.pathname.replace(/\/$/, '') || '/';
-    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+
+    // 1. Strict Environment Validation (Must be first to prevent crashes)
+    const requiredSecrets = [
+      'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'TWITCH_CLIENT_ID',
+      'FRONTEND_URL', 'SESSION_SECRET', 'CREATOR_CDN_BASE'
+    ];
+    const missing = requiredSecrets.filter(s => !(env as any)[s]);
+    if (missing.length > 0) {
+      return new Response(JSON.stringify({
+        error: `Missing environment secrets: ${missing.join(', ')}`,
+        help: "Please use 'npx wrangler secret put KEY' to set these for production."
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    let supabase: any;
+    try {
+      supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: 'Failed to initialize database client: ' + e.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
     const origin = request.headers.get('Origin') || '';
-    const domainMatch = env.FRONTEND_URL ? new URL(env.FRONTEND_URL).hostname.replace('www.', '') : '';
+    let domainMatch = '';
+    try {
+      if (env.FRONTEND_URL) domainMatch = new URL(env.FRONTEND_URL).hostname.replace('www.', '');
+    } catch {
+      // FRONTEND_URL is not a valid URL — fall back to direct string matching only
+    }
 
     const isAllowedOrigin = origin === env.FRONTEND_URL ||
       (domainMatch && origin.includes(domainMatch)) ||
@@ -1143,6 +1359,34 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type, Twitch-ID, X-CSRF-Token',
     };
 
+    // Generic Rate Limiting for Public/Expensive Routes (50 requests per minute per IP)
+    const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+    if (path.startsWith('/api/onboarding') || path === '/api/bootstrap') {
+      const now = Date.now();
+      let limitRecord = globalRateLimiter.get(ip) || { count: 0, resetAt: now + 60 * 1000 };
+
+      if (now > limitRecord.resetAt) {
+        limitRecord = { count: 1, resetAt: now + 60 * 1000 };
+      } else {
+        limitRecord.count++;
+      }
+      globalRateLimiter.set(ip, limitRecord);
+
+      // Clean up old entries occasionally
+      if (Math.random() < 0.05) {
+        for (const [key, val] of globalRateLimiter.entries()) {
+          if (now > val.resetAt) globalRateLimiter.delete(key);
+        }
+      }
+
+      if (limitRecord.count > 50) {
+        return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // Metadata Endpoint
     if (method === 'GET' && path === '/api/mechanics') {
       const { data, error } = await supabase.from('mechanics').select('*');
@@ -1154,19 +1398,23 @@ export default {
       // --- MIDDLEWARE HELPERS ---
 
       async function checkAdmin(req: Request) {
-        const cookie = req.headers.get('Cookie');
-        const token = cookie?.match(/admin_session=([^;]+)/)?.[1];
+        const u = await getUserFromSession(req, env, supabase);
+        if (!u) throw new Error("Unauthorized: Session missing");
 
-        if (!token) {
-          throw new Error("Unauthorized: Session missing");
-        }
+        const adminIds = (env.PLATFORM_ADMIN_IDS || '').split(',').map(id => id.trim());
+        const isPlatformAdmin = adminIds.includes(u.twitch_id);
 
-        try {
-          await jwtVerify(token, new TextEncoder().encode(env.SESSION_SECRET));
-          return; // Valid session
-        } catch (e: any) {
-          throw new Error("Unauthorized: Invalid session");
+        // Check if user is a registered streamer
+        const { data: streamer } = await supabase
+          .from('streamers')
+          .select('*')
+          .eq('twitch_id', u.twitch_id)
+          .maybeSingle();
+
+        if (!isPlatformAdmin && !streamer) {
+          throw new Error("Unauthorized: Insufficient privileges");
         }
+        return { user: u, isPlatformAdmin, streamer }; // Valid admin session
       }
 
       async function checkCreator(req: Request, sbase: any) {
@@ -1370,6 +1618,7 @@ export default {
             return new Response(obsRes.body, {
               headers: {
                 'Content-Type': 'text/html',
+                'Cache-Control': 'no-store',
                 ...corsHeaders
               }
             });
@@ -1381,9 +1630,25 @@ export default {
         return new Response('OBS overlay not found', { status: 404 });
       }
 
+      // --- QUEUE CONTROL POPOUT (OBS dockable) ---
+      // Token validation is handled by the page's own API calls; just serve the HTML.
+      if (method === 'GET' && path === '/queue-control') {
+        try {
+          const qcRes = await env.ASSETS?.fetch(new Request(`${url.origin}/queue-control.html`));
+          if (qcRes && qcRes.ok) {
+            return new Response(qcRes.body, {
+              headers: { 'Content-Type': 'text/html', 'Cache-Control': 'no-store', ...corsHeaders }
+            });
+          }
+        } catch (e) {
+          console.error('[QueueControl] Error serving page:', e);
+        }
+        return new Response('Queue control page not found', { status: 404 });
+      }
+
       // If NOT an API/Auth route, try serving from assets.
       // If asset not found and it's a GET, fallback to index.html (SPA routing).
-      if (env.ASSETS && !path.startsWith('/api') && !path.startsWith('/auth') && path !== '/twitch/eventsub' && !path.startsWith('/api/obs') && path !== '/obs-overlay') {
+      if (env.ASSETS && !path.startsWith('/api') && !path.startsWith('/auth') && path !== '/twitch/eventsub' && !path.startsWith('/api/obs') && path !== '/obs-overlay' && path !== '/queue-control') {
         try {
           const assetRes = await env.ASSETS.fetch(request.clone());
           if (assetRes.status !== 404) return assetRes;
@@ -1398,20 +1663,13 @@ export default {
       }
 
 
-      // Strict Environment Validation
-      const requiredSecrets = [
-        'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'TWITCH_CLIENT_ID',
-        'FRONTEND_URL', 'ADMIN_PASSWORD', 'SESSION_SECRET'
-      ];
-      const missing = requiredSecrets.filter(s => !(env as any)[s]);
-      if (missing.length > 0) {
-        return secureResponse(`Missing secrets: ${missing.join(', ')}`, 500, {}, true);
-      }
+
 
       // Rate limiting
       const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
       const isAdminRoute = path.startsWith('/api/admin');
-      const rateLimit = isAdminRoute ? 600 : 300;
+      const isAdminLogin = method === 'POST' && path === '/api/admin/login';
+      const rateLimit = isAdminLogin ? 10 : isAdminRoute ? 600 : 300;
 
       if (!checkRateLimit(clientIP, rateLimit)) {
         return new Response(JSON.stringify({ error: 'Too many requests. Please slow down.' }), {
@@ -1422,7 +1680,7 @@ export default {
 
 
 
-      // Strict Environment Validation
+
 
       if (path === '/api/me') {
         console.log(`[Auth/Me] Request from: ${request.headers.get('Origin') || 'no-origin'}, Host: ${request.headers.get('Host')}`);
@@ -1748,8 +2006,17 @@ export default {
             }
           }
 
+          const isPlatformAdmin = (env.PLATFORM_ADMIN_IDS || '').split(',').map(id => id.trim()).includes(user?.twitch_id || '');
+          const isAdmin = isPlatformAdmin || !!creatorRecord;
+
           return secureResponse({
-            user: user ? { ...user, is_creator: !!creatorRecord, streamer: creatorRecord } : null,
+            user: user ? { 
+              ...user, 
+              is_creator: !!creatorRecord, 
+              is_admin: isAdmin,
+              is_platform_admin: isPlatformAdmin,
+              streamer: creatorRecord 
+            } : null,
             streamer: streamer,
             active_streamers: discoveryStreamers, // Legacy support
             sections: sections,
@@ -1830,17 +2097,23 @@ export default {
         path.startsWith('/api') &&
         path !== '/api/logout' &&
         path !== '/api/csrf' &&
-        path !== '/api/admin/login' &&
-        path !== '/api/admin/logout' &&
         path !== '/twitch/eventsub' &&
+        path !== '/api/twitch/webhook' &&
         !path.startsWith('/api/obs')
       ) {
         const cookie = request.headers.get('Cookie') || '';
         const csrfCookie = cookie.match(/csrf=([^;]+)/)?.[1];
         const csrfHeader = request.headers.get('X-CSRF-Token');
 
-        if (!csrfCookie || csrfCookie !== csrfHeader) {
-          console.warn(`[CSRF] Blocked: Cookie: ${!!csrfCookie}, Header: ${!!csrfHeader}`);
+        const origin = request.headers.get('Origin');
+        const isTrustedOrigin = origin && [
+          env.FRONTEND_URL,
+          'http://localhost:3000', 'http://127.0.0.1:3000',
+          'http://localhost:5500', 'http://127.0.0.1:5500'
+        ].includes(origin);
+
+        if (!isTrustedOrigin && (!csrfCookie || csrfCookie !== csrfHeader)) {
+          console.warn(`[CSRF] Blocked: Cookie: ${!!csrfCookie}, Header: ${!!csrfHeader}, Origin: ${origin}`);
           return secureResponse('CSRF blocked', 403, corsHeaders, true);
         }
       }
@@ -2827,6 +3100,7 @@ export default {
             throw delError;
           }
 
+          const { grade: tradeGrade, isGenesisMint: tradeGM } = generateGrade();
           const { data: granted, error: insError } = await supabase.from('user_cards').insert({
             twitch_id: user.twitch_id,
             card_id: newCard.id,
@@ -2836,7 +3110,9 @@ export default {
             attack: newCard.attack,
             defense: newCard.defense,
             max_hp: newCard.defense,
-            mechanic_id: newCard.mechanic_id
+            mechanic_id: newCard.mechanic_id,
+            grade: tradeGrade,
+            is_genesis_mint: tradeGM,
           }).select().single();
 
           if (insError) {
@@ -2887,82 +3163,14 @@ export default {
 
       // --- ADMIN AUTH ENDPOINTS ---
 
-      // Admin Login
-      if (method === 'POST' && path === '/api/admin/login') {
-        let username = 'unknown';
-        try {
-          const body = await request.json() as LoginBody;
-          username = body.username;
-          const password = body.password;
-
-          // Check credentials
-          if (username !== 'codeoce' || password !== env.ADMIN_PASSWORD) {
-            return new Response(JSON.stringify({ error: 'Invalid credentials' }), {
-              status: 401,
-              headers: corsHeaders
-            });
-          }
-
-
-          // Create admin session token
-          const adminToken = await new SignJWT({ admin: true, username })
-            .setProtectedHeader({ alg: 'HS256' })
-            .setIssuedAt()
-            .setExpirationTime('12h')
-            .sign(new TextEncoder().encode(env.SESSION_SECRET));
-
-          const isHttps = request.url.startsWith('https');
-          const secureFlag = isHttps ? '; Secure' : '';
-
-          return new Response(JSON.stringify({ success: true }), {
-            status: 200,
-            headers: {
-              ...corsHeaders,
-              'Set-Cookie': `admin_session=${adminToken}; HttpOnly${secureFlag}; SameSite=Lax; Path=/; Max-Age=43200`
-            }
-          });
-        } catch (e: any) {
-          const msg = e instanceof Error ? ((e as any).message || String(e)) : String(e);
-          await logSystem(supabase, 'warn', 'auth', `Admin login failed for user: ${username}. Error: ${msg}`, undefined, { username });
-          return new Response(JSON.stringify({ error: 'Login failed' }), {
-            status: 500,
-            headers: corsHeaders
-          });
-        }
-      }
-
-      // Admin Logout
-      if (method === 'POST' && path === '/api/admin/logout') {
-        return new Response(JSON.stringify({ success: true }), {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            'Set-Cookie': 'admin_session=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0'
-          }
-        });
-      }
-
       // Check Admin Session
       if (method === 'GET' && path === '/api/admin/check') {
-        const cookie = request.headers.get('Cookie');
-        const token = cookie?.match(/admin_session=([^;]+)/)?.[1];
-
-        if (!token) {
-          return new Response(JSON.stringify({ authenticated: false }), {
-            status: 200,
-            headers: corsHeaders
-          });
-        }
-
         try {
-          const { payload } = await jwtVerify(
-            token,
-            new TextEncoder().encode(env.SESSION_SECRET)
-          );
-
+          await checkAdmin(request);
+          const u = await getUserFromSession(request, env, supabase);
           return new Response(JSON.stringify({
             authenticated: true,
-            username: payload.username
+            username: u?.username
           }), {
             status: 200,
             headers: corsHeaders
@@ -2982,12 +3190,18 @@ export default {
       // 1. Add Card
       if (method === 'POST' && path === '/api/admin/cards') {
         try {
-          await checkAdmin(request);
+          const { streamer, isPlatformAdmin } = await checkAdmin(request);
           const body = await request.json() as AdminCardBody;
+
+          // Multi-tenancy check: non-platform admins can only create cards for themselves
+          const targetStreamerId = body.streamer_id || body.creator_id;
+          if (!isPlatformAdmin && (!streamer || streamer.id !== targetStreamerId)) {
+            throw new Error("Unauthorized: Cannot create cards for other streamers");
+          }
 
           const { error } = await supabase.from('cards').upsert({
             id: body.id,
-            streamer_id: body.streamer_id || body.creator_id, // Backward compatibility
+            streamer_id: targetStreamerId, // Backward compatibility
             name: body.name,
             image_url: body.image_url,
             rarity: body.rarity,
@@ -3048,12 +3262,20 @@ export default {
       // 1b. Bulk Add Cards
       if (method === 'POST' && path === '/api/admin/cards/bulk') {
         try {
-          await checkAdmin(request);
+          const { streamer, isPlatformAdmin } = await checkAdmin(request);
           const body = await request.json() as BulkCardsBody;
           const cards = body.cards;
 
           if (!Array.isArray(cards) || cards.length === 0) {
             throw new Error("Invalid cards array");
+          }
+
+          // Multi-tenancy check for each card
+          for (const card of cards) {
+            const targetId = card.streamer_id || card.creator_id;
+            if (!isPlatformAdmin && (!streamer || streamer.id !== targetId)) {
+                throw new Error("Unauthorized: Bulk includes cards for other streamers");
+            }
           }
 
           const cardsToInsert = cards.map(card => ({
@@ -3082,7 +3304,9 @@ export default {
       // 2. Get Users (for moderation)
       if (method === 'GET' && path === '/api/admin/users') {
         try {
-          await checkAdmin(request);
+          const { isPlatformAdmin } = await checkAdmin(request);
+          if (!isPlatformAdmin) throw new Error("Unauthorized: Platform Admin required");
+
           const { data, error } = await supabase
             .from('users')
             .select('*')
@@ -3115,7 +3339,7 @@ export default {
       // 6. Grant Card to User
       if (method === 'POST' && path === '/api/admin/grant') {
         try {
-          await checkAdmin(request);
+          const { streamer, isPlatformAdmin } = await checkAdmin(request);
           const body = await request.json() as GrantBody;
 
           const { data: user, error: userError } = await supabase
@@ -3134,9 +3358,15 @@ export default {
 
           if (cardError || !card) throw new Error("Card not found");
 
+          // Multi-tenancy check: cannot grant cards you don't own
+          if (!isPlatformAdmin && (!streamer || streamer.id !== card.streamer_id)) {
+            throw new Error("Unauthorized: Cannot grant cards from other streamers");
+          }
+
           const quantity = body.quantity || 1;
           const grants: any[] = [];
           for (let i = 0; i < quantity; i++) {
+            const { grade: gGrade, isGenesisMint: gGM } = generateGrade();
             grants.push({
               twitch_id: user.twitch_id,
               card_id: card.id,
@@ -3145,7 +3375,9 @@ export default {
               attack: card.attack,
               defense: card.defense,
               max_hp: card.defense,
-              mechanic_id: card.mechanic_id
+              mechanic_id: card.mechanic_id,
+              grade: gGrade,
+              is_genesis_mint: gGM,
             });
           }
 
@@ -3719,9 +3951,9 @@ export default {
 
             // Handle R2 cleanup if image is changing
             if (b.image_url && b.image_url !== existingCard.image_url) {
-              const r2Key = getR2KeyFromImageUrl(existingCard.image_url);
+              const r2Key = getR2KeyFromImageUrl(existingCard.image_url, env.CREATOR_CDN_BASE);
               if (r2Key && env.CARD_IMAGES) {
-                try { await env.CARD_IMAGES.delete(r2Key); } catch (_) {}
+                try { await env.CARD_IMAGES.delete(r2Key); } catch (_) { }
               }
             }
 
@@ -3745,6 +3977,8 @@ export default {
               attack: b.attack || 0,
               defense: b.defense || 0,
               image_url: b.image_url || '/pack.png',
+              is_battle_eligible: b.is_battle_eligible !== undefined ? b.is_battle_eligible : true,
+              is_trading_eligible: b.is_trading_eligible !== undefined ? b.is_trading_eligible : true,
               is_approved: true,
               set_id: b.set_id || null,
               card_number: b.card_number || null,
@@ -3757,13 +3991,13 @@ export default {
 
           // Global Stat Sync: Update all existing user card instances if stats changed
           if (b.attack !== undefined || b.defense !== undefined) {
-              await supabase.from('user_cards')
-                .update({
-                  attack: cardData.attack,
-                  defense: cardData.defense,
-                  max_hp: cardData.defense
-                })
-                .eq('card_id', cardData.id);
+            await supabase.from('user_cards')
+              .update({
+                attack: cardData.attack,
+                defense: cardData.defense,
+                max_hp: cardData.defense
+              })
+              .eq('card_id', cardData.id);
           }
 
           return secureResponse(data, 200, corsHeaders);
@@ -4505,21 +4739,21 @@ export default {
         try {
           const { streamer } = await checkCreator(request, supabase);
           const b = await request.json() as any;
-          
+
           const durationHrs = Math.max(1, parseInt(b.duration || '1'));
           const startsAt = new Date();
           const endsAt = new Date(startsAt.getTime() + durationHrs * 60 * 60 * 1000);
-          
+
           const rarity = b.target_rarity || 'rare';
           const multiplier = parseFloat(b.multiplier || '2');
-          
+
           // Default weights as base: common: 70, rare: 20, epic: 8, legendary: 2
           const config = { common: 70, rare: 20, epic: 8, legendary: 2 };
           const baseWeight = (config as any)[rarity];
-          const newWeight = Math.min(baseWeight * multiplier, 50); 
+          const newWeight = Math.min(baseWeight * multiplier, 50);
           const diff = newWeight - baseWeight;
-          
-          config.common = Math.max(10, config.common - diff); 
+
+          config.common = Math.max(10, config.common - diff);
           (config as any)[rarity] = newWeight;
 
           const { data, error } = await supabase.from('streamer_events').insert({
@@ -4532,7 +4766,7 @@ export default {
           }).select().single();
 
           if (error) throw error;
-          
+
           await logSystem(supabase, 'info', 'admin', `Special Event initiated: ${data.name}`, streamer.id);
           return secureResponse(data, 200, corsHeaders);
         } catch (e: any) {
@@ -4581,7 +4815,7 @@ export default {
 
           // When re-uploading art, remove old image from R2 to avoid orphaned objects
           if (b.image_url && existingCard.image_url !== b.image_url) {
-            const r2Key = getR2KeyFromImageUrl(existingCard.image_url);
+            const r2Key = getR2KeyFromImageUrl(existingCard.image_url, env.CREATOR_CDN_BASE);
             if (r2Key && env.CARD_IMAGES) {
               try {
                 await env.CARD_IMAGES.delete(r2Key);
@@ -4649,7 +4883,7 @@ export default {
           }
 
           // Remove card art from R2 so we don't leave orphaned objects
-          const r2Key = getR2KeyFromImageUrl(existingCard.image_url);
+          const r2Key = getR2KeyFromImageUrl(existingCard.image_url, env.CREATOR_CDN_BASE);
           if (r2Key && env.CARD_IMAGES) {
             try {
               await env.CARD_IMAGES.delete(r2Key);
@@ -4721,7 +4955,7 @@ export default {
             forcedRarity,
             isSilent: b.is_silent
           });
-          
+
           const logMsg = forcedCardId ? `Creator granted specific card ${forcedCardId} to ${b.twitch_id}` : `Creator granted random ${forcedRarity || 'any'} card to ${b.twitch_id}`;
           await logSystem(supabase, 'info', 'grant', logMsg, streamer.id);
           return secureResponse({ success: true }, 200, corsHeaders);
@@ -5231,7 +5465,10 @@ export default {
           const filePath = `${fileName}`;
 
           await env.CARD_IMAGES.put(filePath, await file.arrayBuffer(), {
-            httpMetadata: { contentType: file.type || 'image/webp' }
+            httpMetadata: {
+              contentType: file.type || 'image/webp',
+              cacheControl: 'public, max-age=31536000, immutable'
+            }
           });
 
           const publicUrl = `https://cdn.codeoce.com/${filePath}`;
@@ -5826,63 +6063,79 @@ export default {
         return secureResponse(result, 200, corsHeaders);
       }
 
-      // 3.5b Sync Achievements
-      if (method === 'POST' && path === '/api/achievements/sync') {
-        const user = await getUserFromSession(request, env, supabase);
-        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
-
-        const streamer = await resolveStreamerContext(request, supabase, url);
-        if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
-
-        const result = await syncUserAchievements(supabase, user.twitch_id, streamer.id);
-        return secureResponse(result, 200, corsHeaders);
-      }
+      // Achievements are now synced automatically via /api/achievements GET
 
       // 3.6 Creator Stats Dashboard
       if (method === 'GET' && path === '/api/creator/stats') {
-        const user = await getUserFromSession(request, env, supabase);
-        if (!user) return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+        try {
+          const { streamer } = await checkCreator(request, supabase);
 
-        const streamer = await getStreamerForCreator(user, supabase);
-        if (!streamer) return secureResponse('Not a registered creator', 403, corsHeaders, true);
+          // Get stats from leaderboard view
+          const { data: lbData } = await supabase
+            .from('streamer_leaderboards')
+            .select('total_cards, unique_collectors')
+            .eq('streamer_id', streamer.id)
+            .maybeSingle();
 
-        // TODO: Replace with complex RPC aggregations when pack schema is finalized
-        const stats = {
-          minted: 1337,
-          packs: 0,
-          community: 420
-        };
+          // Get pack count
+          const { count: packCount } = await supabase
+            .from('streamer_sets')
+            .select('*', { count: 'exact', head: true })
+            .eq('streamer_id', streamer.id);
 
-        return new Response(JSON.stringify(stats), { status: 200, headers: corsHeaders });
+          return secureResponse({
+            minted: lbData?.total_cards || 0,
+            packs: packCount || 0,
+            community: lbData?.unique_collectors || 0
+          }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 403, corsHeaders, true);
+        }
       }
 
-      // 3.7 Creator Mint Card
-      if (method === 'POST' && path === '/api/creator/cards') {
-        const user = await getUserFromSession(request, env, supabase);
-        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
-        const streamer = await getStreamerForCreator(user, supabase);
-        if (!streamer) return secureResponse('Not a registered creator', 403, corsHeaders, true);
+      // 3.7 Creator Cards handled at line 3782 & 3798
 
-        const body = await request.json() as any;
-        if (!body.name || !body.rarity) return secureResponse('Missing card data', 400, corsHeaders, true);
+      // 3.8 Creator Packs List
+      if (method === 'GET' && path === '/api/creator/packs') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const { data, error } = await supabase
+            .from('streamer_sets')
+            .select('*')
+            .eq('streamer_id', streamer.id)
+            .order('created_at', { ascending: false });
 
-        // In a real app, handle image uploads and store in `cards` table
-        // For now, we mock success for the dashboard UI
-        return secureResponse({ success: true, message: `Card ${body.name} minted!` }, 200, corsHeaders);
+          if (error) throw error;
+          return secureResponse(data, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 403, corsHeaders, true);
+        }
       }
 
-      // 3.8 Creator Assemble Pack
+      // 3.8b Creator Assemble Pack (POST)
       if (method === 'POST' && path === '/api/creator/packs') {
-        const user = await getUserFromSession(request, env, supabase);
-        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
-        const streamer = await getStreamerForCreator(user, supabase);
-        if (!streamer) return secureResponse('Not a registered creator', 403, corsHeaders, true);
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const body: any = await request.json();
+          if (!body.name) return secureResponse('Pack name required', 400, corsHeaders, true);
 
-        const body = await request.json() as any;
-        if (!body.name) return secureResponse('Missing pack data', 400, corsHeaders, true);
+          const { data, error } = await supabase
+            .from('streamer_sets')
+            .insert({
+              streamer_id: streamer.id,
+              name: body.name,
+              description: body.description || '',
+              code: body.code || body.name.substring(0, 3).toUpperCase(),
+              is_active: true
+            })
+            .select()
+            .single();
 
-        // Mock success for assembling packs in UI
-        return secureResponse({ success: true, message: `Pack ${body.name} assembled!` }, 200, corsHeaders);
+          if (error) throw error;
+          return secureResponse({ success: true, pack: data }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 400, corsHeaders, true);
+        }
       }
 
       // 3.9 Creator Trigger Live Drop
@@ -6061,6 +6314,10 @@ export default {
           const toInsert = [];
           for (const p of pending) {
             const cardData = Array.isArray(p.cards) ? p.cards[0] : (p.cards as any);
+            // Use the grade locked in at reward time; fall back to generating one
+            // for any legacy pending rows that predate the grading feature
+            const grade    = p.grade           ?? generateGrade().grade;
+            const isGM     = p.is_genesis_mint ?? false;
             toInsert.push({
               twitch_id: user.id,
               card_id: p.card_id,
@@ -6070,7 +6327,9 @@ export default {
               attack: cardData?.attack || 0,
               defense: cardData?.defense || 0,
               max_hp: cardData?.defense || 0,
-              mechanic_id: cardData?.mechanic_id || null
+              mechanic_id: cardData?.mechanic_id || null,
+              grade,
+              is_genesis_mint: isGM,
             });
           }
 
@@ -6088,7 +6347,7 @@ export default {
         // Check if user is a streamer
         const { data: streamer } = await supabase
           .from('streamers')
-          .select('id')
+          .select('id, is_active')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -6116,7 +6375,9 @@ export default {
 
         let destination = requestOrigin;
         if (role === 'creator') {
-          destination = `${requestOrigin}/onboarding?role=creator`;
+          if (!streamer || !streamer.is_active) {
+            destination = `${requestOrigin}/onboarding?role=creator`;
+          }
         } else {
           // Check if collector onboarding is complete
           const { data: dbUser } = await supabase
@@ -6196,6 +6457,167 @@ export default {
         return streamer;
       }
 
+      // ── OBS SIGNAL (polled by obs.html during animation) ──
+      // Returns current pause + skip state; atomically clears skip_signal after reading.
+      if (method === 'GET' && path === '/api/obs/signal') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+
+        const { data: s } = await supabase
+          .from('streamers')
+          .select('obs_paused, obs_skip_signal')
+          .eq('id', streamer.id)
+          .maybeSingle();
+
+        const skip   = !!s?.obs_skip_signal;
+        const paused = !!s?.obs_paused;
+
+        // Clear skip signal atomically so it only fires once
+        if (skip) {
+          await supabase.from('streamers').update({ obs_skip_signal: false }).eq('id', streamer.id);
+        }
+
+        return new Response(JSON.stringify({ paused, skip }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+        });
+      }
+
+      // ── QUEUE CONTROL API (token-authenticated, used by queue-control.html) ──
+
+      // GET /api/obs/queue-ctl — list pending + consumed items
+      if (method === 'GET' && path === '/api/obs/queue-ctl') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+
+        // Fetch full streamer record for obs_settings + pause state
+        const { data: fullStreamer } = await supabase.from('streamers').select('obs_settings, obs_paused').eq('id', streamer.id).maybeSingle();
+
+        const [pendingRes, consumedRes] = await Promise.all([
+          supabase.from('user_cards')
+            .select('id, created_at, cards(id, name, rarity, image_url), users(username, avatar_url)')
+            .eq('streamer_id', streamer.id).eq('is_obs_consumed', false)
+            .order('created_at', { ascending: true }).limit(50),
+          supabase.from('user_cards')
+            .select('id, created_at, cards(id, name, rarity, image_url), users(username, avatar_url)')
+            .eq('streamer_id', streamer.id).eq('is_obs_consumed', true)
+            .order('created_at', { ascending: false }).limit(30),
+        ]);
+
+        return new Response(JSON.stringify({
+          pending:      pendingRes.data  || [],
+          consumed:     consumedRes.data || [],
+          obs_settings: fullStreamer?.obs_settings || { show_rarities: ['common', 'rare', 'epic', 'legendary'] },
+          obs_paused:   !!fullStreamer?.obs_paused,
+        }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // POST /api/obs/queue-ctl/skip
+      if (method === 'POST' && path === '/api/obs/queue-ctl/skip') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const body = await request.json().catch(() => ({})) as any;
+        if (!body.id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400, headers: corsHeaders });
+        const { error } = await supabase.from('user_cards').update({ is_obs_consumed: true }).eq('id', body.id).eq('streamer_id', streamer.id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+      }
+
+      // POST /api/obs/queue-ctl/replay
+      if (method === 'POST' && path === '/api/obs/queue-ctl/replay') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const body = await request.json().catch(() => ({})) as any;
+        if (!body.id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400, headers: corsHeaders });
+        const { error } = await supabase.from('user_cards').update({ is_obs_consumed: false, created_at: new Date().toISOString() }).eq('id', body.id).eq('streamer_id', streamer.id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+      }
+
+      // POST /api/obs/queue-ctl/clear
+      if (method === 'POST' && path === '/api/obs/queue-ctl/clear') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const { error } = await supabase.from('user_cards').update({ is_obs_consumed: true }).eq('streamer_id', streamer.id).eq('is_obs_consumed', false);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+      }
+
+      // POST /api/obs/queue-ctl/settings
+      if (method === 'POST' && path === '/api/obs/queue-ctl/settings') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const body = await request.json().catch(() => ({})) as any;
+        if (!body.obs_settings?.show_rarities) return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400, headers: corsHeaders });
+        const validRarities = ['common', 'rare', 'epic', 'legendary'];
+        const clean = body.obs_settings.show_rarities.filter((r: string) => validRarities.includes(r.toLowerCase()));
+        const { error } = await supabase.from('streamers').update({ obs_settings: { show_rarities: clean } }).eq('id', streamer.id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, obs_settings: { show_rarities: clean } }), { status: 200, headers: corsHeaders });
+      }
+
+      // POST /api/obs/queue-ctl/pause — freeze the queue (overlay gets null from /next)
+      if (method === 'POST' && path === '/api/obs/queue-ctl/pause') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const { error } = await supabase.from('streamers').update({ obs_paused: true }).eq('id', streamer.id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, paused: true }), { status: 200, headers: corsHeaders });
+      }
+
+      // POST /api/obs/queue-ctl/resume — unfreeze the queue
+      if (method === 'POST' && path === '/api/obs/queue-ctl/resume') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const { error } = await supabase.from('streamers').update({ obs_paused: false }).eq('id', streamer.id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, paused: false }), { status: 200, headers: corsHeaders });
+      }
+
+      // POST /api/obs/queue-ctl/skip-now — interrupt the currently playing animation
+      if (method === 'POST' && path === '/api/obs/queue-ctl/skip-now') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam    = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const { error } = await supabase.from('streamers').update({ obs_skip_signal: true }).eq('id', streamer.id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+      }
+
+      // Also expose pause/resume/skip-now via session-auth for the dashboard queue tab
+      if (method === 'POST' && path === '/api/creator/obs-queue/pause') {
+        const { user, streamer } = await checkCreator(request, supabase);
+        await supabase.from('streamers').update({ obs_paused: true }).eq('id', streamer.id);
+        return secureResponse({ success: true, paused: true }, 200, corsHeaders);
+      }
+      if (method === 'POST' && path === '/api/creator/obs-queue/resume') {
+        const { user, streamer } = await checkCreator(request, supabase);
+        await supabase.from('streamers').update({ obs_paused: false }).eq('id', streamer.id);
+        return secureResponse({ success: true, paused: false }, 200, corsHeaders);
+      }
+      if (method === 'POST' && path === '/api/creator/obs-queue/skip-now') {
+        const { user, streamer } = await checkCreator(request, supabase);
+        await supabase.from('streamers').update({ obs_skip_signal: true }).eq('id', streamer.id);
+        return secureResponse({ success: true }, 200, corsHeaders);
+      }
+
       // 1. Get Next Card for OBS
       if (method === 'GET' && url.pathname === '/api/obs/next') {
         // Support both old (twitch_id) and new (streamer+token) formats for backward compatibility
@@ -6226,28 +6648,71 @@ export default {
           return new Response(JSON.stringify({ error: 'Missing streamer/token or twitch_id' }), { status: 400, headers: corsHeaders });
         }
 
+        // Load streamer's full obs config (settings + pause flag)
+        const { data: fullStreamer } = await supabase
+          .from('streamers')
+          .select('obs_settings, obs_paused')
+          .eq('id', streamer.id)
+          .maybeSingle();
+
+        // If the queue is paused, return null immediately — overlay stays quiet
+        if (fullStreamer?.obs_paused) {
+          return new Response(JSON.stringify({ cards: null, paused: true }), { status: 200, headers: corsHeaders });
+        }
+
+        const obsSettings = fullStreamer?.obs_settings || { show_rarities: ['common', 'rare', 'epic', 'legendary'] };
+        const allowedRarities: string[] = (obsSettings.show_rarities || ['common', 'rare', 'epic', 'legendary'])
+          .map((r: string) => r.toLowerCase());
+
         // Fetch the oldest unconsumed card for this streamer
-        const { data: userCard, error } = await supabase
+        // Fetch up to 20 at a time so we can skip filtered-out rarities in one pass
+        const { data: candidates, error } = await supabase
           .from('user_cards')
           .select('id, card_id, twitch_id, cards(id, name, rarity, image_url), users(username)')
           .eq('streamer_id', streamer.id)
           .eq('is_obs_consumed', false)
           .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+          .limit(20);
 
         if (error) {
           console.error('[OBS] DB Error:', error);
           return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
         }
 
-        if (!userCard) return new Response(JSON.stringify({ cards: null }), { status: 200, headers: corsHeaders });
+        if (!candidates || candidates.length === 0) {
+          return new Response(JSON.stringify({ cards: null }), { status: 200, headers: corsHeaders });
+        }
 
-        const card = userCard.cards as any;
-        const user = userCard.users as any;
+        // Find first card whose rarity passes the filter; auto-consume skipped ones
+        let chosenCard: any = null;
+        const toSkip: string[] = [];
+
+        for (const uc of candidates) {
+          const cardRarity = ((uc.cards as any)?.rarity || 'common').toLowerCase();
+          if (allowedRarities.includes(cardRarity)) {
+            chosenCard = uc;
+            break;
+          } else {
+            // Mark this one as consumed (silently skipped — below rarity threshold)
+            toSkip.push(uc.id);
+          }
+        }
+
+        // Bulk-skip filtered-out cards
+        if (toSkip.length > 0) {
+          await supabase.from('user_cards').update({ is_obs_consumed: true }).in('id', toSkip);
+          console.log(`[OBS] Auto-skipped ${toSkip.length} card(s) below rarity threshold`);
+        }
+
+        if (!chosenCard) {
+          return new Response(JSON.stringify({ cards: null }), { status: 200, headers: corsHeaders });
+        }
+
+        const card = chosenCard.cards as any;
+        const user = chosenCard.users as any;
 
         const payload = {
-          user_card_id: userCard.id,
+          user_card_id: chosenCard.id,
           card_id: card?.id,
           name: card?.name,
           rarity: card?.rarity,
@@ -6269,24 +6734,14 @@ export default {
         let streamer: any = null;
 
         if (streamerParam && tokenParam) {
-          // New token-based authentication
+          // Token-based authentication (required)
           streamer = await verifyOBSToken(streamerParam, tokenParam);
           if (!streamer) {
             return new Response(JSON.stringify({ error: 'Invalid token or streamer' }), { status: 403, headers: corsHeaders });
           }
-        } else if (twitchId) {
-          // Old format - backward compatibility
-          const { data: s } = await supabase
-            .from('streamers')
-            .select('id')
-            .eq('twitch_id', twitchId)
-            .single();
-          if (!s) {
-            return new Response(JSON.stringify({ error: 'Streamer not found' }), { status: 404, headers: corsHeaders });
-          }
-          streamer = s;
         } else {
-          return new Response(JSON.stringify({ error: 'Missing streamer/token or twitch_id' }), { status: 400, headers: corsHeaders });
+          // Legacy twitch_id path is disabled — require authenticated token format
+          return new Response(JSON.stringify({ error: 'Authentication required: provide streamer and token parameters' }), { status: 400, headers: corsHeaders });
         }
 
         let targetId = cardId;
@@ -6314,6 +6769,7 @@ export default {
           .from('user_cards')
           .update({ is_obs_consumed: true })
           .eq('id', targetId)
+          .eq('streamer_id', streamer.id)
           .select('id'); // return updated rows so we can confirm
 
         if (updateError) {
@@ -6322,7 +6778,121 @@ export default {
         }
 
         console.log(`[OBS] Consumed ${updateData?.length ?? 0} row(s) for id=${targetId}`);
-        return new Response(JSON.stringify({ success: true, consumed: updateData?.length ?? 0 }), { status: 200, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+      }
+
+      // ============================================================
+      // OBS QUEUE MANAGEMENT (Creator-authenticated, session-based)
+      // ============================================================
+
+      // GET /api/creator/obs-queue — list pending + recently consumed queue items
+      if (method === 'GET' && path === '/api/creator/obs-queue') {
+        const { user, streamer } = await checkCreator(request, supabase);
+
+        // Pending (unconsumed) — oldest first
+        const { data: pending, error: pendingErr } = await supabase
+          .from('user_cards')
+          .select('id, created_at, cards(id, name, rarity, image_url), users(username, avatar_url)')
+          .eq('streamer_id', streamer.id)
+          .eq('is_obs_consumed', false)
+          .order('created_at', { ascending: true })
+          .limit(50);
+
+        if (pendingErr) return secureResponse({ error: pendingErr.message }, 500, corsHeaders, true);
+
+        // Recently consumed — newest first, last 30
+        const { data: consumed, error: consumedErr } = await supabase
+          .from('user_cards')
+          .select('id, created_at, cards(id, name, rarity, image_url), users(username, avatar_url)')
+          .eq('streamer_id', streamer.id)
+          .eq('is_obs_consumed', true)
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        if (consumedErr) return secureResponse({ error: consumedErr.message }, 500, corsHeaders, true);
+
+        // Current obs_settings (rarity filter) + pause state
+        const obsSettings = streamer.obs_settings || { show_rarities: ['common', 'rare', 'epic', 'legendary'] };
+        const obsPaused   = !!streamer.obs_paused;
+
+        return secureResponse({ pending: pending || [], consumed: consumed || [], obs_settings: obsSettings, obs_paused: obsPaused }, 200, corsHeaders);
+      }
+
+      // POST /api/creator/obs-queue/skip — mark a specific card as consumed (skip)
+      if (method === 'POST' && path === '/api/creator/obs-queue/skip') {
+        const { user, streamer } = await checkCreator(request, supabase);
+        const body = await request.json().catch(() => ({})) as any;
+        const id = body.id;
+        if (!id) return secureResponse({ error: 'Missing id' }, 400, corsHeaders, true);
+
+        const { error } = await supabase
+          .from('user_cards')
+          .update({ is_obs_consumed: true })
+          .eq('id', id)
+          .eq('streamer_id', streamer.id);
+
+        if (error) return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        return secureResponse({ success: true }, 200, corsHeaders);
+      }
+
+      // POST /api/creator/obs-queue/replay — reset a card to unconsumed (replay), pushing it to end of queue
+      if (method === 'POST' && path === '/api/creator/obs-queue/replay') {
+        const { user, streamer } = await checkCreator(request, supabase);
+        const body = await request.json().catch(() => ({})) as any;
+        const id = body.id;
+        if (!id) return secureResponse({ error: 'Missing id' }, 400, corsHeaders, true);
+
+        // Update created_at to now so it plays AFTER currently-queued items
+        const { error } = await supabase
+          .from('user_cards')
+          .update({ is_obs_consumed: false, created_at: new Date().toISOString() })
+          .eq('id', id)
+          .eq('streamer_id', streamer.id);
+
+        if (error) return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        return secureResponse({ success: true }, 200, corsHeaders);
+      }
+
+      // POST /api/creator/obs-queue/clear — mark ALL pending cards as consumed
+      if (method === 'POST' && path === '/api/creator/obs-queue/clear') {
+        const { user, streamer } = await checkCreator(request, supabase);
+
+        const { error } = await supabase
+          .from('user_cards')
+          .update({ is_obs_consumed: true })
+          .eq('streamer_id', streamer.id)
+          .eq('is_obs_consumed', false);
+
+        if (error) return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        return secureResponse({ success: true }, 200, corsHeaders);
+      }
+
+      // GET /api/creator/obs-settings — get OBS display settings
+      if (method === 'GET' && path === '/api/creator/obs-settings') {
+        const { user, streamer } = await checkCreator(request, supabase);
+        const obsSettings = streamer.obs_settings || { show_rarities: ['common', 'rare', 'epic', 'legendary'] };
+        return secureResponse({ obs_settings: obsSettings }, 200, corsHeaders);
+      }
+
+      // POST /api/creator/obs-settings — save OBS display settings
+      if (method === 'POST' && path === '/api/creator/obs-settings') {
+        const { user, streamer } = await checkCreator(request, supabase);
+        const body = await request.json().catch(() => ({})) as any;
+        const newSettings = body.obs_settings;
+        if (!newSettings || !Array.isArray(newSettings.show_rarities)) {
+          return secureResponse({ error: 'Invalid settings payload' }, 400, corsHeaders, true);
+        }
+
+        const validRarities = ['common', 'rare', 'epic', 'legendary'];
+        const cleanRarities = newSettings.show_rarities.filter((r: string) => validRarities.includes(r.toLowerCase()));
+
+        const { error } = await supabase
+          .from('streamers')
+          .update({ obs_settings: { show_rarities: cleanRarities } })
+          .eq('id', streamer.id);
+
+        if (error) return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        return secureResponse({ success: true, obs_settings: { show_rarities: cleanRarities } }, 200, corsHeaders);
       }
 
       // ============================================================
@@ -6681,7 +7251,7 @@ export default {
             const mechIcon = s.mechanic_icon
               || s.mechanic?.icon
               || '';
-            
+
             // Genesis Trait
             const genesisMechName = s.genesis_mechanic?.name || null;
             const genesisMechIcon = s.genesis_mechanic?.icon || '';
@@ -6743,7 +7313,7 @@ export default {
       }
 
       // 6. Twitch EventSub
-      if (method === 'POST' && path === '/twitch/eventsub') {
+      if (method === 'POST' && path === '/api/twitch/webhook') {
         return handleTwitchWebhook(request, env);
       }
 
@@ -6755,7 +7325,8 @@ export default {
         if (assetRes.ok) return assetRes;
 
         // If not found and doesn't look like a file (no extension), serve index.html
-        if (!path.includes('.')) {
+        // Never serve index.html for the OBS overlay or queue control — those have their own handlers.
+        if (!path.includes('.') && path !== '/obs-overlay' && path !== '/queue-control') {
           // Special Test Route
           if (path === '/onboarding/test') {
             const testRes = await env.ASSETS.fetch(new Request(`${url.origin}/onboarding-test.html`));
