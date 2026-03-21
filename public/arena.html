@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Castle TCG Battle Arena</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;700;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/arena.css">
+</head>
+
+<body class="bg-transparent text-white overflow-hidden" style="font-family:'Inter',sans-serif">
+
+    <!-- Idle -->
+    <div id="arena-idle" class="absolute inset-0 flex items-center justify-center hidden">
+        <div class="idle-pulse ease text-white/15 text-sm font-bold uppercase tracking-[0.3em]">
+            ● Waiting for battle...
+        </div>
+    </div>
+
+    <!-- Stage -->
+    <div id="arena-stage" class="absolute inset-0 hidden pointer-events-none">
+
+        <!-- ═══ VS SCREEN ═══ -->
+        <div id="vs-screen" class="absolute inset-0 vs-bg flex items-center justify-center z-50 opacity-0"
+            style="transition:opacity 0.5s">
+
+            <div class="vs-slash-line"></div>
+
+            <div class="flex items-center gap-0 w-full max-w-3xl px-8">
+                <!-- Challenger -->
+                <div id="vs-challenger" class="flex-1 flex flex-col items-center"
+                    style="opacity:0;transform:translateX(-80px);transition:all 0.55s cubic-bezier(0.175,0.885,0.32,1.275)">
+                    <div class="vs-avatar-wrap mb-3">
+                        <div class="vs-ring vs-ring-blue"></div>
+                        <img id="vs-c-avatar" src="" class="vs-avatar" crossorigin="anonymous">
+                    </div>
+                    <div id="vs-c-name" class="vs-player-name text-void-accent">PLAYER 1</div>
+                    <div class="vs-role-label text-void-accent/50">CHALLENGER</div>
+                </div>
+
+                <!-- VS badge -->
+                <div id="vs-logo" class="vs-badge"
+                    style="opacity:0;transform:scale(0.4);transition:all 0.4s cubic-bezier(0.175,0.885,0.32,1.4) 0.3s">
+                    VS</div>
+
+                <!-- Target -->
+                <div id="vs-target" class="flex-1 flex flex-col items-center"
+                    style="opacity:0;transform:translateX(80px);transition:all 0.55s cubic-bezier(0.175,0.885,0.32,1.275)">
+                    <div class="vs-avatar-wrap mb-3">
+                        <div class="vs-ring vs-ring-red"></div>
+                        <img id="vs-t-avatar" src="" class="vs-avatar" crossorigin="anonymous">
+                    </div>
+                    <div id="vs-t-name" class="vs-player-name text-red-300">PLAYER 2</div>
+                    <div class="vs-role-label text-red-500/50">OPPONENT</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ BATTLE BOARD ═══ -->
+        <div id="battle-board" class="absolute inset-0 flex flex-col opacity-0" style="transition:opacity 0.6s">
+
+            <!-- Subtle arena glow FX -->
+            <div class="arena-glow-red"></div>
+            <div class="arena-glow-blue"></div>
+
+            <!-- TARGET row — anchored to centre -->
+            <div class="flex flex-col items-center"
+                style="position:absolute;bottom:50%;left:0;right:0;padding-bottom:80px;">
+                <div id="target-cards" class="flex gap-5 justify-center mb-4"></div>
+                <div class="player-bar player-bar-red">
+                    <img id="board-t-avatar" src="" class="player-avatar border-red-400" crossorigin="anonymous">
+                    <div>
+                        <div id="board-t-name" class="player-bar-name text-red-100">Player 2</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BATTLEFIELD DIVIDER — exact centre -->
+            <div class="battlefield-strip">
+                <div class="bf-line"></div>
+                <div class="bf-label">⚔ BATTLEFIELD ⚔</div>
+                <div class="bf-line"></div>
+            </div>
+
+            <!-- CHALLENGER row — anchored to centre -->
+            <div class="flex flex-col items-center" style="position:absolute;top:50%;left:0;right:0;padding-top:80px;">
+                <div class="player-bar player-bar-blue mb-4">
+                    <img id="board-c-avatar" src="" class="player-avatar border-void-accent/40" crossorigin="anonymous">
+                    <div>
+                        <div id="board-c-name" class="player-bar-name text-void-accent/10">Player 1</div>
+                    </div>
+                </div>
+                <div id="challenger-cards" class="flex gap-5 justify-center"></div>
+            </div>
+        </div>
+
+        <!-- ROUND BANNER -->
+        <div id="round-banner" class="round-banner">ROUND 1</div>
+
+        <!-- ═══ WINNER SCREEN ═══ -->
+        <div id="winner-banner" class="absolute inset-0 z-50 flex flex-col items-center justify-center hidden"
+            style="background:rgba(0,0,0,0.92);opacity:0;transition:opacity 0.7s">
+            <div class="winner-label">VICTORY</div>
+            <div class="winner-av-wrap">
+                <div class="winner-av-ring"></div>
+                <img id="winner-avatar" src="" class="winner-avatar" crossorigin="anonymous">
+            </div>
+            <div id="winner-name" class="winner-name">WINNER</div>
+            <div id="winner-score" class="winner-score">0 – 0</div>
+        </div>
+
+    </div>
+
+    <script src="/arena.js"></script>
+</body>
+
+</html>
