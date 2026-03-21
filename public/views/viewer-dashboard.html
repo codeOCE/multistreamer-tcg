@@ -1,12 +1,12 @@
-<!-- DASHBOARD VIEW -->
+
 <section id="dashboard-view" class="hidden min-h-screen pt-28 px-6 lg:px-12 pb-32 max-w-[1700px] mx-auto">
-    <!-- VIEW: MAIN DASHBOARD -->
+    
     <div id="collection-view" class="dashboard-subview void-fade">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10">
 
-            <!-- LEFT SIDEBAR: ARCHITECTURE (Col 1-3) -->
+            
             <aside class="col-span-12 lg:col-span-3 space-y-12">
-                <!-- BINDER LIST -->
+                
                 <div class="space-y-6">
                     <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">
@@ -19,7 +19,7 @@
                     <nav id="binder-list" class="space-y-2"></nav>
                 </div>
 
-                <!-- GET MORE CARDS SECTION -->
+                
                 <div
                     class="glass-panel p-6 rounded-2xl border-white/5 bg-white/[0.02] flex flex-col items-center text-center space-y-4">
                     <div>
@@ -41,7 +41,7 @@
                     </div>
                 </div>
 
-                <!-- STATS SUMMARY (Simplified Cards) -->
+                
                 <div class="space-y-4">
                     <div
                         class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted border-b border-white/10 pb-3 pl-2">
@@ -68,18 +68,18 @@
                 </div>
             </aside>
 
-            <!-- MAIN CONTENT: GLOBAL COLLECTION (Col 4-9) -->
-            <main class="col-span-12 lg:col-span-6 flex flex-col space-y-12 w-full">
-                <!-- HEADER, PAGINATION & OVERALL STATS (Inline) -->
+            
+            <main id="binder-view" class="col-span-12 lg:col-span-6 flex flex-col space-y-12 w-full">
+                
                 <div class="flex flex-col gap-4 border-b border-white/5 pb-4">
-                    <!-- Top row: Breadcrumb, Title and Pagination -->
+                    
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-4">
                             <h3 id="page-indicator"
                                 class="text-2xl font-display font-black uppercase tracking-widest text-white shadow-black drop-shadow">
                                 BINDER</h3>
 
-                            <!-- Share button inline with title -->
+                            
                             <div id="binder-actions-area" class="hidden ml-4">
                                 <button onclick="shareBinderPage()"
                                     class="px-3 py-1.5 rounded-full bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center gap-2">
@@ -88,7 +88,7 @@
                             </div>
                         </div>
 
-                        <!-- Pagination arrows -->
+                        
                         <div class="flex items-center gap-2">
                             <button id="prev-page-btn"
                                 class="w-8 h-8 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white transition-all disabled:opacity-20">
@@ -101,9 +101,9 @@
                         </div>
                     </div>
 
-                    <!-- Middle row: Search and filters -->
-                    <div class="flex items-center justify-between gap-4">
-                        <!-- Search -->
+                    
+                    <div id="binder-filter-row" class="flex items-center justify-between gap-4">
+                        
                         <div class="relative flex-1">
                             <i
                                 class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/50 text-xs"></i>
@@ -111,26 +111,45 @@
                                 class="w-full bg-white/[0.02] border border-white/5 rounded-lg py-2.5 pl-10 pr-4 text-xs font-bold text-void-text focus:ring-1 ring-void-accent/30 transition-all placeholder:text-void-muted/40">
                         </div>
 
-                        <!-- Dropdowns -->
+                        
                         <div class="flex gap-2">
-                            <select id="rarity-filter"
-                                class="bg-white/[0.02] border border-white/5 text-[10px] font-bold text-void-muted py-2.5 pl-4 pr-10 rounded-lg outline-none focus:border-white/20 transition-all appearance-none relative">
-                                <option value="all">All Rarities</option>
-                                <option value="common">Common</option>
-                                <option value="rare">Rare</option>
-                                <option value="epic">Epic</option>
-                                <option value="legendary">Legendary</option>
-                            </select>
-                            <select id="set-filter"
-                                class="bg-white/[0.02] border border-white/5 text-[10px] font-bold text-void-muted py-2.5 pl-4 pr-10 rounded-lg outline-none focus:border-white/20 transition-all appearance-none relative">
-                                <option value="all">All Sets</option>
-                                <!-- Javascript injected sets -->
-                            </select>
+                            <div class="void-dropdown" data-select-id="rarity-filter">
+                                <select id="rarity-filter" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                    <option value="all">All Rarities</option>
+                                    <option value="common">Common</option>
+                                    <option value="rare">Rare</option>
+                                    <option value="epic">Epic</option>
+                                    <option value="legendary">Legendary</option>
+                                </select>
+                                <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                    <span class="void-dropdown-label">All Rarities</span>
+                                    <i class="fa-solid fa-chevron-down void-dropdown-chevron"></i>
+                                </button>
+                                <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                                    <div class="void-dropdown-option" role="option" data-value="all">All Rarities</div>
+                                    <div class="void-dropdown-option" role="option" data-value="common">Common</div>
+                                    <div class="void-dropdown-option" role="option" data-value="rare">Rare</div>
+                                    <div class="void-dropdown-option" role="option" data-value="epic">Epic</div>
+                                    <div class="void-dropdown-option" role="option" data-value="legendary">Legendary</div>
+                                </div>
+                            </div>
+                            <div id="binder-set-selector-dropdown-wrapper" class="void-dropdown" data-select-id="set-filter">
+                                <select id="set-filter" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                    <option value="all">All Sets</option>
+                                </select>
+                                <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                    <span class="void-dropdown-label">All Sets</span>
+                                    <i class="fa-solid fa-chevron-down void-dropdown-chevron"></i>
+                                </button>
+                                <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                                    <div class="void-dropdown-option" role="option" data-value="all">All Sets</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Bottom row: Set progress chips -->
-                    <div class="flex items-center gap-2 pt-2">
+                    
+                    <div id="set-selector" class="flex items-center gap-2 pt-2">
                         <div
                             class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-void-accent bg-void-accent/10">
                             <span class="text-[9px] font-black text-white uppercase tracking-widest">All
@@ -152,30 +171,37 @@
                     </div>
                 </div>
 
-                <!-- GRID -->
+                
                 <div class="max-w-none w-full">
                     <div id="binder-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
                     </div>
                 </div>
 
-                <!-- PAGINATION -->
-                <div class="pt-10 flex justify-center items-center border-t border-white/5">
-                    <div class="flex items-center gap-6 px-12">
-                        <span
-                            class="text-[11px] font-black text-void-accent uppercase italic opacity-60 tracking-widest">Active
-                            System</span>
-                        <div class="flex gap-2">
-                            <div class="w-2 h-2 rounded-full bg-void-accent"></div>
-                            <div class="w-2 h-2 rounded-full bg-void-accent opacity-30"></div>
-                            <div class="w-2 h-2 rounded-full bg-void-accent opacity-10"></div>
+                
+                <div id="binder-share-footer" class="hidden w-full flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-0 p-6 sm:p-8 bg-[#0a0f0d] border-t border-white/5 rounded-b-2xl mt-auto">
+                    <div class="flex items-center gap-3 lg:pr-8 lg:border-r border-white/10 shrink-0">
+                        <div class="w-10 h-10 bg-void-accent/20 rounded-xl flex items-center justify-center border border-void-accent/40 shadow-[0_0_15px_rgba(var(--void-accent-rgb),0.2)]">
+                            <i class="fa-solid fa-chess-rook text-void-accent text-xl"></i>
                         </div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-[10px] font-black text-white uppercase tracking-[0.2em]">Castle</span>
+                            <span class="text-[8px] font-bold text-white/40 uppercase tracking-widest">TCG Platform</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1 justify-center items-center text-center min-w-0 flex-1 lg:px-8">
+                        <span id="share-streamer-name" class="text-[12px] font-black text-white uppercase tracking-[0.08em] leading-tight">---</span>
+                        <span id="share-binder-name" class="text-[9px] font-bold text-void-muted uppercase tracking-[0.18em] leading-snug">---</span>
+                    </div>
+                    <div class="flex flex-col items-start lg:items-end text-left lg:text-right gap-1 min-w-0 shrink-0 lg:pl-8 lg:border-l border-white/10 lg:max-w-[min(100%,14rem)]">
+                        <span id="share-collection-name" class="text-[10px] font-black text-white uppercase tracking-[0.12em] leading-tight break-words">---</span>
+                        <span id="share-collection-tagline" class="hidden text-[8px] font-bold text-void-muted/90 uppercase tracking-widest leading-relaxed break-words"></span>
                     </div>
                 </div>
             </main>
 
-            <!-- RIGHT SIDEBAR: ACHIEVEMENTS & DROPS (Col 10-12) -->
+            
             <aside class="col-span-12 lg:col-span-3 space-y-12">
-                <!-- ACHIEVEMENTS CONTAINER -->
+                
                 <div id="achievements-container" class="space-y-6">
                     <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">
@@ -183,12 +209,12 @@
                         <i class="fa-solid fa-trophy text-[10px] text-void-accent opacity-50"></i>
                     </div>
                     <div id="achievements-list" class="space-y-3">
-                        <!-- JS injected achievements -->
+                        
                         <div class="text-[10px] text-void-muted text-center py-4">Loading achievements...</div>
                     </div>
                 </div>
 
-                <!-- RECENT DROPS MOVED HERE -->
+                
                 <div class="space-y-6">
                     <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Recent
@@ -202,7 +228,7 @@
         </div>
     </div>
 
-    <!-- VIEW: ARCHIVE (LEADERBOARD) -->
+    
     <div id="leaderboard-view" class="hidden dashboard-subview void-fade space-y-12">
         <div class="text-center max-w-2xl mx-auto space-y-4">
             <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">Top Tiers</h3>
@@ -211,7 +237,7 @@
         <div id="leaderboard-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div>
     </div>
 
-    <!-- VIEW: BATTLE ARENA -->
+    
     <div id="battle-view" class="hidden dashboard-subview void-fade space-y-10">
         <div class="flex justify-between items-end border-b border-white/5 pb-8">
             <div>
@@ -226,10 +252,10 @@
             </div>
         </div>
 
-        <!-- TWO COLUMN: Deck Builder + Challenge -->
+        
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
-            <!-- LEFT: Deck Builder (3/5) -->
+            
             <div class="lg:col-span-3 space-y-6">
                 <div class="glass-panel p-8 space-y-6">
                     <div class="flex items-center justify-between">
@@ -246,9 +272,9 @@
                         </div>
                     </div>
 
-                    <!-- 3 Deck Slots -->
+                    
                     <div class="grid grid-cols-3 gap-4" id="deck-slots">
-                        <!-- Slot 1 -->
+                        
                         <div class="deck-slot" data-slot="1">
                             <div
                                 class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2 flex items-center gap-2">
@@ -265,7 +291,7 @@
                                     Phase</span>
                             </div>
                         </div>
-                        <!-- Slot 2 -->
+                        
                         <div class="deck-slot" data-slot="2">
                             <div
                                 class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2 flex items-center gap-2">
@@ -283,7 +309,7 @@
                                     Phase</span>
                             </div>
                         </div>
-                        <!-- Slot 3 -->
+                        
                         <div class="deck-slot" data-slot="3">
                             <div
                                 class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2 flex items-center gap-2">
@@ -302,7 +328,7 @@
                         </div>
                     </div>
 
-                    <!-- Mechanic Legend -->
+                    
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
                         <div
                             class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
@@ -355,9 +381,9 @@
                 </div>
             </div>
 
-            <!-- RIGHT: Saved Decks (2/5) -->
+            
             <div class="lg:col-span-2 space-y-6">
-                <!-- Saved Decks Panel -->
+                
                 <div
                     class="glass-panel rounded-sm border border-white/5 p-8 flex flex-col h-full min-h-[500px]">
                     <div class="flex items-center justify-between mb-6">
@@ -380,7 +406,7 @@
         </div>
     </div>
 
-    <!-- VIEW: EXCHANGE (TRADING) -->
+    
     <div id="trading-view" class="hidden dashboard-subview void-fade space-y-16">
         <div class="flex justify-between items-end border-b border-white/5 pb-8">
             <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">Platform Exchange
@@ -388,14 +414,14 @@
             <div class="flex gap-1 glass-panel p-1 rounded-xl">
                 <button id="subtab-inbox"
                     class="px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all">Inbound</button>
-                <button id="subtab-upgrade"
-                    class="px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all">Synthesis</button>
+                <button id="subtab-dust"
+                    class="px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all">Magic Dust</button>
             </div>
         </div>
 
         <div id="inbox-section" class="space-y-8">
             <div class="flex gap-6 items-center">
-                <input type="text" id="target-trade-code" placeholder="Streamer ID..."
+                <input type="text" id="target-trade-code" placeholder="Their Trade Code..."
                     class="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-void-text focus:outline-none focus:border-void-accent w-48 text-sm">
                 <button onclick="initiateTrade()"
                     class="saas-button px-6 py-2 text-xs font-black uppercase tracking-widest">Connect</button>
@@ -411,31 +437,43 @@
             <div id="trade-list" class="space-y-6"></div>
         </div>
 
-        <div id="upgrade-section" class="hidden space-y-12">
-            <div
-                class="p-12 rounded-[2.5rem] glass-panel border border-void-accent/20 void-shadow text-center space-y-6">
-                <h4 class="text-3xl font-display font-black uppercase italic tracking-tighter text-void-accent">
-                    Rarity Synthesis</h4>
-                <p class="text-void-muted text-lg max-w-xl mx-auto font-light">Fuse <span
-                        class="font-bold text-void-text italic">5 identical entities</span> to reach the next
-                    tier.</p>
-                <div id="trade-in-rarity-banner"
-                    class="hidden inline-flex items-center gap-6 glass-panel p-4 rounded-2xl">
-                    <span id="from-rarity-pill"
-                        class="px-6 py-2 bg-white/5 rounded-full text-[9px] font-black">---</span>
-                    <i class="fa-solid fa-arrow-right text-void-accent"></i>
-                    <span id="to-rarity-pill"
-                        class="px-6 py-2 bg-void-accent text-white rounded-full text-[9px] font-black">---</span>
+        <div id="dust-section" class="hidden dust-view">
+            <div class="dust-workspace">
+                
+                <aside class="dust-column dust-enchanted">
+                    <div class="dust-column-header">
+                        <span class="dust-column-title">Enchanted</span>
+                        <span class="dust-column-hint">→ disenchant</span>
+                    </div>
+                    <div id="dust-sell-grid" class="dust-sell-grid"></div>
+                </aside>
+
+                
+                <div id="dust-balance-wrap" class="dust-column dust-disenchant dust-vat dust-drop-zone" data-drop-zone="dust" title="Drop mechanics here to sell for dust">
+                    <div class="dust-column-header">
+                        <span class="dust-column-title">Disenchant</span>
+                    </div>
+                    <div class="dust-vat-inner">
+                        <span class="dust-vat-label">Reserve</span>
+                        <span id="dust-balance" class="dust-vat-value" tabindex="0">0</span>
+                        <span class="dust-vat-unit">dust</span>
+                    </div>
                 </div>
-            </div>
-            <div id="trade-in-grid" class="grid grid-cols-2 lg:grid-cols-5 gap-8"></div>
-            <div class="flex justify-center gap-6">
-                <button id="clear-trade-in"
-                    class="px-10 py-4 bg-white/5 text-void-muted font-black text-[9px] uppercase tracking-widest rounded-xl">Purge
-                    Cache</button>
-                <button id="process-trade-in-btn"
-                    class="px-10 py-4 bg-void-accent text-white font-black text-[9px] uppercase tracking-widest rounded-xl void-shadow disabled:opacity-50">Execute
-                    Synthesis</button>
+
+                
+                <main class="dust-column dust-enchant">
+                    <div class="dust-column-header">
+                        <span class="dust-column-title">Enchant</span>
+                        <span class="dust-column-hint">mechanic → card</span>
+                    </div>
+                    <div class="dust-enchant-mechanics">
+                        <div id="dust-buy-mechanics" class="dust-mechanics-row"></div>
+                    </div>
+                    <div class="dust-enchant-cards">
+                        <span class="dust-apply-label">Apply to</span>
+                        <div id="dust-buy-cards" class="dust-buy-grid"></div>
+                    </div>
+                </main>
             </div>
         </div>
     </div>
