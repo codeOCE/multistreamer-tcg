@@ -21,6 +21,8 @@
 	},
 	"vars": {
 		"UPSTASH_REDIS_REST_URL": "",
-		"UPSTASH_REDIS_REST_TOKEN": ""
+		"UPSTASH_REDIS_REST_TOKEN": "",
+		"ENCRYPTION_SECRET": "",
+		"WORKER_DEV_URL": ""
 	}
 }

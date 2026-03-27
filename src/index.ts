@@ -36,10 +36,12 @@ interface Env {
   UPSTASH_REDIS_REST_TOKEN: string;
   FRONTEND_URL: string;
   SESSION_SECRET: string;
+  ENCRYPTION_SECRET?: string; // Dedicated key for AES-GCM token encryption (separate from JWT signing)
   CREATOR_CDN_BASE: string; // The URL for serve R2 assets
   PLATFORM_ADMIN_IDS?: string; // Comma-separated Twitch IDs
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
   CARD_IMAGES: any; // R2Bucket
+  WORKER_DEV_URL?: string; // Specific workers.dev URL for CORS — avoids .workers.dev wildcard
 }
 
 // Helper to wrap database queries in a cache check
@@ -193,11 +195,17 @@ async function getUserFromSession(request: Request, env: Env, supabase: any) {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('twitch_id, username, avatar_url, binder_layout, binder_theme, onboarding_collector_step, is_onboarding_complete')
+      .select('twitch_id, username, avatar_url, binder_layout, binder_theme, onboarding_collector_step, is_onboarding_complete, last_logout_at')
       .eq('twitch_id', twitchId.toString())
       .single();
 
     if (error || !user) return null;
+
+    // Session revocation check: reject tokens issued before the last logout
+    if (user.last_logout_at && payload.iat) {
+      const logoutTime = new Date(user.last_logout_at).getTime() / 1000;
+      if (payload.iat < logoutTime) return null; // Token predates last logout — revoked
+    }
 
     return user;
   } catch (e: any) {
@@ -402,20 +410,39 @@ async function getStreamerForCreator(user: any, supabase: any): Promise<any | nu
 }
 
 // --- ENCRYPTION HELPERS ---
+// Derive a 256-bit key from a raw secret string via SHA-256 hashing
+async function deriveKey(secret: string, usage: KeyUsage[]): Promise<CryptoKey> {
+  const raw = new TextEncoder().encode(secret);
+  const hash = await crypto.subtle.digest('SHA-256', raw);
+  return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, usage);
+}
+
+// AES-GCM encryption (authenticated) — output is prefixed with 'gcm:' to distinguish from legacy AES-CBC
 async function encryptSensitive(text: string, secret: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  const keyBuf = encoder.encode(secret.padEnd(32, '0').slice(0, 32));
-  const key = await crypto.subtle.importKey('raw', keyBuf, { name: 'AES-CBC' }, false, ['encrypt']);
-  const iv = crypto.getRandomValues(new Uint8Array(16));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, data);
+  const key = await deriveKey(secret, ['encrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(12)); // AES-GCM uses 12-byte IV
+  const data = new TextEncoder().encode(text);
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
-  return btoa(String.fromCharCode(...combined));
+  return 'gcm:' + btoa(String.fromCharCode(...combined));
 }
 
+// AES-GCM decryption with AES-CBC fallback for tokens encrypted before this upgrade
 async function decryptSensitive(encryptedBase64: string, secret: string): Promise<string> {
+  // New format: prefixed with 'gcm:'
+  if (encryptedBase64.startsWith('gcm:')) {
+    const b64 = encryptedBase64.slice(4);
+    const combined = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)));
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const key = await deriveKey(secret, ['decrypt']);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+    return new TextDecoder().decode(decrypted);
+  }
+
+  // Legacy fallback: AES-CBC (for tokens stored before this upgrade)
   const combined = new Uint8Array(atob(encryptedBase64).split('').map(c => c.charCodeAt(0)));
   const iv = combined.slice(0, 16);
   const data = combined.slice(16);
@@ -1972,7 +1999,7 @@ export default {
       (domainMatch && origin.includes(domainMatch)) ||
       origin === 'http://localhost:8787' ||
       origin === 'http://localhost:3000' ||
-      origin.endsWith('.workers.dev');
+      (env.WORKER_DEV_URL ? origin === env.WORKER_DEV_URL : false);
 
     const corsHeaders = {
       'Access-Control-Allow-Origin': isAllowedOrigin ? origin : env.FRONTEND_URL,
@@ -2874,6 +2901,15 @@ export default {
       if (path === '/api/logout') {
         const isHttps = request.url.startsWith('https');
         const secureFlag = isHttps ? '; Secure' : '';
+
+        // Stamp last_logout_at so existing JWTs for this user are immediately revoked
+        try {
+          const sessionUser = await getUserFromSession(request, env, supabase);
+          if (sessionUser?.twitch_id) {
+            await supabase.from('users').update({ last_logout_at: new Date().toISOString() }).eq('twitch_id', sessionUser.twitch_id);
+          }
+        } catch { /* Non-blocking — proceed with cookie clear regardless */ }
+
         return new Response('OK', {
           headers: {
             ...corsHeaders,
@@ -2972,7 +3008,7 @@ export default {
           // DECRYPT TOKEN
           let accessToken = '';
           try {
-            accessToken = await decryptSensitive(dbUser.twitch_access_token_encrypted, env.SESSION_SECRET);
+            accessToken = await decryptSensitive(dbUser.twitch_access_token_encrypted, env.ENCRYPTION_SECRET ?? env.SESSION_SECRET);
           } catch (decryptErr) {
             console.error('[Onboarding/Follows] Decryption failed:', decryptErr);
             return secureResponse('Failed to decrypt token', 500, corsHeaders, true);
@@ -4824,7 +4860,7 @@ export default {
           const isMaxPerStreamEnabled = mode === 'once_per_stream';
           const maxPerStream = isMaxPerStreamEnabled ? 1 : null;
 
-          const twitchAccessToken = await decryptSensitive(streamer.twitch_access_token_encrypted, env.SESSION_SECRET);
+          const twitchAccessToken = await decryptSensitive(streamer.twitch_access_token_encrypted, env.ENCRYPTION_SECRET ?? env.SESSION_SECRET);
 
           const twitchResp = await fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${streamer.twitch_id}`, {
             method: 'POST',
@@ -5667,7 +5703,23 @@ export default {
             error: isValidFormat ? null : 'Invalid reward ID format'
           }, 200, corsHeaders);
         } catch (e: any) {
-          return secureResponse({ valid: false, error: e.message }, 400, corsHeaders);
+          return secureResponse({ valid: false, error: 'Authorization error' }, 400, corsHeaders);
+        }
+      }
+
+      // Creator: Regenerate OBS Overlay Token (security fix #7 — rotates static token)
+      if (method === 'POST' && path === '/api/creator/regenerate-obs-token') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const newToken = crypto.randomUUID();
+          const { error } = await supabase
+            .from('streamers')
+            .update({ obs_overlay_token: newToken })
+            .eq('id', streamer.id);
+          if (error) throw error;
+          return secureResponse({ obs_overlay_token: newToken }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse('Failed to regenerate token', 500, corsHeaders, true);
         }
       }
 
@@ -6534,12 +6586,28 @@ export default {
           const cardId = url.searchParams.get('card_id');
           if (!cardId) throw new Error("Missing card_id");
 
-          const { error } = await supabase.from('cards').delete().eq('id', cardId);
+          // IDOR fix: combine ownership check into DELETE — platform admins can delete any card
+          let deleteQuery = supabase.from('cards').delete().eq('id', cardId);
+          if (!isPlatformAdmin && !canWritePlatformCardCatalog(isPlatformAdmin, staffRole) && streamer) {
+            deleteQuery = deleteQuery.eq('streamer_id', streamer.id);
+          }
+
+          const { error, count } = await deleteQuery;
           if (error) throw error;
+          if (count === 0) return new Response(JSON.stringify({ error: 'Card not found or not authorized' }), { status: 404, headers: corsHeaders });
+
+          // Invalidate card pool cache for this streamer
+          try {
+            if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+              const adminRedis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
+              const rarities = ['common', 'rare', 'epic', 'legendary'];
+              if (streamer) await Promise.all(rarities.map(r => adminRedis.del(`cache_cards_pool:${streamer.id}:${r}`)));
+            }
+          } catch { /* Non-critical */ }
 
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
         } catch (e: any) {
-          return new Response(JSON.stringify({ error: ((e as any).message || String(e)) }), { status: 401, headers: corsHeaders });
+          return new Response(JSON.stringify({ error: 'An internal error occurred' }), { status: 401, headers: corsHeaders });
         }
       }
 
@@ -6796,7 +6864,7 @@ export default {
           for (const field of allowedFields) {
             if (body[field] !== undefined) {
               if (['twitch_client_secret', 'streamelements_jwt'].includes(field) && body[field]) {
-                updates[field] = await encryptSensitive(body[field], env.SESSION_SECRET);
+                updates[field] = await encryptSensitive(body[field], env.ENCRYPTION_SECRET ?? env.SESSION_SECRET);
               } else {
                 updates[field] = body[field];
               }
@@ -7666,10 +7734,11 @@ export default {
         const userData: any = await userResp.json();
         const user = userData.data[0];
 
-        // 1. Mark User as Linked and store tokens (ENCRYPTED)
-        const encryptedAccess = await encryptSensitive(tokenData.access_token, env.SESSION_SECRET);
+        // 1. Mark User as Linked and store tokens (ENCRYPTED with dedicated key)
+        const encKey = env.ENCRYPTION_SECRET ?? env.SESSION_SECRET;
+        const encryptedAccess = await encryptSensitive(tokenData.access_token, encKey);
         const encryptedRefresh = tokenData.refresh_token
-          ? await encryptSensitive(tokenData.refresh_token, env.SESSION_SECRET)
+          ? await encryptSensitive(tokenData.refresh_token, encKey)
           : null;
 
         const tokenScope = Array.isArray(tokenData.scope)
