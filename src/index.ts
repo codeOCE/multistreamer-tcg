@@ -8547,7 +8547,9 @@ export default {
         const requestOrigin = new URL(request.url).origin;
         console.log(`[Auth/Callback] User authenticated: ${user.display_name} (${user.id}), Role: ${role}`);
 
-        let destination = requestOrigin;
+        // Default to hub for viewers, or dashboard for creators
+        let destination = role === 'creator' ? `${requestOrigin}/dashboard` : `${requestOrigin}/hub`;
+        
         if (role === 'creator') {
           if (!streamer || !streamer.is_active) {
             destination = `${requestOrigin}/onboarding?role=creator`;
@@ -8560,7 +8562,8 @@ export default {
             .eq('twitch_id', user.id)
             .maybeSingle();
 
-          if (!dbUser || !dbUser.is_onboarding_complete) {
+          // Only force onboarding if it is explicitly false
+          if (!dbUser || dbUser.is_onboarding_complete === false) {
             destination = `${requestOrigin}/onboarding?role=collector`;
           }
         }
