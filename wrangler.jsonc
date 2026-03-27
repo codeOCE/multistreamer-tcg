@@ -15,5 +15,12 @@
 			"binding": "CARD_IMAGES",
 			"bucket_name": "multistreamer-tcg-cards"
 		}
-	]
+	],
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"UPSTASH_REDIS_REST_URL": "",
+		"UPSTASH_REDIS_REST_TOKEN": ""
+	}
 }
