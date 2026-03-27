@@ -3108,7 +3108,7 @@ export default {
           const user = await getUserFromSession(request, env, supabase);
 
           const streamerParam = url.searchParams.get('streamer') || url.searchParams.get('streamer_id');
-          const isGlobal = streamerParam === 'all';
+          let isGlobal = streamerParam === 'all';
 
           // Get creator record for logged-in user if exists (needed before defaulting streamer context)
           let creatorRecord = null;
@@ -3143,118 +3143,37 @@ export default {
             }
           }
 
-          const fetchPromises: any[] = [];
-          const targetTwitchId = user?.twitch_id;
+          // ULTIMATE PERF FIX: Single RPC assembles the entire app state in one round-trip.
+          isGlobal = (streamer.id === 'all');
+          const targetTwitchId = (isGlobal && url.searchParams.get('inspect')) 
+            ? url.searchParams.get('inspect') 
+            : user?.twitch_id;
 
-          // 1. Stats (Total & Legendary)
-          if (targetTwitchId) {
-            let totalQuery = supabase.from('user_cards').select('*', { count: 'exact', head: true }).eq('twitch_id', targetTwitchId);
-            let legendaryQuery = supabase.from('user_cards').select('*, cards!inner(rarity)', { count: 'exact', head: true }).eq('twitch_id', targetTwitchId);
+          const { data: rpc, error: rpcErr } = await supabase.rpc('get_bootstrap_data_v4', {
+            p_user_twitch_id: targetTwitchId || null,
+            p_current_streamer_id: isGlobal ? null : streamer.id
+          });
 
-            if (!isGlobal) {
-              totalQuery = totalQuery.eq('streamer_id', streamer.id);
-              legendaryQuery = legendaryQuery.eq('streamer_id', streamer.id);
-            }
-
-            // Check for both 'Legendary' and 'legendary' to be safe
-            legendaryQuery = legendaryQuery.or('rarity.ilike.legendary', { foreignTable: 'cards' });
-
-            fetchPromises.push(totalQuery);
-            fetchPromises.push(legendaryQuery);
-          } else {
-            fetchPromises.push(Promise.resolve({ count: 0 }));
-            fetchPromises.push(Promise.resolve({ count: 0 }));
+          if (rpcErr) {
+            console.error('[Bootstrap] RPC Error:', rpcErr.message);
+            throw rpcErr;
           }
 
-          // 2. Recent Drops (First 12)
-          if (targetTwitchId) {
-            let dropsQuery = supabase.from('enriched_user_cards').select('*').eq('twitch_id', targetTwitchId);
-            if (!isGlobal) dropsQuery = dropsQuery.eq('streamer_id', streamer.id);
-            fetchPromises.push(dropsQuery.order('created_at', { ascending: false }).limit(12));
-          } else {
-            fetchPromises.push(Promise.resolve({ data: [] }));
-          }
-
-          // 3. Binders
-          if (targetTwitchId) {
-            let binderQuery = supabase.from('user_binders').select('*').eq('user_id', targetTwitchId);
-            if (!isGlobal && streamer && streamer.id !== 'all') {
-              binderQuery = binderQuery.eq('streamer_id', streamer.id);
-            }
-            fetchPromises.push(binderQuery.order('sort_order', { ascending: true }));
-          } else {
-            fetchPromises.push(Promise.resolve({ data: [] }));
-          }
-
-          // 4. Achievements
-          if (targetTwitchId) {
-            let achQuery = supabase.from('user_achievements').select('achievement_id, unlocked_at');
-            if (!isGlobal) achQuery = achQuery.eq('streamer_id', streamer.id);
-            fetchPromises.push(achQuery.eq('twitch_id', targetTwitchId));
-          } else {
-            fetchPromises.push(Promise.resolve({ data: [] }));
-          }
-
-          // 5. Leaderboard (Direct from optimized view)
-          let lbQuery = supabase.from('streamer_leaderboards').select('*');
-          if (!isGlobal) lbQuery = lbQuery.eq('streamer_id', streamer.id);
-          fetchPromises.push(lbQuery.order('total_cards', { ascending: false }).limit(100));
-
-          // 6. Total Unique Cards Available
-          let availQuery = supabase.from('cards').select('*', { count: 'exact', head: true });
-          if (!isGlobal) availQuery = availQuery.eq('streamer_id', streamer.id);
-          fetchPromises.push(availQuery);
-
-          // 7. Creator Detail (If logged in user is a creator, get their cards/stats)
-          if (creatorRecord) {
-            fetchPromises.push(supabase.from('cards').select('*').eq('streamer_id', creatorRecord.id).order('created_at', { ascending: false }).limit(50));
-            fetchPromises.push(supabase.from('streamer_leaderboards').select('*').eq('streamer_id', creatorRecord.id).maybeSingle());
-          } else {
-            fetchPromises.push(Promise.resolve({ data: [] }));
-            fetchPromises.push(Promise.resolve({ data: null }));
-          }
-
-          // 8. User Favorites
-          if (targetTwitchId) {
-            fetchPromises.push(supabase.from('user_favorites').select('streamer_id').eq('user_id', targetTwitchId));
-          } else {
-            fetchPromises.push(Promise.resolve({ data: [] }));
-          }
-
-          // 9. Personal Connected Streamers (Streamers you have cards from)
-          if (targetTwitchId) {
-            fetchPromises.push(supabase.from('enriched_user_cards').select('streamer_id, brand_name, streamer_username, avatar_url, pack_image_url').eq('twitch_id', targetTwitchId));
-          } else {
-            fetchPromises.push(Promise.resolve({ data: [] }));
-          }
-
-          // 10. Global streamers for hub discovery (active or unset is_active — excludes explicit false)
-          fetchPromises.push(
-            supabase
-              .from('streamers')
-              .select('id, username, display_name, avatar_url, brand_name, brand_tagline, is_active, pack_image_url, twitch_id')
-              .or('is_active.eq.true,is_active.is.null')
-              .limit(80)
-          );
-
-          // 11. All Available Achievements
-          fetchPromises.push(supabase.from('achievements').select('*'));
-
-          const [
-            statsTotalRes,
-            statsLegendaryRes,
-            recentDropsRes,
-            bindersRes,
-            achievementsRes,
-            leaderboardRes,
-            totalAvailRes,
-            creatorCardsRes,
-            creatorStatsRes,
-            favoritesRes,
-            personalConnectionsRes,
-            activeStreamersRes,
-            allAvailableAchievementsRes
-          ] = await Promise.all(fetchPromises);
+          // Map RPC results to the variables used downstream
+          const statsTotalRes = { count: rpc.page_stats?.total_cards || 0 };
+          const statsLegendaryRes = { count: rpc.page_stats?.legendary_count || 0 };
+          const recentDropsRes = { data: rpc.recent_drops || [] };
+          const bindersRes = { data: rpc.binders || [] };
+          const achievementsRes = { data: rpc.user_achievements || [] };
+          const leaderboardRes = { data: rpc.leaderboard || [] };
+          const totalAvailRes = { count: rpc.total_avail_count || 0 };
+          const creatorCardsRes = { data: rpc.creator_data?.cards || [] };
+          const creatorStatsRes = { data: rpc.creator_data?.stats || null };
+          const favoritesRes = { data: (rpc.favorites || []).map((id: string) => ({ streamer_id: id })) };
+          const personalConnectionsRes = { data: rpc.personal_connections || [] };
+          const activeStreamersRes = { data: rpc.discovery || [] };
+          const allAvailableAchievementsRes = { data: rpc.achievements || [] };
+          const userProfileData = rpc.user; // renamed to avoids collisions if needed
 
           let platformStaffRole: string | null = null;
           let teamMemberships: any[] = [];
@@ -3336,8 +3255,8 @@ export default {
             console.error('[Bootstrap/Twitch] streamers query failed:', allStreamersErr.message, allStreamersErr.code);
           }
           const allStreamersList = allS || [];
-          debugAllStreamerIds = allStreamersList.map(s => s.twitch_id).join(',');
-          debugAllStreamersDetail = allStreamersList.map(s => `${s.username}:${s.twitch_id ?? 'null'}`).slice(0, 20).join('; ');
+          debugAllStreamerIds = allStreamersList.map((s: any) => s.twitch_id).join(',');
+          debugAllStreamersDetail = allStreamersList.map((s: any) => `${s.username}:${s.twitch_id ?? 'null'}`).slice(0, 20).join('; ');
           if (allStreamersList.length === 0) {
             console.warn('[Bootstrap/Twitch] No streamers in DB - cannot match follows. Run migrations?');
           }
@@ -3387,7 +3306,7 @@ export default {
 
                   // 1) Match by twitch_id (normalize both sides: strip non-digits, trim)
                   const matchDebug: string[] = [];
-                  followedStreamers = allStreamersList.filter(s => {
+                  followedStreamers = allStreamersList.filter((s: any) => {
                     if (!s.twitch_id) return false;
                     const dbId = String(s.twitch_id).trim().replace(/\D/g, '');
                     const isMatch = followTwitchIds.includes(dbId);
