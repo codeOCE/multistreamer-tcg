@@ -67,6 +67,39 @@ async function fetchWithCache(redis: Redis | null, key: string, ttlSeconds: numb
   return data;
 }
 
+const BRANDING_CACHE_TTL_SEC = 600;
+const brandingCacheKeySid = (id: string) => `branding:v1:sid:${id}`;
+const brandingCacheKeyTwitch = (twitchId: string) => `branding:v1:twitch:${twitchId}`;
+
+type BrandingCachePayload = {
+  binder_color?: string | null;
+  brand_name?: string | null;
+  brand_tagline?: string | null;
+};
+
+function pickBrandingForCache(row: any): BrandingCachePayload {
+  return {
+    binder_color: row?.binder_color ?? null,
+    brand_name: row?.brand_name ?? null,
+    brand_tagline: row?.brand_tagline ?? null,
+  };
+}
+
+/** Warm Upstash with compact branding for fast repeat reads (dashboard bootstrap / edges). */
+async function warmStreamerBrandingCache(redis: Redis | null, streamer: any) {
+  if (!redis || !streamer?.id) return;
+  try {
+    const payload = JSON.stringify(pickBrandingForCache(streamer));
+    const ttl = BRANDING_CACHE_TTL_SEC;
+    await redis.setex(brandingCacheKeySid(String(streamer.id)), ttl, payload);
+    if (streamer.twitch_id) {
+      await redis.setex(brandingCacheKeyTwitch(String(streamer.twitch_id)), ttl, payload);
+    }
+  } catch (e) {
+    console.warn('[BrandingCache] warm failed', e);
+  }
+}
+
 const CARD_IMAGE_MAX_BYTES = 8 * 1024 * 1024; // 8MB
 const CARD_IMAGE_MAX_EDGE_PX = 2000;
 
@@ -730,6 +763,23 @@ function assertTeamCanEditCatalog(teamRole: 'moderator' | 'editor' | null | unde
   if (teamRole === 'moderator') throw new Error('Forbidden: Editor role required for this action');
 }
 
+/** Moderators may PATCH only these pack-related fields (pack editor + direct pack art upload). */
+const MODERATOR_PACK_SETTINGS_KEYS = new Set(['pack_image_url', 'pack_image', 'pack_design_url', 'pack_foil_color']);
+
+function assertModeratorPackSettingsOnly(body: Record<string, any>) {
+  if (body.settings !== undefined) {
+    throw new Error('Forbidden: Moderators may only update pack image, pack design, and foil color.');
+  }
+  const keys = Object.keys(body).filter((k) => body[k] !== undefined);
+  const bad = keys.filter((k) => !MODERATOR_PACK_SETTINGS_KEYS.has(k));
+  if (bad.length > 0) {
+    throw new Error('Forbidden: Moderators may only update pack image, pack design, and foil color.');
+  }
+  if (keys.length === 0) {
+    throw new Error('Forbidden: No pack fields to update.');
+  }
+}
+
 // --- HELPER FUNCTIONS ---
 
 
@@ -823,6 +873,12 @@ async function handleTwitchWebhook(req: Request, env: Env): Promise<Response> {
   }
   const streamer = resolvedStreamer;
 
+  /** Fewer Worker subrequests (no Upstash) + one sync instead of heavy per-card achievement queries. */
+  const twitchGrantOpts: GrantRandomCardOptions = {
+    preferSupabaseOverRedis: true,
+    skipAchievementCheck: true,
+  };
+
   // 1. Handle Channel Points Redemption
   if (type === 'channel.channel_points_custom_reward_redemption.add') {
     const redeemedRewardId = event.reward.id;
@@ -831,8 +887,17 @@ async function handleTwitchWebhook(req: Request, env: Env): Promise<Response> {
     // Grant Card
     if (redeemedRewardId === streamer.twitch_reward_id) {
       console.log(`[Webhook] Granting card for ${userName} in ${streamer.username}'s stream`);
-      const g = await grantRandomCard(supabase, userId, userName, streamer.id, `🏰 Redemption: ${event.reward.title}!`, env);
+      const g = await grantRandomCard(
+        supabase,
+        userId,
+        userName,
+        streamer.id,
+        `🏰 Redemption: ${event.reward.title}!`,
+        env,
+        twitchGrantOpts
+      );
       await logTwitchGrantToActivity(supabase, streamer.id, g, 'Channel Points');
+      if (g?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
     }
 
     // Battle Initiation
@@ -853,34 +918,81 @@ async function handleTwitchWebhook(req: Request, env: Env): Promise<Response> {
       console.log(`[Webhook] Sub received by ${userName} (GIFT) - No reward granted to recipient per settings.`);
     } else {
       console.log(`[Webhook] New sub by ${userName} - Granting card!`);
-      const g = await grantRandomCard(supabase, userId, userName, streamer.id, `💜 Welcome to the community! (Sub Reward)`, env);
+      const g = await grantRandomCard(
+        supabase,
+        userId,
+        userName,
+        streamer.id,
+        `💜 Welcome to the community! (Sub Reward)`,
+        env,
+        twitchGrantOpts
+      );
       await logTwitchGrantToActivity(supabase, streamer.id, g, 'New subscription');
+      if (g?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
     }
   }
 
   // 3. Handle Subscription Messages (Re-subs)
   if (type === 'channel.subscription.message') {
     console.log(`[Webhook] Re-sub message by ${userName} - Granting card!`);
-    const g = await grantRandomCard(supabase, userId, userName, streamer.id, `✨ Thanks for staying with us! (Re-sub Reward)`, env);
+    const g = await grantRandomCard(
+      supabase,
+      userId,
+      userName,
+      streamer.id,
+      `✨ Thanks for staying with us! (Re-sub Reward)`,
+      env,
+      twitchGrantOpts
+    );
     await logTwitchGrantToActivity(supabase, streamer.id, g, 'Resub');
+    if (g?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
   }
 
-  // 4. Handle Gift Multiplier (The Gifter gets the reward)
+  // 4. Handle Gift Multiplier (The Gifter gets the reward) — batched like dashboard bulk (Worker subrequest limit).
   if (type === 'channel.subscription.gift') {
-    const giftCount = event.total || 1;
-    console.log(`[Webhook] ${userName} gifted ${giftCount} subs! Granting ${giftCount} cards to gifter.`);
+    const giftCount = Math.min(200, Math.max(1, parseInt(String(event.total ?? 1), 10) || 1));
+    console.log(`[Webhook] ${userName} gifted ${giftCount} subs! Granting ${giftCount} cards to gifter (batch).`);
 
-    for (let i = 0; i < giftCount; i++) {
-      const g = await grantRandomCard(
+    try {
+      const { granted, lastResult } = await bulkGrantRandomCardsToTwitchUser(
         supabase,
+        env,
+        streamer.id,
         userId,
         userName,
-        streamer.id,
-        `🎁 Gift Expansion! (${i + 1}/${giftCount})`,
-        env,
-        { isSilent: i > 0 } // Only alert for the first card to avoid spam
+        giftCount,
+        {
+          skipRedis: true,
+          isObsConsumedForIndex: (i) => i > 0,
+          buildNotification: (i, total, randomCard, isGenesis) => ({
+            message: isGenesis
+              ? `🌌 GENESIS CARD! 🎁 Gift Expansion! (${i + 1}/${total})`
+              : `🎁 Gift Expansion! (${i + 1}/${total})`,
+            data: {
+              card_id: randomCard.id,
+              name: randomCard.name,
+              rarity: randomCard.rarity,
+              image_url: randomCard.image_url,
+              is_genesis: isGenesis,
+            },
+          }),
+        }
       );
-      await logTwitchGrantToActivity(supabase, streamer.id, g, `Gift sub ${i + 1}/${giftCount}`);
+      await logTwitchGrantToActivity(
+        supabase,
+        streamer.id,
+        lastResult,
+        granted > 1 ? `Gift ×${granted} subs` : 'Gift sub 1/1'
+      );
+    } catch (e: any) {
+      console.error('[Webhook] Gift batch grant failed:', e?.message || e);
+      logGrantIssueCopyPaste('channel.subscription.gift batch failed', {
+        step: 'twitch_webhook.gift',
+        streamer_id: streamer.id,
+        gifter_twitch_id: userId,
+        gift_count: giftCount,
+        message: e?.message,
+      });
     }
   }
 
@@ -976,6 +1088,21 @@ async function assignMechanic(supabase: any, redis?: Redis | null): Promise<stri
     console.error('[assignMechanic] Error:', e.message);
     return null;
   }
+}
+
+/** Same distribution as assignMechanic, in-process (single mechanics fetch for bulk grants). */
+function pickWeightedMechanicFromList(mechanics: { id: string; rarity_weight?: number }[] | null | undefined): string | null {
+  if (!mechanics || mechanics.length === 0) return null;
+  let best: { id: string; rarity_weight?: number } | null = null;
+  let bestScore = -Infinity;
+  for (const m of mechanics) {
+    const score = Math.random() ** (1.0 / Math.max(m.rarity_weight || 1, 1));
+    if (score > bestScore) {
+      bestScore = score;
+      best = m;
+    }
+  }
+  return best?.id ?? null;
 }
 
 /**
@@ -1226,12 +1353,459 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
 }
 
 
-async function grantRandomCard(supabase: any, userId: string, userName: string, creatorId: string, customMessage?: string | null, env?: Env, options: { forcedCardId?: string, forcedRarity?: string, isSilent?: boolean } = {}) {
+/** PostgREST / Supabase client error shape → safe JSON for logs. */
+function supabaseErrSnapshot(err: unknown): Record<string, unknown> {
+  if (!err || typeof err !== 'object') return { raw: String(err) };
+  const e = err as Record<string, unknown>;
+  return {
+    message: e.message,
+    code: e.code,
+    details: e.details,
+    hint: e.hint,
+  };
+}
+
+/** One block per failure — copy from `wrangler tail` / Worker logs and paste for debugging. */
+function logGrantIssueCopyPaste(title: string, fields: Record<string, unknown>) {
+  const payload = {
+    tag: 'GRANT_ISSUE_COPY_PASTE',
+    title,
+    time: new Date().toISOString(),
+    ...fields,
+  };
+  console.error('\n========== GRANT ISSUE (copy JSON below) ==========');
+  console.error(JSON.stringify(payload, null, 2));
+  console.error('========== END GRANT ISSUE ==========\n');
+}
+
+/** Reuse set + card-pool rows across iterations of a single bulk grant (avoids hammering Supabase). */
+type GrantPoolRequestCache = {
+  activeSets?: any[];
+  rarityPools: Map<string, any[]>;
+};
+
+type GrantRandomCardOptions = {
+  forcedCardId?: string;
+  forcedRarity?: string;
+  isSilent?: boolean;
+  /** When true, skip checkAndUnlockAchievements (caller should sync once after bulk). */
+  skipAchievementCheck?: boolean;
+  /** When true, do not use Redis for streamer sets / per-rarity card pools (avoids stale cache during bulk grants). */
+  skipRedisForGrantPool?: boolean;
+  /** When set (e.g. bulk dashboard grant), active sets and each rarity pool are fetched at most once per request. */
+  grantPoolRequestCache?: GrantPoolRequestCache;
+  /** Optional; on failure, `failReason` is set before returning null. */
+  grantDiagnostic?: { failReason?: string };
+  /**
+   * Twitch webhooks / one-off grants: skip Upstash entirely (each Redis call = extra Worker subrequest + Upstash usage).
+   * Dashboard and repeat traffic keep Redis for cache hits.
+   */
+  preferSupabaseOverRedis?: boolean;
+};
+
+type GrantActivitySummary = {
+  card_id: string;
+  card_name: string;
+  rarity: string;
+  recipient_twitch_id: string;
+  recipient_username: string;
+  /** Twitch webhooks: grant used skipAchievementCheck — run syncUserAchievements once after logging. */
+  _deferAchievementSync?: boolean;
+};
+
+type BulkGrantPickState = {
+  creatorId: string;
+  forcedRarity?: string;
+  grantPoolRequestCache: GrantPoolRequestCache;
+  rarityWeights: Record<string, number>;
+  activeSetIds: string[];
+};
+
+async function loadBulkGrantRarityWeights(
+  supabase: any,
+  creatorId: string,
+  now: string,
+  redis: Redis | null
+): Promise<Record<string, number>> {
+  let rarityWeights: any = null;
+  const { data: activeEvent } = await supabase
+    .from('streamer_events')
+    .select('config')
+    .eq('streamer_id', creatorId)
+    .eq('is_active', true)
+    .lte('starts_at', now)
+    .gte('ends_at', now)
+    .maybeSingle();
+  rarityWeights = activeEvent?.config;
+  if (!rarityWeights) {
+    const { data: customConfig } = await supabase
+      .from('streamer_rarity_configs')
+      .select('common_weight, rare_weight, epic_weight, legendary_weight')
+      .eq('streamer_id', creatorId)
+      .maybeSingle();
+    if (customConfig) {
+      rarityWeights = {
+        common: customConfig.common_weight,
+        rare: customConfig.rare_weight,
+        epic: customConfig.epic_weight,
+        legendary: customConfig.legendary_weight,
+      };
+    }
+  }
+  if (!rarityWeights) {
+    const fetcher = async () => {
+      const { data: configData } = await supabase.from('platform_config').select('*');
+      return configData;
+    };
+    const configData = redis ? await fetchWithCache(redis, 'cache_platform_config', 3600, fetcher) : await fetcher();
+    const weightingConfig = configData?.find((c: any) => c.id === 'rarity_weights')?.data;
+    rarityWeights = weightingConfig || { common: 70, rare: 20, epic: 8, legendary: 2 };
+  }
+  return rarityWeights;
+}
+
+async function ensureBulkRarityPool(
+  supabase: any,
+  creatorId: string,
+  selectedRarity: string,
+  reqCache: GrantPoolRequestCache
+): Promise<any[]> {
+  const rarityKey = `${creatorId}:${selectedRarity.toLowerCase()}`;
+  if (reqCache.rarityPools.has(rarityKey)) return reqCache.rarityPools.get(rarityKey)!;
+  const { data, error } = await supabase
+    .from('cards')
+    .select('*')
+    .ilike('rarity', selectedRarity)
+    .eq('streamer_id', creatorId);
+  if (error) {
+    console.error('[Grant] Card fetch error (bulk):', error.message);
+    logGrantIssueCopyPaste('cards pool fetch failed', {
+      step: 'cards_select',
+      streamer_id: creatorId,
+      selected_rarity: selectedRarity,
+      rarity_key: rarityKey,
+      used_request_cache: true,
+      bulk: true,
+      supabase_error: supabaseErrSnapshot(error),
+    });
+    throw new Error(`Database error during card fetch: ${error.message}`);
+  }
+  const rows = data ?? [];
+  reqCache.rarityPools.set(rarityKey, rows);
+  return rows;
+}
+
+async function pickOneRandomCardBulk(
+  supabase: any,
+  state: BulkGrantPickState,
+  depth: number
+): Promise<any | null> {
+  if (depth > 12) return null;
+  const { creatorId, forcedRarity, grantPoolRequestCache, rarityWeights, activeSetIds } = state;
+  let selectedRarity = 'Common';
+  if (forcedRarity) {
+    selectedRarity = forcedRarity.charAt(0).toUpperCase() + forcedRarity.slice(1);
+  } else {
+    const roll = Math.random() * 100;
+    let cumulative = 0;
+    for (const r of ['common', 'rare', 'epic', 'legendary']) {
+      cumulative += rarityWeights[r] || 0;
+      if (roll <= cumulative) {
+        selectedRarity = r.charAt(0).toUpperCase() + r.slice(1);
+        break;
+      }
+    }
+  }
+  const allCardsInRarity = await ensureBulkRarityPool(supabase, creatorId, selectedRarity, grantPoolRequestCache);
+  const pool = (allCardsInRarity || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+  if (!pool || pool.length === 0) {
+    if (forcedRarity) {
+      const { data: anyPoolRaw } = await supabase.from('cards').select('*').eq('streamer_id', creatorId);
+      const anyPool = (anyPoolRaw || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+      if (!anyPool?.length) return null;
+      return anyPool[Math.floor(Math.random() * anyPool.length)];
+    }
+    if (selectedRarity.toLowerCase() === 'common') {
+      const { data: allCards } = await supabase.from('cards').select('*').eq('streamer_id', creatorId).limit(10);
+      const fallbackPool = (allCards || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+      if (fallbackPool.length > 0) return fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
+      return null;
+    }
+    return pickOneRandomCardBulk(supabase, state, depth + 1);
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/** Picks N catalog rows with minimal subrequests (one Worker invocation), then caller batch-inserts. */
+async function creatorBulkPickRandomCards(
+  supabase: any,
+  env: Env | undefined,
+  creatorId: string,
+  count: number,
+  forcedCardId: string | undefined,
+  forcedRarity: string | undefined,
+  grantPoolRequestCache: GrantPoolRequestCache,
+  pickOpts?: { skipRedis?: boolean }
+): Promise<any[]> {
+  if (forcedCardId) {
+    const { data: c, error: cErr } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('id', forcedCardId)
+      .eq('streamer_id', creatorId)
+      .maybeSingle();
+    if (cErr || !c) {
+      throw new Error(
+        'Card not found in this channel catalog (wrong ID, another streamer’s card, or it was deleted).'
+      );
+    }
+    return Array.from({ length: count }, () => c);
+  }
+  let redis: Redis | null = null;
+  if (
+    !pickOpts?.skipRedis &&
+    env?.UPSTASH_REDIS_REST_URL &&
+    env?.UPSTASH_REDIS_REST_TOKEN
+  ) {
+    redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
+  }
+  const now = new Date().toISOString();
+  const rarityWeights = await loadBulkGrantRarityWeights(supabase, creatorId, now, redis);
+  if (!('activeSets' in grantPoolRequestCache)) {
+    const { data, error } = await supabase
+      .from('streamer_sets')
+      .select('id, is_active, is_always_active')
+      .eq('streamer_id', creatorId);
+    if (error) {
+      console.error('[Grant] Set fetch error (bulk):', error.message);
+      logGrantIssueCopyPaste('streamer_sets fetch failed', {
+        step: 'streamer_sets',
+        streamer_id: creatorId,
+        bulk: true,
+        supabase_error: supabaseErrSnapshot(error),
+      });
+      throw new Error(`Database error during streamer_sets fetch: ${error.message}`);
+    }
+    grantPoolRequestCache.activeSets = data ?? [];
+  }
+  const activeSets = grantPoolRequestCache.activeSets!;
+  const activeSetIds = activeSets.filter((s: any) => s.is_active || s.is_always_active).map((s: any) => s.id);
+  const bulkState: BulkGrantPickState = {
+    creatorId,
+    forcedRarity,
+    grantPoolRequestCache,
+    rarityWeights,
+    activeSetIds,
+  };
+  const picks: any[] = [];
+  for (let i = 0; i < count; i++) {
+    const card = await pickOneRandomCardBulk(supabase, bulkState, 0);
+    if (!card?.id) {
+      throw new Error('No cards available for this streamer (bulk pick exhausted).');
+    }
+    picks.push(card);
+  }
+  return picks;
+}
+
+type BulkGrantToRecipientOptions = {
+  forcedCardId?: string;
+  forcedRarity?: string;
+  /** Per-row OBS consumption (e.g. gift subs: only first shows on overlay). */
+  isObsConsumedForIndex?: (index: number) => boolean;
+  /** Override card_drop notification text/data per row. */
+  buildNotification?: (
+    index: number,
+    total: number,
+    randomCard: any,
+    isGenesis: boolean
+  ) => { message: string; data: Record<string, unknown> };
+  /** Skip Upstash for this batch (Twitch webhooks — fewer Worker subrequests). */
+  skipRedis?: boolean;
+};
+
+/**
+ * Batch random catalog grants (dashboard bulk, Twitch mass gift, etc.) — minimal Worker subrequests.
+ */
+async function bulkGrantRandomCardsToTwitchUser(
+  supabase: any,
+  env: Env | undefined,
+  streamerId: string,
+  twitchId: string,
+  username: string,
+  qty: number,
+  options: BulkGrantToRecipientOptions = {}
+): Promise<{ granted: number; lastResult: GrantActivitySummary }> {
+  const { forcedCardId, forcedRarity, skipRedis: bulkSkipRedis } = options;
+  const isObsFor = options.isObsConsumedForIndex ?? (() => false);
+  const total = qty;
+  const buildNotif =
+    options.buildNotification ??
+    ((index: number, tot: number, randomCard: any, isGenesis: boolean) => ({
+      message: isGenesis
+        ? `🌌 GENESIS CARD! You got a dual-trait card: ${randomCard.name}!`
+        : `🏰 You got a new card: ${randomCard.name}!`,
+      data: {
+        card_id: randomCard.id,
+        name: randomCard.name,
+        rarity: randomCard.rarity,
+        image_url: randomCard.image_url,
+        is_genesis: isGenesis,
+      },
+    }));
+
+  const { data: blockedRowBulk } = await supabase
+    .from('streamer_collector_blocks')
+    .select('blocked_twitch_id')
+    .eq('streamer_id', streamerId)
+    .eq('blocked_twitch_id', twitchId)
+    .maybeSingle();
+  if (blockedRowBulk) {
+    throw new Error('This user is blocked from receiving cards on this channel');
+  }
+  const { data: userRowBulk } = await supabase
+    .from('users')
+    .select('is_linked')
+    .eq('twitch_id', twitchId)
+    .maybeSingle();
+
+  const bulkCache: GrantPoolRequestCache = { rarityPools: new Map<string, any[]>() };
+  const picked = await creatorBulkPickRandomCards(
+    supabase,
+    env,
+    streamerId,
+    qty,
+    forcedCardId,
+    forcedRarity,
+    bulkCache,
+    { skipRedis: !!bulkSkipRedis }
+  );
+
+  if (userRowBulk?.is_linked) {
+    const { data: mechanicsRows } = await supabase
+      .from('mechanics')
+      .select('id, rarity_weight')
+      .eq('is_active', true);
+    const mechanicsList = mechanicsRows || [];
+    const userCardRows: any[] = [];
+    const notifRows: any[] = [];
+    picked.forEach((randomCard: any, idx: number) => {
+      const { grade: cardGrade, isGenesisMint } = generateGrade();
+      const isGenesis = Math.random() < 0.01;
+      let primaryMechanicId = pickWeightedMechanicFromList(mechanicsList);
+      let secondaryMechanicId: string | null = null;
+      if (isGenesis) {
+        let retries = 0;
+        while (retries < 5) {
+          secondaryMechanicId = pickWeightedMechanicFromList(mechanicsList);
+          if (secondaryMechanicId !== primaryMechanicId) break;
+          retries++;
+        }
+      }
+      userCardRows.push({
+        twitch_id: twitchId,
+        card_id: randomCard.id,
+        streamer_id: streamerId,
+        granted_by_streamer: streamerId,
+        is_obs_consumed: isObsFor(idx),
+        attack: randomCard.attack,
+        defense: randomCard.defense,
+        max_hp: randomCard.defense,
+        mechanic_id: isGenesis ? secondaryMechanicId : primaryMechanicId,
+        genesis_mechanic_id: isGenesis ? primaryMechanicId : null,
+        grade: cardGrade,
+        is_genesis_mint: isGenesisMint,
+      });
+      const { message, data } = buildNotif(idx, total, randomCard, isGenesis);
+      notifRows.push({
+        twitch_id: twitchId,
+        streamer_id: streamerId,
+        type: 'card_drop',
+        message,
+        data,
+      });
+    });
+    const { error: cardErrBulk } = await supabase.from('user_cards').insert(userCardRows);
+    if (cardErrBulk) {
+      logGrantIssueCopyPaste('user_cards batch insert failed', {
+        step: 'user_cards.insert.batch',
+        streamer_id: streamerId,
+        recipient_twitch_id: twitchId,
+        count: userCardRows.length,
+        supabase_error: supabaseErrSnapshot(cardErrBulk),
+      });
+      throw new Error(cardErrBulk.message || 'user_cards batch insert failed');
+    }
+    if (notifRows.length > 0) {
+      const { error: notifErrBulk } = await supabase.from('notifications').insert(notifRows);
+      if (notifErrBulk) console.error('[Grant] Batch notification insert:', notifErrBulk.message);
+    }
+    await syncUserAchievements(supabase, twitchId, streamerId);
+  } else {
+    if (!userRowBulk) {
+      await supabase
+        .from('users')
+        .upsert({ twitch_id: twitchId, username, is_linked: false }, { onConflict: 'twitch_id' });
+    }
+    const pendingRows = picked.map((randomCard: any, idx: number) => {
+      const { grade: pendingGrade, isGenesisMint: pendingIsGenesisMint } = generateGrade();
+      return {
+        twitch_id: twitchId,
+        card_id: randomCard.id,
+        streamer_id: streamerId,
+        is_obs_consumed: isObsFor(idx),
+        grade: pendingGrade,
+        is_genesis_mint: pendingIsGenesisMint,
+      };
+    });
+    const { error: rewardErrBulk } = await supabase.from('pending_rewards').insert(pendingRows);
+    if (rewardErrBulk) {
+      logGrantIssueCopyPaste('pending_rewards batch insert failed', {
+        step: 'pending_rewards.insert.batch',
+        streamer_id: streamerId,
+        recipient_twitch_id: twitchId,
+        count: pendingRows.length,
+        supabase_error: supabaseErrSnapshot(rewardErrBulk),
+      });
+      throw new Error(rewardErrBulk.message || 'pending_rewards batch insert failed');
+    }
+  }
+
+  const lastCard = picked[picked.length - 1];
+  return {
+    granted: picked.length,
+    lastResult: {
+      card_id: String(lastCard.id),
+      card_name: String(lastCard.name || 'Card'),
+      rarity: String(lastCard.rarity || ''),
+      recipient_twitch_id: twitchId,
+      recipient_username: username,
+    },
+  };
+}
+
+async function grantRandomCard(
+  supabase: any,
+  userId: string,
+  userName: string,
+  creatorId: string,
+  customMessage?: string | null,
+  env?: Env,
+  options: GrantRandomCardOptions = {}
+) {
+  const setGrantFail = (reason: string) => {
+    if (options.grantDiagnostic) options.grantDiagnostic.failReason = reason;
+  };
   try {
     let redis: Redis | null = null;
-    if (env?.UPSTASH_REDIS_REST_URL && env?.UPSTASH_REDIS_REST_TOKEN) {
+    if (
+      !options.preferSupabaseOverRedis &&
+      env?.UPSTASH_REDIS_REST_URL &&
+      env?.UPSTASH_REDIS_REST_TOKEN
+    ) {
       redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
     }
+    const poolRedis = options.skipRedisForGrantPool ? null : redis;
 
     const { data: blockedRow } = await supabase
       .from('streamer_collector_blocks')
@@ -1250,8 +1824,17 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
     let selectedRarity = 'Common';
 
     if (forcedCardId) {
-      const { data: c, error: cErr } = await supabase.from('cards').select('*').eq('id', forcedCardId).single();
-      if (cErr || !c) throw new Error('Forced card not found');
+      const { data: c, error: cErr } = await supabase
+        .from('cards')
+        .select('*')
+        .eq('id', forcedCardId)
+        .eq('streamer_id', creatorId)
+        .maybeSingle();
+      if (cErr || !c) {
+        throw new Error(
+          'Card not found in this channel catalog (wrong ID, another streamer’s card, or it was deleted).'
+        );
+      }
       randomCard = c;
       selectedRarity = c.rarity;
     } else {
@@ -1309,30 +1892,60 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
         }
       }
 
-      // Fetch active sets to filter the card pool (cached per streamer for 5 minutes)
-      const activeSets = await fetchWithCache(
-        redis!,
-        `cache_streamer_sets:${creatorId}`,
-        300,
-        async () => {
+      const reqCache = options.grantPoolRequestCache;
+
+      // Fetch active sets to filter the card pool (Redis TTL cache, or once per HTTP request for bulk)
+      let activeSets: any[] | null | undefined;
+      if (reqCache) {
+        if (!('activeSets' in reqCache)) {
           const { data, error } = await supabase
             .from('streamer_sets')
             .select('id, is_active, is_always_active')
             .eq('streamer_id', creatorId);
-          if (error) console.error('[Grant] Set fetch error:', error.message);
-          return data;
+          if (error) {
+            console.error('[Grant] Set fetch error:', error.message);
+            logGrantIssueCopyPaste('streamer_sets fetch failed', {
+              step: 'streamer_sets',
+              streamer_id: creatorId,
+              supabase_error: supabaseErrSnapshot(error),
+            });
+            throw new Error(`Database error during streamer_sets fetch: ${error.message}`);
+          }
+          reqCache.activeSets = data ?? [];
         }
-      );
+        activeSets = reqCache.activeSets;
+      } else {
+        activeSets = await fetchWithCache(
+          poolRedis,
+          `cache_streamer_sets:${creatorId}`,
+          300,
+          async () => {
+            const { data, error } = await supabase
+              .from('streamer_sets')
+              .select('id, is_active, is_always_active')
+              .eq('streamer_id', creatorId);
+            if (error) {
+              console.error('[Grant] Set fetch error:', error.message);
+              logGrantIssueCopyPaste('streamer_sets fetch failed (cached path)', {
+                step: 'streamer_sets',
+                streamer_id: creatorId,
+                supabase_error: supabaseErrSnapshot(error),
+              });
+            }
+            return data;
+          }
+        );
+      }
 
       const activeSetIds = activeSets?.filter((s: any) => s.is_active || s.is_always_active).map((s: any) => s.id) || [];
 
-      // Query cards with case-insensitive rarity check (cached per streamer+rarity for 5 minutes)
-      const cacheKey = `cache_cards_pool:${creatorId}:${selectedRarity.toLowerCase()}`;
-      const allCardsInRarity = await fetchWithCache(
-        redis!,
-        cacheKey,
-        300,
-        async () => {
+      // Query cards with case-insensitive rarity check (Redis TTL, or once per rarity per bulk request)
+      const rarityKey = `${creatorId}:${selectedRarity.toLowerCase()}`;
+      let allCardsInRarity: any[] | null | undefined;
+      if (reqCache) {
+        if (reqCache.rarityPools.has(rarityKey)) {
+          allCardsInRarity = reqCache.rarityPools.get(rarityKey);
+        } else {
           const { data, error } = await supabase
             .from('cards')
             .select('*')
@@ -1340,11 +1953,48 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
             .eq('streamer_id', creatorId);
           if (error) {
             console.error('[Grant] Card fetch error:', error.message);
-            throw new Error('Database error during card fetch');
+            logGrantIssueCopyPaste('cards pool fetch failed', {
+              step: 'cards_select',
+              streamer_id: creatorId,
+              selected_rarity: selectedRarity,
+              rarity_key: rarityKey,
+              used_request_cache: true,
+              supabase_error: supabaseErrSnapshot(error),
+            });
+            throw new Error(`Database error during card fetch: ${error.message}`);
           }
-          return data;
+          const rows = data ?? [];
+          reqCache.rarityPools.set(rarityKey, rows);
+          allCardsInRarity = rows;
         }
-      );
+      } else {
+        const cacheKey = `cache_cards_pool:${creatorId}:${selectedRarity.toLowerCase()}`;
+        allCardsInRarity = await fetchWithCache(
+          poolRedis,
+          cacheKey,
+          300,
+          async () => {
+            const { data, error } = await supabase
+              .from('cards')
+              .select('*')
+              .ilike('rarity', selectedRarity)
+              .eq('streamer_id', creatorId);
+            if (error) {
+              console.error('[Grant] Card fetch error:', error.message);
+              logGrantIssueCopyPaste('cards pool fetch failed', {
+                step: 'cards_select',
+                streamer_id: creatorId,
+                selected_rarity: selectedRarity,
+                rarity_key: `${creatorId}:${selectedRarity.toLowerCase()}`,
+                used_request_cache: false,
+                supabase_error: supabaseErrSnapshot(error),
+              });
+              throw new Error(`Database error during card fetch: ${error.message}`);
+            }
+            return data;
+          }
+        );
+      }
 
       // A card is eligible if it has no set OR its set is active (or always active)
       let pool = (allCardsInRarity || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
@@ -1367,6 +2017,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
               randomCard = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
             } else {
               console.error('[Grant] Completely empty card pool for streamer:', creatorId);
+              setGrantFail('No cards available in pool for this streamer');
               return null;
             }
           } else {
@@ -1381,6 +2032,7 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
 
     if (!randomCard?.id) {
       console.error('[Grant] No card selected after pool resolution');
+      setGrantFail('No card selected after pool resolution');
       return null;
     }
 
@@ -1430,6 +2082,14 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
 
       if (cardErr) {
         console.error('[Grant] Error inserting user_card:', cardErr.message);
+        logGrantIssueCopyPaste('user_cards insert failed', {
+          step: 'user_cards.insert',
+          streamer_id: creatorId,
+          recipient_twitch_id: userId,
+          card_id: randomCard?.id,
+          supabase_error: supabaseErrSnapshot(cardErr),
+        });
+        setGrantFail(cardErr.message || 'user_cards insert failed');
         return null;
       }
 
@@ -1455,8 +2115,12 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
         console.error('[Grant] Error inserting notification:', notifErr.message);
       }
 
-      await checkAndUnlockAchievements(supabase, userId, randomCard, creatorId);
-      return grantSummary;
+      if (!options.skipAchievementCheck) {
+        await checkAndUnlockAchievements(supabase, userId, randomCard, creatorId);
+      }
+      return options.skipAchievementCheck
+        ? { ...grantSummary, _deferAchievementSync: true }
+        : grantSummary;
     } else {
       // Ensure the user row exists before inserting into pending_rewards (FK constraint)
       if (!user) {
@@ -1477,23 +2141,35 @@ async function grantRandomCard(supabase: any, userId: string, userName: string, 
 
       if (rewardErr) {
         console.error('[Grant] Error inserting pending_reward:', rewardErr.message);
+        logGrantIssueCopyPaste('pending_rewards insert failed', {
+          step: 'pending_rewards.insert',
+          streamer_id: creatorId,
+          recipient_twitch_id: userId,
+          card_id: randomCard?.id,
+          supabase_error: supabaseErrSnapshot(rewardErr),
+        });
+        setGrantFail(rewardErr.message || 'pending_rewards insert failed');
         return null;
       }
       return grantSummary;
     }
   } catch (e: any) {
     console.error('[Grant] Error:', e.message);
+    const msg = e?.message || 'Grant threw an unexpected error';
+    // Thrown DB fetch errors already emitted GRANT_ISSUE_COPY_PASTE above.
+    if (!(typeof msg === 'string' && msg.startsWith('Database error during'))) {
+      logGrantIssueCopyPaste('grantRandomCard uncaught exception', {
+        step: 'grantRandomCard.catch',
+        streamer_id: creatorId,
+        recipient_twitch_id: userId,
+        message: msg,
+        stack: typeof e?.stack === 'string' ? e.stack.split('\n').slice(0, 12).join('\n') : undefined,
+      });
+    }
+    setGrantFail(msg);
     return null;
   }
 }
-
-type GrantActivitySummary = {
-  card_id: string;
-  card_name: string;
-  rarity: string;
-  recipient_twitch_id: string;
-  recipient_username: string;
-};
 
 async function logTwitchGrantToActivity(
   supabase: any,
@@ -2439,6 +3115,9 @@ export default {
           if (user) {
             const { data } = await supabase.from('streamers').select('*').eq('twitch_id', user.twitch_id).maybeSingle();
             creatorRecord = data;
+            if (creatorRecord && reqRedis) {
+              await warmStreamerBrandingCache(reqRedis, creatorRecord);
+            }
           }
 
           // Use a dummy "Hub" streamer if global view is requested
@@ -4793,8 +5472,12 @@ export default {
       if (method === 'PATCH' && path === '/api/creator/settings') {
         try {
           const { streamer, teamRole } = await checkCreator(request, supabase);
-          assertTeamCanEditCatalog(teamRole);
           const b = await request.json() as any;
+          if (teamRole === 'moderator') {
+            assertModeratorPackSettingsOnly(b);
+          } else {
+            assertTeamCanEditCatalog(teamRole);
+          }
 
           const updateData: any = {};
           if (b.reward_id !== undefined) updateData.twitch_reward_id = b.reward_id;
@@ -4817,6 +5500,7 @@ export default {
           // Pack customization
           if (b.pack_image_url !== undefined) updateData.pack_image_url = b.pack_image_url;
           if (b.pack_image !== undefined) updateData.pack_image_url = b.pack_image; // Backward compatibility
+          if (b.pack_design_url !== undefined) updateData.pack_design_url = b.pack_design_url;
           if (b.pack_foil_color !== undefined) updateData.pack_foil_color = b.pack_foil_color;
           if (b.card_back_url !== undefined) updateData.card_back_url = b.card_back_url;
           if (b.pack_open_sound_url !== undefined) updateData.pack_open_sound_url = b.pack_open_sound_url;
@@ -4836,6 +5520,9 @@ export default {
           const { error: updateErr } = await supabase.from('streamers').update(updateData).eq('id', streamer.id);
 
           if (updateErr) throw updateErr;
+          if (reqRedis) {
+            await warmStreamerBrandingCache(reqRedis, { ...streamer, ...updateData });
+          }
           return secureResponse({ success: true }, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message, 400, corsHeaders, true);
@@ -6356,7 +7043,7 @@ export default {
         }
       }
 
-      // Creator: Grant card to user
+      // Creator: Grant card to user (optional quantity for overlay / queue stress testing)
       if (method === 'POST' && path === '/api/creator/grant') {
         try {
           const { streamer } = await checkCreator(request, supabase);
@@ -6368,31 +7055,112 @@ export default {
           const forcedCardId = isRandom ? undefined : b.card_id;
           const forcedRarity = isRandom ? b.random_rarity : undefined;
 
-          // Call updated grantRandomCard
-          const grantResult = await grantRandomCard(supabase, b.twitch_id, b.username || 'System Grant', streamer.id, null, env, {
-            forcedCardId,
-            forcedRarity,
-            isSilent: b.is_silent
-          });
-          if (!grantResult) {
-            throw new Error('Grant failed — no card was awarded. Check active sets, card pool, and that the viewer is not blocked.');
+          let qty = 1;
+          if (b.quantity !== undefined && b.quantity !== null && b.quantity !== '') {
+            const n = parseInt(String(b.quantity), 10);
+            if (Number.isFinite(n) && n >= 1) qty = Math.min(n, 200);
           }
-          await logSystem(
-            supabase,
-            'info',
-            'grant',
-            `"${grantResult.card_name}" → ${grantResult.recipient_username} · Dashboard`,
-            streamer.id,
-            {
-              card_id: grantResult.card_id,
-              card_name: grantResult.card_name,
-              rarity: grantResult.rarity,
-              recipient_twitch_id: grantResult.recipient_twitch_id,
-              recipient_username: grantResult.recipient_username,
-              platform: 'dashboard',
+
+          let granted = 0;
+          let lastResult: GrantActivitySummary | null = null;
+          let lastStopReason: string | undefined;
+          const recipientUsernameDefault = b.username || 'System Grant';
+
+          // quantity > 1: shared batch path (same as Twitch mass gift — low subrequest count).
+          if (qty > 1) {
+            const silent = !!b.is_silent;
+            const res = await bulkGrantRandomCardsToTwitchUser(
+              supabase,
+              env,
+              streamer.id,
+              b.twitch_id,
+              recipientUsernameDefault,
+              qty,
+              {
+                forcedCardId,
+                forcedRarity,
+                isObsConsumedForIndex: () => silent,
+              }
+            );
+            granted = res.granted;
+            lastResult = res.lastResult;
+          } else {
+            const grantOpts: GrantRandomCardOptions = {
+              forcedCardId,
+              forcedRarity,
+              isSilent: b.is_silent,
+              skipAchievementCheck: false,
+              skipRedisForGrantPool: false,
+              grantPoolRequestCache: undefined,
+            };
+            const grantDiagnostic: { failReason?: string } = {};
+            const grantResult = await grantRandomCard(
+              supabase,
+              b.twitch_id,
+              recipientUsernameDefault,
+              streamer.id,
+              null,
+              env,
+              { ...grantOpts, grantDiagnostic }
+            );
+            if (!grantResult) {
+              lastStopReason = grantDiagnostic.failReason;
+              throw new Error(
+                lastStopReason ||
+                  'Grant failed — no card was awarded. Check active sets, card pool, and that the viewer is not blocked.'
+              );
             }
+            granted = 1;
+            lastResult = grantResult;
+          }
+
+          const recipientUsername = lastResult?.recipient_username || b.username || 'Unknown';
+          if (granted === 1 && lastResult) {
+            await logSystem(
+              supabase,
+              'info',
+              'grant',
+              `"${lastResult.card_name}" → ${recipientUsername} · Dashboard`,
+              streamer.id,
+              {
+                card_id: lastResult.card_id,
+                card_name: lastResult.card_name,
+                rarity: lastResult.rarity,
+                recipient_twitch_id: lastResult.recipient_twitch_id,
+                recipient_username: recipientUsername,
+                platform: 'dashboard',
+              }
+            );
+          } else if (granted > 1 && lastResult) {
+            await logSystem(
+              supabase,
+              'info',
+              'grant',
+              `Bulk grant ×${granted} → ${recipientUsername} · Dashboard`,
+              streamer.id,
+              {
+                quantity: granted,
+                bulk_grant: true,
+                recipient_twitch_id: lastResult.recipient_twitch_id,
+                recipient_username: recipientUsername,
+                platform: 'dashboard',
+                last_card_id: lastResult.card_id,
+                last_card_name: lastResult.card_name,
+              }
+            );
+          }
+
+          return secureResponse(
+            {
+              success: true,
+              granted,
+              requested: qty,
+              partial: granted < qty,
+              ...(granted < qty && lastStopReason ? { stop_reason: lastStopReason } : {})
+            },
+            200,
+            corsHeaders
           );
-          return secureResponse({ success: true }, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message, 400, corsHeaders, true);
         }
@@ -6929,7 +7697,10 @@ export default {
       if (method === 'POST' && path === '/api/creator/upload') {
         try {
           const { streamer, teamRole } = await checkCreator(request, supabase);
-          assertTeamCanEditCatalog(teamRole);
+          // Owner + editors + moderators (mods: pack editor / pack art; cannot reach card APIs without editor role)
+          if (teamRole !== 'moderator') {
+            assertTeamCanEditCatalog(teamRole);
+          }
           const formData = await request.formData();
           const file = formData.get('file') as File;
 
@@ -7442,47 +8213,34 @@ export default {
         }
       }
 
-      // 3. Get Leaderboard
+      // 3. Get Leaderboard — uses Postgres RPC (server-side GROUP BY COUNT) + 60s Redis cache
       if (method === 'GET' && path === '/api/leaderboard') {
         try {
           const streamer = await resolveStreamerContext(request, supabase, url);
           if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
 
-          // Compute leaderboard from user_cards aggregated by twitch_id
-          const { data, error } = await supabase
-            .from('user_cards')
-            .select('twitch_id, users!inner(username, avatar_url)')
-            .eq('streamer_id', streamer.id)
-            .order('created_at', { ascending: false });
+          const lbRedis = (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN)
+            ? new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN })
+            : null;
 
-          if (error) {
-            console.error("Leaderboard Error:", error.message);
-            return secureResponse('Database error: ' + error.message, 500, corsHeaders, true);
-          }
-
-          // Aggregate by user
-          const leaderboardMap = new Map();
-          data?.forEach((card: any) => {
-            const twitchId = card.twitch_id;
-            if (!leaderboardMap.has(twitchId)) {
-              leaderboardMap.set(twitchId, {
-                twitch_id: twitchId,
-                username: card.users?.username || 'Unknown',
-                avatar_url: card.users?.avatar_url || null,
-                total_cards: 0
-              });
+          const leaderboard = await fetchWithCache(
+            lbRedis,
+            `leaderboard:${streamer.id}`,
+            60,
+            async () => {
+              const { data, error } = await supabase.rpc('get_leaderboard_top100', { p_streamer_id: streamer.id });
+              if (error) {
+                console.error('[Leaderboard] RPC error:', error.message);
+                throw new Error('Database error: ' + error.message);
+              }
+              return data || [];
             }
-            leaderboardMap.get(twitchId).total_cards++;
-          });
-
-          const leaderboard = Array.from(leaderboardMap.values())
-            .sort((a, b) => b.total_cards - a.total_cards)
-            .slice(0, 100);
+          );
 
           return secureResponse(leaderboard, 200, corsHeaders);
         } catch (e: any) {
-          console.error("Leaderboard Exception:", e);
-          return secureResponse('Error: ' + e.message, 500, corsHeaders, true);
+          console.error('[Leaderboard] Exception:', e);
+          return secureResponse('An internal error occurred', 500, corsHeaders, true);
         }
       }
 
@@ -7954,7 +8712,42 @@ export default {
         return streamer;
       }
 
-      // ── OBS SIGNAL (polled by obs.html during animation) ──
+      // ── OBS INIT — validates token, returns Supabase Realtime config (replaces polling) ──
+      // obs.html calls this once on load, then opens a Supabase Realtime WebSocket directly.
+      // This eliminates the 500ms /api/obs/signal polling interval entirely.
+      if (method === 'GET' && path === '/api/obs/init') {
+        const streamerParam = url.searchParams.get('streamer');
+        const tokenParam = url.searchParams.get('token');
+        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
+        if (!streamer) {
+          return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        }
+
+        // Fetch full config for initial branding
+        const { data: fullStreamer } = await supabase
+          .from('streamers')
+          .select('id, username, brand_name, obs_settings, obs_paused, pack_image_url, card_back_url, pack_animation_style')
+          .eq('id', streamer.id)
+          .maybeSingle();
+
+        return new Response(JSON.stringify({
+          streamer_id: streamer.id,
+          streamer_username: fullStreamer?.username,
+          supabase_url: env.SUPABASE_URL,
+          supabase_anon_key: env.SUPABASE_KEY,
+          obs_settings: fullStreamer?.obs_settings || { show_rarities: ['common', 'rare', 'epic', 'legendary'] },
+          obs_paused: !!fullStreamer?.obs_paused,
+          pack_image_url: fullStreamer?.pack_image_url || null,
+          card_back_url: fullStreamer?.card_back_url || null,
+          pack_animation_style: fullStreamer?.pack_animation_style || 'style1',
+          brand_name: fullStreamer?.brand_name || fullStreamer?.username || null,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+        });
+      }
+
+      // ── OBS SIGNAL (legacy poll — kept for backward-compat, obs.html now uses Realtime) ──
       // Returns current pause + skip state; atomically clears skip_signal after reading.
       if (method === 'GET' && path === '/api/obs/signal') {
         const streamerParam = url.searchParams.get('streamer');
