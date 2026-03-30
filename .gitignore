@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Cloudflare Workers / Wrangler
+.wrangler/
+dist/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# Custom Project Folders
+/not needed/
+tests/output/
+/migrations/
+/migration-package/
+
+# OS/Editor Files
+.DS_Store
+.vscode/
+Thumbs.db
+*.log
+
+# MRQ Local Config
+.mrq.json

@@ -1,0 +1,28 @@
+{
+	"name": "multistreamer-tcg",
+	"main": "src/index.ts",
+	"compatibility_date": "2024-02-27",
+	"assets": {
+		"directory": "public",
+		"binding": "ASSETS"
+	},
+	"r2_buckets": [
+		{
+			"binding": "multistreamer_tcg_cards",
+			"bucket_name": "multistreamer-tcg-cards"
+		},
+		{
+			"binding": "CARD_IMAGES",
+			"bucket_name": "multistreamer-tcg-cards"
+		}
+	],
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"UPSTASH_REDIS_REST_URL": "",
+		"UPSTASH_REDIS_REST_TOKEN": "",
+		"ENCRYPTION_SECRET": "",
+		"WORKER_DEV_URL": ""
+	}
+}

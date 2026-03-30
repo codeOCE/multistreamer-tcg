@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Castle TCG | Collect. Trade. Flex.</title>
+    <meta name="description" content="Castle TCG is the ultimate digital collectible platform for streamers and fans. Collect unique cards from your favorite creators, trade with the community, and flex your collection.">
+    <meta name="keywords" content="TCG, Streamer, Twitch, Collectibles, Trading Cards, Digital Assets, Gaming">
+
+    <link rel="icon" type="image/png" href="/Black_Castle.png">
+    
+    
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://multistreamer-tcg.codeoce.workers.dev/">
+    <meta property="og:title" content="Castle TCG | Collect. Trade. Flex.">
+    <meta property="og:description" content="The ultimate digital collectible platform for streamers and fans.">
+    <meta property="og:image" content="https://multistreamer-tcg.codeoce.workers.dev/social-preview.png">
+
+    
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://multistreamer-tcg.codeoce.workers.dev/">
+    <meta property="twitter:title" content="Castle TCG | Collect. Trade. Flex.">
+    <meta property="twitter:description" content="The ultimate digital collectible platform for streamers and fans.">
+    <meta property="twitter:image" content="https://multistreamer-tcg.codeoce.workers.dev/social-preview.png">
+
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+
+    
+    <link rel="preconnect" href="https://multistreamer-tcg.codeoce.workers.dev">
+    <link rel="dns-prefetch" href="https://multistreamer-tcg.codeoce.workers.dev">
+
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased selection:bg-void-accent/30">
+    <div class="saas-bg-glow"></div>
+    <div id="toast-container"></div>
+
+    
+    <main class="relative min-h-screen">
+
+        
+        <nav id="app-navbar" class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
+            <div class="max-w-[1400px] mx-auto px-8 h-20 flex items-center justify-between">
+                <div class="flex items-center gap-2 group cursor-pointer" onclick="window.location.href='/'">
+                    <div
+                        class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                        <img src="/White_Castle.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+                    </div>
+                    <div class="flex flex-col">
+                        <span
+                            class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span
+                                class="text-void-accent">TCG</span></span>
+                    </div>
+                </div>
+
+                
+                <div id="landing-mode-toggle" class="relative flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md ml-4">
+                    <button onclick="setLandingMode('viewer')" id="mode-viewer-btn"
+                        class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
+                        I am a Viewer
+                    </button>
+                    <button onclick="setLandingMode('streamer')" id="mode-streamer-btn"
+                        class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
+                        I am a Streamer
+                    </button>
+                    <div id="mode-indicator" class="absolute h-[calc(100%-8px)] rounded-xl bg-void-accent/20 transition-all duration-500 ease-premium"></div>
+                </div>
+
+                
+                <div id="central-nav"
+                    class="hidden items-center bg-white/[0.04] border border-white/5 p-1.5 rounded-3xl shadow-2xl backdrop-blur-md">
+                    <button onclick="switchView('collection')" id="nav-collection-btn"
+                        class="nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all active rounded-2xl border-none outline-none">
+                        Collection
+                    </button>
+                    <button onclick="switchView('leaderboard')" id="nav-archive-btn"
+                        class="nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all rounded-2xl border-none outline-none">
+                        Archive
+                    </button>
+                    <button onclick="switchView('trading')" id="nav-exchange-btn"
+                        class="nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all rounded-2xl border-none outline-none">
+                        Exchange
+                    </button>
+                    <button onclick="switchView('battle')" id="nav-battle-btn-top"
+                        class="nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all rounded-2xl border-none outline-none">
+                        Battle
+                    </button>
+                    <button type="button" onclick="switchView('creator-dashboard'); if (history && history.replaceState) { try { history.replaceState({ appView: 'creator-dashboard' }, '', '/dashboard'); } catch (e) {} }" id="nav-creator-btn"
+                        class="hidden nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-accent transition-all rounded-2xl border-none outline-none">
+                        Dashboard
+                    </button>
+                    <button onclick="window.location.href='/hub'" id="nav-hub-btn"
+                        class="nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all rounded-2xl border-none outline-none">
+                        Hub
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-6">
+                    <div id="nav-user-preview" class="hidden items-center gap-4">
+                        <span id="nav-username" class="hidden">---</span>
+                        <span id="nav-user-role" class="hidden">Collector</span>
+                        <div id="nav-user-menu-root" class="relative">
+                            <button type="button" id="nav-user-menu-trigger"
+                                class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-void-accent/50"
+                                aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                                <span class="relative inline-block">
+                                    <img id="nav-avatar" src="" alt=""
+                                        class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
+                                    <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"
+                                        aria-hidden="true"></span>
+                                </span>
+                                <i class="fa-solid fa-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"
+                                    aria-hidden="true"></i>
+                            </button>
+                            <div id="nav-user-menu"
+                                class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                                role="menu">
+                                <div class="border-b border-white/5">
+                                    <button type="button" id="nav-user-identity-toggle"
+                                        class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:bg-white/[0.04]"
+                                        aria-expanded="false" aria-controls="nav-user-team-panel">
+                                        <img id="nav-user-menu-avatar" src="" alt=""
+                                            class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                                        <div class="min-w-0 flex-1">
+                                            <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                            <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                                <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"
+                                                    aria-hidden="true"></span>
+                                                <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                            </div>
+                                        </div>
+                                        <span id="nav-user-team-chevron-wrap"
+                                            class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                            <i id="nav-user-team-chevron"
+                                                class="fa-solid fa-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"
+                                                aria-hidden="true"></i>
+                                        </span>
+                                    </button>
+                                    <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                        <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                    </div>
+                                </div>
+                                <div class="px-4 py-3 border-b border-white/5">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                            <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                        </div>
+                                        <button type="button" id="nav-user-menu-copy-code"
+                                            class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                    </div>
+                                </div>
+                                <div class="p-1.5">
+                                    <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                        <i class="fa-solid fa-gear text-void-muted w-4 text-center shrink-0" aria-hidden="true"></i>
+                                        <span class="flex flex-col leading-tight normal-case">
+                                            <span class="uppercase tracking-widest">Account settings</span>
+                                            <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                                        </span>
+                                    </button>
+                                    <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                        <i class="fa-solid fa-right-from-bracket w-4 text-center" aria-hidden="true"></i> Log out
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="login-nav-btn" class="saas-button text-[11px] px-6 py-2.5 rounded-xl">
+                        Sign in
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        
+        <section id="landing-view"
+            class="landing-section pt-32 pb-20 px-8 min-h-[90vh] flex flex-col lg:flex-row items-center justify-between max-w-[1400px] mx-auto gap-12 lg:gap-20"
+            style="display:none">
+            
+            <div class="w-full lg:w-1/2 space-y-10 void-fade text-left z-10" style="animation-delay: 0.1s">
+                <h1 id="hero-title"
+                    class="text-6xl md:text-8xl lg:text-[120px] xl:text-[140px] font-display font-black text-void-text leading-[0.8] tracking-tighter uppercase italic">
+                    SUPPORT.<br>COLLECT.<br><span class="text-void-accent">FLEX.</span>
+                </h1>
+
+                <p id="hero-subtitle" class="text-lg md:text-xl text-void-muted font-medium max-w-xl leading-relaxed">
+                    Castle TCG is where streamers and fans collect together. Discover unique cards from your favorite
+                    creators and trade with the community to complete your collection.
+                </p>
+
+                <div class="flex flex-col sm:flex-row gap-5 items-center justify-start pt-6">
+                    <button id="hero-login-btn"
+                        class="saas-button px-12 py-5 text-[12px] uppercase tracking-widest w-full sm:w-auto rounded-xl">
+                        Get Started
+                    </button>
+                    <button id="hero-secondary-btn" onclick="document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })"
+                        class="saas-button saas-button-secondary px-12 py-5 text-[12px] uppercase tracking-widest w-full sm:w-auto rounded-xl">
+                        View Platform
+                    </button>
+                </div>
+            </div>
+
+            
+            <div class="w-full lg:w-1/2 h-[600px] lg:h-[700px] relative card-tower-container rounded-[3rem] border border-white/5 bg-void-bg-alt/20 backdrop-blur-md overflow-hidden void-fade shadow-2xl"
+                style="animation-delay: 0.4s; mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-6 absolute inset-0 p-8">
+                    
+                    <div class="flex flex-col gap-6 animate-float-up">
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png">
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-col gap-6 animate-float-down">
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png">
+                        </div>
+                    </div>
+                    
+                    <div class="hidden md:flex flex-col gap-6 animate-float-up">
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png">
+                        </div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        
+        <section id="how-it-works" class="landing-section py-40 px-8 max-w-7xl mx-auto void-fade relative"
+            style="display:none">
+            <div class="text-center space-y-6 mb-32">
+                <div id="how-tagline" class="text-[11px] font-black text-void-accent uppercase tracking-[0.4em]">The Community</div>
+                <h2 id="how-title"
+                    class="text-6xl md:text-7xl font-display font-black text-void-text uppercase italic tracking-tighter">
+                    How it Works</h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                
+                <div class="p-10 glass-panel rounded-3xl group hover:bg-void-accent/5 transition-all">
+                    <div
+                        class="w-14 h-14 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent mb-8 group-hover:scale-110 group-hover:bg-void-accent group-hover:text-void-bg transition-all duration-500">
+                        <i id="step-1-icon" class="fa-solid fa-link text-xl"></i>
+                    </div>
+                    <h3 id="step-1-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">01. Connect Twitch</h3>
+                    <p id="step-1-desc" class="text-void-muted leading-relaxed font-medium text-sm">Join the community by linking your Twitch account to start your collecting journey.</p>
+                </div>
+
+                
+                <div class="p-10 glass-panel rounded-3xl group hover:bg-void-accent/5 transition-all">
+                    <div
+                        class="w-14 h-14 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent mb-8 group-hover:scale-110 group-hover:bg-void-accent group-hover:text-void-bg transition-all duration-500">
+                        <i id="step-2-icon" class="fa-solid fa-layer-group text-xl"></i>
+                    </div>
+                    <h3 id="step-2-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">02. Collect Cards</h3>
+                    <p id="step-2-desc" class="text-void-muted leading-relaxed font-medium text-sm">Support your favorite streamers and earn rare cards through drops and rewards.</p>
+                </div>
+
+                
+                <div class="p-10 glass-panel rounded-3xl group hover:bg-void-accent/5 transition-all">
+                    <div
+                        class="w-14 h-14 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent mb-8 group-hover:scale-110 group-hover:bg-void-accent group-hover:text-void-bg transition-all duration-500">
+                        <i id="step-3-icon" class="fa-solid fa-repeat text-xl"></i>
+                    </div>
+                    <h3 id="step-3-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">03. Trade & Battle</h3>
+                    <p id="step-3-desc" class="text-void-muted leading-relaxed font-medium text-sm">Trade with friends to complete your sets and battle others to show off your best cards.</p>
+                </div>
+            </div>
+
+        </section>
+
+        
+        <footer class="landing-section py-12 px-8 border-t border-white/5 bg-void-bg-alt/10 backdrop-blur-3xl"
+            style="display:none">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+                
+                <div class="flex items-center gap-2">
+                    <div
+                        class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center overflow-hidden p-1">
+                        <img src="/White_Castle.png" alt="" class="brand-castle-mark w-full h-full" width="32" height="32">
+                    </div>
+                    <span class="text-sm font-display font-black uppercase tracking-tight text-void-text">Castle<span
+                            class="text-void-accent">TCG</span></span>
+                </div>
+
+                <div class="flex flex-col items-center gap-2">
+                    <div class="text-[10px] font-bold text-void-muted uppercase tracking-[0.2em] text-center">
+                        &copy; 2026 CASTLE TCG. ALL RIGHTS RESERVED.
+                    </div>
+                    <div class="flex gap-4 text-[9px] font-black uppercase tracking-widest text-void-muted/50">
+                        <a href="#" class="hover:text-void-accent transition-all">Privacy Policy</a>
+                        <span class="opacity-20">•</span>
+                        <a href="#" class="hover:text-void-accent transition-all">Terms of Service</a>
+                    </div>
+                </div>
+
+                
+                <div class="flex gap-6 items-center">
+                    <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
+                            class="fa-brands fa-x-twitter text-lg"></i></a>
+                    <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
+                            class="fa-brands fa-discord text-lg"></i></a>
+                    <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
+                            class="fa-brands fa-tiktok text-lg"></i></a>
+                </div>
+            </div>
+        </footer>
+
+        
+        <section id="login-view" class="hidden relative min-h-screen pt-28 pb-24 px-6 max-w-[1400px] mx-auto">
+            <div class="max-w-lg mx-auto glass-panel rounded-3xl p-8 md:p-10 border border-white/10">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-12 h-12 rounded-2xl bg-[#9146FF]/15 flex items-center justify-center text-[#9146FF]">
+                        <i class="fa-brands fa-twitch text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-black uppercase italic tracking-tight text-void-text leading-tight">Sign in</h1>
+                        <p class="text-[10px] text-void-muted uppercase tracking-widest font-bold">Twitch or Kick · returning users</p>
+                    </div>
+                </div>
+                <p id="login-auth-summary" class="text-sm text-void-muted mb-6 min-h-[3rem]">Checking your session…</p>
+                <div id="login-signin-actions" class="space-y-3">
+                    <a id="login-btn-viewer" href="/auth/twitch?role=viewer" data-castle-oauth
+                        class="block w-full text-center saas-button py-4 rounded-xl text-[11px] font-black uppercase tracking-widest">Sign in with Twitch · Collector</a>
+                    <a id="login-btn-creator" href="/auth/twitch?role=creator" data-castle-oauth
+                        class="block w-full text-center saas-button saas-button-secondary py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border border-white/10">Sign in with Twitch · Streamer</a>
+                    <a id="login-btn-kick-viewer" href="/auth/kick?role=viewer" data-castle-oauth
+                        class="flex items-center justify-center gap-2.5 w-full py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border border-[#53FC18]/35 bg-[#53FC18]/10 text-[#b8f5c0] hover:bg-[#53FC18]/18 transition-colors">
+                        <img src="/kick-mark.svg" alt="" width="22" height="22" class="w-[22px] h-[22px] shrink-0" />
+                        <span>Sign in with Kick · Collector</span>
+                    </a>
+                    <a id="login-btn-kick-creator" href="/auth/kick?role=creator" data-castle-oauth
+                        class="flex items-center justify-center gap-2.5 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest border border-white/10 bg-white/[0.04] text-void-muted hover:text-void-text hover:border-white/20 transition-colors">
+                        <img src="/kick-mark.svg" alt="" width="20" height="20" class="w-5 h-5 shrink-0 opacity-90" />
+                        <span>Sign in with Kick · Streamer</span>
+                    </a>
+                </div>
+                <div id="login-signedin-actions" class="hidden space-y-3 mt-2">
+                    <button type="button" id="login-continue-hub"
+                        class="w-full saas-button py-4 rounded-xl text-[11px] font-black uppercase tracking-widest">Continue to Hub</button>
+                    <button type="button" id="login-continue-dash"
+                        class="hidden w-full saas-button saas-button-secondary py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border border-white/10">Creator dashboard</button>
+                    <button type="button" id="login-reauth-btn"
+                        class="hidden w-full py-4 rounded-xl text-[11px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-200 border border-amber-500/40 hover:bg-amber-500/30 transition-all">Update Twitch permissions</button>
+                    <button type="button" id="login-logout-btn"
+                        class="w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-void-muted hover:text-void-text border border-white/10">Sign out of Castle</button>
+                </div>
+                <p class="text-[10px] text-void-muted mt-8 pt-6 border-t border-white/5 leading-relaxed">
+                    New here? <a href="/onboarding" class="text-void-accent font-bold hover:underline">Start setup</a>
+                    · <a href="/" class="text-void-muted hover:text-void-accent">Home</a>
+                </p>
+            </div>
+        </section>
+
+        <div id="dynamic-view-mount"></div>
+
+    </main>
+
+    
+    <script src="/castle-auth-origin.js"></script>
+    <script src="/nav-user-menu.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var b = typeof window.__CASTLE_BACKEND__ === 'string' ? window.__CASTLE_BACKEND__ : '';
+            if (!b) return;
+            document.querySelectorAll('a[data-castle-oauth]').forEach(function (a) {
+                var h = a.getAttribute('href');
+                if (h && h.charAt(0) === '/') a.href = b + h;
+            });
+        });
+    </script>
+    <script src="/app.js"></script>
+
+</body>
+
+</html>

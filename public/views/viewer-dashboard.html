@@ -1,0 +1,628 @@
+
+<section id="dashboard-view" class="hidden min-h-screen pt-28 px-6 lg:px-12 pb-32 max-w-[1700px] mx-auto">
+    
+    <div id="collection-view" class="dashboard-subview void-fade">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10">
+
+            
+            <aside class="col-span-12 lg:col-span-3 space-y-12">
+                
+                <div class="space-y-6">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">
+                            My Binders</div>
+                        <button onclick="showCreateBinderModal()"
+                            class="text-[10px] text-void-accent hover:text-white transition-all font-black uppercase group">
+                            <i class="fa-solid fa-plus-circle opacity-50 group-hover:opacity-100 mr-1"></i> New
+                        </button>
+                    </div>
+                    <nav id="binder-list" class="space-y-2"></nav>
+                </div>
+
+                
+                <div
+                    class="glass-panel p-6 rounded-2xl border-white/5 bg-white/[0.02] flex flex-col items-center text-center space-y-4">
+                    <div>
+                        <h4 class="text-sm font-black text-white uppercase tracking-widest mb-2">Get More Cards
+                        </h4>
+                        <p id="summon-more-text" class="text-[10px] text-void-muted leading-relaxed">
+                            Subscribe to creators, use Channel Points, or buy packs to expand your collection!
+                        </p>
+                    </div>
+                    <div class="w-full space-y-2 mt-4">
+                        <button type="button" id="buy-pack-btn" onclick="buyPackCheckout()" 
+                            class="hidden w-full py-4 rounded-lg bg-void-accent text-void-bg font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-void-accent/20 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-cart-shopping"></i> Buy 5-Card Pack ($5.00)
+                        </button>
+                        <button id="summon-subscribe-btn"
+                            class="w-full py-3 rounded-lg bg-void-accent/10 border border-void-accent/30 text-[10px] font-black uppercase tracking-widest text-void-accent hover:bg-void-accent hover:text-void-bg transition-all">
+                            <i class="fa-solid fa-star mr-2"></i> Support Creator
+                        </button>
+                        <button id="summon-channel-btn"
+                            class="w-full py-3 rounded-lg bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-[0_0_15px_rgba(var(--void-accent-rgb),0.3)]">
+                            View Channel
+                        </button>
+                    </div>
+                </div>
+
+                
+                <div class="space-y-4">
+                    <div
+                        class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted border-b border-white/10 pb-3 pl-2">
+                        Vitals</div>
+                    <div class="grid grid-cols-1 gap-4">
+                        <div class="glass-panel p-6 rounded-2xl border-white/5 bg-white/[0.02]">
+                            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">
+                                Collection Index</div>
+                            <div class="flex items-center justify-between gap-4">
+                                <div id="stat-total" class="text-3xl font-display font-black text-white italic">
+                                    0</div>
+                                <div class="flex flex-col items-end">
+                                    <span id="stat-progress-val"
+                                        class="text-[11px] font-black text-void-accent mb-1">0%</span>
+                                    <div class="w-20 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                        <div id="stat-progress-bar"
+                                            class="h-full bg-void-accent shadow-[0_0_10px_rgba(var(--void-accent-rgb),0.5)] transition-all duration-1000"
+                                            style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            
+            <main id="binder-view" class="col-span-12 lg:col-span-6 flex flex-col space-y-12 w-full">
+                
+                <div class="flex flex-col gap-4 border-b border-white/5 pb-4">
+                    
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <h3 id="page-indicator"
+                                class="text-2xl font-display font-black uppercase tracking-widest text-white shadow-black drop-shadow">
+                                BINDER</h3>
+
+                            
+                            <div id="binder-actions-area" class="hidden ml-4">
+                                <button onclick="shareBinderPage()"
+                                    class="px-3 py-1.5 rounded-full bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center gap-2">
+                                    <i class="fa-solid fa-share-nodes"></i> Share
+                                </button>
+                            </div>
+                        </div>
+
+                        
+                        <div class="flex items-center gap-2">
+                            <button id="prev-page-btn"
+                                class="w-8 h-8 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white transition-all disabled:opacity-20">
+                                <i class="fa-solid fa-chevron-left text-xs"></i>
+                            </button>
+                            <button id="next-page-btn"
+                                class="w-8 h-8 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white transition-all disabled:opacity-20">
+                                <i class="fa-solid fa-chevron-right text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    
+                    <div id="binder-filter-row" class="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-3">
+                        
+                        <div class="relative w-full min-w-0 sm:flex-1 sm:max-w-xl">
+                            <i
+                                class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/50 text-xs"></i>
+                            <input type="text" id="card-search" placeholder="Search cards..."
+                                class="w-full bg-white/[0.02] border border-white/5 rounded-lg py-2.5 pl-10 pr-4 text-xs font-bold text-void-text focus:ring-1 ring-void-accent/30 transition-all placeholder:text-void-muted/40">
+                        </div>
+
+                        
+                        <div class="flex gap-2 shrink-0 w-full sm:w-auto">
+                            <div class="void-dropdown binder-filter-dropdown min-w-0 flex-1 sm:flex-none" data-select-id="rarity-filter">
+                                <select id="rarity-filter" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                    <option value="all">All Rarities</option>
+                                    <option value="common">Common</option>
+                                    <option value="rare">Rare</option>
+                                    <option value="epic">Epic</option>
+                                    <option value="legendary">Legendary</option>
+                                </select>
+                                <button type="button" class="void-dropdown-trigger rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5" aria-haspopup="listbox" aria-expanded="false">
+                                    <span class="void-dropdown-label truncate">All Rarities</span>
+                                    <i class="fa-solid fa-chevron-down void-dropdown-chevron shrink-0 ml-2"></i>
+                                </button>
+                                <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                                    <div class="void-dropdown-option" role="option" data-value="all">All Rarities</div>
+                                    <div class="void-dropdown-option" role="option" data-value="common">Common</div>
+                                    <div class="void-dropdown-option" role="option" data-value="rare">Rare</div>
+                                    <div class="void-dropdown-option" role="option" data-value="epic">Epic</div>
+                                    <div class="void-dropdown-option" role="option" data-value="legendary">Legendary</div>
+                                </div>
+                            </div>
+                            <div id="binder-set-selector-dropdown-wrapper" class="void-dropdown binder-filter-dropdown min-w-0 flex-1 sm:flex-none" data-select-id="set-filter">
+                                <select id="set-filter" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                    <option value="all">All Sets</option>
+                                </select>
+                                <button type="button" class="void-dropdown-trigger rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5" aria-haspopup="listbox" aria-expanded="false">
+                                    <span class="void-dropdown-label truncate">All Sets</span>
+                                    <i class="fa-solid fa-chevron-down void-dropdown-chevron shrink-0 ml-2"></i>
+                                </button>
+                                <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                                    <div class="void-dropdown-option" role="option" data-value="all">All Sets</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    
+                    <div id="set-selector" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 pt-2 pb-1" aria-label="Set progress">
+                    </div>
+                </div>
+
+                
+                <div class="max-w-none w-full">
+                    <div id="binder-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+                    </div>
+                </div>
+
+                
+                <div id="binder-share-footer" class="hidden w-full flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-0 p-6 sm:p-8 bg-[#0a0f0d] border-t border-white/5 rounded-b-2xl mt-auto">
+                    <div class="flex items-center gap-3 lg:pr-8 lg:border-r border-white/10 shrink-0">
+                        <div class="w-10 h-10 bg-void-accent/20 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(var(--void-accent-rgb),0.2)] overflow-hidden p-1.5">
+                            <img src="/White_Castle.png" alt="" class="brand-castle-mark w-full h-full" width="40" height="40">
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-[10px] font-black text-white uppercase tracking-[0.2em]">Castle</span>
+                            <span class="text-[8px] font-bold text-white/40 uppercase tracking-widest">TCG Platform</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1 justify-center items-center text-center min-w-0 flex-1 lg:px-8">
+                        <span id="share-streamer-name" class="text-[12px] font-black text-white uppercase tracking-[0.08em] leading-tight">---</span>
+                        <span id="share-binder-name" class="text-[9px] font-bold text-void-muted uppercase tracking-[0.18em] leading-snug">---</span>
+                    </div>
+                    <div class="flex flex-col items-start lg:items-end text-left lg:text-right gap-1 min-w-0 shrink-0 lg:pl-8 lg:border-l border-white/10 lg:max-w-[min(100%,14rem)]">
+                        <span id="share-collection-name" class="text-[10px] font-black text-white uppercase tracking-[0.12em] leading-tight break-words">---</span>
+                        <span id="share-collection-tagline" class="hidden text-[8px] font-bold text-void-muted/90 uppercase tracking-widest leading-relaxed break-words"></span>
+                    </div>
+                </div>
+            </main>
+
+            
+            <aside class="col-span-12 lg:col-span-3 space-y-12">
+                
+                <div id="achievements-container" class="space-y-6">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">
+                            Achievements</div>
+                        <i class="fa-solid fa-trophy text-[10px] text-void-accent opacity-50"></i>
+                    </div>
+                    <div id="achievements-list" class="space-y-3">
+                        
+                        <div class="text-[10px] text-void-muted text-center py-4">Loading achievements...</div>
+                    </div>
+                </div>
+
+                
+                <div class="space-y-6">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Recent
+                            Drops</div>
+                        <i class="fa-solid fa-clock-rotate-left text-[10px] text-void-accent opacity-50"></i>
+                    </div>
+                    <div id="recent-drops-list" class="space-y-3"></div>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+    
+    <div id="leaderboard-view" class="hidden dashboard-subview void-fade space-y-12">
+        <div class="text-center max-w-2xl mx-auto space-y-4">
+            <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">Top Tiers</h3>
+            <p class="text-void-muted text-lg font-light">Global hierarchy of platform collectors.</p>
+        </div>
+        <div id="leaderboard-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div>
+    </div>
+
+    
+    <div id="battle-view" class="hidden dashboard-subview void-fade space-y-10">
+        <div class="flex justify-between items-end border-b border-white/5 pb-8">
+            <div>
+                <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">⚔️ Battle Arena
+                </h3>
+                <p class="text-void-muted text-sm mt-2 font-medium">Build your 3-card deck and challenge other
+                    collectors.</p>
+            </div>
+            <div
+                class="text-xs font-bold text-void-muted glass-panel px-4 py-2 rounded-lg border border-white/5">
+                <span id="battle-arena-streamer" class="text-void-accent">—</span>
+            </div>
+        </div>
+
+        
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+
+            
+            <div class="lg:col-span-3 space-y-6">
+                <div class="glass-panel p-8 space-y-6">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xl font-black uppercase italic tracking-tight">My Battle Deck</h4>
+                        <div class="flex items-center gap-2">
+                            <button id="battle-test-btn" onclick="initiateTestBattle()"
+                                class="px-4 py-2.5 bg-indigo-600 text-white font-black text-[9px] uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-600/20 hover:scale-105 transition-all disabled:opacity-50">
+                                Test Battle
+                            </button>
+                            <button id="battle-save-deck-btn" onclick="showSaveDeckModal()"
+                                class="px-4 py-2.5 bg-void-accent text-white font-black text-[9px] uppercase tracking-widest rounded-xl shadow-lg shadow-void-accent/20 hover:scale-105 transition-all disabled:opacity-50">
+                                Save Deck
+                            </button>
+                        </div>
+                    </div>
+
+                    
+                    <div class="grid grid-cols-3 gap-4" id="deck-slots">
+                        
+                        <div class="deck-slot" data-slot="1">
+                            <div
+                                class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2 flex items-center gap-2">
+                                <span
+                                    class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[8px] font-black">1</span>
+                                Slot 1
+                            </div>
+                            <div id="deck-slot-1" onclick="openCardPicker(1)"
+                                class="battle-deck-card-slot aspect-[5/7] rounded-sm border-2 border-dashed border-void-accent/10 flex flex-col items-center justify-center cursor-pointer hover:border-void-accent/40 hover:bg-void-accent/5 transition-all group">
+                                <i
+                                    class="fa-solid fa-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
+                                <span
+                                    class="text-[9px] font-black text-void-accent/20 group-hover:text-void-accent/50 mt-2 transition-colors uppercase tracking-widest">Init
+                                    Phase</span>
+                            </div>
+                        </div>
+                        
+                        <div class="deck-slot" data-slot="2">
+                            <div
+                                class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2 flex items-center gap-2">
+                                <span
+                                    class="w-5 h-5 rounded-none bg-purple-500/20 text-purple-400 flex items-center justify-center text-[8px] font-black border border-purple-500/30">2</span>
+                                Slot 2 <span
+                                    class="text-[7px] text-amber-400/70 font-black tracking-widest">MIMIC</span>
+                            </div>
+                            <div id="deck-slot-2" onclick="openCardPicker(2)"
+                                class="battle-deck-card-slot aspect-[5/7] rounded-sm border-2 border-dashed border-void-accent/10 flex flex-col items-center justify-center cursor-pointer hover:border-void-accent/40 hover:bg-void-accent/5 transition-all group">
+                                <i
+                                    class="fa-solid fa-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
+                                <span
+                                    class="text-[9px] font-black text-void-accent/20 group-hover:text-void-accent/50 mt-2 transition-colors uppercase tracking-widest">Init
+                                    Phase</span>
+                            </div>
+                        </div>
+                        
+                        <div class="deck-slot" data-slot="3">
+                            <div
+                                class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2 flex items-center gap-2">
+                                <span
+                                    class="w-5 h-5 rounded-none bg-void-accent/20 text-void-accent/40 flex items-center justify-center text-[8px] font-black border border-void-accent/30">3</span>
+                                Slot 3
+                            </div>
+                            <div id="deck-slot-3" onclick="openCardPicker(3)"
+                                class="battle-deck-card-slot aspect-[5/7] rounded-sm border-2 border-dashed border-void-accent/10 flex flex-col items-center justify-center cursor-pointer hover:border-void-accent/40 hover:bg-void-accent/5 transition-all group">
+                                <i
+                                    class="fa-solid fa-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
+                                <span
+                                    class="text-[9px] font-black text-void-accent/20 group-hover:text-void-accent/50 mt-2 transition-colors uppercase tracking-widest">Init
+                                    Phase</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                        <div
+                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="/Trait_Icon_-_Guard.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Guard
+                            </div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Intercept
+                                Platform</div>
+                        </div>
+                        <div
+                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="/Trait_Icon_-_Absorb.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Vampire
+                            </div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Siphon
+                                Drain</div>
+                        </div>
+                        <div
+                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="/Trait_Icon_-_Revive.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">
+                                Revive</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Restore
+                                Loop</div>
+                        </div>
+                        <div
+                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="/Trait_Icon_-_Mimic.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Mimic
+                            </div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Clone
+                                Process</div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-6 border-t border-white/5">
+                        <div class="space-y-1">
+                            <h5 class="text-[10px] text-void-muted uppercase font-black tracking-widest">Arena
+                                Access</h5>
+                            <p class="text-[8px] text-void-muted/60 lowercase italic">Use this link for your OBS
+                                browser source</p>
+                        </div>
+                        <button onclick="copyArenaLink()"
+                            class="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 text-[9px] font-black uppercase tracking-widest rounded-lg border border-indigo-500/20 transition-all flex items-center gap-2">
+                            <i class="fas fa-link text-[8px]"></i>
+                            Copy Arena Link
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            
+            <div class="lg:col-span-2 space-y-6">
+                
+                <div
+                    class="glass-panel rounded-sm border border-white/5 p-8 flex flex-col h-full min-h-[500px]">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h4 class="text-xl font-black uppercase italic tracking-tight">Saved Decks</h4>
+                            <p class="text-xs text-void-muted mt-1">Store your favorite loadouts.</p>
+                        </div>
+                    </div>
+
+                    <div id="saved-decks-list"
+                        class="flex-1 flex flex-col overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                        <div
+                            class="text-center text-xs text-void-muted py-8 flex flex-col items-center my-auto">
+                            <i class="fa-solid fa-layer-group text-3xl text-white/10 mb-4"></i>
+                            <span>Loading decks...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <div id="trading-view" class="hidden dashboard-subview void-fade space-y-16">
+        <div class="flex justify-between items-end border-b border-white/5 pb-8">
+            <h3 class="text-6xl font-display font-black uppercase italic tracking-tighter">Platform Exchange
+            </h3>
+            <div class="flex gap-1 glass-panel p-1 rounded-xl">
+                <button id="subtab-inbox"
+                    class="px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all">Inbound</button>
+                <button id="subtab-dust"
+                    class="px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all">Magic Dust</button>
+            </div>
+        </div>
+
+        <div id="inbox-section" class="space-y-8">
+            <div class="flex gap-6 items-center">
+                <input type="text" id="target-trade-code" placeholder="Their Castle Code..."
+                    class="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-void-text focus:outline-none focus:border-void-accent w-48 text-sm">
+                <button onclick="initiateTrade()"
+                    class="saas-button px-6 py-2 text-xs font-black uppercase tracking-widest">Connect</button>
+                <div class="ml-auto flex items-center gap-4 glass-panel px-6 py-3 rounded-xl">
+                    <div class="text-[9px] font-black text-void-muted uppercase tracking-widest">Castle Code
+                    </div>
+                    <div id="my-trade-code" class="text-xs font-black text-void-accent tracking-[0.2em]">
+                        LOADING...</div>
+                    <button onclick="copyTradeCode()" class="text-void-accent/40 hover:text-void-accent"><i
+                            class="fa-solid fa-copy"></i></button>
+                </div>
+            </div>
+            <div id="trade-list" class="space-y-6"></div>
+        </div>
+
+        <div id="dust-section" class="hidden dust-view">
+            <div class="dust-workspace">
+                
+                <aside class="dust-column dust-enchanted">
+                    <div class="dust-column-header">
+                        <span class="dust-column-title">Enchanted</span>
+                        <span class="dust-column-hint">→ disenchant</span>
+                    </div>
+                    <div id="dust-sell-grid" class="dust-sell-grid"></div>
+                </aside>
+
+                
+                <div id="dust-balance-wrap" class="dust-column dust-disenchant dust-vat dust-drop-zone" data-drop-zone="dust" title="Drop mechanics here to sell for dust">
+                    <div class="dust-column-header">
+                        <span class="dust-column-title">Disenchant</span>
+                    </div>
+                    <div class="dust-vat-inner">
+                        <span class="dust-vat-label">Reserve</span>
+                        <span id="dust-balance" class="dust-vat-value" tabindex="0">0</span>
+                        <span class="dust-vat-unit">dust</span>
+                    </div>
+                </div>
+
+                
+                <main class="dust-column dust-enchant">
+                    <div class="dust-column-header">
+                        <span class="dust-column-title">Enchant</span>
+                        <span class="dust-column-hint">mechanic → card</span>
+                    </div>
+                    <div class="dust-enchant-mechanics">
+                        <div id="dust-buy-mechanics" class="dust-mechanics-row"></div>
+                    </div>
+                    <div class="dust-enchant-cards">
+                        <span class="dust-apply-label">Apply to</span>
+                        <div id="dust-buy-cards" class="dust-buy-grid"></div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <div id="profile-view" class="hidden dashboard-subview void-fade space-y-12 lg:space-y-16 pb-24">
+        <div class="flex flex-col lg:flex-row lg:justify-between lg:items-end gap-6 border-b border-white/5 pb-8">
+            <div>
+                <h3 class="text-5xl sm:text-6xl font-display font-black uppercase italic tracking-tighter leading-[0.95]">Account</h3>
+                <p class="text-void-muted text-sm mt-2 font-medium max-w-xl">Castle code, linked platforms, team access, and account security.</p>
+            </div>
+            <div class="flex flex-wrap gap-1 glass-panel p-1 rounded-xl shrink-0">
+                <button type="button" data-profile-tab="channels" class="profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-void-accent text-void-text bg-void-accent/10">Channels</button>
+                <button type="button" data-profile-tab="transactions" class="profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text">History</button>
+                <button type="button" data-profile-tab="security" class="profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text">Security</button>
+            </div>
+        </div>
+
+        <div id="profile-panel-channels" class="profile-settings-panel space-y-8 lg:space-y-10">
+            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-6">
+                <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Identity</div>
+                    <i class="fa-solid fa-id-card-clip text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                </div>
+                <div class="flex flex-col sm:flex-row sm:items-start gap-6">
+                    <div class="relative shrink-0">
+                        <img id="viewer-settings-avatar" src="" alt=""
+                            class="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-white/10 bg-white/[0.03] shadow-lg shadow-black/40 ring-1 ring-void-accent/20" />
+                    </div>
+                    <div class="flex-1 min-w-0 space-y-4">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <h2 id="viewer-settings-display-name" class="text-2xl sm:text-3xl font-display font-black text-white uppercase italic tracking-tight truncate">—</h2>
+                            <span id="viewer-settings-role-badge" class="text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-white/5 text-void-muted border border-white/10">—</span>
+                        </div>
+                        <p class="text-xs text-void-muted leading-relaxed max-w-2xl">Your Castle identity and linked platforms. Castle code is your public trade handle — share it only with people you trust.</p>
+                        <div class="flex flex-wrap items-stretch gap-4 pt-1">
+                            <div class="glass-panel px-4 py-3 rounded-xl border border-white/5 flex items-center gap-4 min-w-0">
+                                <div class="min-w-0">
+                                    <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Castle code</div>
+                                    <span id="viewer-settings-castle-code" class="text-sm font-black tracking-[0.15em] text-void-accent font-mono">…</span>
+                                </div>
+                                <button type="button" id="viewer-settings-copy-code" class="shrink-0 w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent hover:border-void-accent/30 transition-colors" title="Copy code">
+                                    <i class="fa-solid fa-copy text-xs" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted border-b border-white/10 pb-3 mb-3">Connections</div>
+                            <div id="viewer-settings-connections" class="flex flex-wrap gap-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-4">
+                <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Channels you manage</div>
+                    <i class="fa-solid fa-users-gear text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                </div>
+                <p class="text-xs text-void-muted leading-relaxed">Creator channels where you are mod or editor.</p>
+                <div id="viewer-settings-team-list" class="space-y-2"></div>
+                <p id="viewer-settings-team-empty" class="text-xs text-void-muted/80 italic py-2 hidden">You don’t manage any channels yet.</p>
+            </div>
+
+            <div id="viewer-settings-upgrade-card" class="glass-panel rounded-2xl border border-void-accent/20 bg-void-accent/[0.04] p-6 sm:p-8 space-y-4 shadow-[0_0_40px_-12px_rgba(var(--void-accent-rgb),0.35)]">
+                <div class="flex justify-between items-end border-b border-void-accent/15 pb-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-accent">Upgrade to creator</div>
+                    <i class="fa-solid fa-wand-magic-sparkles text-[10px] text-void-accent opacity-70" aria-hidden="true"></i>
+                </div>
+                <p class="text-xs text-void-muted leading-relaxed">Run your own channel on Castle: mint cards, packs, and Channel Point drops. Pricing will apply later — for now you can try the full setup.</p>
+                <a id="viewer-settings-upgrade-btn" href="/onboarding"
+                    class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Start creator setup</a>
+            </div>
+
+            <div id="viewer-settings-channel-points-panel" class="hidden glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-4">
+                <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Twitch Channel Points</div>
+                    <i class="fa-brands fa-twitch text-[10px] text-[#9146FF] opacity-80" aria-hidden="true"></i>
+                </div>
+                <p class="text-xs text-void-muted leading-relaxed">Set your main “open pack” reward and link extra rewards to specific event cards (for example “I was here” drops).</p>
+                <button type="button" onclick="openTwitchSettings()"
+                    class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-void-text text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:border-void-accent/30 transition-all">
+                    <i class="fa-solid fa-gear text-xs" aria-hidden="true"></i>
+                    Configure Channel Points
+                </button>
+            </div>
+
+            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-4">
+                <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">More connections</div>
+                    <i class="fa-solid fa-plug text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                </div>
+                <p class="text-xs text-void-muted leading-relaxed">Link additional platforms to your Castle account.</p>
+                <div class="flex flex-wrap gap-3">
+                    <a id="viewer-settings-link-kick" href="#"
+                        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest hover:border-[#53FC18]/40 hover:text-[#53FC18] transition-colors">
+                        <img src="/kick-mark.svg" alt="" class="h-4 w-4 object-contain" /> Connect Kick
+                    </a>
+                    <button type="button" disabled
+                        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/5 bg-white/[0.02] text-[10px] font-black uppercase tracking-widest text-void-muted cursor-not-allowed opacity-50">
+                        <i class="fa-brands fa-youtube text-red-500"></i> YouTube <span class="text-[8px] normal-case font-bold">(soon)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="profile-panel-transactions" class="profile-settings-panel hidden space-y-8">
+            <div class="p-16 sm:p-20 text-center flex flex-col items-center justify-center space-y-5 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
+                <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
+                    <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                </div>
+                <h3 class="text-xl font-display font-black uppercase italic text-void-text tracking-tight">Transaction history</h3>
+                <p class="text-void-muted text-xs max-w-md leading-relaxed">Pack purchases and payments will appear here in a future update.</p>
+            </div>
+        </div>
+
+        <div id="profile-panel-security" class="profile-settings-panel hidden space-y-8 lg:space-y-10">
+            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-5">
+                <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Block drops</div>
+                    <i class="fa-solid fa-ban text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                </div>
+                <p class="text-xs text-void-muted leading-relaxed">You won’t receive new card drops from blocked creator channels. Existing cards stay in your collection.</p>
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <input type="text" id="viewer-block-streamer-input" placeholder="Creator username (e.g. codeoce)" autocomplete="off"
+                        class="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-void-text placeholder:text-void-muted/50 focus:outline-none focus:border-void-accent/40 focus:ring-1 focus:ring-void-accent/20" />
+                    <button type="button" id="viewer-block-streamer-btn"
+                        class="px-6 py-3 rounded-xl bg-void-accent text-void-bg font-black text-[9px] uppercase tracking-widest shadow-lg shadow-void-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0">Block channel</button>
+                </div>
+                <div id="viewer-blocked-list" class="space-y-2 min-h-[2rem]"></div>
+            </div>
+
+            <div class="glass-panel rounded-2xl border border-red-500/20 bg-red-950/20 p-6 sm:p-8 space-y-4">
+                <div class="flex justify-between items-end border-b border-red-500/20 pb-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-red-400">Danger zone</div>
+                    <i class="fa-solid fa-triangle-exclamation text-[10px] text-red-400/80" aria-hidden="true"></i>
+                </div>
+                <p class="text-xs text-void-muted leading-relaxed">Deleting your account permanently removes your Castle profile, collection, and settings. <span class="text-red-300/90 font-semibold">There is no data recovery.</span> This does not delete content on Twitch or Kick.</p>
+                <button type="button" id="viewer-open-delete-account-modal"
+                    class="px-6 py-3 rounded-xl border border-red-500/50 bg-red-600/15 text-red-300 text-[10px] font-black uppercase tracking-widest hover:bg-red-600/25 transition-colors">Delete my account</button>
+            </div>
+        </div>
+
+        <div id="viewer-delete-account-modal" class="fixed inset-0 z-[4000] hidden flex items-center justify-center p-6 bg-void-bg/90 backdrop-blur-md">
+            <div class="glass-panel max-w-lg w-full rounded-2xl border border-white/10 border-red-500/25 p-8 space-y-6 shadow-2xl shadow-black/50">
+                <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                    <h4 class="text-lg font-display font-black uppercase italic tracking-tight text-red-400">Delete forever</h4>
+                    <i class="fa-solid fa-skull-crossbones text-sm text-red-400/60" aria-hidden="true"></i>
+                </div>
+                <p class="text-sm text-void-muted leading-relaxed">This cannot be undone. Type <span class="font-mono text-sm text-white bg-white/5 px-1.5 py-0.5 rounded border border-white/10">DELETE MY CASTLE ACCOUNT</span> below to confirm.</p>
+                <input type="text" id="viewer-delete-confirm-input" autocomplete="off" placeholder="DELETE MY CASTLE ACCOUNT"
+                    class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-void-text focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20" />
+                <div class="flex flex-col sm:flex-row gap-3 justify-end pt-2">
+                    <button type="button" id="viewer-delete-cancel-btn" class="saas-button-secondary px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest">Cancel</button>
+                    <button type="button" id="viewer-delete-submit-btn" class="px-6 py-3 rounded-xl bg-red-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-500 shadow-lg shadow-red-900/30 transition-colors">Delete forever</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
