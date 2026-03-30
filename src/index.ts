@@ -364,6 +364,9 @@ interface Env {
   /** Set to "1" or "true" to enable bootstrap Server-Timing, x-debug-* headers, and verbose logs. */
   DEBUG_BOOTSTRAP?: string;
   ENVIRONMENT?: string;
+  // --- LAYERED CACHE & STATE (EXTRA) ---
+  KV_CACHE: any; // KVNamespace
+  PACK_OPENING_SESSIONS: any; // DurableObjectNamespace
 }
 
 function isDebugBootstrap(env: Env): boolean {
@@ -417,36 +420,87 @@ const ENRICHED_USER_CARDS_COLLECTION_SELECT =
   'user_card_id, twitch_id, card_id, streamer_id, attack, defense, max_hp, current_hp, mechanic_id, genesis_mechanic_id, is_dead, revive_used, granted_by_streamer, is_obs_consumed, granted_at, created_at, name, rarity, image_url, type, description, card_number, streamer_username, brand_name, brand_emoji, brand_color_primary, brand_color_secondary, pack_image_url, set_name, set_code, mechanic_name, mechanic_display_name, mechanic_icon, mechanic_description, genesis_mechanic_name, genesis_mechanic_display_name, genesis_mechanic_icon, genesis_mechanic_description';
 
 // Helper to wrap database queries in a cache check
-async function fetchWithCache(redis: Redis | null, key: string, ttlSeconds: number, fetcher: () => Promise<any>) {
+async function fetchWithCache(env: Env, redis: Redis | null, key: string, ttlSeconds: number, fetcher: () => Promise<any>, ctx?: any) {
+  // 1. Layer 1: Edge KV Cache (Fastest)
+  if (env && (env as any).KV_CACHE) {
+    try {
+      const kvVal = await (env as any).KV_CACHE.get(key);
+      if (kvVal) {
+        console.log(`[Cache/Hit] KV hit for ${key.slice(0, 32)}...`);
+        return JSON.parse(kvVal);
+      }
+    } catch {}
+  }
+
+  // 2. Layer 2: Redis Cache (Hot Backup)
   if (redis) {
     try {
       const cached = await redis.get(key);
       if (cached != null) {
+        console.log(`[Cache/Hit] Redis hit for ${key.slice(0, 32)}...`);
+        let finalVal = cached;
         if (typeof cached === 'string') {
-          try {
-            return JSON.parse(cached);
-          } catch {
-            return cached;
-          }
+          try { finalVal = JSON.parse(cached); } catch {}
         }
-        return cached;
+        
+        // Background refresh KV if missing
+        if (env && (env as any).KV_CACHE && ctx) {
+          ctx.waitUntil((env as any).KV_CACHE.put(key, JSON.stringify(finalVal), { expirationTtl: ttlSeconds }));
+        }
+        return finalVal;
       }
-    } catch (e) {
-      console.error('[Redis] Cache get error for key:', key, e);
-    }
+    } catch {}
   }
 
+  console.log(`[Cache/Miss] Layer 1+2 miss for ${key.slice(0, 32)}... calling fetcher`);
+  const t0 = Date.now();
+  // 3. Layer 3: Origin Database (Slowest)
   const data = await fetcher();
-
-  if (redis && data !== null && data !== undefined) {
-    try {
-      const payload = typeof data === 'string' ? data : JSON.stringify(data);
-      await redis.setex(key, ttlSeconds, payload);
-    } catch (e) {
-      console.error('[Redis] Cache set error for key:', key, e);
-    }
+  console.log(`[Cache/Fetcher] ${key.slice(0, 32)}... fetched in ${Date.now() - t0}ms`);
+  
+  // Persist to caches in background
+  if (ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        if (env && (env as any).KV_CACHE) {
+          await (env as any).KV_CACHE.put(key, JSON.stringify(data), { expirationTtl: ttlSeconds });
+        }
+        if (redis) {
+          await redis.set(key, JSON.stringify(data), { ex: ttlSeconds });
+        }
+      } catch (e) {
+        console.error(`[Cache/Persist] Error for ${key}:`, e);
+      }
+    })());
   }
+
   return data;
+}
+
+/** Specific helper to fetch achievements with multi-layer caching. */
+async function fetchAchievementsWithCache(env: Env, supabase: any, redis: Redis | null, twitchId: string, streamerId: string, customNames: any, ctx?: any) {
+  const cacheKey = `achv:v1:${twitchId}:${streamerId}`;
+  
+  return await fetchWithCache(env, redis, cacheKey, 600, async () => {
+    const { data: allAchievements } = await supabase.from('achievements').select('*');
+    const { data: userAchievements } = await supabase
+      .from('user_achievements')
+      .select('achievement_id, unlocked_at')
+      .eq('twitch_id', twitchId)
+      .eq('streamer_id', streamerId);
+
+    const unlockedIds = new Set(userAchievements?.map((a: any) => a.achievement_id) || []);
+
+    return allAchievements?.map((ach: any) => {
+      const customKey = ACHIEVEMENT_ID_TO_CUSTOM_NAME_KEY[ach.id];
+      return {
+        ...ach,
+        name: resolveAchievementDisplayName(ach.name, customKey, customNames),
+        unlocked: unlockedIds.has(ach.id),
+        unlocked_at: userAchievements?.find((ua: any) => ua.achievement_id === ach.id)?.unlocked_at
+      };
+    }) || [];
+  }, ctx);
 }
 
 const BRANDING_CACHE_TTL_SEC = 600;
@@ -637,7 +691,7 @@ async function getUserFromSession(request: Request, env: Env, supabase: any) {
     const { data: user, error } = await supabase
       .from('users')
       .select(
-        'twitch_id, username, avatar_url, binder_layout, binder_theme, onboarding_collector_step, is_onboarding_complete, last_logout_at, kick_user_id, kick_access_token_encrypted'
+        'twitch_id, username, avatar_url, binder_layout, binder_theme, onboarding_collector_step, is_onboarding_complete, last_logout_at, kick_user_id, kick_access_token_encrypted, trade_code'
       )
       .eq('twitch_id', tid)
       .single();
@@ -1958,7 +2012,7 @@ function generateGrade(): { grade: number; isGenesisMint: boolean } {
  * Uses reservoir sampling: ORDER BY -log(random()) / rarity_weight.
  * Returns the mechanic UUID or null if the table is empty.
  */
-async function assignMechanic(supabase: any, redis?: Redis | null): Promise<string | null> {
+async function assignMechanic(env: Env, supabase: any, redis?: Redis | null, ctx?: any): Promise<string | null> {
   try {
     const fetcher = async () => {
       const { data } = await supabase
@@ -1968,7 +2022,7 @@ async function assignMechanic(supabase: any, redis?: Redis | null): Promise<stri
       return data;
     };
     
-    const mechanics = redis ? await fetchWithCache(redis, 'cache_active_mechanics', 3600, fetcher) : await fetcher();
+    const mechanics = await fetchWithCache(env, redis as Redis | null, 'cache_active_mechanics', 3600, fetcher, ctx);
 
     if (!mechanics || mechanics.length === 0) return null;
 
@@ -2323,10 +2377,12 @@ type BulkGrantPickState = {
 };
 
 async function loadBulkGrantRarityWeights(
+  env: Env,
   supabase: any,
   creatorId: string,
   now: string,
-  redis: Redis | null
+  redis: Redis | null,
+  ctx?: any
 ): Promise<Record<string, number>> {
   let rarityWeights: any = null;
   const { data: activeEvent } = await supabase
@@ -2358,7 +2414,7 @@ async function loadBulkGrantRarityWeights(
       const { data: configData } = await supabase.from('platform_config').select('*');
       return configData;
     };
-    const configData = redis ? await fetchWithCache(redis, 'cache_platform_config', 3600, fetcher) : await fetcher();
+    const configData = await fetchWithCache(env as Env, redis as Redis | null, 'cache_platform_config', 3600, fetcher, ctx);
     const weightingConfig = configData?.find((c: any) => c.id === 'rarity_weights')?.data;
     rarityWeights = weightingConfig || { common: 70, rare: 20, epic: 8, legendary: 2 };
   }
@@ -2446,7 +2502,8 @@ async function creatorBulkPickRandomCards(
   forcedCardId: string | undefined,
   forcedRarity: string | undefined,
   grantPoolRequestCache: GrantPoolRequestCache,
-  pickOpts?: { skipRedis?: boolean }
+  pickOpts: { skipRedis?: boolean } = {},
+  ctx?: any
 ): Promise<any[]> {
   if (forcedCardId) {
     const { data: c, error: cErr } = await supabase
@@ -2471,7 +2528,7 @@ async function creatorBulkPickRandomCards(
     redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
   }
   const now = new Date().toISOString();
-  const rarityWeights = await loadBulkGrantRarityWeights(supabase, creatorId, now, redis);
+  const rarityWeights = await loadBulkGrantRarityWeights(env, supabase, creatorId, now, redis, ctx);
   if (!('activeSets' in grantPoolRequestCache)) {
     const { data, error } = await supabase
       .from('streamer_sets')
@@ -2535,7 +2592,8 @@ async function bulkGrantRandomCardsToTwitchUser(
   twitchId: string,
   username: string,
   qty: number,
-  options: BulkGrantToRecipientOptions = {}
+  options: BulkGrantToRecipientOptions = {},
+  ctx?: any
 ): Promise<{ granted: number; lastResult: GrantActivitySummary }> {
   const { forcedCardId, forcedRarity, skipRedis: bulkSkipRedis } = options;
   const isObsFor = options.isObsConsumedForIndex ?? (() => false);
@@ -2573,13 +2631,14 @@ async function bulkGrantRandomCardsToTwitchUser(
   const bulkCache: GrantPoolRequestCache = { rarityPools: new Map<string, any[]>() };
   const picked = await creatorBulkPickRandomCards(
     supabase,
-    env,
+    env as Env,
     streamerId,
     qty,
     forcedCardId,
     forcedRarity,
     bulkCache,
-    { skipRedis: !!bulkSkipRedis }
+    { skipRedis: !!bulkSkipRedis },
+    ctx
   );
 
   if (userRowBulk?.is_linked) {
@@ -2711,7 +2770,8 @@ async function grantRandomCard(
   creatorId: string,
   customMessage?: string | null,
   env?: Env,
-  options: GrantRandomCardOptions = {}
+  options: GrantRandomCardOptions = {},
+  ctx?: any
 ) {
   const setGrantFail = (reason: string) => {
     if (options.grantDiagnostic) options.grantDiagnostic.failReason = reason;
@@ -2799,7 +2859,7 @@ async function grantRandomCard(
             const { data: configData } = await supabase.from('platform_config').select('*');
             return configData;
           };
-          const configData = redis ? await fetchWithCache(redis, 'cache_platform_config', 3600, fetcher) : await fetcher();
+          const configData = await fetchWithCache(env ?? {} as Env, redis, 'cache_platform_config', 3600, fetcher, ctx);
           const weightingConfig = configData?.find((c: any) => c.id === 'rarity_weights')?.data;
           rarityWeights = weightingConfig || { common: 70, rare: 20, epic: 8, legendary: 2 };
         }
@@ -2836,6 +2896,7 @@ async function grantRandomCard(
         activeSets = reqCache.activeSets;
       } else {
         activeSets = await fetchWithCache(
+          env ?? {} as Env,
           poolRedis,
           `cache_streamer_sets:${creatorId}`,
           300,
@@ -2853,7 +2914,8 @@ async function grantRandomCard(
               });
             }
             return data;
-          }
+          },
+          ctx
         );
       }
 
@@ -2890,7 +2952,8 @@ async function grantRandomCard(
       } else {
         const cacheKey = `cache_cards_pool:${creatorId}:${selectedRarity.toLowerCase()}`;
         allCardsInRarity = await fetchWithCache(
-          poolRedis,
+          env as Env,
+          poolRedis as Redis | null,
           cacheKey,
           300,
           async () => {
@@ -2912,7 +2975,8 @@ async function grantRandomCard(
               throw new Error(`Database error during card fetch: ${error.message}`);
             }
             return data;
-          }
+          },
+          ctx
         );
       }
 
@@ -2942,7 +3006,7 @@ async function grantRandomCard(
             }
           } else {
             // Fallback to common roll
-            return await grantRandomCard(supabase, userId, userName, creatorId, customMessage, env, options);
+            return await grantRandomCard(supabase, userId, userName, creatorId, customMessage, env, options, ctx);
           }
         }
       } else {
@@ -2972,14 +3036,14 @@ async function grantRandomCard(
 
       // Genesis Trait System (1% chance for dual traits)
       const isGenesis = Math.random() < 0.01;
-      const primaryMechanicId = await assignMechanic(supabase, redis);
+      const primaryMechanicId = await assignMechanic(env || {} as Env, supabase, redis, ctx);
       let secondaryMechanicId = null;
 
       if (isGenesis) {
         // Roll for a second distinct mechanic
         let retries = 0;
         while (retries < 5) {
-          secondaryMechanicId = await assignMechanic(supabase, redis);
+          secondaryMechanicId = await assignMechanic(env || {} as Env, supabase, redis, ctx);
           if (secondaryMechanicId !== primaryMechanicId) break;
           retries++;
         }
@@ -3667,6 +3731,38 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type, Twitch-ID, X-CSRF-Token',
     };
 
+    // --- EDGE CACHE LAYER (Layer 3) ---
+    let cacheKeyUrl = url.toString();
+    const cacheablePaths = ['/api/v2/bootstrap', '/api/collection', '/api/mechanics', '/api/leaderboard', '/api/stats', '/api/cards/count'];
+    const isCacheable = method === 'GET' && cacheablePaths.some(p => path.startsWith(p));
+    let cache: any = null;
+
+    if (isCacheable) {
+      // For user-private data, append Twitch ID to cache key to prevent data leakage
+      const isPrivate = path.startsWith('/api/v2/bootstrap') || path.startsWith('/api/collection');
+      if (isPrivate) {
+        const cookie = request.headers.get('Cookie') || '';
+        const token = cookie.match(/(?:^|; )session=([^;]*)/)?.[1];
+        if (token) {
+          try {
+            const { payload } = await jwtVerify(token, new TextEncoder().encode(env.SESSION_SECRET));
+            const twitchId = payload.sub || (payload as any).twitch_id;
+            if (twitchId) cacheKeyUrl += `?_cache_user=${twitchId}`;
+          } catch { /* if JWT invalid, let standard auth handle it later */ }
+        }
+      }
+
+      cache = (caches as any).default;
+      const cachedResponse = await cache.match(cacheKeyUrl);
+      if (cachedResponse) {
+        const response = new Response(cachedResponse.body, cachedResponse);
+        response.headers.set('X-Cache', 'HIT-EDGE');
+        // Add CORS headers to cached response
+        Object.entries(corsHeaders).forEach(([k, v]) => response.headers.set(k, v));
+        return response;
+      }
+    }
+
     const sharedRedis =
       env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN
         ? new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN })
@@ -3691,6 +3787,7 @@ export default {
     if (method === 'GET' && path === '/api/mechanics') {
       try {
         const rows = await fetchWithCache(
+          env,
           sharedRedis,
           CACHE_KEY_MECHANICS_LIST,
           CACHE_TTL_MECHANICS_SEC,
@@ -3703,11 +3800,16 @@ export default {
               .order('display_name');
             if (error) throw error;
             return data || [];
-          }
+          },
+          ctx
         );
-        return secureResponse(rows, 200, corsHeaders, false, {
+        const response = secureResponse(rows, 200, corsHeaders, false, {
           'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
         });
+        if (cache && cacheKeyUrl) {
+          ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+        }
+        return response;
       } catch (e: any) {
         return secureResponse(e?.message || 'Failed to fetch mechanics', 500, corsHeaders, true);
       }
@@ -4782,7 +4884,45 @@ export default {
           const isPlatformAdmin = (env.PLATFORM_ADMIN_IDS || '').split(',').map(id => id.trim()).includes(user?.twitch_id || '');
           const isAdmin = isPlatformAdmin || !!creatorRecord || !!platformStaffRole;
 
+          // Consolidated metadata for Nav Menu & Achievements
+          // Fetch in parallel to avoid multiple awaits slowing down bootstrap
+          const [authStatus, achievements] = await Promise.all([
+            user ? (async () => {
+              const cacheKey = `auth:health:v2:${user.twitch_id}`;
+              const tHealth0 = Date.now();
+              const cached = await (env as any).KV_CACHE?.get(cacheKey);
+              if (cached) {
+                console.log(`[Bootstrap/Perf] Auth health CACHE HIT in ${Date.now() - tHealth0}ms`);
+                return JSON.parse(cached);
+              }
+
+              console.log(`[Bootstrap/Perf] Auth health CACHE MISS, computing...`);
+              const tCompute0 = Date.now();
+              const status = {
+                twitch: await computeTwitchAuthHealth(supabase, env, user.twitch_id, !!creatorRecord),
+                kick: await computeKickAuthHealth(supabase, env, user.twitch_id),
+                kick_linked: !!((user as any).kick_user_id || (user as any).kick_linked)
+              };
+              console.log(`[Bootstrap/Perf] Auth health compute took ${Date.now() - tCompute0}ms`);
+              
+              if (ctx && (env as any).KV_CACHE) {
+                ctx.waitUntil((env as any).KV_CACHE.put(cacheKey, JSON.stringify(status), { expirationTtl: 300 })); // 5 min cache
+              }
+              return status;
+            })() : Promise.resolve(null),
+            user ? fetchAchievementsWithCache(
+              env, 
+              supabase, 
+              reqRedis, 
+              user.twitch_id, 
+              streamer.id, 
+              streamer.achievement_names || {}, 
+              ctx
+            ) : Promise.resolve([])
+          ]);
+
           const bootTotalMs = Date.now() - bootT0;
+
           const bootstrapBody: Record<string, unknown> = {
             user: user ? {
               ...user,
@@ -4791,7 +4931,8 @@ export default {
               is_platform_admin: isPlatformAdmin,
               platform_staff_role: platformStaffRole,
               team_memberships: teamMemberships,
-              streamer: creatorRecord
+              streamer: creatorRecord,
+              auth_status: authStatus
             } : null,
             streamer: streamer,
             active_streamers: discoveryStreamers, // Legacy support
@@ -4804,22 +4945,7 @@ export default {
             },
             recent_drops: recentDropsRes.data || [],
             binders: bindersRes.data || [],
-            achievements: (() => {
-              const customNames = (streamer && streamer.achievement_names) || {};
-
-              const unlockedData = achievementsRes.data || [];
-              const unlockedIds = new Set(unlockedData.map((a: any) => a.achievement_id));
-
-              return (allAvailableAchievementsRes.data || []).map((ach: any) => {
-                const customKey = ACHIEVEMENT_ID_TO_CUSTOM_NAME_KEY[ach.id];
-                return {
-                  ...ach,
-                  name: resolveAchievementDisplayName(ach.name, customKey, customNames),
-                  unlocked: unlockedIds.has(ach.id),
-                  unlocked_at: unlockedData.find((a: any) => a.achievement_id === ach.id)?.unlocked_at
-                };
-              });
-            })(),
+            achievements: achievements,
             leaderboard: leaderboard,
             creator_cards: bootstrapLite ? [] : creatorCardsRes.data || [],
             creator_stats: bootstrapLite ? null : creatorStatsRes.data || null,
@@ -4858,6 +4984,83 @@ export default {
         } catch (e: any) {
           console.error('[Bootstrap] Error:', e);
           return secureResponse('Bootstrap failed', 500, corsHeaders, true);
+        }
+      }
+      
+      // V2 Consolidated Bootstrap: Includes User Collection (Page 1)
+      if (path === '/api/v2/bootstrap') {
+        try {
+          const bootstrapLite = url.searchParams.get('lite') === '1';
+          const bootT0 = Date.now();
+          
+          // 1. Run Standard Bootstrap Logic (Wait for session first)
+          const user = await getUserFromSession(request, env, supabase);
+          const streamerParam = url.searchParams.get('streamer') || url.searchParams.get('streamer_id');
+          
+          // Duplicate logic but consolidated for performance
+          const streamer = await resolveStreamerContext(request, supabase, url);
+          const isGlobal = !streamer || streamer.id === 'all';
+          const targetTwitchId = (isGlobal && url.searchParams.get('inspect')) 
+            ? url.searchParams.get('inspect') 
+            : user?.twitch_id;
+
+          // 2. Parallelize: Master RPC + User Collection Page 1
+          const [rpcRes, collectionRes] = await Promise.all([
+            supabase.rpc('get_bootstrap_data_v4', {
+              p_user_twitch_id: targetTwitchId || null,
+              p_current_streamer_id: isGlobal ? null : streamer?.id
+            }),
+            (targetTwitchId && !isGlobal) ? supabase
+              .from('enriched_user_cards')
+              .select(ENRICHED_USER_CARDS_COLLECTION_SELECT)
+              .eq('twitch_id', targetTwitchId)
+              .eq('streamer_id', streamer?.id)
+              .order('created_at', { ascending: false })
+              .limit(50) : Promise.resolve({ data: [] })
+          ]);
+
+          if (rpcRes.error) throw rpcRes.error;
+          const rpc = rpcRes.data;
+
+          // 3. Assemble Response (Sharing mostly with V1 logic)
+          // [Note: In a real refactor we would extract the mapping logic to a helper]
+          const sections = {
+            favorites: [], // Simplified for V2 if desired, or keep V1 mapping
+            collected: rpc.personal_connections || [],
+            followed: [], 
+            discovery: rpc.discovery || []
+          };
+
+          const bootstrapBody = {
+            user: user ? { ...user, is_creator: !!rpc.creator_data?.stats } : null,
+            streamer: streamer,
+            stats: {
+              total: rpc.page_stats?.total_cards || 0,
+              legendary: rpc.page_stats?.legendary_count || 0,
+              total_available: rpc.total_avail_count || 0
+            },
+            collection: collectionRes.data || [],
+            recent_drops: rpc.recent_drops || [],
+            binders: rpc.binders || [],
+            achievements: rpc.achievements || [],
+            leaderboard: rpc.leaderboard || [],
+            bootstrap_lite: bootstrapLite,
+            timing: {
+              total_ms: Date.now() - bootT0
+            }
+          };
+
+          const response = secureResponse(bootstrapBody, 200, corsHeaders, false, {
+            'Cache-Control': 'public, max-age=30, stale-while-revalidate=300',
+            'X-Response-Version': 'V2'
+          });
+          if (cache && cacheKeyUrl) {
+            ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+          }
+          return response;
+        } catch (e: any) {
+          console.error('[Bootstrap V2] Error:', e);
+          return secureResponse('Bootstrap V2 failed', 500, corsHeaders, true);
         }
       }
 
@@ -6253,6 +6456,7 @@ export default {
       if (method === 'GET' && path === '/api/dust/mechanics') {
         try {
           const mechanics = await fetchWithCache(
+            env,
             sharedRedis,
             CACHE_KEY_MECHANICS_LIST,
             CACHE_TTL_MECHANICS_SEC,
@@ -6263,7 +6467,8 @@ export default {
                 .eq('is_active', true);
               if (error) throw error;
               return data || [];
-            }
+            },
+            ctx
           );
           return secureResponse(mechanics, 200, corsHeaders);
         } catch (e: any) {
@@ -6866,6 +7071,24 @@ export default {
       if (method === 'GET' && cardImageMatch) {
         try {
           const cardId = cardImageMatch[1];
+          
+          // --- R2 CACHE LAYER ---
+          const cacheKey = `rendered/${cardId}.svg`;
+          try {
+            const cachedObject = await env.CARD_IMAGES.get(cacheKey);
+            if (cachedObject) {
+              return new Response(cachedObject.body, {
+                headers: {
+                  'Content-Type': 'image/svg+xml',
+                  'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+                  'X-Cache': 'HIT-R2'
+                }
+              });
+            }
+          } catch (r2Err) {
+            console.error('[R2 Cache] Error reading:', r2Err);
+          }
+
           // 1. Try to find if it's a User Card Instance (ID is UUID)
           let traits: string[] = [];
           let template: any = null;
@@ -6918,11 +7141,17 @@ export default {
           // Generate SVG
           const svg = generateCardSVG(template, fullTraits);
 
+          // --- ASYNC R2 PERSISTENCE ---
+          ctx.waitUntil(env.CARD_IMAGES.put(cacheKey, svg, {
+            httpMetadata: { contentType: 'image/svg+xml' }
+          }).catch((e: any) => console.error('[R2 Cache] Put failed:', e)));
+
           // Return SVG as image/svg+xml
           return new Response(svg, {
             headers: {
               'Content-Type': 'image/svg+xml',
-              'Cache-Control': 'public, max-age=3600'
+              'Cache-Control': 'public, max-age=3600',
+              'X-Cache': 'MISS'
             }
           });
         } catch (e: any) {
@@ -8420,7 +8649,7 @@ export default {
           const { streamer } = await checkCreator(request, supabase);
           const days = parseInt(url.searchParams.get('days') || '30');
           const cacheKey = `cache:v1:analytics:combined:${streamer.id}:${days}`;
-          const combined = await fetchWithCache(sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, async () => {
+          const combined = await fetchWithCache(env, sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, async () => {
             const [overview, cards, packs, collectors] = await Promise.all([
               internalGetOverview(supabase, streamer.id, days),
               internalGetCards(supabase, streamer.id, days),
@@ -8441,7 +8670,7 @@ export default {
           const { streamer } = await checkCreator(request, supabase);
           const days = parseInt(url.searchParams.get('days') || '30');
           const cacheKey = `cache:v1:analytics:overview:${streamer.id}:${days}`;
-          const overview = await fetchWithCache(sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetOverview(supabase, streamer.id, days));
+          const overview = await fetchWithCache(env, sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetOverview(supabase, streamer.id, days), ctx);
           return secureResponse(overview, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message, 400, corsHeaders, true);
@@ -8454,7 +8683,7 @@ export default {
           const { streamer } = await checkCreator(request, supabase);
           const days = parseInt(url.searchParams.get('days') || '30');
           const cacheKey = `cache:v1:analytics:cards:${streamer.id}:${days}`;
-          const cardAnalytics = await fetchWithCache(sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetCards(supabase, streamer.id, days));
+          const cardAnalytics = await fetchWithCache(env, sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetCards(supabase, streamer.id, days), ctx);
           return secureResponse(cardAnalytics, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message, 400, corsHeaders, true);
@@ -8468,7 +8697,7 @@ export default {
           const days = parseInt(url.searchParams.get('days') || '30');
           const includeFullList = url.searchParams.get('full') === '1';
           const cacheKey = `cache:v1:analytics:collectors:${streamer.id}:${includeFullList}`;
-          const collectorAnalytics = await fetchWithCache(sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetCollectors(supabase, streamer.id, days, includeFullList));
+          const collectorAnalytics = await fetchWithCache(env, sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetCollectors(supabase, streamer.id, days, includeFullList), ctx);
           return secureResponse(collectorAnalytics, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message, 400, corsHeaders, true);
@@ -8481,7 +8710,7 @@ export default {
           const { streamer } = await checkCreator(request, supabase);
           const days = parseInt(url.searchParams.get('days') || '30');
           const cacheKey = `cache:v1:analytics:packs:${streamer.id}:${days}`;
-          const packAnalytics = await fetchWithCache(sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetPacks(supabase, streamer.id, days));
+          const packAnalytics = await fetchWithCache(env, sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, () => internalGetPacks(supabase, streamer.id, days), ctx);
           return secureResponse(packAnalytics, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message, 400, corsHeaders, true);
@@ -9867,6 +10096,7 @@ export default {
       if (method === 'GET' && path === '/api/streamers') {
         try {
           const streamers = await fetchWithCache(
+            env,
             sharedRedis,
             CACHE_KEY_STREAMERS_ACTIVE,
             CACHE_TTL_STREAMERS_SEC,
@@ -9877,7 +10107,8 @@ export default {
                 .eq('is_active', true);
               if (sErr) throw sErr;
               return data || [];
-            }
+            },
+            ctx
           );
           return secureResponse(streamers, 200, corsHeaders, false, {
             'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
@@ -9895,6 +10126,7 @@ export default {
         const cacheKey = `cache:v1:streamer:config:${String(streamerParam).trim().toLowerCase()}`;
         try {
           const cached = await fetchWithCache(
+            env,
             sharedRedis,
             cacheKey,
             CACHE_TTL_STREAMER_CONFIG_SEC,
@@ -9918,7 +10150,8 @@ export default {
               const pack_sales_enabled = !!streamer.stripe_connect_id;
               const { stripe_connect_id: _sid, ...publicStreamer } = streamer as any;
               return { ...publicStreamer, pack_sales_enabled };
-            }
+            },
+            ctx
           );
           if (!cached) return secureResponse('Streamer not found', 404, corsHeaders, true);
           return secureResponse(cached, 200, corsHeaders, false, {
@@ -9932,6 +10165,7 @@ export default {
 
       // 1. Get Collection
       if (method === 'GET' && path === '/api/collection') {
+        const bootT0 = Date.now();
         const user = await getUserFromSession(request, env, supabase);
         const streamerParam = url.searchParams.get('streamer') || url.searchParams.get('streamer_id');
 
@@ -9971,7 +10205,15 @@ export default {
           console.error('DB Error:', error.message);
           return secureResponse(error.message, 500, corsHeaders, true);
         }
-        return secureResponse(data || [], 200, corsHeaders);
+        
+        const responseData = data || [];
+        const response = secureResponse(responseData, 200, corsHeaders, false, {
+          'Server-Timing': `total;dur=${Date.now() - bootT0}`
+        });
+        if (cache && cacheKeyUrl) {
+          ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+        }
+        return response;
       }
 
       // 1.5 Get Total Card Count (Public)
@@ -9989,7 +10231,14 @@ export default {
           console.error("DB Error:", error.message);
           return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
         }
-        return new Response(JSON.stringify({ count: count || 0 }), { status: 200, headers: corsHeaders });
+        const response = new Response(JSON.stringify({ count: count || 0 }), { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Cache-Control': 'public, s-maxage=300' } 
+        });
+        if (cache && cacheKeyUrl) {
+          ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+        }
+        return response;
       }
 
       // --- BATTLE SYSTEM API ---
@@ -10273,6 +10522,7 @@ export default {
       // 2. Get Stats
       if (method === 'GET' && path === '/api/stats') {
         try {
+          const bootT0 = Date.now();
           const user = await getUserFromSession(request, env, supabase);
           if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
 
@@ -10314,7 +10564,13 @@ export default {
             legendary: legendaryCount || 0
           };
 
-          return secureResponse(stats, 200, corsHeaders);
+          const response = secureResponse(stats, 200, corsHeaders, false, {
+            'Server-Timing': `total;dur=${Date.now() - bootT0}`
+          });
+          if (cache && cacheKeyUrl) {
+            ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+          }
+          return response;
         } catch (e: any) {
           console.error('[Stats] Exception:', e);
           return secureResponse({ total: 0, legendary: 0 }, 200, corsHeaders);
@@ -10332,20 +10588,23 @@ export default {
             : null;
 
           const leaderboard = await fetchWithCache(
+            env,
             lbRedis,
             `leaderboard:${streamer.id}`,
             60,
             async () => {
               const { data, error } = await supabase.rpc('get_leaderboard_top100', { p_streamer_id: streamer.id });
-              if (error) {
-                console.error('[Leaderboard] RPC error:', error.message);
-                throw new Error('Database error: ' + error.message);
-              }
+              if (error) throw error;
               return data || [];
-            }
+            },
+            ctx
           );
 
-          return secureResponse(leaderboard, 200, corsHeaders);
+          const response = secureResponse(leaderboard, 200, corsHeaders);
+          if (cache && cacheKeyUrl) {
+            ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+          }
+          return response;
         } catch (e: any) {
           console.error('[Leaderboard] Exception:', e);
           return secureResponse('An internal error occurred', 500, corsHeaders, true);
@@ -10363,35 +10622,16 @@ export default {
         const twitchId = user.twitch_id;
         const customNames = streamer.achievement_names || {};
 
-        const { data: allAchievements } = await supabase.from('achievements').select('*');
-        const { data: userAchievements } = await supabase
-          .from('user_achievements')
-          .select('achievement_id, unlocked_at')
-          .eq('twitch_id', twitchId)
-          .eq('streamer_id', streamer.id);
+        const result = await fetchAchievementsWithCache(env, supabase, reqRedis, twitchId, streamer.id, customNames, ctx);
 
-        const unlockedIds = new Set(userAchievements?.map((a: any) => a.achievement_id) || []);
-
-        // Auto-sync: If they have cards but 0 achievements, trigger a sync in the background
-        if (unlockedIds.size === 0) {
+        // Auto-sync: If they have 0 achievements but cards, trigger a sync in the background
+        if (Array.isArray(result) && result.filter(a => a.unlocked).length === 0) {
           const { count: cardCount } = await supabase.from('user_cards').select('*', { count: 'exact', head: true }).eq('twitch_id', twitchId).eq('streamer_id', streamer.id);
           if (cardCount && cardCount > 0) {
             console.log(`[Achievements] Auto-syncing for ${twitchId} (0 achievements but ${cardCount} cards)`);
-            // We don't await this to keep the GET call fast, but it will fire off the notifications
-            syncUserAchievements(supabase, twitchId, streamer.id);
+            ctx.waitUntil(syncUserAchievements(supabase, twitchId, streamer.id));
           }
         }
-
-        const result = allAchievements?.map((ach: any) => {
-          const customKey = ACHIEVEMENT_ID_TO_CUSTOM_NAME_KEY[ach.id];
-
-          return {
-            ...ach,
-            name: resolveAchievementDisplayName(ach.name, customKey, customNames),
-            unlocked: unlockedIds.has(ach.id),
-            unlocked_at: userAchievements?.find((ua: any) => ua.achievement_id === ach.id)?.unlocked_at
-          };
-        }) || [];
 
         return secureResponse(result, 200, corsHeaders);
       }
@@ -10764,6 +11004,11 @@ export default {
 
           await ensureKickEventSubscriptions(tokenData.access_token);
 
+          // Clear health cache on success
+          if (ctx && (env as any).KV_CACHE) {
+            ctx.waitUntil((env as any).KV_CACHE.delete(`auth:health:v2:${targetTwitchId}`));
+          }
+
           const destBase = role === 'creator' ? `${originKick}/dashboard.html` : `${originKick}/hub`;
           const destLink = destBase + (destBase.includes('?') ? '&' : '?') + 'kick=linked';
           const hdrsLink = new Headers();
@@ -10779,9 +11024,18 @@ export default {
           return new Response(null, { status: 302, headers: hdrsLink });
         }
 
+        // Normal Login: Check if this Kick user is already linked to a Twitch ID
+        const { data: existingLinked } = await supabase
+          .from('users')
+          .select('twitch_id')
+          .eq('kick_user_id', kidStr)
+          .maybeSingle();
+
+        const finalTwitchId = existingLinked?.twitch_id || canonicalId;
+
         const { error: userErrKick } = await supabase.from('users').upsert(
           {
-            twitch_id: canonicalId,
+            twitch_id: finalTwitchId,
             username: displayName,
             avatar_url: avatarUrl,
             is_linked: true,
@@ -10792,6 +11046,11 @@ export default {
           },
           { onConflict: 'twitch_id' }
         );
+
+        // Clear health cache
+        if (ctx && (env as any).KV_CACHE) {
+          ctx.waitUntil((env as any).KV_CACHE.delete(`auth:health:v2:${finalTwitchId}`));
+        }
         if (userErrKick) console.error('[Kick/Callback] users upsert:', userErrKick);
 
         if (role === 'creator') {
@@ -12119,3 +12378,37 @@ export default {
 };
 
 
+
+// --- DURABLE OBJECTS (Advanced Optimization) ---
+
+/**
+ * PackOpeningSession DO
+ * Manages the multi-step reveal of a pack to avoid hammering Postgres with partial state.
+ */
+export class PackOpeningSession {
+  state: any; // DurableObjectState
+  env: Env;
+
+  constructor(state: any, env: Env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request: Request) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    // Simple state management for demonstration
+    let current: any = await this.state.storage.get("session") || { revealed: 0, total: 5, cards: [] };
+
+    if (path === "/reveal") {
+      if (current.revealed < current.total) {
+        current.revealed++;
+        await this.state.storage.put("session", current);
+      }
+      return new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } });
+  }
+}

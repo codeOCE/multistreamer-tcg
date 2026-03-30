@@ -211,18 +211,26 @@
         const identityToggle = document.getElementById('nav-user-identity-toggle');
         const iconWrap = document.getElementById('nav-user-platform-icons');
 
-        if (codeEl) codeEl.textContent = '…';
-        const auth = await fetchAuthStatus();
+        if (codeEl) codeEl.textContent = (u && u.trade_code) ? u.trade_code : '…';
+        
+        // Use auth_status from bootstrap if available, otherwise fetch
+        let auth = (u && u.auth_status) ? u.auth_status : null;
+        if (!auth) {
+            auth = await fetchAuthStatus();
+        }
         renderPlatformIcons(iconWrap, auth, u);
 
-        try {
-            const res = await fetch(`${getBackendUrl()}/api/trade/code`, { credentials: 'include' });
-            if (res.ok) {
-                const data = await res.json();
-                if (codeEl) codeEl.textContent = data.trade_code || '—';
-            } else if (codeEl) codeEl.textContent = '—';
-        } catch (_) {
-            if (codeEl) codeEl.textContent = '—';
+        // If we don't have the trade_code, fetch it
+        if (!u || !u.trade_code) {
+            try {
+                const res = await fetch(`${getBackendUrl()}/api/trade/code`, { credentials: 'include' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (codeEl) codeEl.textContent = data.trade_code || '—';
+                } else if (codeEl) codeEl.textContent = '—';
+            } catch (_) {
+                if (codeEl) codeEl.textContent = '—';
+            }
         }
 
         const memberships = u && Array.isArray(u.team_memberships) ? u.team_memberships : [];

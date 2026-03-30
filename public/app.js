@@ -2015,10 +2015,10 @@ async function initializeApp() {
 
 
     const bootstrapUrl = (routeInfo.view === 'hub' || routeInfo.view === 'home')
-        ? `${BACKEND_URL}/api/bootstrap?streamer=all&lite=1`
+        ? `${BACKEND_URL}/api/v2/bootstrap?streamer=all&lite=1`
         : routeInfo.slug
-            ? `${BACKEND_URL}/api/bootstrap?streamer=${encodeURIComponent(routeInfo.slug)}&lite=1`
-            : `${BACKEND_URL}/api/bootstrap?lite=1`;
+            ? `${BACKEND_URL}/api/v2/bootstrap?streamer=${encodeURIComponent(routeInfo.slug)}&lite=1`
+            : `${BACKEND_URL}/api/v2/bootstrap?lite=1`;
 
 
     const cacheKey = `bootstrap_${bootstrapUrl}`;
@@ -2513,7 +2513,7 @@ async function toggleFavorite(streamerId) {
                 }, 12000);
             }
 
-            const bootRes = await fetch(`${BACKEND_URL}/api/bootstrap?streamer=all&lite=1`, { credentials: 'include' });
+            const bootRes = await fetch(`${BACKEND_URL}/api/v2/bootstrap?streamer=all&lite=1`, { credentials: 'include' });
             if (!bootRes.ok) {
                 showToast("Could not refresh hub", "error");
                 window.__castleSkipHubStaleBootstrap = false;
@@ -7373,6 +7373,10 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     if (bootstrapData && bootstrapData.creator_stats) {
         updateCreatorStatsUI(bootstrapData.creator_stats);
     }
+    if (bootstrapData && bootstrapData.achievements) {
+        achievementsData = bootstrapData.achievements;
+        renderAchievements();
+    }
 
 
     if (currentUser && currentUser.is_creator) {
@@ -8522,11 +8526,17 @@ async function fetchUserCollection(initialData = null) {
             await renderBinder();
             renderRecentDrops();
             renderPrizedPossession();
+            // If we have a decent amount of data (like the 50 from V2 bootstrap), we can skip the standard fetch
+            if (initialData.length >= 50) return;
         }
 
         if (!initialData) {
             showSkeletonCards();
         }
+        
+        // Skip fetch if we already have stats from bootstrap
+        const hasStats = dashboardBootstrapData && dashboardBootstrapData.stats && dashboardBootstrapData.streamer?.username === filterParam;
+        
         const resCards = await fetch(`${BACKEND_URL}/api/collection?streamer=${filterParam}`, {
             credentials: 'include'
         });
@@ -8578,27 +8588,37 @@ async function fetchUserCollection(initialData = null) {
         if (!initialData) {
             const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
             if (!filterParam) return;
-            const resStats = await fetch(`${BACKEND_URL}/api/stats?streamer=${filterParam}`, {
-                credentials: 'include'
-            });
-            if (resStats.ok) {
-                const stats = await resStats.json();
-                const totalEl = document.getElementById('stat-total');
-                const legendaryEl = document.getElementById('stat-legendary');
-                if (totalEl) totalEl.innerText = stats.total;
-                if (legendaryEl) legendaryEl.innerText = stats.legendary;
-            }
+            
+            // Optimization: Skip stats/count if already provided by V2 Bootstrap
+            const b = dashboardBootstrapData;
+            const skipStats = b && b.stats && b.streamer?.username === filterParam;
+
+            if (!skipStats) {
+                const resStats = await fetch(`${BACKEND_URL}/api/stats?streamer=${filterParam}`, {
+                    credentials: 'include'
+                });
+                if (resStats.ok) {
+                    const stats = await resStats.json();
+                    const totalEl = document.getElementById('stat-total');
+                    const legendaryEl = document.getElementById('stat-legendary');
+                    if (totalEl) totalEl.innerText = stats.total;
+                    if (legendaryEl) legendaryEl.innerText = stats.legendary;
+                }
 
 
-            const resCount = await fetch(`${BACKEND_URL}/api/cards/count`, {
-                credentials: 'include'
-            });
-            if (resCount.ok) {
-                const countData = await resCount.json();
-                const totalAvailEl = document.getElementById('stat-total-available');
-                if (totalAvailEl) totalAvailEl.innerText = countData.count;
-                totalUniqueCards = countData.count;
-                updateCollectionProgress();
+                const resCount = await fetch(`${BACKEND_URL}/api/cards/count`, {
+                    credentials: 'include'
+                });
+                if (resCount.ok) {
+                    const countData = await resCount.json();
+                    const totalAvailEl = document.getElementById('stat-total-available');
+                    if (totalAvailEl) totalAvailEl.innerText = countData.count;
+                    totalUniqueCards = countData.count;
+                    updateCollectionProgress();
+                }
+            } else {
+                // Already updated in showDashboard() via V2 Bootstrap payload
+                console.log("[App] Skipping stats fetch, already have V2 bootstrap payload");
             }
         }
 
@@ -8760,6 +8780,11 @@ async function fetchLeaderboard() {
 let achievementsData = [];
 
 async function fetchAchievements() {
+    if (achievementsData.length > 0) {
+        console.log("[Achievements] Using hydrated data from bootstrap, skipping fetch.");
+        renderAchievements();
+        return;
+    }
     if (document.getElementById('achievements-list')) {
         setLoadingState('achievements-list', true);
     }

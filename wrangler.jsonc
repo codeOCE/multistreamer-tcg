@@ -24,5 +24,27 @@
 		"UPSTASH_REDIS_REST_TOKEN": "",
 		"ENCRYPTION_SECRET": "",
 		"WORKER_DEV_URL": ""
-	}
+	},
+	"kv_namespaces": [
+		{
+			"binding": "KV_CACHE",
+			"id": "10f08283758e4956b18e78fb2febc5d9"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "PACK_OPENING_SESSIONS",
+				"class_name": "PackOpeningSession"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"PackOpeningSession"
+			]
+		}
+	]
 }
