@@ -1,8 +1,8 @@
-// arena.js — Battle System Overlay Controller
-// Polls /api/public/battle/latest every 3 seconds and animates the battle sequence.
 
 
-// --- GLOBAL IMAGE FALLBACK HANDLER ---
+
+
+
 window.addEventListener('error', function(e) {
     if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'img') {
         if (e.target.dataset.fallbackApplied) return;
@@ -16,7 +16,7 @@ const POLL_INTERVAL = 3000;
 let lastBattleId = null;
 let isAnimating = false;
 
-// DOM shortcuts
+
 const stage = document.getElementById('arena-stage');
 const idleState = document.getElementById('arena-idle');
 const vsScreen = document.getElementById('vs-screen');
@@ -28,7 +28,17 @@ const winnerBanner = document.getElementById('winner-banner');
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
-// ── Polling ──────────────────────────────────────────────────────────────────
+function mechanicBadgeIconInner(icon) {
+    if (!icon) return '';
+    const s = String(icon).trim();
+    if (s.startsWith('/') || s.startsWith('http://') || s.startsWith('https://')) {
+        const safe = s.replace(/"/g, '&quot;');
+        return `<img src="${safe}" alt="" class="w-full h-full object-contain p-0.5" />`;
+    }
+    return s;
+}
+
+
 async function pollForBattles() {
     if (isAnimating) return;
     try {
@@ -60,7 +70,7 @@ async function pollForBattles() {
 setInterval(pollForBattles, POLL_INTERVAL);
 pollForBattles();
 
-// ── Card Builder ─────────────────────────────────────────────────────────────
+
 function buildCardEl(cardData) {
     const wrapper = document.createElement('div');
     const mechName = (cardData.mechanic_name || '').toLowerCase();
@@ -70,16 +80,17 @@ function buildCardEl(cardData) {
     const imgSrc = cardData.image_url
         || `https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(cardData.name || 'card')}`;
 
-    // Rarity border glow
+
     const rarityClass = {
         common: 'rarity-common', uncommon: 'rarity-uncommon',
         rare: 'rarity-rare', epic: 'rarity-epic', legendary: 'rarity-legendary'
     }[(cardData.rarity || '').toLowerCase()] || 'rarity-common';
 
-    // Mechanic badge
+
     const badgeClass = mechName ? `badge-${mechName}` : '';
+    const iconInner = mechanicBadgeIconInner(mechIcon);
     const badgeHtml = mechIcon
-        ? `<div class="mechanic-badge absolute top-2.5 right-2.5 w-9 h-9 rounded-full flex items-center justify-center text-lg z-20 ${badgeClass}" title="${mechName}">${mechIcon}</div>`
+        ? `<div class="mechanic-badge absolute top-2.5 right-2.5 w-9 h-9 rounded-full flex items-center justify-center text-lg z-20 ${badgeClass}" title="${mechName}">${iconInner}</div>`
         : '';
 
     wrapper.innerHTML = `
@@ -111,7 +122,7 @@ function buildCardEl(cardData) {
     return wrapper.firstElementChild;
 }
 
-// ── Scoreboard ─────────────────────────────────────────────────────────────
+
 function updateScoreboard(side, wins) {
     const container = document.getElementById(`${side}-match-score`);
     if (!container) return;
@@ -122,7 +133,7 @@ function updateScoreboard(side, wins) {
     });
 }
 
-// ── Coin Flip ─────────────────────────────────────────────────────────────────
+
 async function showCoinFlip(firstAttacker, challengerName, targetName, challengerAvatar, targetAvatar) {
     const safeAvatar = (name, av) => av || `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
     const cAv = safeAvatar(challengerName, challengerAvatar);
@@ -162,10 +173,10 @@ async function showCoinFlip(firstAttacker, challengerName, targetName, challenge
     requestAnimationFrame(() => overlay.style.opacity = '1');
     await delay(350);
 
-    // Wait for the spin to land
+
     await delay(1900);
 
-    // Gold glow reveal
+
     const coinEl = overlay.querySelector('#cf-coin');
     const resultEl = overlay.querySelector('#cf-result');
     if (coinEl) {
@@ -182,17 +193,25 @@ async function showCoinFlip(firstAttacker, challengerName, targetName, challenge
 }
 
 
-// ── Trait Animations ──────────────────────────────────────────────────────────
-async function showTraitPopup(cardEl, emojiOrText, cssClass, ms = 1200, labelClass = '') {
+
+async function showTraitPopup(cardEl, emojiOrTextOrIconUrl, cssClass, ms = 1200, labelClass = '') {
     if (!cardEl) return;
     const popupEl = cardEl.querySelector('.event-popup');
     if (!popupEl) return;
 
-    popupEl.textContent = emojiOrText;
-    popupEl.className = 'event-popup absolute top-1/2 left-1/2 font-black opacity-0 pointer-events-none z-30'; // Reset
+    popupEl.textContent = '';
+    popupEl.innerHTML = '';
+    const raw = String(emojiOrTextOrIconUrl || '').trim();
+    if (raw.startsWith('/') || raw.startsWith('http://') || raw.startsWith('https://')) {
+        const safe = raw.replace(/"/g, '&quot;');
+        popupEl.innerHTML = `<img src="${safe}" alt="" class="trait-popup-icon" />`;
+    } else {
+        popupEl.textContent = emojiOrTextOrIconUrl;
+    }
+    popupEl.className = 'event-popup absolute top-1/2 left-1/2 font-black opacity-0 pointer-events-none z-30';
     if (labelClass) popupEl.classList.add(labelClass);
 
-    // Trigger reflow
+
     void popupEl.offsetWidth;
 
     popupEl.classList.add(cssClass);
@@ -200,14 +219,14 @@ async function showTraitPopup(cardEl, emojiOrText, cssClass, ms = 1200, labelCla
 
     await delay(ms);
     popupEl.style.opacity = '0';
-    // Small delay before removing class to allow fade out
+
     setTimeout(() => {
         popupEl.classList.remove(cssClass);
         if (labelClass) popupEl.classList.remove(labelClass);
     }, 300);
 }
 
-// ── Main Battle Sequence ──────────────────────────────────────────────────────
+
 async function playBattleSequence(data) {
     if (!data || !data.matchRounds) {
         console.warn('[Arena] No matchRounds in battle_data:', data);
@@ -217,12 +236,12 @@ async function playBattleSequence(data) {
     const safeAvatar = (name, av) => av || `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
     const set = (id, prop, val) => { const el = document.getElementById(id); if (el) el[prop] = val; };
 
-    // 0. Setup
+
     if (stage) stage.classList.remove('hidden');
     if (board) board.style.opacity = '0';
     if (vsScreen) { vsScreen.style.opacity = '0'; vsScreen.style.transform = 'scale(0.8)'; }
 
-    // 1. VS Screen
+
     set('vs-c-avatar', 'src', safeAvatar(data.challenger.name, data.challenger.avatar));
     set('vs-c-name', 'innerText', data.challenger.name);
     set('vs-t-avatar', 'src', safeAvatar(data.target.name, data.target.avatar));
@@ -241,22 +260,22 @@ async function playBattleSequence(data) {
     if (vsScreen) vsScreen.style.opacity = '0';
     await delay(500);
 
-    // Initial decks from engine (guaranteed to have all 3 cards)
+
     const cInitialDeck = data.initialChallengerDeck || [];
     const tInitialDeck = data.initialTargetDeck || [];
     console.log('[Arena] Initial decks:', cInitialDeck.length, tInitialDeck.length);
 
-    // 2. Match Rounds
+
     for (let mIdx = 0; mIdx < data.matchRounds.length; mIdx++) {
         const matchRound = data.matchRounds[mIdx];
 
-        // Reset board
+
         if (cCardsEl) cCardsEl.innerHTML = '';
         if (tCardsEl) tCardsEl.innerHTML = '';
-        const cCardsMap = new Map(); // slot -> DOM element
+        const cCardsMap = new Map();
         const tCardsMap = new Map();
 
-        // Build board from initial deck state (all 3 cards shown from the start)
+
         const buildSide = (deckCards, container, map) => {
             [1, 2, 3].forEach(slot => {
                 const card = deckCards.find(c => c.slot === slot);
@@ -276,14 +295,14 @@ async function playBattleSequence(data) {
         buildSide(cInitialDeck, cCardsEl, cCardsMap);
         buildSide(tInitialDeck, tCardsEl, tCardsMap);
 
-        // Player info
+
         set('board-c-avatar', 'src', safeAvatar(data.challenger.name, data.challenger.avatar));
         set('board-c-name', 'innerText', data.challenger.name);
         set('board-t-avatar', 'src', safeAvatar(data.target.name, data.target.avatar));
         set('board-t-name', 'innerText', data.target.name);
         if (board) board.style.opacity = '1';
 
-        // Round banner — uses CSS .round-banner.visible animation
+
         if (roundBanner) {
             roundBanner.textContent = `MATCH ROUND ${matchRound.round}`;
             roundBanner.style.opacity = '1';
@@ -293,7 +312,7 @@ async function playBattleSequence(data) {
         if (roundBanner) { roundBanner.style.opacity = '0'; roundBanner.classList.remove('visible'); }
         await delay(300);
 
-        // Coin flip animation — shows the winner's avatar spinning
+
         await showCoinFlip(
             matchRound.firstAttacker,
             data.challenger.name,
@@ -302,9 +321,9 @@ async function playBattleSequence(data) {
             data.target.avatar
         );
 
-        // 3. Exchanges
+
         for (const ex of matchRound.exchanges) {
-            // Identify attacker and defender card elements
+
             const cSlot = ex.challengerCard?.slot;
             const tSlot = ex.targetCard?.slot;
             if (!cSlot || !tSlot) continue;
@@ -317,36 +336,36 @@ async function playBattleSequence(data) {
 
             if (!attackerEl || !defenderEl) continue;
 
-            // Attacker highlight
+
             attackerEl.classList.add('ring-4', 'ring-yellow-400', 'z-20', 'scale-105');
 
-            // Guard visual feedback
+
             const defCard = ex.side === 'challenger' ? ex.targetCard : ex.challengerCard;
             if (defCard?.mechanic_name === 'guard') {
                 defenderEl.classList.add('ring-4', 'ring-yellow-300');
                 showTraitPopup(defenderEl, '🛡️', 'anim-shield-flash', 900, 'floating-text-block');
             }
 
-            // Dynamic targeting movement
+
             const rectA = attackerEl.getBoundingClientRect();
             const rectD = defenderEl.getBoundingClientRect();
             const dX = (rectD.left + rectD.width / 2) - (rectA.left + rectA.width / 2);
             const dY = (rectD.top + rectD.height / 2) - (rectA.top + rectA.height / 2);
             attackerEl.style.transition = 'transform 0.2s ease-in';
-            // Just a short lunge (15% of distance) towards the target
+
             attackerEl.style.transform = `translate(${dX * 0.15}px, ${dY * 0.15}px) scale(1.05)`;
             await delay(200);
 
-            // Impact (Individual card shakes only, no full screen jolt)
 
-            // Damage numbers
+
+
             const atkDmg = ex.side === 'challenger' ? ex.challengerCard.attack : ex.targetCard.attack;
             const defDmg = ex.side === 'challenger' ? ex.targetCard.attack : ex.challengerCard.attack;
 
             const cDmgEl = cCardEl?.querySelector('.damage-popup');
             const tDmgEl = tCardEl?.querySelector('.damage-popup');
 
-            // Attacker deals damage to defender, defender counterattacks
+
             if (ex.side === 'challenger') {
                 if (tDmgEl) { tDmgEl.textContent = `-${atkDmg}`; tDmgEl.style.opacity = '1'; }
                 if (cDmgEl) { cDmgEl.textContent = `-${defDmg}`; cDmgEl.style.opacity = '1'; }
@@ -358,7 +377,7 @@ async function playBattleSequence(data) {
             cCardEl?.classList.add('anim-damage');
             tCardEl?.classList.add('anim-damage');
 
-            // Remove damage shake class so it can re-trigger on next hit
+
             setTimeout(() => {
                 cCardEl?.classList.remove('anim-damage');
                 tCardEl?.classList.remove('anim-damage');
@@ -366,27 +385,27 @@ async function playBattleSequence(data) {
 
             await delay(250);
 
-            // Return attacker to position
+
             attackerEl.style.transition = 'transform 0.4s ease-out';
             attackerEl.style.transform = 'scale(1)';
             attackerEl.style.zIndex = '1';
 
             await delay(400);
 
-            // Crucial: reset transition so standard CSS hover effects work again
+
             attackerEl.style.transition = '';
 
-            // Update HP bars
+
             const cHpEl = cCardEl?.querySelector('.card-hp');
             const tHpEl = tCardEl?.querySelector('.card-hp');
             if (cHpEl && ex.challengerCardAfter) cHpEl.textContent = Math.max(0, ex.challengerCardAfter.current_hp);
             if (tHpEl && ex.targetCardAfter) tHpEl.textContent = Math.max(0, ex.targetCardAfter.current_hp);
 
-            // Deaths
+
             if (!ex.challengerSurvived) cCardEl?.classList.add('card-dead');
             if (!ex.targetSurvived) tCardEl?.classList.add('card-dead');
 
-            // Trait Events
+
             for (const evt of (ex.events || [])) {
                 const isChallengerSide = evt.side === 'challenger' || evt.side === 'attacker';
                 const isTargetSide = evt.side === 'target' || evt.side === 'defender';
@@ -394,38 +413,38 @@ async function playBattleSequence(data) {
                 if (evt.type === 'vampire_heal') {
                     const healerEl = isChallengerSide ? cCardEl : tCardEl;
                     await showTraitPopup(healerEl, '🩸', 'anim-trait-pop', 1400, 'floating-text-heal');
-                    // Also update HP after heal
+
                     const healHpEl = healerEl?.querySelector('.card-hp');
                     if (healHpEl) {
                         const afterCard = isChallengerSide ? ex.challengerCardAfter : ex.targetCardAfter;
                         if (afterCard) healHpEl.textContent = Math.max(0, afterCard.current_hp);
                     }
-                } else if (evt.type === 'reanimate') {
+                } else if (evt.type === 'revive' || evt.type === 'reanimate') {
                     const reanimEl = isChallengerSide ? cCardEl : (isTargetSide ? tCardEl : null);
                     if (reanimEl) {
                         reanimEl.classList.remove('card-dead');
-                        await showTraitPopup(reanimEl, '♻️', 'anim-trait-pop', 1400, 'floating-text-revive');
+                        await showTraitPopup(reanimEl, '/Trait_Icon_-_Revive.png', 'anim-trait-pop', 1400, 'floating-text-revive');
                         const reHpEl = reanimEl.querySelector('.card-hp');
                         if (reHpEl) reHpEl.textContent = '1';
                     }
                 } else if (evt.type === 'mimic_trigger') {
                     const mimicEl = (evt.side === 'challenger') ? cCardsMap.get(evt.slot) : tCardsMap.get(evt.slot);
                     if (mimicEl) {
-                        // Glitch animation on card
+
                         mimicEl.classList.add('anim-mimic-morph');
                         setTimeout(() => mimicEl.classList.remove('anim-mimic-morph'), 800);
 
                         await showTraitPopup(mimicEl, '🪄', 'anim-trait-pop', 1200);
-                        // Update ATK/DEF display
+
                         const atkEl = mimicEl.querySelector('.card-atk');
                         const hpEl = mimicEl.querySelector('.card-hp');
-                        if (atkEl) atkEl.textContent = evt.attack; // Removed extra emoji to match builder
+                        if (atkEl) atkEl.textContent = evt.attack;
                         if (hpEl) hpEl.textContent = evt.defense;
                     }
                 }
             }
 
-            // Cleanup
+
             await delay(400);
             attackerEl.classList.remove('ring-4', 'ring-yellow-400', 'z-20', 'scale-105');
             defenderEl.classList.remove('ring-4', 'ring-yellow-300');
@@ -437,7 +456,7 @@ async function playBattleSequence(data) {
             await delay(300);
         }
 
-        // Scoreboard after round
+
         let cWins = 0, tWins = 0;
         for (let i = 0; i <= mIdx; i++) {
             if (data.matchRounds[i].winner === 'challenger') cWins++;
@@ -451,7 +470,7 @@ async function playBattleSequence(data) {
         await delay(500);
     }
 
-    // 4. Winner banner
+
     const w = data.winner;
     let winnerName, winnerAv, winnerScore;
     if (w === 'challenger') {
@@ -478,7 +497,7 @@ async function playBattleSequence(data) {
 
     await delay(8000);
 
-    // 5. Reset
+
     if (winnerBanner) winnerBanner.style.opacity = '0';
     if (board) board.style.opacity = '0';
     await delay(1000);

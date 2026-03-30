@@ -1,5 +1,119 @@
-const BACKEND_URL = window.location.origin;
+const BACKEND_URL =
+    typeof getCastleBackendOrigin === 'function' ? getCastleBackendOrigin() : window.location.origin;
 
+/** Load a vendor script once (Sortable, html2canvas, fabric, Chart.js). */
+function loadScriptOnce(src) {
+    return new Promise((resolve, reject) => {
+        const scripts = document.querySelectorAll('script[data-dynamic-src]');
+        for (const s of scripts) {
+            if (s.getAttribute('data-dynamic-src') === src) {
+                if (s.getAttribute('data-loaded') === '1') {
+                    resolve();
+                    return;
+                }
+                s.addEventListener('load', () => resolve(), { once: true });
+                s.addEventListener('error', () => reject(new Error('Load failed: ' + src)), { once: true });
+                return;
+            }
+        }
+        const el = document.createElement('script');
+        el.src = src;
+        el.async = true;
+        el.setAttribute('data-dynamic-src', src);
+        el.onload = () => {
+            el.setAttribute('data-loaded', '1');
+            resolve();
+        };
+        el.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(el);
+    });
+}
+
+async function ensureSortableLoaded() {
+    if (typeof Sortable !== 'undefined') return;
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js');
+}
+
+async function ensureHtml2CanvasLoaded() {
+    if (typeof html2canvas !== 'undefined') return;
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+}
+
+async function ensureFabricLoaded() {
+    if (typeof fabric !== 'undefined') return;
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js');
+}
+
+function applyChartDefaults() {
+    if (typeof Chart === 'undefined') return;
+    Chart.defaults.color = '#9ca3af';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(10, 10, 12, 0.9)';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#9ca3af';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+}
+
+async function ensureChartJsLoaded() {
+    if (typeof Chart !== 'undefined') {
+        applyChartDefaults();
+        return;
+    }
+    await loadScriptOnce('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js');
+    applyChartDefaults();
+}
+
+/** Shipped default booster pack art (`public/default_pack.png`) */
+const DEFAULT_PACK_IMAGE_URL = '/default_pack.png';
+
+/**
+ * Escapes HTML special characters to prevent XSS.
+ * @param {string} str The string to escape.
+ * @returns {string} The escaped string.
+ */
+function escapeHTML(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+/** Renders mechanic icon: `<img>` for paths/URLs, escaped emoji/text otherwise. */
+function htmlMechanicIcon(icon, imgClass = 'w-5 h-5 object-contain inline-block align-middle') {
+    if (!icon) return '';
+    const s = String(icon).trim();
+    if (s.startsWith('/') || s.startsWith('http://') || s.startsWith('https://')) {
+        return `<img src="${escapeHTML(s)}" alt="" class="${imgClass}" />`;
+    }
+    return escapeHTML(s);
+}
+
+/**
+ * Checks if a path is considered public (accessible without onboarding).
+ * @param {string} path The URL pathname.
+ * @returns {boolean} True if the path is public.
+ */
+function checkPublicPath(path) {
+    if (!path) return false;
+    const exactPublicPaths = ['/', '/hub', '/privacy', '/terms', '/cookies', '/login', '/404'];
+    const isExact = exactPublicPaths.some(p => path === p || path === p + '.html');
+    const isSubPath = path.startsWith('/binder/') || path.startsWith('/hub/');
+    return isExact || isSubPath;
+}
+
+window.checkPublicPath = checkPublicPath;
+
+/** Drop cached /api/bootstrap JSON so logout/login does not reuse the wrong auth snapshot */
+function clearBootstrapSessionCaches() {
+    try {
+        Object.keys(sessionStorage)
+            .filter((k) => k.startsWith('bootstrap_'))
+            .forEach((k) => sessionStorage.removeItem(k));
+    } catch (e) { /* ignore */ }
+}
 
 const loadedViews = new Set();
 async function loadView(viewName) {
@@ -526,6 +640,49 @@ function closeActivityLogModal() {
     document.body.style.overflow = '';
 }
 
+function activityLogPlatformLabel(p) {
+    if (p == null || p === '') return '';
+    const k = String(p).toLowerCase();
+    if (k === 'twitch') return 'Twitch';
+    if (k === 'dashboard') return 'Dashboard';
+    return String(p).charAt(0).toUpperCase() + String(p).slice(1);
+}
+
+function formatActivityLogSummary(log) {
+    const m = log?.metadata && typeof log.metadata === 'object' ? log.metadata : {};
+    const platform = activityLogPlatformLabel(m.platform);
+    const platSuffix = platform ? ` · ${platform}` : '';
+
+    if (log.category === 'grant') {
+        const user = m.recipient_username || m.target_username;
+        const card = m.card_name;
+        if (m.bulk_grant && user && m.quantity) {
+            return `${m.quantity}× grant → ${user}${platSuffix}`;
+        }
+        const qty = m.quantity && Number(m.quantity) > 1 ? `${m.quantity}× ` : '';
+        if (card && user) {
+            let line = `${qty}${card} → ${user}${platSuffix}`;
+            if (m.platform === 'twitch' && m.twitch_context) {
+                line += ` (${m.twitch_context})`;
+            }
+            return line;
+        }
+    }
+
+    if (log.category === 'admin') {
+        if (m.blocked_username || m.blocked_twitch_id) {
+            const who = m.blocked_username || m.blocked_twitch_id;
+            return `Blocked ${who}${platSuffix}`;
+        }
+        if (m.wiped_username || m.wiped_twitch_id) {
+            const who = m.wiped_username || m.wiped_twitch_id;
+            return `Wiped collection · ${who}${platSuffix}`;
+        }
+    }
+
+    return log.message || '';
+}
+
 async function fetchAdminLogs() {
     const container = document.getElementById('admin-activity-logs') || document.getElementById('admin-activity-logs-app');
     if (!container) return;
@@ -552,11 +709,14 @@ function renderAdminLogs(logs) {
     container.innerHTML = logs.map(log => {
         const time = new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const levelClass = log.level === 'error' ? 'text-red-500' : (log.level === 'warn' ? 'text-amber-500' : 'text-void-accent');
+        const level = escapeHTML(log.level || 'INFO');
+        const category = escapeHTML(log.category || 'SYSTEM');
+        const summary = escapeHTML(formatActivityLogSummary(log));
         return `<div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-white/5 transition-colors items-center">
             <div class="col-span-2 text-[9px] font-mono text-void-muted">${time}</div>
-            <div class="col-span-2"><span class="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${levelClass} bg-current/10">${log.level || 'INFO'}</span></div>
-            <div class="col-span-2 text-[9px] font-black uppercase text-white/40 tracking-widest">${log.category || 'SYSTEM'}</div>
-            <div class="col-span-6 text-[10px] font-bold text-white/80 leading-relaxed truncate">${log.message}</div>
+            <div class="col-span-2"><span class="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${levelClass} bg-current/10">${level}</span></div>
+            <div class="col-span-2 text-[9px] font-black uppercase text-white/40 tracking-widest">${category}</div>
+            <div class="col-span-6 text-[10px] font-bold text-white/80 leading-relaxed admin-log-row__msg">${summary}</div>
         </div>`;
     }).join('');
 }
@@ -587,6 +747,8 @@ let APP_STREAMER = null;
 window.activeStreamerFilter = null;
 
 let currentUser = null;
+/** Set in showDashboard(); read in switchView() for overview stats refresh */
+let dashboardBootstrapData = null;
 let userCollection = [];
 let uniqueCards = [];
 let leaderboardData = [];
@@ -610,7 +772,7 @@ const LANDING_COPY = {
         'hero-title': 'SUPPORT.<br>COLLECT.<br><span class="text-void-accent">FLEX.</span>',
         'hero-subtitle': 'Castle TCG is where streamers and fans collect together. Discover unique cards from your favorite creators and trade with the community to complete your collection.',
         'hero-secondary-btn': 'View Platform',
-        'login-nav-btn': 'Start Setup',
+        'login-nav-btn': 'Sign in',
         'hero-login-btn': 'Get Started',
         'how-tagline': 'The Community',
         'how-title': 'How it Works',
@@ -628,7 +790,7 @@ const LANDING_COPY = {
         'hero-title': 'CREATE.<br>REWARD.<br><span class="text-void-accent">GROW.</span>',
         'hero-subtitle': 'Castle TCG is the ultimate engagement layer for your stream. Create custom digital collectibles, reward your most loyal fans, and watch your community grow.',
         'hero-secondary-btn': 'Launch Collection',
-        'login-nav-btn': 'Start Setup',
+        'login-nav-btn': 'Sign in',
         'hero-login-btn': 'Start Setup',
         'how-tagline': 'The Platform',
         'how-title': 'Streamer Toolkit',
@@ -1171,19 +1333,6 @@ let collectorGrowthChartInstance = null;
 let packActivityChartInstance = null;
 
 
-if (window.Chart) {
-    Chart.defaults.color = '#9ca3af';
-    Chart.defaults.font.family = "'Inter', sans-serif";
-    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(10, 10, 12, 0.9)';
-    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
-    Chart.defaults.plugins.tooltip.bodyColor = '#9ca3af';
-    Chart.defaults.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
-    Chart.defaults.plugins.tooltip.borderWidth = 1;
-    Chart.defaults.plugins.tooltip.padding = 10;
-    Chart.defaults.plugins.tooltip.cornerRadius = 8;
-}
-
-
 window.openOnboarding = () => {
     console.log("[Onboarding] Redirecting to dedicated onboarding page...");
     window.location.href = '/onboarding';
@@ -1211,11 +1360,155 @@ window.backToRoles = () => {
 window.selectPlatform = (platform) => {
     if (platform === 'twitch') {
         console.log("[Onboarding] Redirecting to twitch auth with role:", window.selectedOnboardingRole);
-        window.location.href = `/auth/twitch?role=${window.selectedOnboardingRole}`;
+        window.location.href = `${BACKEND_URL}/auth/twitch?role=${window.selectedOnboardingRole}`;
+    } else if (platform === 'kick') {
+        console.log("[Onboarding] Redirecting to Kick auth with role:", window.selectedOnboardingRole);
+        window.location.href = `${BACKEND_URL}/auth/kick?role=${window.selectedOnboardingRole}`;
     }
 };
 
 window.selectedOnboardingRole = 'viewer';
+
+
+async function initLoginPage() {
+    const summary = document.getElementById('login-auth-summary');
+    const signIn = document.getElementById('login-signin-actions');
+    const signedIn = document.getElementById('login-signedin-actions');
+    const btnViewer = document.getElementById('login-btn-viewer');
+    const btnCreator = document.getElementById('login-btn-creator');
+    const btnHub = document.getElementById('login-continue-hub');
+    const btnDash = document.getElementById('login-continue-dash');
+    const btnReauth = document.getElementById('login-reauth-btn');
+    const btnLogout = document.getElementById('login-logout-btn');
+
+    if (!summary || !signIn || !signedIn) return;
+
+    summary.textContent = 'Checking your session…';
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/auth/twitch-status`, { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            summary.textContent = 'Could not verify your session. Try signing in again.';
+            signIn.classList.remove('hidden');
+            signedIn.classList.add('hidden');
+            return;
+        }
+
+        if (!data.authenticated) {
+            summary.textContent =
+                'Sign in with Twitch or Kick to use your linked account. Twitch accounts are checked for follows and channel tools; Kick uses OAuth for your Kick profile and channel APIs.';
+            signIn.classList.remove('hidden');
+            signedIn.classList.add('hidden');
+            if (btnViewer) btnViewer.href = `${BACKEND_URL}/auth/twitch?role=viewer`;
+            if (btnCreator) btnCreator.href = `${BACKEND_URL}/auth/twitch?role=creator`;
+            const btnKickV = document.getElementById('login-btn-kick-viewer');
+            const btnKickC = document.getElementById('login-btn-kick-creator');
+            if (btnKickV) btnKickV.href = `${BACKEND_URL}/auth/kick?role=viewer`;
+            if (btnKickC) btnKickC.href = `${BACKEND_URL}/auth/kick?role=creator`;
+            return;
+        }
+
+        const isKick = data.auth_provider === 'kick';
+        const tw = data.twitch || {};
+        const kick = data.kick || {};
+        const needs = isKick ? !!kick.needs_reauth : !!tw.needs_reauth;
+
+        signIn.classList.add('hidden');
+        signedIn.classList.remove('hidden');
+
+        if (isKick) {
+            if (kick.token_valid && !needs) {
+                summary.textContent = `Signed in as ${data.username}. Kick is connected.`;
+                if (btnReauth) btnReauth.classList.add('hidden');
+            } else {
+                summary.textContent =
+                    'Your Castle session is active, but Kick must be refreshed. Sign in with Kick again or use “Update Kick permissions”.';
+                if (btnReauth) btnReauth.classList.remove('hidden');
+            }
+        } else if (tw.token_valid && !needs) {
+            let kickExtra = '';
+            if (data.kick_linked) {
+                if (kick?.token_valid && !kick?.needs_reauth) {
+                    kickExtra = ' Kick is also connected.';
+                } else {
+                    kickExtra =
+                        ' Kick is linked — refresh it from your dashboard (Streaming Platforms → Connect Kick) if tools fail.';
+                }
+            }
+            summary.textContent = `Signed in as ${data.username}. Twitch is connected with the permissions Castle needs.${kickExtra}`;
+            if (btnReauth) btnReauth.classList.add('hidden');
+        } else {
+            const missing = (tw.scopes_missing || []).join(', ') || '';
+            summary.textContent =
+                'Your Castle session is active, but Twitch must be refreshed. ' +
+                (tw.token_valid
+                    ? (missing ? `Missing permissions: ${missing}.` : 'Some permissions are missing.')
+                    : 'Twitch rejected the stored token (revoked or expired).') +
+                ' Use “Update Twitch permissions” or sign out and sign in again.';
+            if (btnReauth) btnReauth.classList.remove('hidden');
+        }
+
+        if (btnDash) {
+            if (data.is_creator) btnDash.classList.remove('hidden');
+            else btnDash.classList.add('hidden');
+        }
+
+        if (btnReauth) {
+            btnReauth.textContent = isKick ? 'Update Kick permissions' : 'Update Twitch permissions';
+        }
+
+        if (btnHub) btnHub.onclick = () => { window.location.href = '/hub'; };
+        if (btnDash) btnDash.onclick = () => { window.location.href = '/dashboard.html'; };
+        if (btnReauth) {
+            btnReauth.onclick = () => {
+                const role = data.is_creator ? 'creator' : 'viewer';
+                if (isKick) {
+                    window.location.href = `${BACKEND_URL}/auth/kick?role=${role}`;
+                } else {
+                    window.location.href = `${BACKEND_URL}/auth/twitch?role=${role}&reauth=1`;
+                }
+            };
+        }
+        if (btnLogout) {
+            btnLogout.onclick = async () => {
+                try {
+                    await fetch(`${BACKEND_URL}/api/logout`, { method: 'POST', credentials: 'include' });
+                } catch (e) {
+                    console.error('[Logout]', e);
+                }
+                clearBootstrapSessionCaches();
+                window.location.reload();
+            };
+        }
+
+        if (btnViewer && btnCreator) {
+            if (needs && !isKick) {
+                btnViewer.href = `${BACKEND_URL}/auth/twitch?role=viewer&reauth=1`;
+                btnCreator.href = `${BACKEND_URL}/auth/twitch?role=creator&reauth=1`;
+            } else if (!isKick) {
+                btnViewer.href = `${BACKEND_URL}/auth/twitch?role=viewer`;
+                btnCreator.href = `${BACKEND_URL}/auth/twitch?role=creator`;
+            }
+        }
+        const btnKickViewer = document.getElementById('login-btn-kick-viewer');
+        const btnKickCreator = document.getElementById('login-btn-kick-creator');
+        if (btnKickViewer && btnKickCreator) {
+            const kickBase =
+                data.authenticated && data.auth_provider === 'twitch'
+                    ? `${BACKEND_URL}/auth/kick?mode=link&role=`
+                    : `${BACKEND_URL}/auth/kick?role=`;
+            btnKickViewer.href = `${kickBase}viewer`;
+            btnKickCreator.href = `${kickBase}creator`;
+        }
+    } catch (e) {
+        console.error('[Login]', e);
+        summary.textContent = 'Network error. Try again.';
+        signIn.classList.remove('hidden');
+        signedIn.classList.add('hidden');
+    }
+}
 
 
 let userBinders = [];
@@ -1261,10 +1554,16 @@ function parseRoute() {
         } else {
             routeInfo.view = 'home';
         }
-    } else if (parts.length === 1 && parts[0] !== 'obs-overlay') {
-
-        window.location.replace(`/binder/${parts[0]}`);
-        return;
+    } else if (parts.length === 1) {
+        const reserved = ['onboarding', 'login', 'logout', 'dashboard', 'hub', 'profile', 'privacy', 'terms', 'cookies', '404', 'auth', 'api', 'obs-overlay'];
+        if (reserved.includes(parts[0])) {
+            routeInfo.view = parts[0];
+            routeInfo.slug = null;
+        } else {
+            console.log("[Router] Single part route detected. Redirecting to binder...");
+            window.location.replace(`/binder/${parts[0]}`);
+            return;
+        }
     } else {
         routeInfo.view = 'home';
         routeInfo.slug = null;
@@ -1330,7 +1629,7 @@ window.copyTradeCode = () => {
     const code = document.getElementById('my-trade-code').innerText;
     if (code && code !== 'LOADING...') {
         navigator.clipboard.writeText(code);
-        showToast("Trade code copied!", "success");
+        showToast("Castle code copied!", "success");
     }
 };
 let shownNotificationIds = new Set();
@@ -1385,7 +1684,7 @@ function showToast(message, type = 'info') {
 
     toast.innerHTML = `
             <i class="fa-solid ${icons[type]} toast-icon"></i>
-            <div class="toast-message">${message}</div>
+            <div class="toast-message">${escapeHTML(message)}</div>
         `;
 
     container.appendChild(toast);
@@ -1405,11 +1704,11 @@ function showCardToast(card) {
 
     toast.innerHTML = `
             <div class="toast-card-thumb">
-                <img src="${card.image_url}" alt="${card.name}">
+                <img src="${card.image_url}" alt="${escapeHTML(card.name)}">
             </div>
             <div class="toast-card-details">
-                <div class="toast-card-rarity">${card.rarity}</div>
-                <div class="toast-card-name">${card.name}</div>
+                <div class="toast-card-rarity">${escapeHTML(card.rarity)}</div>
+                <div class="toast-card-name">${escapeHTML(card.name)}</div>
             </div>
         `;
 
@@ -1548,10 +1847,10 @@ function revealNextCard() {
 
     slot.innerHTML = `
             <div class="card-reveal h-full w-full relative" style="perspective:800px">
-                <img src="${card.image_url}" alt="${card.name}" class="h-full w-full object-cover rounded-2xl shadow-2xl" style="border: 2px solid ${rarityColor}40; box-shadow: 0 0 30px ${rarityColor}30;">
+                <img src="${card.image_url}" alt="${escapeHTML(card.name)}" class="h-full w-full object-cover rounded-2xl shadow-2xl" style="border: 2px solid ${rarityColor}40; box-shadow: 0 0 30px ${rarityColor}30;">
                 <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent rounded-b-2xl">
-                    <div class="text-[9px] font-black uppercase tracking-[0.2em] mb-0.5" style="color:${rarityColor}">${card.rarity}</div>
-                    <div class="text-sm font-black text-white leading-tight">${card.name}</div>
+                    <div class="text-[9px] font-black uppercase tracking-[0.2em] mb-0.5" style="color:${rarityColor}">${escapeHTML(card.rarity)}</div>
+                    <div class="text-sm font-black text-white leading-tight">${escapeHTML(card.name)}</div>
                 </div>
             </div>
         `;
@@ -1608,7 +1907,7 @@ function setLoadingState(elementId, isLoading, emptyMessage = 'No items yet') {
                 </div>
             `).join('');
     } else {
-        element.innerHTML = `<div class="text-center text-xs text-gray-500 py-4">${emptyMessage}</div>`;
+        element.innerHTML = `<div class="text-center text-xs text-gray-500 py-4">${escapeHTML(emptyMessage)}</div>`;
     }
 }
 
@@ -1624,6 +1923,9 @@ function showLanding() {
 
     const landingToggle = document.getElementById('landing-mode-toggle');
     if (landingToggle) landingToggle.classList.remove('hidden');
+
+    const loginPanel = document.getElementById('login-view');
+    if (loginPanel) loginPanel.classList.add('hidden');
 }
 function hideLanding() {
     document.querySelectorAll('.landing-section').forEach(s => s.style.display = 'none');
@@ -1655,7 +1957,7 @@ async function initializeApp() {
     if (routeInfo.view === 'hub') {
         await loadView('hub');
         await loadView('viewer-dashboard');
-    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
+    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder' || routeInfo.view === 'profile') {
         await loadView('viewer-dashboard');
     } else if (routeInfo.view === 'streamer-profile') {
         await loadView('streamer-profile');
@@ -1663,7 +1965,7 @@ async function initializeApp() {
 
 
     hideLanding();
-    ['dashboard-view', 'hub-view', 'streamer-profile-view', 'login-view'].forEach(id => {
+    ['dashboard-view', 'hub-view', 'streamer-profile-view'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
@@ -1683,7 +1985,7 @@ async function initializeApp() {
     } else if (routeInfo.view === 'streamer-profile') {
         const profile = document.getElementById('streamer-profile-view');
         if (profile) profile.classList.remove('hidden');
-    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
+    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder' || routeInfo.view === 'profile') {
         const dashboard = document.getElementById('dashboard-view');
         if (dashboard) dashboard.classList.remove('hidden');
 
@@ -1698,27 +2000,44 @@ async function initializeApp() {
             const el = document.getElementById(id);
             if (el) { el.classList.add('hidden'); el.style.display = 'none'; }
         });
+    } else if (routeInfo.view === 'login') {
+        const loginEl = document.getElementById('login-view');
+        if (loginEl) loginEl.classList.remove('hidden');
+        const centralNav = document.getElementById('central-nav');
+        if (centralNav) {
+            centralNav.classList.remove('hidden');
+            centralNav.classList.add('flex');
+        }
+        const landingToggle = document.getElementById('landing-mode-toggle');
+        if (landingToggle) landingToggle.classList.add('hidden');
     }
 
 
 
     const bootstrapUrl = (routeInfo.view === 'hub' || routeInfo.view === 'home')
-        ? `${BACKEND_URL}/api/bootstrap?streamer=all`
+        ? `${BACKEND_URL}/api/bootstrap?streamer=all&lite=1`
         : routeInfo.slug
-            ? `${BACKEND_URL}/api/bootstrap?streamer=${encodeURIComponent(routeInfo.slug)}`
-            : `${BACKEND_URL}/api/bootstrap`;
+            ? `${BACKEND_URL}/api/bootstrap?streamer=${encodeURIComponent(routeInfo.slug)}&lite=1`
+            : `${BACKEND_URL}/api/bootstrap?lite=1`;
 
 
     const cacheKey = `bootstrap_${bootstrapUrl}`;
     let cached = sessionStorage.getItem(cacheKey);
 
-    if (cached && routeInfo.view === 'binder' && routeInfo.slug) {
+    if (cached) {
         try {
             const parsed = JSON.parse(cached);
-            const cachedUsername = parsed?.streamer?.username?.toLowerCase();
-            const wantSlug = routeInfo.slug.toLowerCase();
-            if (cachedUsername !== wantSlug) cached = null;
-        } catch { cached = null; }
+            // Never reuse an anonymous bootstrap when a session cookie may exist (avoids "Sign in" after login).
+            if (!parsed?.user) {
+                cached = null;
+            } else if (routeInfo.view === 'binder' && routeInfo.slug) {
+                const cachedUsername = parsed?.streamer?.username?.toLowerCase();
+                const wantSlug = routeInfo.slug.toLowerCase();
+                if (cachedUsername !== wantSlug) cached = null;
+            }
+        } catch {
+            cached = null;
+        }
     }
     let bootstrap = null;
     let freshFetchPromise = null;
@@ -1729,35 +2048,6 @@ async function initializeApp() {
                 const res = await fetch(bootstrapUrl, { credentials: 'include' });
                 if (res.ok) {
 
-                    const supabaseHost = res.headers.get('x-debug-supabase-host');
-                    const streamersError = res.headers.get('x-debug-streamers-error');
-                    const rawCount = res.headers.get('x-debug-follows-raw-count');
-                    const matches = res.headers.get('x-debug-follows-platform-matches');
-                    const tokenValid = res.headers.get('x-debug-token-valid');
-                    const rawIds = res.headers.get('x-debug-follows-raw-ids');
-                    const allStreamers = res.headers.get('x-debug-all-streamers');
-                    const streamersDetail = res.headers.get('x-debug-streamers-detail');
-                    const matchSource = res.headers.get('x-debug-match-source');
-                    const matchDetails = res.headers.get('x-debug-match-details');
-                    const favoriteIdsHeader = res.headers.get('x-debug-favorite-ids');
-
-                    if (rawCount !== null) {
-                        if (supabaseHost) console.log(`[BOOTSTRAP DEBUG] Supabase host: ${supabaseHost}`);
-                        if (streamersError) console.error(`[BOOTSTRAP DEBUG] Streamers query error: ${streamersError}`);
-                        console.log(`[BOOTSTRAP DEBUG] Twitch Follows: ${rawCount} raw, ${matches} platform matches. Token valid: ${tokenValid}`);
-                        console.log(`[BOOTSTRAP DEBUG] Match Source: ${matchSource}`);
-                        if (matchDetails && matchDetails !== 'none') {
-                            console.log(`[BOOTSTRAP DEBUG] Match Details: ${matchDetails}`);
-                        }
-                        if (rawIds && rawIds !== 'none') {
-                            console.log(`[BOOTSTRAP DEBUG] Raw IDs from Twitch: ${rawIds}`);
-                        }
-                        console.log(`[BOOTSTRAP DEBUG] Database Twitch IDs: ${allStreamers ?? 'none'}`);
-                        console.log(`[BOOTSTRAP DEBUG] Streamers (username:twitch_id): ${streamersDetail ?? 'none'}`);
-                        if (favoriteIdsHeader) {
-                            console.log(`[BOOTSTRAP DEBUG] Favorite IDs: ${favoriteIdsHeader}`);
-                        }
-                    }
                     return await res.json();
                 }
             } catch (e) {
@@ -1812,13 +2102,16 @@ async function initializeApp() {
         currentUser = {
             twitch_id: bootstrap.user.twitch_id,
             name: bootstrap.user.username,
+            display_name: bootstrap.user.display_name || bootstrap.user.username,
             avatar: bootstrap.user.avatar_url,
             layout: bootstrap.user.binder_layout,
             theme: bootstrap.user.binder_theme,
             is_creator: bootstrap.user.is_creator,
             streamer: bootstrap.user.streamer,
             onboarding_collector_step: bootstrap.user.onboarding_collector_step,
-            is_onboarding_complete: bootstrap.user.is_onboarding_complete
+            is_onboarding_complete: bootstrap.user.is_onboarding_complete,
+            team_memberships: Array.isArray(bootstrap.user.team_memberships) ? bootstrap.user.team_memberships : [],
+            kick_linked: !!bootstrap.user.kick_linked
         };
 
 
@@ -1829,15 +2122,22 @@ async function initializeApp() {
         }
 
 
-        if (currentUser.is_creator && !currentUser.streamer?.is_active && !window.location.pathname.includes('onboarding') && !bootstrap.isFromCache) {
-            console.log("[App] Unconfigured creator detected. Redirecting to onboarding...");
+        const isPublicPath = checkPublicPath(window.location.pathname);
+        // Only redirect when the DB explicitly says incomplete / inactive (null/undefined must not force onboarding)
+        const creatorNeedsSetup =
+            currentUser.is_creator &&
+            currentUser.streamer &&
+            currentUser.streamer.is_active === false;
+        if (creatorNeedsSetup && !window.location.pathname.includes('onboarding') && !isPublicPath && !bootstrap.isFromCache) {
+            console.log('[App] Creator not active yet. Redirecting to onboarding...');
             window.location.href = '/onboarding.html?role=creator';
             return;
         }
 
-
-        if (!currentUser.is_creator && !currentUser.is_onboarding_complete && !window.location.pathname.includes('onboarding') && !bootstrap.isFromCache) {
-            console.log("[App] Unconfigured collector detected. Redirecting to onboarding...");
+        const collectorNeedsOnboarding =
+            !currentUser.is_creator && currentUser.is_onboarding_complete === false;
+        if (collectorNeedsOnboarding && !window.location.pathname.includes('onboarding') && !isPublicPath && !bootstrap.isFromCache) {
+            console.log('[App] Collector onboarding incomplete. Redirecting to onboarding...');
             window.location.href = '/onboarding.html?role=collector';
             return;
         }
@@ -1853,24 +2153,53 @@ async function initializeApp() {
         if (bootstrap.isFromCache && freshFetchPromise) {
             freshFetchPromise.then(async (freshBootstrap) => {
                 if (freshBootstrap) {
-                    if (freshBootstrap.user?.is_creator && !freshBootstrap.user.streamer?.is_active && !window.location.pathname.includes('onboarding')) {
-                        console.log("[App] Background fetch confirmed unconfigured creator. Redirecting...");
+                    const isPublic = checkPublicPath(window.location.pathname);
+                    const fu = freshBootstrap.user;
+                    const bgCreatorNeeds =
+                        fu?.is_creator && fu.streamer && fu.streamer.is_active === false;
+                    const bgCollectorNeeds = fu && !fu.is_creator && fu.is_onboarding_complete === false;
+                    if (bgCreatorNeeds && !window.location.pathname.includes('onboarding') && !isPublic) {
+                        console.log('[App] Background fetch: creator not active. Redirecting...');
                         window.location.href = '/onboarding.html?role=creator';
-                    } else if (!freshBootstrap.user?.is_creator && !freshBootstrap.user?.is_onboarding_complete && !window.location.pathname.includes('onboarding')) {
-                        console.log("[App] Background fetch confirmed unconfigured collector. Redirecting...");
+                    } else if (bgCollectorNeeds && !window.location.pathname.includes('onboarding') && !isPublic) {
+                        console.log('[App] Background fetch: collector onboarding incomplete. Redirecting...');
                         window.location.href = '/onboarding.html?role=collector';
                     } else {
 
                         console.log("[App] Background fetch complete. Refreshing UI snap...");
-                        if (currentUser) {
+                        if (currentUser && freshBootstrap.user) {
                             currentUser.streamer = freshBootstrap.user.streamer;
-                            if (currentUser.streamer) applyBranding(currentUser.streamer);
+                            currentUser.team_memberships = Array.isArray(freshBootstrap.user.team_memberships)
+                                ? freshBootstrap.user.team_memberships
+                                : currentUser.team_memberships;
+                            currentUser.display_name =
+                                freshBootstrap.user.display_name || freshBootstrap.user.username || currentUser.display_name;
+                            if (typeof freshBootstrap.user.kick_linked === 'boolean') {
+                                currentUser.kick_linked = freshBootstrap.user.kick_linked;
+                            }
+                            const viewingBinderBySlug = routeInfo.view === 'binder' && !!routeInfo.slug;
+                            if (currentUser.streamer && !viewingBinderBySlug) {
+                                applyBranding(currentUser.streamer);
+                            }
                         }
                         if (routeInfo.view === 'hub') {
-                            renderViewerHub(freshBootstrap.sections || {}, freshBootstrap.favorite_ids || []);
+                            // Background fetch started at page load; it may finish AFTER the user toggled a
+                            // favourite (stale favorite_ids). Skip one render so we don't clobber hub state.
+                            if (window.__castleSkipHubStaleBootstrap) {
+                                window.__castleSkipHubStaleBootstrap = false;
+                                console.log('[App] Skipping stale background hub refresh (favourites updated).');
+                                applyLoggedInSessionChrome();
+                            } else {
+                                applyLoggedInSessionChrome();
+                                await renderViewerHub(freshBootstrap.sections || {}, freshBootstrap.favorite_ids || []);
+                            }
                         } else if (routeInfo.view === 'streamer-profile') {
-                            renderStreamerProfile(freshBootstrap);
-                        } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
+                            applyLoggedInSessionChrome();
+                            await renderStreamerProfile(freshBootstrap);
+                        } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder' || routeInfo.view === 'profile') {
+                            if (routeInfo.view === 'binder' && routeInfo.slug) {
+                                await resolveStreamer();
+                            }
                             showDashboard(null, freshBootstrap, true);
                             fetchUserCollection(freshBootstrap.recent_drops);
                             fetchUserBinders();
@@ -1898,36 +2227,34 @@ async function initializeApp() {
             const centralNav = document.getElementById('central-nav');
             if (centralNav) centralNav.classList.add('hidden');
 
-            const navUser = document.getElementById('nav-user-preview');
-            const navNick = document.getElementById('nav-username');
-            const navImg = document.getElementById('nav-avatar');
-            const navLogout = document.getElementById('nav-logout-btn');
-            const navCreator = document.getElementById('nav-creator-btn');
-
-            if (navUser) { navUser.classList.remove('hidden'); navUser.classList.add('flex'); }
-            if (navNick) navNick.innerText = currentUser.name;
-            if (navImg) navImg.src = currentUser.avatar;
-
-            if (navCreator) {
-                const navRole = document.getElementById('nav-user-role');
-                if (currentUser.is_creator) {
-                    navCreator.classList.remove('hidden');
-                    if (navRole) navRole.innerText = "Creator";
-                } else {
-                    navCreator.classList.add('hidden');
-                    if (navRole) navRole.innerText = "Collector";
-                }
-            }
+            applyLoggedInSessionChrome();
             return;
         } else if (routeInfo.view === 'hub') {
 
             hideLanding();
+            applyLoggedInSessionChrome();
             await renderViewerHub(bootstrap.sections || {}, bootstrap.favorite_ids || []);
             return;
         } else if (routeInfo.view === 'streamer-profile') {
 
             hideLanding();
+            applyLoggedInSessionChrome();
             await renderStreamerProfile(bootstrap);
+            return;
+        } else if (routeInfo.view === 'login') {
+
+            hideLanding();
+            const loginEl = document.getElementById('login-view');
+            if (loginEl) loginEl.classList.remove('hidden');
+            const centralNav = document.getElementById('central-nav');
+            if (centralNav) {
+                centralNav.classList.remove('hidden');
+                centralNav.classList.add('flex');
+            }
+            const landingToggle = document.getElementById('landing-mode-toggle');
+            if (landingToggle) landingToggle.classList.add('hidden');
+            await initLoginPage();
+            applyLoggedInSessionChrome();
             return;
         }
 
@@ -1940,16 +2267,44 @@ async function initializeApp() {
         achievementsData = bootstrap.achievements || [];
         userBinders = bootstrap.binders || [];
 
-        const initialView = routeInfo.view === 'binder' ? 'collection' : null;
-        await showDashboard(initialView, bootstrap);
+        // Binder URLs: resolve slug into APP_STREAMER before showDashboard so the binder branch runs
+        // (avoids falling through to creator-dashboard when bootstrap.streamer is missing).
+        // Use initialView null for binder so showDashboard hits `binder && APP_STREAMER`, not only `if (initialView)`.
+        if (routeInfo.view === 'binder' && routeInfo.slug) {
+            await resolveStreamer();
+        }
+
+        await showDashboard(null, bootstrap);
 
         fetchUserCollection(bootstrap.recent_drops);
         startPolling();
 
     } else {
 
-        if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
-            window.location.href = `/auth/twitch?role=viewer`;
+        if (routeInfo.view === 'dashboard' || routeInfo.view === 'profile') {
+            window.location.href = `${BACKEND_URL}/auth/twitch?role=viewer`;
+            return;
+        } else if (routeInfo.view === 'binder') {
+            // Allow guest access to binder
+            hideLanding();
+            const dashboard = document.getElementById('dashboard-view');
+            if (dashboard) dashboard.classList.remove('hidden');
+
+            const centralNav = document.getElementById('central-nav');
+            if (centralNav) {
+                centralNav.classList.remove('hidden');
+                centralNav.classList.add('flex');
+            }
+
+            leaderboardData = bootstrap.leaderboard || [];
+            achievementsData = bootstrap.achievements || [];
+            userBinders = bootstrap.binders || [];
+
+            if (routeInfo.slug) {
+                await resolveStreamer();
+            }
+            await showDashboard(null, bootstrap);
+            fetchUserCollection(bootstrap.recent_drops);
             return;
         } else if (routeInfo.view === 'hub') {
 
@@ -1970,7 +2325,7 @@ async function initializeApp() {
                             <h3 class="text-3xl font-black uppercase italic tracking-tight">Access Restricted</h3>
                             <p class="text-void-muted max-w-md mx-auto">Please initialize your profile to access your collected vaults and discover active creator nodes.</p>
                         </div>
-                        <button onclick="window.location.href='/auth/twitch?role=viewer'" 
+                        <button onclick="window.location.href=(typeof getCastleBackendOrigin==='function'?getCastleBackendOrigin():window.location.origin)+'/auth/twitch?role=viewer'" 
                                 class="saas-button px-12 py-4 rounded-xl shadow-void-accent/20">
                             Initialize Collection
                         </button>
@@ -1985,6 +2340,18 @@ async function initializeApp() {
             const profile = document.getElementById('streamer-profile-view');
             if (profile) profile.classList.remove('hidden');
             await renderStreamerProfile(bootstrap);
+        } else if (routeInfo.view === 'login') {
+            hideLanding();
+            const loginEl = document.getElementById('login-view');
+            if (loginEl) loginEl.classList.remove('hidden');
+            const centralNav = document.getElementById('central-nav');
+            if (centralNav) {
+                centralNav.classList.remove('hidden');
+                centralNav.classList.add('flex');
+            }
+            const landingToggle = document.getElementById('landing-mode-toggle');
+            if (landingToggle) landingToggle.classList.add('hidden');
+            await initLoginPage();
         } else {
 
             showLanding();
@@ -2010,7 +2377,7 @@ async function renderViewerHub(sections, favoriteIds = []) {
     if (loading) loading.classList.add('hidden');
     if (container) container.classList.remove('hidden');
 
-    const favIdsSet = new Set(favoriteIds);
+    const favIdsSet = new Set((favoriteIds || []).map(id => String(id).toLowerCase()));
     const sectionConfigs = [
         { id: 'favorites', el: document.getElementById('hub-favorites-section'), grid: document.getElementById('hub-favorites-grid') },
         { id: 'followed', el: document.getElementById('hub-followed-section'), grid: document.getElementById('hub-followed-grid') }
@@ -2024,10 +2391,10 @@ async function renderViewerHub(sections, favoriteIds = []) {
                 ? currentUser.streamer 
                 : { username: currentUser.name, display_name: currentUser.name, avatar_url: currentUser.avatar_url };
             selfContainer.innerHTML = `
-                <div onclick="window.location.href='/binder/${s.username}'" 
+                <div onclick="window.location.href='/binder/${escapeHTML(s.username)}'" 
                      class="group relative flex items-center gap-4 bg-void-accent/5 border border-void-accent/20 hover:bg-void-accent/10 hover:border-void-accent/40 px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 shadow-lg shadow-void-accent/5">
                     <div class="relative">
-                        <img src="${s.brand_logo_url || s.avatar_url}" class="w-12 h-12 rounded-xl object-cover border border-void-accent/20">
+                        <img src="${escapeHTML(s.brand_logo_url || s.pack_image_url || s.avatar_url)}" class="w-12 h-12 rounded-xl object-cover border border-void-accent/20">
                         <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-void-accent flex items-center justify-center rounded-full border-2 border-void-bg text-[8px] text-void-bg font-black">
                             <i class="fa-solid fa-star"></i>
                         </div>
@@ -2054,7 +2421,7 @@ async function renderViewerHub(sections, favoriteIds = []) {
                 conf.el.classList.remove('hidden');
                 if (emptyEl) emptyEl.classList.add('hidden');
                 conf.grid.classList.remove('hidden');
-                conf.grid.innerHTML = data.map(s => renderStreamerCard(s, favIdsSet.has(s.id))).join('');
+                conf.grid.innerHTML = data.map(s => renderStreamerCard(s, favIdsSet.has(String(s.id).toLowerCase()))).join('');
             } else {
                 conf.el.classList.remove('hidden');
                 if (emptyEl) emptyEl.classList.remove('hidden');
@@ -2075,13 +2442,16 @@ async function renderViewerHub(sections, favoriteIds = []) {
 }
 
 function renderStreamerCard(s, isFavorited) {
-    const targetUrl = `/binder/${s.username}`;
+    const targetUrl = `/binder/${escapeHTML(s.username)}`;
     const starClass = isFavorited ? 'text-yellow-400 fill-yellow-400' : 'text-void-muted group-hover/star:text-yellow-400/50';
+    const streamerName = escapeHTML(s.display_name || s.username || '');
+    const collectionName = escapeHTML(s.brand_name || 'Collection');
+    const thumbSrc = escapeHTML(s.avatar_url || s.brand_logo_url || s.pack_image_url || 'https://via.placeholder.com/300');
 
     return `
         <div class="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/[0.02] hover:border-void-accent/40 hover:bg-white/[0.04] transition-all duration-300">
             <!-- Favorite Toggle -->
-            <button onclick="event.stopPropagation(); toggleFavorite('${s.id}')" 
+            <button type="button" onclick="event.stopPropagation(); event.preventDefault(); toggleFavorite('${escapeHTML(s.id)}')" 
                     class="group/star absolute top-4 right-4 z-30 w-10 h-10 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center transition-all hover:scale-110 active:scale-95">
                 <i class="fa-solid fa-star ${starClass} transition-colors"></i>
             </button>
@@ -2090,19 +2460,20 @@ function renderStreamerCard(s, isFavorited) {
             <div onclick="window.location.href='${targetUrl}'" class="cursor-pointer">
                 <div class="absolute inset-0 bg-gradient-to-t from-void-bg via-void-bg/50 to-transparent z-10"></div>
                 
-                <img src="${s.brand_logo_url || s.avatar_url || 'https://via.placeholder.com/300'}" 
-                     class="w-full h-48 object-cover opacity-60 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" alt="${s.username}">
+                <img src="${thumbSrc}" 
+                     class="w-full h-48 object-cover opacity-60 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" alt="${streamerName}">
                 
                 <div class="absolute bottom-0 left-0 w-full p-6 z-20">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h3 class="text-2xl font-display font-black text-void-text uppercase italic tracking-tighter shadow-black drop-shadow-lg">${s.brand_name || s.username}</h3>
-                            <div class="flex items-center gap-2 mt-1">
-                                <p class="text-[10px] font-bold text-void-muted uppercase tracking-widest">${s.is_active ? 'Active Node' : 'Archived'}</p>
-                                ${s.is_self ? '<span class="px-2 py-0.5 rounded-full bg-void-accent/20 text-void-accent text-[8px] font-black uppercase tracking-tighter">Your Hub</span>' : ''}
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0 pr-1">
+                            <h3 class="text-2xl font-display font-black text-void-text uppercase italic tracking-tighter shadow-black drop-shadow-lg truncate pl-0.5 pr-2">${streamerName}</h3>
+                            <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                <p class="text-[10px] font-bold text-void-muted uppercase tracking-widest truncate max-w-full">${collectionName}</p>
+                                ${s.is_active === false ? '<span class="text-[9px] font-black uppercase tracking-wider text-void-muted/70">Archived</span>' : ''}
+                                ${s.is_self ? '<span class="px-2 py-0.5 rounded-full bg-void-accent/20 text-void-accent text-[8px] font-black uppercase tracking-tighter shrink-0">Your Hub</span>' : ''}
                             </div>
                         </div>
-                        <div class="w-10 h-10 rounded-xl bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent group-hover:translate-x-1 transition-all">
+                        <div class="w-10 h-10 shrink-0 rounded-xl bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent group-hover:translate-x-1 transition-all">
                             <i class="fa-solid fa-arrow-right"></i>
                         </div>
                     </div>
@@ -2114,28 +2485,56 @@ function renderStreamerCard(s, isFavorited) {
 
 async function toggleFavorite(streamerId) {
     if (!currentUser) {
-        showVoidNotification("IDENTITY REQUIRED FOR PERSISTENCE", "error");
+        showToast("Sign in to save favourites", "error");
         return;
     }
 
+    if (!csrfToken) await fetchCSRFToken();
+
     try {
-        const resp = await fetch('/api/favorites/toggle', {
+        const resp = await fetch(`${BACKEND_URL}/api/favorites/toggle`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+            },
+            credentials: 'include',
             body: JSON.stringify({ streamer_id: streamerId })
         });
 
-        const data = await resp.json();
-        if (data.success) {
-            showVoidNotification(data.favorited ? "NODE PRIORITIZED" : "NODE DEPRIORITIZED", "success");
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.success) {
+            showToast(data.favorited ? "Added to favourites" : "Removed from favourites", "success");
 
-            const updated = await fetch('/api/bootstrap?streamer=all').then(r => r.json());
-            if (updated.sections) {
-                renderViewerHub(updated.sections, updated.favorite_ids);
+            if (window.location.pathname === '/hub' || window.location.pathname.startsWith('/hub')) {
+                window.__castleSkipHubStaleBootstrap = true;
+                setTimeout(() => {
+                    window.__castleSkipHubStaleBootstrap = false;
+                }, 12000);
             }
+
+            const bootRes = await fetch(`${BACKEND_URL}/api/bootstrap?streamer=all&lite=1`, { credentials: 'include' });
+            if (!bootRes.ok) {
+                showToast("Could not refresh hub", "error");
+                window.__castleSkipHubStaleBootstrap = false;
+                return;
+            }
+            const boot = await bootRes.json();
+            if (boot.csrf_token) csrfToken = boot.csrf_token;
+            try {
+                const hubCacheKey = `bootstrap_${BACKEND_URL}/api/bootstrap?streamer=all&lite=1`;
+                sessionStorage.setItem(hubCacheKey, JSON.stringify(boot));
+            } catch (e) { /* ignore quota */ }
+            if (boot.sections) {
+                renderViewerHub(boot.sections, boot.favorite_ids || []);
+            }
+        } else {
+            const msg = typeof data.error === 'string' ? data.error : (data.message || "Could not update favourites");
+            showToast(msg, "error");
         }
     } catch (e) {
         console.error("[App] Favorite toggle failed:", e);
+        showToast("Could not update favourites", "error");
     }
 }
 
@@ -2170,7 +2569,7 @@ async function renderStreamerProfile(bootstrap) {
             if (currentUser) {
                 window.location.href = `/binder/${APP_STREAMER.username}`;
             } else {
-                window.location.href = `/auth/twitch?role=viewer`;
+                window.location.href = `${BACKEND_URL}/auth/twitch?role=viewer`;
             }
         };
     }
@@ -2181,11 +2580,14 @@ async function renderStreamerProfile(bootstrap) {
         const icons = { kick: 'fa-solid fa-k', youtube: 'fa-brands fa-youtube', twitter: 'fa-brands fa-x-twitter', discord: 'fa-brands fa-discord', tiktok: 'fa-brands fa-tiktok' };
         const labels = { kick: 'Kick', youtube: 'YouTube', twitter: 'X', discord: 'Discord', tiktok: 'TikTok' };
         const entries = Object.entries(links).filter(([, url]) => url);
-        linksEl.innerHTML = entries.length ? entries.map(([key, url]) =>
-            `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:border-void-accent/50 hover:bg-void-accent/10 text-void-muted hover:text-void-accent transition-all text-sm font-bold">
-                <i class="${icons[key] || 'fa-solid fa-link'}"></i> ${labels[key] || key}
-            </a>`
-        ).join('') : '';
+        linksEl.innerHTML = entries.length ? entries.map(([key, url]) => {
+            const iconHtml = key === 'kick'
+                ? '<img src="/kick-mark.svg" alt="" width="18" height="18" class="inline-block w-[18px] h-[18px] opacity-95" />'
+                : `<i class="${icons[key] || 'fa-solid fa-link'}"></i>`;
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:border-void-accent/50 hover:bg-void-accent/10 text-void-muted hover:text-void-accent transition-all text-sm font-bold">
+                ${iconHtml} ${labels[key] || key}
+            </a>`;
+        }).join('') : '';
     }
 }
 
@@ -2198,16 +2600,17 @@ async function resolveStreamer() {
     }
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/streamer/config?streamer=${slug}`);
+        const res = await fetch(
+            `${BACKEND_URL}/api/streamer/config?streamer=${encodeURIComponent(slug)}`
+        );
         if (res.ok) {
             APP_STREAMER = await res.json();
-            console.log("Streamer Context Resolved:", APP_STREAMER.username);
+            console.log('Streamer Context Resolved:', APP_STREAMER.username);
         } else {
-            console.warn("Failed to resolve streamer context. Invalid slug.");
-            APP_STREAMER = null;
+            console.warn('Failed to resolve streamer config for slug:', slug, res.status);
         }
     } catch (e) {
-        console.error("Streamer resolution error:", e);
+        console.error('Streamer resolution error:', e);
     }
 
     if (APP_STREAMER) {
@@ -2256,11 +2659,28 @@ function applyBranding(streamer) {
     const summonText = document.getElementById('summon-more-text');
     const summonBtn = document.getElementById('summon-channel-btn');
     if (summonText) {
-        summonText.innerHTML = `Subscribe, use Channel Points, or buy packs to summon new frogs live on stream at <span class="text-void-accent font-bold">${brandName}</span>!`;
+        summonText.innerHTML = `Subscribe, use Channel Points, or buy packs to summon new frogs live on stream at <span class="text-void-accent font-bold">${escapeHTML(brandName)}</span>!`;
     }
     if (summonBtn) {
         summonBtn.onclick = () => window.open(`https://twitch.tv/${streamer.username}`, '_blank');
     }
+
+    syncBuyPackButtonVisibility();
+}
+
+/** Show buy-pack only when signed in, on a specific creator context, and creator has Stripe linked (or pack_sales_enabled from public config). */
+function syncBuyPackButtonVisibility() {
+    const btn = document.getElementById('buy-pack-btn');
+    if (!btn) return;
+    const s = APP_STREAMER;
+    const paymentsOk = !!(s && (s.stripe_connect_id || s.pack_sales_enabled));
+    const canShow =
+        !!currentUser &&
+        paymentsOk &&
+        s &&
+        s.id &&
+        s.id !== 'all';
+    btn.classList.toggle('hidden', !canShow);
 }
 
 async function fetchCSRFToken() {
@@ -2277,10 +2697,321 @@ async function fetchCSRFToken() {
     }
 }
 
-function populateProfileView() {
-    if (!APP_STREAMER) return;
-    document.getElementById('profile-streamer-avatar').src = APP_STREAMER.avatar_url;
-    document.getElementById('profile-streamer-name').innerText = APP_STREAMER.display_name || APP_STREAMER.username;
+let viewerProfileSettingsInitialized = false;
+
+function setViewerProfileTab(tab) {
+    const active = 'border-void-accent text-void-text bg-void-accent/10';
+    const inactive = 'border-transparent text-void-muted hover:text-void-text';
+    document.querySelectorAll('.profile-settings-tab').forEach((btn) => {
+        const t = btn.getAttribute('data-profile-tab');
+        const on = t === tab;
+        btn.className = `profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border ${on ? active : inactive}`;
+    });
+    const panels = {
+        channels: document.getElementById('profile-panel-channels'),
+        transactions: document.getElementById('profile-panel-transactions'),
+        security: document.getElementById('profile-panel-security')
+    };
+    Object.entries(panels).forEach(([k, el]) => {
+        if (!el) return;
+        el.classList.toggle('hidden', k !== tab);
+    });
+}
+
+function initViewerProfileSettingsOnce() {
+    if (viewerProfileSettingsInitialized) return;
+    viewerProfileSettingsInitialized = true;
+
+    document.querySelectorAll('.profile-settings-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const tab = btn.getAttribute('data-profile-tab');
+            if (tab) setViewerProfileTab(tab);
+        });
+    });
+
+    document.getElementById('viewer-settings-copy-code')?.addEventListener('click', () => {
+        const el = document.getElementById('viewer-settings-castle-code');
+        const code = el ? el.textContent.trim() : '';
+        if (!code || code === '…' || code === '—') return;
+        navigator.clipboard.writeText(code).then(
+            () => {
+                if (typeof showToast === 'function') showToast('Castle code copied!', 'success');
+            },
+            () => { /* ignore */ }
+        );
+    });
+
+    document.getElementById('viewer-block-streamer-btn')?.addEventListener('click', () => {
+        void addViewerStreamerBlock();
+    });
+
+    document.getElementById('viewer-open-delete-account-modal')?.addEventListener('click', () => {
+        const modal = document.getElementById('viewer-delete-account-modal');
+        const input = document.getElementById('viewer-delete-confirm-input');
+        if (input) input.value = '';
+        modal?.classList.remove('hidden');
+        if (typeof scrollLock === 'function') scrollLock();
+    });
+
+    document.getElementById('viewer-delete-cancel-btn')?.addEventListener('click', () => {
+        document.getElementById('viewer-delete-account-modal')?.classList.add('hidden');
+        if (typeof scrollUnlock === 'function') scrollUnlock();
+    });
+
+    document.getElementById('viewer-delete-submit-btn')?.addEventListener('click', () => {
+        void submitViewerDeleteAccount();
+    });
+
+    document.getElementById('viewer-delete-account-modal')?.addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'viewer-delete-account-modal') {
+            e.currentTarget.classList.add('hidden');
+            if (typeof scrollUnlock === 'function') scrollUnlock();
+        }
+    });
+}
+
+async function renderViewerSettingsConnections() {
+    const wrap = document.getElementById('viewer-settings-connections');
+    if (!wrap) return;
+
+    let auth = { auth_provider: 'twitch', kick_linked: !!(currentUser && currentUser.kick_linked), twitch: {}, kick: null };
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/auth/twitch-status`, { credentials: 'include' });
+        if (res.ok) auth = { ...auth, ...(await res.json()) };
+    } catch (e) { /* ignore */ }
+
+    const role = currentUser && currentUser.is_creator ? 'creator' : 'viewer';
+    const kickHref = `${BACKEND_URL}/auth/kick?mode=link&role=${role}`;
+    const twitchHref = `${BACKEND_URL}/auth/twitch?role=${role}&reauth=1`;
+
+    const isKickPrimary = auth.auth_provider === 'kick';
+    const twOk = !isKickPrimary && auth.twitch && auth.twitch.token_valid && !auth.twitch.needs_reauth;
+    const kickOk = auth.kick_linked && auth.kick && auth.kick.token_valid && !auth.kick.needs_reauth;
+
+    const chip = (label, ok, href, iconClass, accent) => {
+        const st = ok ? 'Connected' : 'Refresh';
+        return `
+            <a href="${href}" class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest hover:border-void-accent/30 transition-colors shadow-sm shadow-black/20">
+                <i class="${iconClass} ${accent} text-sm"></i>
+                <span>${label}</span>
+                <span class="text-[9px] font-black ${ok ? 'text-emerald-400/90' : 'text-amber-400/90'}">${st}</span>
+            </a>`;
+    };
+
+    wrap.innerHTML = `${chip('Twitch', twOk, twitchHref, 'fa-brands fa-twitch', 'text-[#9146FF]')}
+        ${chip('Kick', kickOk, kickHref, 'fa-solid fa-k', 'text-[#53FC18]')}`;
+}
+
+function renderViewerTeamList() {
+    const teamList = document.getElementById('viewer-settings-team-list');
+    const empty = document.getElementById('viewer-settings-team-empty');
+    const teams = (currentUser && Array.isArray(currentUser.team_memberships)) ? currentUser.team_memberships : [];
+    if (!teamList) return;
+    if (teams.length === 0) {
+        teamList.innerHTML = '';
+        if (empty) empty.classList.remove('hidden');
+        return;
+    }
+    if (empty) empty.classList.add('hidden');
+    teamList.innerHTML = teams
+        .map((m) => {
+            const s = m.streamer || m;
+            const name = s.brand_name || s.display_name || s.username || 'Channel';
+            const role = (m.role || m.team_role || 'team').toString();
+            const uname = s.username || '';
+            const avatar = s.avatar_url || s.brand_logo_url || '/assets/default-avatar.png';
+            return `
+                <div class="flex items-center justify-between gap-4 py-3 px-4 rounded-xl border border-white/5 bg-black/30 hover:border-white/10 transition-colors">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <img src="${escapeHTML(avatar)}" alt="" class="w-11 h-11 rounded-xl object-cover border border-white/10 shrink-0 shadow-md shadow-black/30" />
+                        <div class="min-w-0">
+                            <div class="text-sm font-display font-black text-white uppercase italic tracking-tight truncate">${escapeHTML(name)}</div>
+                            <div class="text-[9px] font-black uppercase tracking-[0.2em] text-void-muted">${escapeHTML(role)}</div>
+                        </div>
+                    </div>
+                    ${uname ? `<a href="/binder/${encodeURIComponent(uname)}" class="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-void-accent border border-void-accent/25 bg-void-accent/5 hover:bg-void-accent/15 shrink-0 transition-colors">Open</a>` : ''}
+                </div>`;
+        })
+        .join('');
+}
+
+async function loadViewerBlockedStreamers() {
+    const listEl = document.getElementById('viewer-blocked-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<p class="text-[10px] font-black uppercase tracking-widest text-void-muted py-2">Loading…</p>';
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/user/blocked-streamers`, { credentials: 'include' });
+        if (!res.ok) {
+            listEl.innerHTML = `<p class="text-xs text-red-400/90">Could not load blocks (${res.status})</p>`;
+            return;
+        }
+        const rows = await res.json();
+        if (!Array.isArray(rows) || rows.length === 0) {
+            listEl.innerHTML = '<p class="text-xs text-void-muted/80 italic py-2 border border-dashed border-white/10 rounded-xl px-4">No channels blocked.</p>';
+            return;
+        }
+        listEl.innerHTML = rows
+            .map((row) => {
+                const s = row.streamer || {};
+                const label = s.brand_name || s.display_name || s.username || row.streamer_id;
+                const sid = row.streamer_id;
+                return `
+                    <div class="flex items-center justify-between gap-3 py-3 px-4 rounded-xl border border-white/5 bg-black/30 hover:border-white/10 transition-colors">
+                        <span class="text-sm font-display font-black text-white uppercase italic tracking-tight truncate">${escapeHTML(String(label))}</span>
+                        <button type="button" class="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-red-400 border border-red-500/25 bg-red-500/5 hover:bg-red-500/15 viewer-unblock-btn transition-colors" data-streamer-id="${escapeHTML(String(sid))}">Remove</button>
+                    </div>`;
+            })
+            .join('');
+        listEl.querySelectorAll('.viewer-unblock-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-streamer-id');
+                if (id) void removeViewerStreamerBlock(id);
+            });
+        });
+    } catch (e) {
+        listEl.innerHTML = '<p class="text-xs text-red-400/90">Could not load blocks.</p>';
+    }
+}
+
+async function addViewerStreamerBlock() {
+    const input = document.getElementById('viewer-block-streamer-input');
+    const raw = (input && input.value) ? input.value.trim() : '';
+    if (!raw) {
+        if (typeof showToast === 'function') showToast('Enter a creator username.', 'error');
+        return;
+    }
+    if (!csrfToken) await fetchCSRFToken();
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/user/blocked-streamers`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken || '' },
+            body: JSON.stringify({ username: raw })
+        });
+        const errData = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const msg = errData && errData.error ? errData.error : 'Could not block channel';
+            if (typeof showToast === 'function') showToast(String(msg), 'error');
+            return;
+        }
+        if (input) input.value = '';
+        if (typeof showToast === 'function') showToast('Channel blocked', 'success');
+        await loadViewerBlockedStreamers();
+    } catch (e) {
+        if (typeof showToast === 'function') showToast('Network error', 'error');
+    }
+}
+
+async function removeViewerStreamerBlock(streamerId) {
+    if (!csrfToken) await fetchCSRFToken();
+    try {
+        const res = await fetch(
+            `${BACKEND_URL}/api/user/blocked-streamers?streamer_id=${encodeURIComponent(streamerId)}`,
+            {
+                method: 'DELETE',
+                credentials: 'include',
+                headers: { 'X-CSRF-Token': csrfToken || '' }
+            }
+        );
+        const errData = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const msg = errData && errData.error ? errData.error : 'Could not remove block';
+            if (typeof showToast === 'function') showToast(String(msg), 'error');
+            return;
+        }
+        if (typeof showToast === 'function') showToast('Block removed', 'success');
+        await loadViewerBlockedStreamers();
+    } catch (e) {
+        if (typeof showToast === 'function') showToast('Network error', 'error');
+    }
+}
+
+async function submitViewerDeleteAccount() {
+    const input = document.getElementById('viewer-delete-confirm-input');
+    const phrase = (input && input.value) ? input.value.trim() : '';
+    if (phrase !== 'DELETE MY CASTLE ACCOUNT') {
+        if (typeof showToast === 'function') showToast('Type the confirmation phrase exactly.', 'error');
+        return;
+    }
+    if (!csrfToken) await fetchCSRFToken();
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/user/delete-account`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken || '' },
+            body: JSON.stringify({ confirmation: phrase })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const msg = data && data.error ? data.error : 'Could not delete account';
+            if (typeof showToast === 'function') showToast(String(msg), 'error');
+            return;
+        }
+        try {
+            sessionStorage.clear();
+        } catch (_) { /* ignore */ }
+        window.location.href = '/login';
+    } catch (e) {
+        if (typeof showToast === 'function') showToast('Network error', 'error');
+    }
+}
+
+async function populateProfileView() {
+    if (!currentUser) return;
+    initViewerProfileSettingsOnce();
+    setViewerProfileTab('channels');
+
+    const av = document.getElementById('viewer-settings-avatar');
+    if (av) av.src = currentUser.avatar || '/assets/default-avatar.png';
+
+    const nameEl = document.getElementById('viewer-settings-display-name');
+    if (nameEl) nameEl.textContent = currentUser.display_name || currentUser.name || '—';
+
+    const roleBadge = document.getElementById('viewer-settings-role-badge');
+    if (roleBadge) {
+        if (currentUser.is_creator) {
+            roleBadge.textContent = 'CREATOR';
+            roleBadge.className =
+                'text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-void-accent/20 text-void-accent border border-void-accent/30';
+        } else if (currentUser.team_memberships && currentUser.team_memberships.length) {
+            roleBadge.textContent = 'TEAM';
+            roleBadge.className =
+                'text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25';
+        } else {
+            roleBadge.textContent = 'COLLECTOR';
+            roleBadge.className =
+                'text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-white/10 text-void-muted border border-white/10';
+        }
+    }
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/trade/code`, { credentials: 'include' });
+        if (res.ok) {
+            const d = await res.json();
+            const c = document.getElementById('viewer-settings-castle-code');
+            if (c) c.textContent = d.trade_code || '—';
+        }
+    } catch (e) { /* ignore */ }
+
+    const upgradeCard = document.getElementById('viewer-settings-upgrade-card');
+    if (upgradeCard) {
+        upgradeCard.classList.toggle('hidden', !!currentUser.is_creator);
+    }
+
+    const cpPanel = document.getElementById('viewer-settings-channel-points-panel');
+    if (cpPanel) {
+        cpPanel.classList.toggle('hidden', !currentUser.is_creator);
+    }
+
+    const kickLink = document.getElementById('viewer-settings-link-kick');
+    if (kickLink) {
+        const role = currentUser.is_creator ? 'creator' : 'viewer';
+        kickLink.href = `${BACKEND_URL}/auth/kick?mode=link&role=${role}`;
+    }
+
+    await renderViewerSettingsConnections();
+    renderViewerTeamList();
+    await loadViewerBlockedStreamers();
 }
 
 async function checkCreatorSetupStatus() {
@@ -2422,7 +3153,7 @@ function updateRecentActivity(activity) {
             <i class="fa-solid ${getActivityIcon(event.type)}"></i>
         </div>
         <div class="flex-1 min-w-0">
-            <div class="text-sm font-bold text-void-text truncate">${event.message || 'Activity'}</div>
+            <div class="text-sm font-bold text-void-text truncate">${escapeHTML(event.message || 'Activity')}</div>
             <div class="text-[9px] text-void-muted">${formatTimeAgo(event.timestamp)}</div>
         </div>
     </div>
@@ -2671,33 +3402,34 @@ function renderCreatorCardsGrid() {
 
     grid.innerHTML = filteredCards.map(card => {
         const isSelected = selectedCardIds.has(card.id);
+        const escapedId = escapeHTML(card.id);
         return `
     <div class="group relative aspect-[5/7] rounded-xl overflow-hidden border-2 ${isSelected ? 'border-void-accent' : 'border-white/5'} hover:border-void-accent/50 transition-all cursor-pointer ${bulkSelectMode ? '' : ''}" 
-         onclick="${bulkSelectMode ? `toggleCardSelection('${card.id}')` : `editCard('${card.id}')`}">
+         onclick="${bulkSelectMode ? `toggleCardSelection('${escapedId}')` : `editCard('${escapedId}')`}">
         ${bulkSelectMode ? `
             <div class="absolute top-2 left-2 z-10 w-6 h-6 rounded-lg ${isSelected ? 'bg-void-accent' : 'bg-white/20'} flex items-center justify-center border-2 ${isSelected ? 'border-void-accent' : 'border-white/30'}">
                 ${isSelected ? '<i class="fa-solid fa-check text-white text-xs"></i>' : ''}
             </div>
         ` : ''}
-        <img src="${card.image_url || '/pack.png'}" alt="${card.name || 'Card'}" 
+        <img src="${escapeHTML(card.image_url || '/pack.png')}" alt="${escapeHTML(card.name || 'Card')}" 
             class="w-full h-full object-cover ${isSelected ? 'opacity-75' : ''}" 
             loading="lazy"
             onerror="this.src='/pack.png'">
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
             <div class="absolute bottom-0 left-0 right-0 p-3">
-                <div class="text-xs font-black text-white uppercase truncate">${card.name || 'Unnamed Card'}</div>
-                <div class="text-[9px] font-black text-void-accent uppercase">${card.rarity || 'common'}</div>
+                <div class="text-xs font-black text-white uppercase truncate">${escapeHTML(card.name || 'Unnamed Card')}</div>
+                <div class="text-[9px] font-black text-void-accent uppercase">${escapeHTML(card.rarity || 'common')}</div>
             </div>
         </div>
         ${!bulkSelectMode ? `
-            <button onclick="event.stopPropagation(); deleteCard('${card.id}')" 
+            <button onclick="event.stopPropagation(); deleteCard('${escapedId}')" 
                 class="absolute top-2 right-2 w-8 h-8 bg-red-500/80 hover:bg-red-500 rounded-lg flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
                 <i class="fa-solid fa-trash text-xs"></i>
             </button>
         ` : ''}
         ${card.set_id ? `
             <div class="absolute ${bulkSelectMode ? 'top-2 right-2' : 'top-2 left-2'} px-2 py-1 bg-void-accent/80 rounded text-[8px] font-black text-white uppercase truncate max-w-[80%]">
-                ${allSets.find(s => s.id === card.set_id)?.name || 'Set'}
+                ${escapeHTML(allSets.find(s => s.id === card.set_id)?.name || 'Set')}
             </div>
         ` : ''}
     </div>
@@ -2884,18 +3616,21 @@ async function renderEditorView() {
             return;
         }
 
-        setList.innerHTML = sets.map(s => `
-            <button onclick="selectEditorSet('${s.id}')" id="editor-set-item-${s.id}" class="w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group ${editorCurrentSetId === s.id ? 'bg-void-accent/20 border-void-accent/40 text-void-accent' : 'bg-white/5 border-white/5 text-void-muted hover:bg-white/10 hover:border-white/10'}">
+        setList.innerHTML = sets.map(s => {
+            const escapedId = escapeHTML(s.id);
+            return `
+            <button onclick="selectEditorSet('${escapedId}')" id="editor-set-item-${escapedId}" class="w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group ${editorCurrentSetId === s.id ? 'bg-void-accent/20 border-void-accent/40 text-void-accent' : 'bg-white/5 border-white/5 text-void-muted hover:bg-white/10 hover:border-white/10'}">
                 <div class="flex items-center gap-3">
                     <i class="fa-solid ${s.is_active ? 'fa-box-open' : 'fa-box'} ${s.is_active ? 'text-void-accent' : 'text-void-muted'}"></i>
                     <div>
-                        <div class="text-[11px] font-black uppercase tracking-tight ${editorCurrentSetId === s.id ? 'text-white' : 'group-hover:text-void-text'}">${s.name || 'Untitled Set'}</div>
-                        <div class="text-[9px] font-bold opacity-60">${s.code || 'NO-CODE'}</div>
+                        <div class="text-[11px] font-black uppercase tracking-tight ${editorCurrentSetId === s.id ? 'text-white' : 'group-hover:text-void-text'}">${escapeHTML(s.name || 'Untitled Set')}</div>
+                        <div class="text-[9px] font-bold opacity-60">${escapeHTML(s.code || 'NO-CODE')}</div>
                     </div>
                 </div>
                 ${editorCurrentSetId === s.id ? '<i class="fa-solid fa-chevron-right text-xs"></i>' : ''}
             </button>
-        `).join('');
+        `;
+        }).join('');
 
 
         window.creatorSets = sets;
@@ -2986,37 +3721,41 @@ function renderEditorGrid(cards) {
         return;
     }
 
-    grid.innerHTML = cards.map(card => `
+    grid.innerHTML = cards.map(card => {
+        const escapedId = escapeHTML(card.id);
+        const escapedName = escapeHTML(card.name);
+        return `
         <div class="glass-panel rounded-2xl border border-white/5 overflow-hidden group hover:border-void-accent/40 transition-all flex flex-col">
             <div class="aspect-[5/7] relative overflow-hidden bg-black/40">
-                <img src="${card.image_url || '/pack.png'}" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-700">
+                <img src="${escapeHTML(card.image_url || '/pack.png')}" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-700">
                 <div class="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
                     <div class="flex items-center justify-between">
-                        <span class="text-[8px] font-black uppercase tracking-widest text-void-accent">${card.rarity}</span>
+                        <span class="text-[8px] font-black uppercase tracking-widest text-void-accent">${escapeHTML(card.rarity)}</span>
                         <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-sword mr-1 opacity-60"></i>${card.attack || 0}</span>
-                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-shield mr-1 opacity-60"></i>${card.defense || 0}</span>
+                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-sword mr-1 opacity-60"></i>${parseInt(card.attack || 0)}</span>
+                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-shield mr-1 opacity-60"></i>${parseInt(card.defense || 0)}</span>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="p-3 space-y-3 flex-1 flex flex-col justify-between">
                 <div>
-                    <input type="text" value="${card.name}" onchange="updateCardInline('${card.id}', 'name', this.value)" class="w-full bg-transparent text-[11px] font-black uppercase text-white border-none focus:ring-0 p-0 mb-1 truncate">
-                    <div class="text-[8px] text-void-muted uppercase font-bold">Protocol ${card.card_number || '---'}</div>
+                    <input type="text" value="${escapedName}" onchange="updateCardInline('${escapedId}', 'name', this.value)" class="w-full bg-transparent text-[11px] font-black uppercase text-white border-none focus:ring-0 p-0 mb-1 truncate">
+                    <div class="text-[8px] text-void-muted uppercase font-bold">Protocol ${escapeHTML(card.card_number || '---')}</div>
                 </div>
                 <div class="flex items-center gap-1">
-                    <button onclick="editCard('${card.id}')" class="flex-1 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[8px] font-black uppercase transition-all">Edit</button>
-                    <button onclick="openLayerEditorForCard('${card.id}')" title="Edit Art (Layer Editor)" class="w-8 h-8 bg-void-accent/10 text-void-accent hover:bg-void-accent hover:text-void-bg rounded-lg flex items-center justify-center transition-all text-[10px]">
+                    <button onclick="editCard('${escapedId}')" class="flex-1 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[8px] font-black uppercase transition-all">Edit</button>
+                    <button onclick="openLayerEditorForCard('${escapedId}')" title="Edit Art (Layer Editor)" class="w-8 h-8 bg-void-accent/10 text-void-accent hover:bg-void-accent hover:text-void-bg rounded-lg flex items-center justify-center transition-all text-[10px]">
                         <i class="fa-solid fa-pen-ruler"></i>
                     </button>
-                    <button onclick="deleteCard('${card.id}')" class="w-8 h-8 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center transition-all text-[10px]">
+                    <button onclick="deleteCard('${escapedId}')" class="w-8 h-8 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center transition-all text-[10px]">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 async function updateCardInline(cardId, field, value) {
@@ -3645,7 +4384,7 @@ function loadPackThemePreset(preset) {
 }
 
 function resetPackImage() {
-    document.getElementById('pack-preview-image').src = '/pack.png';
+    document.getElementById('pack-preview-image').src = DEFAULT_PACK_IMAGE_URL;
     document.getElementById('pack-image-upload').value = '';
 }
 
@@ -3692,22 +4431,25 @@ function renderPacksList(packs) {
         return;
     }
 
-    packsList.innerHTML = packs.map(pack => `
+    packsList.innerHTML = packs.map(pack => {
+        const escapedId = escapeHTML(pack.id);
+        return `
         <div class="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl group hover:border-void-accent/30 transition-all">
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
                     <i class="fa-solid fa-box-open text-xs"></i>
                 </div>
                 <div>
-                    <div class="text-[11px] font-black uppercase text-white">${pack.name}</div>
-                    <div class="text-[8px] font-bold text-void-muted uppercase tracking-widest">${pack.code || 'TCG'} • ${pack.is_active ? 'Active' : 'Inactive'}</div>
+                    <div class="text-[11px] font-black uppercase text-white">${escapeHTML(pack.name)}</div>
+                    <div class="text-[8px] font-bold text-void-muted uppercase tracking-widest">${escapeHTML(pack.code || 'TCG')} • ${pack.is_active ? 'Active' : 'Inactive'}</div>
                 </div>
             </div>
-            <button onclick="editPack('${pack.id}')" class="opacity-0 group-hover:opacity-100 p-2 text-void-accent hover:text-white transition-all">
+            <button onclick="editPack('${escapedId}')" class="opacity-0 group-hover:opacity-100 p-2 text-void-accent hover:text-white transition-all">
                 <i class="fa-solid fa-pen-to-square text-xs"></i>
             </button>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 async function createPack() {
@@ -3780,20 +4522,153 @@ function closeTwitchSettings() {
     if (modal) modal.classList.add('hidden');
 }
 
+function normalizeCreatorCardsResponse(data) {
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.cards)) return data.cards;
+    return [];
+}
+
+function renderChannelPointFixedCardsList(rows) {
+    const el = document.getElementById('cp-fixed-cards-list');
+    if (!el) return;
+    if (!rows || !rows.length) {
+        el.innerHTML = '<p class="text-void-muted/80 italic py-2">No event rewards linked yet.</p>';
+        return;
+    }
+    el.innerHTML = rows.map((r) => {
+        const cardName = (r.cards && r.cards.name) ? r.cards.name : 'Card';
+        const rarity = (r.cards && r.cards.rarity) ? r.cards.rarity : '';
+        const label = r.label ? escapeHTML(String(r.label)) : '';
+        const rid = escapeHTML(String(r.twitch_reward_id || ''));
+        const nameEsc = escapeHTML(String(cardName));
+        const rarityEsc = rarity ? escapeHTML(String(rarity)) : '';
+        const idAttr = escapeHTML(String(r.id || ''));
+        return `<div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/5">
+      <div class="min-w-0">
+        ${label ? `<div class="font-bold text-void-text truncate">${label}</div>` : ''}
+        <div class="text-void-muted font-mono text-[10px] truncate">${rid}</div>
+        <div class="text-void-text/90">${nameEsc}${rarityEsc ? ` · ${rarityEsc}` : ''}</div>
+      </div>
+      <button type="button" data-cp-fixed-id="${idAttr}" class="cp-fixed-remove shrink-0 px-2 py-1.5 text-red-400 hover:text-red-300 text-[10px] font-black uppercase">Remove</button>
+    </div>`;
+    }).join('');
+    el.querySelectorAll('.cp-fixed-remove').forEach((btn) => {
+        btn.onclick = () => removeChannelPointFixedCardRow(btn.getAttribute('data-cp-fixed-id'));
+    });
+}
+
+async function populateCpFixedCardSelect() {
+    const sel = document.getElementById('cp-fixed-card-select');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select catalog card…</option>';
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const cards = normalizeCreatorCardsResponse(data);
+        cards.forEach((c) => {
+            if (!c || !c.id) return;
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = `${c.name || 'Untitled'} (${c.rarity || '?'})`;
+            sel.appendChild(opt);
+        });
+        if (cur && [...sel.options].some((o) => o.value === cur)) sel.value = cur;
+    } catch (e) {
+        console.error('Failed to load cards for event rewards', e);
+    }
+}
+
 async function loadTwitchSettings() {
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/settings`, { credentials: 'include' });
         if (res.ok) {
             const settings = await res.json();
-            if (settings.twitch_reward_id) {
-                document.getElementById('twitch-reward-id').value = settings.twitch_reward_id;
-            }
-            if (settings.twitch_battle_reward_id) {
-                document.getElementById('twitch-battle-reward-id').value = settings.twitch_battle_reward_id;
-            }
+            const packInput = document.getElementById('twitch-reward-id');
+            if (packInput) packInput.value = settings.twitch_reward_id || '';
+            const battleInput = document.getElementById('twitch-battle-reward-id');
+            if (battleInput) battleInput.value = settings.twitch_battle_reward_id || '';
         }
+        const fixedRes = await fetch(`${BACKEND_URL}/api/creator/channel-point-fixed-cards`, {
+            credentials: 'include'
+        });
+        if (fixedRes.ok) {
+            const payload = await fixedRes.json();
+            const rows = Array.isArray(payload) ? payload : (payload.mappings || []);
+            renderChannelPointFixedCardsList(rows);
+        }
+        await populateCpFixedCardSelect();
     } catch (err) {
         console.error("Failed to load Twitch settings:", err);
+    }
+}
+
+async function addChannelPointFixedCardRow() {
+    const rewardEl = document.getElementById('cp-fixed-reward-id');
+    const cardEl = document.getElementById('cp-fixed-card-select');
+    const labelEl = document.getElementById('cp-fixed-label');
+    const twitchRewardId = (rewardEl && rewardEl.value) ? rewardEl.value.trim() : '';
+    const cardId = (cardEl && cardEl.value) ? cardEl.value.trim() : '';
+    const label = (labelEl && labelEl.value) ? labelEl.value.trim() : '';
+    if (!twitchRewardId) {
+        showToast('Paste the Twitch reward ID', 'error');
+        return;
+    }
+    if (!cardId) {
+        showToast('Choose a catalog card', 'error');
+        return;
+    }
+    if (!csrfToken) await fetchCSRFToken();
+    showToast('Linking reward…', 'loading');
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/creator/channel-point-fixed-cards`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+                twitch_reward_id: twitchRewardId,
+                card_id: cardId,
+                label: label || null
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showToast(data.error || data.message || 'Could not link reward', 'error');
+            return;
+        }
+        if (rewardEl) rewardEl.value = '';
+        if (labelEl) labelEl.value = '';
+        if (cardEl) cardEl.value = '';
+        showToast('Event reward linked', 'success');
+        await loadTwitchSettings();
+    } catch (e) {
+        showToast('Connection error', 'error');
+    }
+}
+
+async function removeChannelPointFixedCardRow(id) {
+    if (!id || !confirm('Remove this event reward link?')) return;
+    if (!csrfToken) await fetchCSRFToken();
+    showToast('Removing…', 'loading');
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/creator/channel-point-fixed-cards/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': csrfToken },
+            credentials: 'include'
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showToast(data.error || 'Remove failed', 'error');
+            return;
+        }
+        showToast('Removed', 'success');
+        await loadTwitchSettings();
+    } catch (e) {
+        showToast('Connection error', 'error');
     }
 }
 
@@ -3964,24 +4839,29 @@ function renderSetsList() {
             </div>
         `;
         } else {
-            list.innerHTML = creatorSets.map(set => `
-            <div class="glass-panel rounded-2xl border border-white/5 p-6 hover:border-void-accent/30 transition-all cursor-pointer group" onclick="editSet('${set.id}')">
+            list.innerHTML = creatorSets.map(set => {
+                const escapedId = escapeHTML(set.id);
+                const escapedName = escapeHTML(set.name);
+                const escapedCode = escapeHTML(set.code || 'No code');
+                const escapedIcon = set.icon_url ? escapeHTML(set.icon_url) : null;
+                return `
+            <div class="glass-panel rounded-2xl border border-white/5 p-6 hover:border-void-accent/30 transition-all cursor-pointer group" onclick="editSet('${escapedId}')">
                 <div class="flex items-center gap-4 mb-3">
-                    ${set.icon_url ? `<img src="${set.icon_url}" alt="${set.name}" class="w-12 h-12 rounded-lg object-cover">` : '<div class="w-12 h-12 rounded-lg bg-void-accent/20 flex items-center justify-center text-xl"><i class="fa-solid fa-folder"></i></div>'}
+                    ${escapedIcon ? `<img src="${escapedIcon}" alt="${escapedName}" class="w-12 h-12 rounded-lg object-cover">` : '<div class="w-12 h-12 rounded-lg bg-void-accent/20 flex items-center justify-center text-xl"><i class="fa-solid fa-folder"></i></div>'}
                     <div class="flex-1 min-w-0">
-                        <h4 class="text-sm font-black text-void-text uppercase truncate">${set.name}</h4>
-                        <p class="text-[9px] text-void-muted">${set.code || 'No code'}</p>
+                        <h4 class="text-sm font-black text-void-text uppercase truncate">${escapedName}</h4>
+                        <p class="text-[9px] text-void-muted">${escapedCode}</p>
                     </div>
                 </div>
                 <div class="flex items-center justify-between">
-                    <span class="text-xs text-void-muted">${set.total_cards || 0} cards</span>
-                    <button onclick="event.stopPropagation(); deleteSet('${set.id}')" 
+                    <span class="text-xs text-void-muted">${parseInt(set.total_cards || 0)} cards</span>
+                    <button onclick="event.stopPropagation(); deleteSet('${escapedId}')" 
                         class="opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center text-red-500">
                         <i class="fa-solid fa-trash text-xs"></i>
                     </button>
                 </div>
             </div>
-        `).join('');
+        `;}).join('');
         }
     }
 
@@ -3989,23 +4869,28 @@ function renderSetsList() {
         if (creatorSets.length === 0) {
             managerList.innerHTML = '<p class="text-sm text-void-muted text-center py-8">No sets yet. Create your first set!</p>';
         } else {
-            managerList.innerHTML = creatorSets.map(set => `
+            managerList.innerHTML = creatorSets.map(set => {
+                const escapedId = escapeHTML(set.id);
+                const escapedName = escapeHTML(set.name);
+                const escapedCode = escapeHTML(set.code || '');
+                const escapedIcon = set.icon_url ? escapeHTML(set.icon_url) : null;
+                return `
             <div class="flex items-center gap-3 p-3 rounded-lg border border-white/5 hover:border-void-accent/30 transition-all">
-                ${set.icon_url ? `<img src="${set.icon_url}" alt="${set.name}" class="w-10 h-10 rounded object-cover">` : '<div class="w-10 h-10 rounded bg-void-accent/20 flex items-center justify-center text-lg">📁</div>'}
+                ${escapedIcon ? `<img src="${escapedIcon}" alt="${escapedName}" class="w-10 h-10 rounded object-cover">` : '<div class="w-10 h-10 rounded bg-void-accent/20 flex items-center justify-center text-lg">📁</div>'}
                 <div class="flex-1">
-                    <div class="text-sm font-black text-void-text">${set.name}</div>
-                    <div class="text-[9px] text-void-muted">${set.code} • ${set.total_cards || 0} cards</div>
+                    <div class="text-sm font-black text-void-text">${escapedName}</div>
+                    <div class="text-[9px] text-void-muted">${escapedCode} • ${parseInt(set.total_cards || 0)} cards</div>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="editSet('${set.id}')" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
+                    <button onclick="editSet('${escapedId}')" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
                         <i class="fa-solid fa-edit text-xs"></i>
                     </button>
-                    <button onclick="deleteSet('${set.id}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-all">
+                    <button onclick="deleteSet('${escapedId}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-all">
                         <i class="fa-solid fa-trash text-xs text-red-500"></i>
                     </button>
                 </div>
             </div>
-        `).join('');
+        `;}).join('');
         }
     }
 }
@@ -4766,6 +5651,8 @@ let analyticsData = {
 };
 
 async function loadAnalytics() {
+    await ensureChartJsLoaded();
+
     const timeRange = document.getElementById('analytics-time-range')?.value || '30';
 
     showToast("Loading analytics...", "loading");
@@ -6392,7 +7279,47 @@ window.previewGenesisImage = previewGenesisImage;
 window.copyWizardOBSUrl = copyWizardOBSUrl;
 window.autoCreateTwitchReward = autoCreateTwitchReward;
 
+/** Top nav: logged-in avatar, hide Initialize / Start Setup, show Dashboard tab for creators. Call from hub, profile, and dashboard. */
+function applyLoggedInSessionChrome() {
+    const navNick = document.getElementById('nav-username');
+    const navImg = document.getElementById('nav-avatar');
+    const navUser = document.getElementById('nav-user-preview');
+    const loginBtn = document.getElementById('login-nav-btn');
+    const navCreator = document.getElementById('nav-creator-btn');
+    const navRole = document.getElementById('nav-user-role');
+
+    if (!currentUser) {
+        if (navUser) {
+            navUser.classList.add('hidden');
+            navUser.classList.remove('flex');
+        }
+        if (loginBtn) loginBtn.classList.remove('hidden');
+        if (navCreator) navCreator.classList.add('hidden');
+        syncBuyPackButtonVisibility();
+        return;
+    }
+
+    if (navNick) navNick.textContent = currentUser.display_name || currentUser.name || 'Collector';
+    if (navImg) navImg.src = currentUser.avatar || '/assets/default-avatar.png';
+    if (navUser) {
+        navUser.classList.remove('hidden');
+        navUser.classList.add('flex');
+    }
+    if (loginBtn) loginBtn.classList.add('hidden');
+
+    const isCr = !!currentUser.is_creator;
+    if (navRole) navRole.textContent = isCr ? 'Creator' : 'Collector';
+    if (navCreator) {
+        if (isCr) navCreator.classList.remove('hidden');
+        else navCreator.classList.add('hidden');
+    }
+    syncBuyPackButtonVisibility();
+    if (typeof initNavUserMenu === 'function') initNavUserMenu();
+    if (typeof updateNavUserMenuLabels === 'function') updateNavUserMenuLabels();
+}
+
 async function showDashboard(initialView = null, bootstrapData = null, isSnap = false) {
+    dashboardBootstrapData = bootstrapData;
     const loginView = document.getElementById('login-view');
     if (loginView) loginView.style.display = 'none';
     const landing = document.getElementById('landing-view');
@@ -6422,18 +7349,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     const dashLoginView = document.getElementById('login-view');
     if (dashLoginView) dashLoginView.classList.add('hidden');
 
-    const navNick = document.getElementById('nav-username');
-    const navImg = document.getElementById('nav-avatar');
-    const navUser = document.getElementById('nav-user-preview');
-    const loginBtn = document.getElementById('login-nav-btn');
-
-    if (navNick) navNick.innerText = currentUser.name;
-    if (navImg) navImg.src = currentUser.avatar;
-    if (navUser) {
-        navUser.classList.remove('hidden');
-        navUser.classList.add('flex');
-    }
-    if (loginBtn) loginBtn.classList.add('hidden');
+    applyLoggedInSessionChrome();
 
 
     if (bootstrapData && bootstrapData.stats) {
@@ -6441,17 +7357,14 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
         const totalEl = document.getElementById('stat-total');
         const legendaryEl = document.getElementById('stat-legendary');
         const totalAvailEl = document.getElementById('stat-total-available');
-        if (totalEl) totalEl.innerText = stats.total;
-        if (legendaryEl) legendaryEl.innerText = stats.legendary;
-        if (totalAvailEl) totalAvailEl.innerText = stats.total_available;
-        totalUniqueCards = stats.total_available;
+        if (totalEl) totalEl.innerText = stats.total || 0;
+        if (legendaryEl) legendaryEl.innerText = stats.legendary || 0;
+        if (totalAvailEl) totalAvailEl.innerText = stats.total_available || 0;
+        totalUniqueCards = stats.total_available || 0;
     }
 
 
-    if (!localStorage.getItem('seen_onboarding_v1')) {
-        console.log("[Auth] New user detected, triggering onboarding...");
-        if (typeof openOnboarding === 'function') openOnboarding();
-    }
+    // Onboarding is handled by /onboarding.html redirects from initializeApp; do not send logged-in users to /onboarding from here.
 
     if (bootstrapData && bootstrapData.creator_cards) {
         creatorCards = bootstrapData.creator_cards;
@@ -6462,7 +7375,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
     }
 
 
-    if (currentUser.is_creator) {
+    if (currentUser && currentUser.is_creator) {
         const navCreatorBtn = document.getElementById('nav-creator-btn');
         if (navCreatorBtn) navCreatorBtn.classList.remove('hidden');
 
@@ -6478,46 +7391,49 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
         }
 
 
-        if (routeInfo.view === 'dashboard' || !routeInfo.view) {
-            loadOverviewData();
-        }
     }
 
 
 
 
 
-    const viewingOwnStreamer = routeInfo.slug && currentUser.name && routeInfo.slug.toLowerCase() === currentUser.name.toLowerCase();
-    const isCreator = currentUser.is_creator;
+    const isCreator = !!(currentUser && currentUser.is_creator);
 
+    // isSnap = background bootstrap refresh after cached first paint. Never reset the active tab/view —
+    // only refresh data below (syncCollectionFromRows, renderBinder, etc.).
     if (initialView) {
-        switchView(initialView);
-        if (initialView === 'creator-dashboard' && !isSnap) {
-            switchCreatorDashboardTab('overview');
-            loadOverviewData();
+        if (!isSnap) {
+            switchView(initialView);
+            if (initialView === 'creator-dashboard') {
+                switchCreatorDashboardTab('analytics');
+            }
+        }
+    } else if (routeInfo.view === 'dashboard') {
+        if (isCreator) {
+            if (!isSnap) {
+                switchView('creator-dashboard');
+                switchCreatorDashboardTab('analytics');
+            }
+        } else {
+            if (!isSnap) {
+                switchView('collection');
+                window.activeStreamerFilter = 'all';
+            }
+            if (!bootstrapData) {
+                fetchUserCollection();
+                fetchUserBinders();
+            } else {
+                fetchUserCollection(bootstrapData.recent_drops);
+                fetchUserBinders();
+            }
         }
     } else if (routeInfo.view === 'binder' && APP_STREAMER) {
-
-        switchView('collection');
-        window.activeStreamerFilter = null;
-        const pageInd = document.getElementById('page-indicator');
-        if (pageInd) pageInd.innerText = `${APP_STREAMER.brand_name || APP_STREAMER.username} Binder`;
-        if (!bootstrapData) {
-            fetchUserCollection();
-            fetchUserBinders();
-        } else {
-            fetchUserCollection(bootstrapData.recent_drops);
-            fetchUserBinders();
-        }
-    } else if (routeInfo.view === 'dashboard' && viewingOwnStreamer && isCreator) {
-        switchView('creator-dashboard');
         if (!isSnap) {
-            switchCreatorDashboardTab('overview');
-            loadOverviewData();
+            switchView('collection');
+            window.activeStreamerFilter = null;
+            const pageInd = document.getElementById('page-indicator');
+            if (pageInd) pageInd.innerText = `${APP_STREAMER.brand_name || APP_STREAMER.username} Binder`;
         }
-    } else if (routeInfo.view === 'dashboard' && routeInfo.slug && APP_STREAMER) {
-        switchView('collection');
-        window.activeStreamerFilter = null;
         if (!bootstrapData) {
             fetchUserCollection();
             fetchUserBinders();
@@ -6526,22 +7442,24 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
             fetchUserBinders();
         }
     } else if (routeInfo.view === 'battle') {
-        switchView('battle');
-    } else if (routeInfo.view === 'profile' && APP_STREAMER) {
-        populateProfileView();
-        switchView('profile');
-    } else {
-
-        if (APP_STREAMER) {
+        if (!isSnap) {
+            switchView('battle');
+        }
+    } else if (routeInfo.view === 'profile' && currentUser) {
+        if (!isSnap) {
             populateProfileView();
             switchView('profile');
-        } else if (currentUser.is_creator && !isSnap) {
-            switchView('creator-dashboard');
-            switchCreatorDashboardTab('overview');
-            loadOverviewData();
+        }
+    } else {
+        if (isCreator) {
+            if (!isSnap) {
+                switchView('creator-dashboard');
+                switchCreatorDashboardTab('analytics');
+            }
         } else {
-
-            switchView('collection');
+            if (!isSnap) {
+                switchView('collection');
+            }
             if (!bootstrapData) {
                 fetchUserCollection();
                 fetchUserBinders();
@@ -6551,45 +7469,38 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
 
 
     if (bootstrapData) {
-        if (bootstrapData.recent_drops) {
-
-            userCollection = bootstrapData.recent_drops.map(item => ({
-                id: item.card_id,
-                instanceId: item.user_card_id,
-                name: item.name,
-                rarity: item.rarity,
-                image_url: item.image_url,
-                type: item.type,
-                set_name: item.set_name || 'Ageless',
-                created_at: item.created_at,
-
-                attack: item.attack || 0,
-                defense: item.defense || 0,
-                max_hp: item.max_hp || 0,
-                current_hp: item.current_hp || 0,
-                mechanic_name: item.mechanic_name,
-                mechanic_display_name: item.mechanic_display_name,
-                mechanic_icon: item.mechanic_icon,
-                mechanic_description: item.mechanic_description,
-                is_dead: item.is_dead || false
-            }));
+        if (bootstrapData.recent_drops != null) {
+            syncCollectionFromRows(bootstrapData.recent_drops);
         }
 
         renderLeaderboard();
         achievementsData = bootstrapData.achievements || [];
         renderAchievements();
-        renderBinderList();
+        await renderBinderList();
         if (bootstrapData.active_streamers) {
             renderCreatorHub(bootstrapData.active_streamers);
         }
         renderRecentDrops?.();
         renderPrizedPossession?.();
+        await renderBinder();
     } else {
         await fetchLeaderboard();
         await fetchAchievements();
         fetchUserCollection();
     }
 
+    try {
+        if (!isSnap) {
+            const pending = sessionStorage.getItem(CASTLE_PENDING_SWITCH_VIEW_KEY);
+            const allowed = ['collection', 'leaderboard', 'trading', 'battle', 'profile', 'admin'];
+            if (pending && allowed.includes(pending)) {
+                sessionStorage.removeItem(CASTLE_PENDING_SWITCH_VIEW_KEY);
+                await switchView(pending);
+            }
+        }
+    } catch (e) { /* ignore */ }
+
+    syncBuyPackButtonVisibility();
     startPolling();
 }
 
@@ -6611,8 +7522,8 @@ function initButtons() {
     if (navLogin) {
         navLogin.onclick = (e) => {
             e.preventDefault();
-            console.log("[Buttons] Nav Get Started clicked");
-            window.openOnboarding();
+            console.log("[Buttons] Nav Sign in clicked");
+            window.location.href = '/login';
         };
     }
 
@@ -6628,6 +7539,7 @@ function initButtons() {
                 console.error('Logout failed', e);
             } finally {
                 localStorage.removeItem('user');
+                clearBootstrapSessionCaches();
                 window.location.reload();
             }
         };
@@ -7069,44 +7981,64 @@ async function loadSetProgress() {
     const focusedCard = document.getElementById('focused-set-card');
     const selector = document.getElementById('set-selector');
 
+    const streamerSlug = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
 
-    if (!allSets || allSets.length === 0) {
+    let catalogSets = [];
+
+    if (streamerSlug && streamerSlug !== 'all') {
         try {
-            const res = await fetch(`${BACKEND_URL}/api/sets`, {
-                credentials: 'include'
-            });
+            const res = await fetch(
+                `${BACKEND_URL}/api/sets?streamer=${encodeURIComponent(streamerSlug)}`,
+                { credentials: 'include' }
+            );
             if (res.ok) {
-                allSets = await res.json();
+                catalogSets = await res.json();
             }
         } catch (e) {
-            console.error("Failed to load sets for progress:", e);
+            console.error('Failed to load sets for progress:', e);
         }
+        const byName = new Map((catalogSets || []).map((s) => [s.name, s]));
+        const namesFromCards = [...new Set(userCollection.map((c) => c.set_name || 'Ageless'))];
+        for (const name of namesFromCards) {
+            if (!byName.has(name)) {
+                byName.set(name, { name, total_cards: 0 });
+            }
+        }
+        catalogSets = Array.from(byName.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } else {
+        const names = [...new Set(userCollection.map((c) => c.set_name || 'Ageless'))].sort();
+        catalogSets = names.map((name) => ({ name, total_cards: 0 }));
     }
 
-    if (!allSets || allSets.length === 0) {
-        if (dropdown) dropdown.innerHTML = '<option value="all">No sets found</option>';
+    window.__binderCatalogSetNames = (catalogSets || []).map((s) => s.name).filter(Boolean);
+
+    if (!catalogSets || catalogSets.length === 0) {
+        if (dropdown) dropdown.innerHTML = '<option value="all">All sets</option>';
         if (focusedCard) focusedCard.classList.add('hidden');
-        if (selector) selector.innerHTML = '';
+        if (selector) {
+            selector.innerHTML = `
+                <p class="text-[10px] text-void-muted font-bold py-2 px-4 rounded-full border border-white/5 bg-white/[0.02] max-w-md">
+                    No sets to show yet — collect cards or open a creator&apos;s binder.
+                </p>`;
+        }
         return;
     }
 
-
     const userCardsBySet = {};
-    const uniqueOwnedCards = Array.from(new Set(userCollection.map(c => c.id)));
+    const uniqueOwnedCards = Array.from(new Set(userCollection.map((c) => c.id)));
 
-    uniqueOwnedCards.forEach(cardId => {
-        const card = userCollection.find(c => c.id === cardId);
+    uniqueOwnedCards.forEach((cardId) => {
+        const card = userCollection.find((c) => c.id === cardId);
         if (card) {
             const setName = card.set_name || 'Ageless';
             userCardsBySet[setName] = (userCardsBySet[setName] || 0) + 1;
         }
     });
 
-
-    const progress = allSets.map(set => {
+    const progress = catalogSets.map((set) => {
         const owned = userCardsBySet[set.name] || 0;
-        const total = set.total_cards || owned || 1;
-        const percentage = total > 0 ? Math.round((owned / total) * 100) : 0;
+        const total = Math.max(set.total_cards || 0, owned, 1);
+        const percentage = total > 0 ? Math.min(100, Math.round((owned / total) * 100)) : 0;
         return { set, owned, total, percentage };
     });
 
@@ -7115,13 +8047,17 @@ async function loadSetProgress() {
         if (dropdown) {
             const currentVal = activeSetFilter;
             let dropdownHtml = '<option value="all">All Sets</option>';
-            dropdownHtml += progress.map(p => `
-                    <option value="${p.set.name}" ${currentVal === p.set.name ? 'selected' : ''}>
-                        ${p.set.name} (${p.percentage}%)
-                    </option>
-                `).join('');
+            dropdownHtml += progress.map((p) => {
+                const safeVal = encodeURIComponent(p.set.name);
+                const sel = currentVal === p.set.name ? ' selected' : '';
+                return `<option value="${safeVal}"${sel}>${escapeHTML(p.set.name)} (${p.percentage}%)</option>`;
+            }).join('');
             dropdown.innerHTML = dropdownHtml;
-            dropdown.value = activeSetFilter;
+            dropdown.value = activeSetFilter === 'all' ? 'all' : encodeURIComponent(activeSetFilter);
+            dropdown.onchange = (e) => {
+                const v = e.target.value;
+                filterBySet(v === 'all' ? 'all' : decodeURIComponent(v));
+            };
         }
 
 
@@ -7147,10 +8083,10 @@ async function loadSetProgress() {
                         <div class="mb-4">
                             <div class="text-[10px] text-void-accent font-bold uppercase tracking-widest mb-3">Overall Progress</div>
                             <div class="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                ${progress.map(p => `
+                                ${progress.map((p) => `
                                     <div>
                                         <div class="flex justify-between items-center mb-1.5">
-                                            <span class="text-[10px] font-bold text-gray-300 truncate mr-2">${p.set.name}</span>
+                                            <span class="text-[10px] font-bold text-gray-300 truncate mr-2">${escapeHTML(p.set.name)}</span>
                                             <span class="text-[10px] font-bold text-void-accent">${p.owned}/${p.total}</span>
                                         </div>
                                         <div class="w-full bg-white/5 rounded-full h-1 overflow-hidden">
@@ -7169,7 +8105,7 @@ async function loadSetProgress() {
                             <div class="flex justify-between items-start mb-3">
                                 <div>
                                     <div class="text-[10px] text-void-accent/40 font-bold uppercase tracking-wider mb-0.5">Focusing On</div>
-                                    <div class="text-white font-bold leading-tight">${p.set.name}</div>
+                                    <div class="text-white font-bold leading-tight">${escapeHTML(p.set.name)}</div>
                                 </div>
                                 <div class="text-right">
                                     <div class="text-white font-bold">${p.owned}/${p.total}</div>
@@ -7193,32 +8129,47 @@ async function loadSetProgress() {
 
         if (selector) {
             const allActive = activeSetFilter === 'all';
-            let selectorHtml = `
-                    <div class="set-chip ${allActive ? 'active' : ''}" onclick="filterBySet('all')">
-                        <div class="text-xs font-bold">All Sets</div>
-                        <div class="text-[10px] text-gray-500">${totalUniqueCards} Cards</div>
-                    </div>
-                `;
+            const uniqueCount = typeof uniqueCards !== 'undefined' ? uniqueCards.length : 0;
+            const pillBase =
+                'group flex flex-col justify-center w-full min-h-0 rounded-lg px-2 py-1.5 text-left transition-all cursor-pointer';
+            const pillIdle = 'border border-transparent bg-white/[0.06] hover:bg-white/[0.09]';
+            const pillActive = 'border border-void-accent bg-white/[0.06]';
 
-            selectorHtml += progress.map(p => `
-                    <div class="set-chip ${activeSetFilter === p.set.name ? 'active' : ''}" onclick="filterBySet('${p.set.name}')">
-                        <div class="flex-1 min-w-0">
-                            <div class="text-xs font-bold truncate">${p.set.name}</div>
-                            <div class="set-chip-progress mt-1">
-                                <div class="set-chip-progress-fill" style="width: ${p.percentage}%"></div>
-                            </div>
-                        </div>
-                        <div class="text-[10px] font-bold text-gray-400">${p.percentage}%</div>
+            let selectorHtml = `
+                <button type="button" data-binder-set="all" title="All sets"
+                    class="${pillBase} ${allActive ? pillActive : pillIdle}"
+                    aria-pressed="${allActive}">
+                    <div class="flex items-center justify-between gap-1 w-full min-w-0">
+                        <span class="text-[9px] font-bold text-white tracking-tight truncate leading-tight">All</span>
+                        <span class="text-[8px] font-medium text-white/45 shrink-0 leading-none">${uniqueCount}</span>
                     </div>
-                `).join('');
+                </button>`;
+
+            selectorHtml += progress.map((p) => {
+                const active = activeSetFilter === p.set.name;
+                const key = encodeURIComponent(p.set.name);
+                const safeTitle = String(p.set.name).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                return `
+                <button type="button" data-binder-set="${key}" title="${safeTitle}"
+                    class="${pillBase} ${active ? pillActive : pillIdle}"
+                    aria-pressed="${active}">
+                    <div class="flex items-start justify-between gap-1 w-full mb-1 min-w-0">
+                        <span class="text-[9px] font-bold text-white tracking-tight line-clamp-2 leading-tight">${escapeHTML(p.set.name)}</span>
+                        <span class="text-[8px] font-medium text-white/45 shrink-0 leading-none">${p.percentage}%</span>
+                    </div>
+                    <div class="h-1 w-full rounded-[2px] bg-white/10 overflow-hidden">
+                        <div class="h-full rounded-[2px] bg-void-accent" style="width: ${p.percentage}%"></div>
+                    </div>
+                </button>`;
+            }).join('');
 
             selector.innerHTML = selectorHtml;
 
-
-            const activeChip = selector.querySelector('.set-chip.active');
-            if (activeChip) {
-                activeChip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-            }
+            const targetKey = activeSetFilter === 'all' ? 'all' : encodeURIComponent(activeSetFilter);
+            const scrollBtn = Array.from(selector.querySelectorAll('[data-binder-set]')).find(
+                (b) => b.getAttribute('data-binder-set') === targetKey
+            );
+            if (scrollBtn) scrollBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
         }
     } catch (err) {
         console.error("Set progress calculation error:", err);
@@ -7240,11 +8191,13 @@ window.filterBySet = (setName) => {
     }
 
     const sidebarDropdown = document.getElementById('set-progress-dropdown');
-    if (sidebarDropdown) sidebarDropdown.value = setName;
+    if (sidebarDropdown) {
+        sidebarDropdown.value = setName === 'all' ? 'all' : encodeURIComponent(setName);
+    }
 
     currentPage = 1;
     loadSetProgress();
-    renderBinder();
+    void renderBinder();
 };
 
 
@@ -7276,11 +8229,11 @@ function renderAchievements() {
             <div class="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center text-lg ${ach.unlocked
                 ? 'bg-[rgba(var(--void-accent-rgb),0.12)] text-void-accent/90'
                 : 'bg-white/5 text-void-muted'}">
-                ${ach.unlocked ? `<span class="achievement-icon">${ach.icon || '🏆'}</span>` : '<i class="fa-solid fa-lock text-[12px]"></i>'}
+                ${ach.unlocked ? `<span class="achievement-icon">${escapeHTML(ach.icon || '🏆')}</span>` : '<i class="fa-solid fa-lock text-[12px]"></i>'}
             </div>
             <div class="flex-1 min-w-0">
-                <div class="text-[11px] font-black uppercase tracking-widest ${ach.unlocked ? 'text-void-text' : 'text-void-muted'} truncate">${ach.name}</div>
-                <div class="text-[9px] text-void-muted/80 mt-1 leading-relaxed">${ach.description}</div>
+                <div class="text-[11px] font-black uppercase tracking-widest ${ach.unlocked ? 'text-void-text' : 'text-void-muted'} truncate">${escapeHTML(ach.name)}</div>
+                <div class="text-[9px] text-void-muted/80 mt-1 leading-relaxed">${escapeHTML(ach.description)}</div>
             </div>
             ${ach.unlocked ? '<div class="shrink-0 w-9 h-9 rounded-full grid place-items-center bg-void-accent/20 text-void-accent text-lg font-bold leading-none">✓</div>' : ''}
         </div>
@@ -7513,10 +8466,15 @@ const grantCardForm = document.getElementById('grant-card-form');
 if (grantCardForm) {
     grantCardForm.onsubmit = async (e) => {
         e.preventDefault();
+        const recipientEl =
+            document.getElementById('grant-username') ||
+            document.getElementById('grant-castle-code-input') ||
+            document.getElementById('grant-username-input');
+        const recipientRaw = recipientEl ? String(recipientEl.value || '').trim() : '';
         const payload = {
-            username: document.getElementById('grant-username').value,
+            username: recipientRaw,
             card_id: document.getElementById('grant-card-id').value,
-            quantity: parseInt(document.getElementById('grant-quantity').value)
+            quantity: parseInt(document.getElementById('grant-quantity').value, 10)
         };
 
         try {
@@ -7532,7 +8490,7 @@ if (grantCardForm) {
 
             if (res.ok) {
                 const data = await res.json();
-                showToast(`Granted ${data.count} card(s) to ${payload.username}`, "success");
+                showToast(`Granted ${data.count} card(s) to ${recipientRaw || 'recipient'}`, "success");
                 e.target.reset();
             } else {
                 const errorData = await res.json();
@@ -7558,6 +8516,13 @@ async function fetchUserCollection(initialData = null) {
             return;
         }
 
+        if (Array.isArray(initialData)) {
+            syncCollectionFromRows(initialData);
+            await renderBinderList();
+            await renderBinder();
+            renderRecentDrops();
+            renderPrizedPossession();
+        }
 
         if (!initialData) {
             showSkeletonCards();
@@ -7576,6 +8541,8 @@ async function fetchUserCollection(initialData = null) {
                 image_url: item.image_url,
                 type: item.type,
                 set_name: item.set_name || 'Ageless',
+                description: item.description,
+                card_number: item.card_number,
                 created_at: item.created_at,
 
                 attack: item.attack || 0,
@@ -7596,9 +8563,9 @@ async function fetchUserCollection(initialData = null) {
             if (userCollection.length > 0) lastCardId = userCollection[0].instanceId;
 
             stackCards();
-            renderBinderList();
             updateSetFilter();
-            renderBinder();
+            await renderBinderList();
+            await renderBinder();
             renderRecentDrops();
             renderPrizedPossession();
             loadSetProgress();
@@ -7856,6 +8823,9 @@ function renderLeaderboard() {
         const rankColor = rankColors[index] || 'text-void-muted';
         const rankIcon = ['🥇', '🥈', '🥉'][index] || `#${index + 1}`;
 
+        const username = escapeHTML(user.username);
+        const avatarUrl = escapeHTML(user.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user.username}`);
+
         return `
                 <div class="p-6 rounded-[2.5rem] bg-void-bg border border-white/5 void-shadow flex items-center gap-6 ${isCurrentUser ? 'ring-2 ring-void-accent/20' : ''}">
                     <div class="w-12 text-center flex-shrink-0">
@@ -7863,7 +8833,7 @@ function renderLeaderboard() {
                     </div>
                     
                     <div class="relative flex-shrink-0">
-                        <img src="${user.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user.username}`}" 
+                        <img src="${avatarUrl}" 
                              class="w-16 h-16 rounded-[1.5rem] border-2 border-void-bg void-shadow">
                         ${isCurrentUser ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-void-accent rounded-full border-2 border-void-bg flex items-center justify-center"><i class="fa-solid fa-user text-[8px] text-void-bg"></i></div>' : ''}
                     </div>
@@ -7871,7 +8841,7 @@ function renderLeaderboard() {
                     <div class="flex-1 min-w-0 pr-6 border-r border-white/5">
                         <div class="text-[10px] font-black text-void-muted uppercase tracking-[0.2em] mb-1">Collector</div>
                         <div class="font-bold text-void-text truncate text-xl uppercase italic">
-                            ${user.username}
+                            ${username}
                             ${isCurrentUser ? '<span class="ml-2 text-[8px] bg-void-accent text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">YOU</span>' : ''}
                         </div>
                     </div>
@@ -7879,11 +8849,11 @@ function renderLeaderboard() {
                     <div class="flex gap-8 text-center">
                         <div class="flex flex-col">
                             <span class="text-[9px] text-void-muted font-black uppercase tracking-[0.2em]">Inventory</span>
-                            <span class="text-void-text font-bold text-2xl leading-tight italic">${user.total_cards}</span>
+                            <span class="text-void-text font-bold text-2xl leading-tight italic">${parseInt(user.total_cards)}</span>
                         </div>
                         <div class="flex flex-col">
                             <span class="text-[9px] text-void-accent/60 font-black uppercase tracking-[0.2em]">Mythic</span>
-                            <span class="text-void-accent font-bold text-2xl leading-tight italic">${user.legendary_count || 0}</span>
+                            <span class="text-void-accent font-bold text-2xl leading-tight italic">${parseInt(user.legendary_count || 0)}</span>
                         </div>
                     </div>
                 </div>
@@ -7913,6 +8883,9 @@ function renderBattlesLeaderboard() {
         const rankColor = rankColors[index] || 'text-void-muted';
         const rankIcon = ['⚔️', '🥈', '🥉'][index] || `#${index + 1}`;
 
+        const username = escapeHTML(user.username);
+        const avatarUrl = escapeHTML(user.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user.username}`);
+
         return `
                 <div class="p-6 rounded-[2.5rem] bg-void-bg border border-white/5 void-shadow flex items-center gap-6 ${isCurrentUser ? 'ring-2 ring-void-accent/20' : ''}">
                     <div class="w-12 text-center flex-shrink-0">
@@ -7920,7 +8893,7 @@ function renderBattlesLeaderboard() {
                     </div>
                     
                     <div class="relative flex-shrink-0">
-                        <img src="${user.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user.username}`}" 
+                        <img src="${avatarUrl}" 
                              class="w-16 h-16 rounded-[1.5rem] border-2 border-void-bg void-shadow">
                         ${isCurrentUser ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-void-accent rounded-full border-2 border-void-bg flex items-center justify-center"><i class="fa-solid fa-user text-[8px] text-void-bg"></i></div>' : ''}
                     </div>
@@ -7928,7 +8901,7 @@ function renderBattlesLeaderboard() {
                     <div class="flex-1 min-w-0 pr-6 border-r border-white/5">
                         <div class="text-[10px] font-black text-void-muted uppercase tracking-[0.2em] mb-1">Combatant</div>
                         <div class="font-bold text-void-text truncate text-xl uppercase italic">
-                            ${user.username}
+                            ${username}
                             ${isCurrentUser ? '<span class="ml-2 text-[8px] bg-void-accent text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">YOU</span>' : ''}
                         </div>
                     </div>
@@ -7936,11 +8909,11 @@ function renderBattlesLeaderboard() {
                     <div class="flex gap-8 text-center">
                         <div class="flex flex-col">
                             <span class="text-[9px] text-void-muted font-black uppercase tracking-[0.2em]">Victory</span>
-                            <span class="text-void-accent font-bold text-2xl leading-tight italic">${user.wins}</span>
+                            <span class="text-void-accent font-bold text-2xl leading-tight italic">${parseInt(user.wins)}</span>
                         </div>
                         <div class="flex flex-col">
                             <span class="text-[9px] text-void-muted font-black uppercase tracking-[0.2em]">Defeat</span>
-                            <span class="text-void-text font-bold text-2xl leading-tight italic opacity-40">${user.losses || 0}</span>
+                            <span class="text-void-text font-bold text-2xl leading-tight italic opacity-40">${parseInt(user.losses || 0)}</span>
                         </div>
                     </div>
                 </div>
@@ -7951,14 +8924,45 @@ function renderBattlesLeaderboard() {
 
 
 
+const CASTLE_PENDING_SWITCH_VIEW_KEY = 'castle_pending_switch_view';
+
+function isHubPathname() {
+    return /^\/hub(\/|$)/.test(window.location.pathname);
+}
+
+/** Resolve a /binder/:slug target when leaving /hub so the URL matches the binder UI (avoids hub URL + collection view mismatch). */
+function resolveBinderSlugForHubExit() {
+    const u = typeof currentUser !== 'undefined' ? currentUser : null;
+    const s =
+        (u && u.streamer && u.streamer.username) ||
+        (typeof APP_STREAMER !== 'undefined' && APP_STREAMER && APP_STREAMER.username) ||
+        (u && u.name) ||
+        '';
+    return String(s || '').trim();
+}
+
 async function switchView(viewName) {
     const views = ['collection', 'leaderboard', 'trading', 'admin', 'profile', 'creator-dashboard', 'battle'];
 
+    const leaveHubFor = ['collection', 'leaderboard', 'trading', 'battle', 'profile', 'admin'];
+    if (isHubPathname() && leaveHubFor.includes(viewName)) {
+        const slug = resolveBinderSlugForHubExit();
+        if (slug) {
+            try {
+                sessionStorage.setItem(CASTLE_PENDING_SWITCH_VIEW_KEY, viewName);
+            } catch (e) { /* ignore */ }
+            window.location.href = `/binder/${encodeURIComponent(slug)}`;
+            return;
+        }
+    }
 
     if (viewName === 'creator-dashboard' && !document.getElementById('creator-dashboard-view')) {
         await loadView('creator-dashboard');
     }
 
+    if (viewName === 'profile' && !document.getElementById('profile-view')) {
+        await loadView('viewer-dashboard');
+    }
 
     const dashboardView = document.getElementById('dashboard-view');
     const hubView = document.getElementById('hub-view');
@@ -8017,16 +9021,16 @@ async function switchView(viewName) {
     }
 
 
-    if (viewName === 'collection') renderBinder();
+    if (viewName === 'collection') await renderBinder();
     if (viewName === 'leaderboard') renderLeaderboard();
     if (viewName === 'trading') renderTradingHub();
-    if (viewName === 'creator-dashboard') loadOverviewData();
+    if (viewName === 'creator-dashboard') loadAnalytics();
     if (viewName === 'admin') refreshAdminPanel();
     if (viewName === 'profile') populateProfileView();
 
 
-    if (bootstrapData) {
-        updateOverviewStats(bootstrapData.stats);
+    if (dashboardBootstrapData && dashboardBootstrapData.stats) {
+        updateOverviewStats(dashboardBootstrapData.stats);
     }
 
 
@@ -8089,27 +9093,28 @@ async function renderBattleDashboard() {
     if (typeof loadCollections === 'function') loadCollections();
 }
 fetchCreatorCards();
-switchCreatorTab('overview');
+switchCreatorTab('analytics');
 
 
 
 async function fetchUserBinders() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/binders`, { credentials: 'include' });
+        const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+        const url = filterParam ? `${BACKEND_URL}/api/binders?streamer=${filterParam}` : `${BACKEND_URL}/api/binders`;
+        const res = await fetch(url, { credentials: 'include' });
         if (res.ok) {
             userBinders = await res.json();
-            renderBinderList();
-            
+            await renderBinderList();
 
             if (activeBinderId !== 'all') {
                 const found = userBinders.find(b => b.id === activeBinderId);
                 if (!found) {
-                    switchBinder('all');
+                    await switchBinder('all');
                 } else {
-                    renderBinder();
+                    await renderBinder();
                 }
             } else {
-                renderBinder();
+                await renderBinder();
             }
         }
     } catch (err) {
@@ -8117,7 +9122,7 @@ async function fetchUserBinders() {
     }
 }
 
-function renderBinderList() {
+async function renderBinderList() {
     const list = document.getElementById('binder-list');
     if (!list) return;
 
@@ -8138,11 +9143,11 @@ function renderBinderList() {
         const count = binder.user_binder_cards?.length || 0;
         return `
             <div class="binder-page-item group ${activeBinderId === binder.id ? 'active' : ''}" style="display:flex;align-items:center;gap:8px">
-                <div onclick="switchBinder('${binder.id}')" style="flex:1;min-width:0;cursor:pointer">
-                    <div class="text-[11px] font-black text-void-text uppercase tracking-widest truncate">${binder.name}</div>
-                    <div class="text-[9px] text-void-muted uppercase font-bold mt-0.5">${count} items</div>
+                <div onclick="switchBinder('${escapeHTML(binder.id)}')" style="flex:1;min-width:0;cursor:pointer">
+                    <div class="text-[11px] font-black text-void-text uppercase tracking-widest truncate">${escapeHTML(binder.name)}</div>
+                    <div class="text-[9px] text-void-muted uppercase font-bold mt-0.5">${parseInt(count)} items</div>
                 </div>
-                <button onclick="event.stopPropagation();deleteBinder('${binder.id}')"
+                <button onclick="event.stopPropagation();deleteBinder('${escapeHTML(binder.id)}')"
                     title="Delete binder"
                     style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:transparent;border:1px solid transparent;color:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;transition:all 0.2s;cursor:pointer"
                     onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.borderColor='rgba(239,68,68,0.3)';this.style.color='rgba(239,68,68,0.8)'"
@@ -8156,7 +9161,7 @@ function renderBinderList() {
     list.innerHTML = allItem + customItems;
 
 
-    initBinderSortable();
+    await initBinderSortable();
 }
 
 function toggleBinderRearrange() {
@@ -8236,7 +9241,9 @@ async function confirmRenameBinder() {
     if (newName === currentBinder?.name) return hideRenameBinderModal();
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/binders`, {
+        const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+        const url = filterParam ? `${BACKEND_URL}/api/binders?streamer=${filterParam}` : `${BACKEND_URL}/api/binders`;
+        const res = await fetch(url, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
@@ -8250,7 +9257,7 @@ async function confirmRenameBinder() {
             showToast("Binder renamed!", "success");
             hideRenameBinderModal();
             await fetchUserBinders();
-            renderBinder();
+            await renderBinder();
         } else {
             const err = await res.json();
             showToast(err.error || "Failed to rename", "error");
@@ -8261,7 +9268,8 @@ async function confirmRenameBinder() {
 }
 
 let binderSortable = null;
-function initBinderSortable() {
+async function initBinderSortable() {
+    await ensureSortableLoaded();
     const list = document.getElementById('binder-list');
     if (!list) return;
 
@@ -8282,7 +9290,9 @@ function initBinderSortable() {
             });
 
             try {
-                await fetch(`${BACKEND_URL}/api/binders/sort`, {
+                const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+                const url = filterParam ? `${BACKEND_URL}/api/binders/sort?streamer=${filterParam}` : `${BACKEND_URL}/api/binders/sort`;
+                await fetch(url, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
@@ -8305,7 +9315,8 @@ function initBinderSortable() {
 }
 
 let cardSortable = null;
-function initCardSortable() {
+async function initCardSortable() {
+    await ensureSortableLoaded();
     const grid = document.getElementById('binder-grid');
     if (!grid) return;
 
@@ -8339,7 +9350,9 @@ function initCardSortable() {
 
             if (updates.length > 0) {
                 try {
-                    await fetch(`${BACKEND_URL}/api/binders/cards/sort`, {
+                    const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+                    const url = filterParam ? `${BACKEND_URL}/api/binders/cards/sort?streamer=${filterParam}` : `${BACKEND_URL}/api/binders/cards/sort`;
+                    await fetch(url, {
                         method: 'PATCH',
                         headers: {
                             'Content-Type': 'application/json',
@@ -8390,7 +9403,7 @@ async function removeCardFromBinder(instanceId) {
                 if (res.ok) {
                     showToast("Card removed!", "success");
                     await fetchUserBinders();
-                    renderBinder();
+                    await renderBinder();
                 } else {
                     const err = await res.json();
                     showToast(err.error || "Failed to remove card", "error");
@@ -8503,6 +9516,7 @@ async function shareBinderPage() {
 
         document.getElementById('share-preview-container').innerHTML = '';
 
+        await ensureHtml2CanvasLoaded();
         const canvas = await html2canvas(captureTarget, {
             backgroundColor: '#050807',
             scale: 2,
@@ -8597,7 +9611,9 @@ async function submitCreateBinder() {
     }
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/binders`, {
+        const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+        const url = filterParam ? `${BACKEND_URL}/api/binders?streamer=${filterParam}` : `${BACKEND_URL}/api/binders`;
+        const res = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -8632,7 +9648,9 @@ async function deleteBinder(id) {
         iconBorder: "border-red-500/20",
         onConfirm: async () => {
             try {
-                const res = await fetch(`${BACKEND_URL}/api/binders?id=${id}`, {
+                const filterParam = window.activeStreamerFilter || (APP_STREAMER ? APP_STREAMER.username : null);
+                const url = filterParam ? `${BACKEND_URL}/api/binders?id=${id}&streamer=${filterParam}` : `${BACKEND_URL}/api/binders?id=${id}`;
+                const res = await fetch(url, {
                     method: 'DELETE',
                     headers: { 'X-CSRF-Token': csrfToken },
                     credentials: 'include'
@@ -8653,7 +9671,7 @@ async function deleteBinder(id) {
 
 
 
-function switchBinder(id) {
+async function switchBinder(id) {
     activeBinderId = id;
     localStorage.setItem('activeBinderId', id);
     currentPage = 1;
@@ -8691,8 +9709,8 @@ function switchBinder(id) {
 
     console.log(`Switching to binder: ${id}`);
 
-    renderBinderList();
-    renderBinder();
+    await renderBinderList();
+    await renderBinder();
 }
 
 
@@ -8827,7 +9845,7 @@ async function confirmAddCards() {
             showToast(`Added ${modalSelectedCardIds.size} cards to binder`, "success");
             hideAddCardsToBinderModal();
             await fetchUserBinders();
-            renderBinder();
+            await renderBinder();
         } else {
             const err = await res.json();
             showToast(err.error || "Failed to add cards", "error");
@@ -8838,9 +9856,114 @@ async function confirmAddCards() {
 }
 
 
+/** One binder stack per card template; trait variants are combined into count and listed in the card detail modal. */
 function getStackKey(card) {
-    const mechanicPart = card.mechanic_id || card.mechanic_name || 'none';
-    return `${card.id}|${mechanicPart}`;
+    return String(card.id);
+}
+
+/** Stable key for grouping owned copies of the same card by genesis + mechanic combo. */
+function traitVariantKey(c) {
+    const m = String(c.mechanic_id || c.mechanic_name || '').trim();
+    const g = String(c.genesis_mechanic_name || '').trim();
+    return `${m || '__none__'}|${g || '__none__'}`;
+}
+
+function formatTraitVariantLabel(c) {
+    const gen = (c.genesis_mechanic_display_name || c.genesis_mechanic_name || '').trim();
+    const mech = (c.mechanic_display_name || c.mechanic_name || '').trim();
+    const parts = [];
+    if (gen) parts.push(gen);
+    if (mech) parts.push(mech);
+    if (parts.length === 0) return 'Base (no traits)';
+    return parts.join(' · ');
+}
+
+/** Single trait line in card detail modal; optional description shown on hover (large icon + explanation). */
+function htmlCardDetailTraitRow(iconToken, label, description) {
+    const desc = description != null && String(description).trim() ? String(description).trim() : '';
+    const bigIcon = htmlMechanicIcon(iconToken, 'card-detail-trait-tooltip-icon-img');
+    const tip = desc
+        ? `<div class="card-detail-trait-tooltip" role="tooltip">
+                    <div class="card-detail-trait-tooltip-inner">
+                        <div class="card-detail-trait-tooltip-icon-wrap" aria-hidden="true">${bigIcon}</div>
+                        <p class="card-detail-trait-tooltip-body">${escapeHTML(desc)}</p>
+                    </div>
+                </div>`
+        : '';
+    const tippable = desc ? ' card-detail-trait-row-line--tippable' : '';
+    const tab = desc ? ' tabindex="0"' : '';
+    return `<div class="card-detail-trait-row-line${tippable}"${tab}>
+                    <span class="card-detail-trait-icon" aria-hidden="true">${htmlMechanicIcon(iconToken, 'card-detail-trait-icon-img')}</span>
+                    <span class="card-detail-trait-title">${escapeHTML(label)}</span>
+                    ${tip}
+                </div>`;
+}
+
+/** Modal trait row: genesis + mechanic share one box; "Genesis {name}" then optional second line for normal trait. */
+function htmlCardDetailTraitVariant(sample, n) {
+    const genName = (sample.genesis_mechanic_display_name || sample.genesis_mechanic_name || '').trim();
+    const mechName = (sample.mechanic_display_name || sample.mechanic_name || '').trim();
+    const genDesc = (sample.genesis_mechanic_description || '').trim();
+    const mechDesc = (sample.mechanic_description || '').trim();
+    const countStr = `×${parseInt(n, 10)}`;
+
+    if (genName) {
+        const genIcon = sample.genesis_mechanic_icon || '✨';
+        const genTitle = `Genesis ${genName}`;
+        let stackInner = `
+            <div class="card-detail-trait-stack">
+                ${htmlCardDetailTraitRow(genIcon, genTitle, genDesc)}`;
+        if (mechName) {
+            const mIcon = sample.mechanic_icon || '⚙️';
+            stackInner += `
+                <div class="card-detail-trait-row-divider" aria-hidden="true"></div>
+                ${htmlCardDetailTraitRow(mIcon, mechName, mechDesc)}`;
+        }
+        stackInner += '</div>';
+        return `
+        <div class="card-detail-variant-group">
+            <div class="card-detail-variant-boxes">
+                <div class="card-detail-trait-box card-detail-trait-box--genesis-combo">${stackInner}</div>
+            </div>
+            <span class="card-detail-variant-count">${countStr}</span>
+        </div>`;
+    }
+
+    if (mechName) {
+        const icon = sample.mechanic_icon || '⚙️';
+        const inner = htmlCardDetailTraitRow(icon, mechName, mechDesc);
+        return `
+        <div class="card-detail-variant-group">
+            <div class="card-detail-variant-boxes">
+                <div class="card-detail-trait-box card-detail-trait-box--mech">
+                    <div class="card-detail-trait-box-inner card-detail-trait-box-inner--stack">${inner}</div>
+                </div>
+            </div>
+            <span class="card-detail-variant-count">${countStr}</span>
+        </div>`;
+    }
+
+    return `
+        <div class="card-detail-variant-group">
+            <div class="card-detail-variant-boxes">
+                <div class="card-detail-trait-box card-detail-trait-box--base">
+                    <div class="card-detail-trait-box-inner">
+                        <span class="card-detail-trait-title card-detail-trait-title--muted">Standard copy</span>
+                    </div>
+                </div>
+            </div>
+            <span class="card-detail-variant-count">${countStr}</span>
+        </div>`;
+}
+
+/** Card back art for binder detail flip (streamer default or shipped asset). */
+function resolveCardBackUrl() {
+    const s = typeof APP_STREAMER !== 'undefined' ? APP_STREAMER : null;
+    if (!s) return '/Castle_Default_Cardback.png';
+    const st = s.settings || {};
+    const url = s.card_back_url || st.global_card_back_url || st.card_back_url;
+    if (url && String(url).trim()) return String(url).trim();
+    return '/Castle_Default_Cardback.png';
 }
 
 function stackCards() {
@@ -8859,26 +9982,72 @@ function stackCards() {
     uniqueCards = Array.from(cardMap.values());
 }
 
+/** Map API / bootstrap card row → userCollection entry, then rebuild stacked unique cards (renderBinder depends on this). */
+function syncCollectionFromRows(rows) {
+    if (!Array.isArray(rows)) return;
+    userCollection = rows.map((item) => ({
+        id: item.card_id,
+        instanceId: item.user_card_id,
+        name: item.name,
+        rarity: item.rarity,
+        image_url: item.image_url,
+        type: item.type,
+        set_name: item.set_name || 'Ageless',
+        description: item.description,
+        card_number: item.card_number,
+        created_at: item.created_at,
+        attack: item.attack || 0,
+        defense: item.defense || 0,
+        max_hp: item.max_hp || 0,
+        current_hp: item.current_hp || 0,
+        mechanic_id: item.mechanic_id,
+        mechanic_name: item.mechanic_name,
+        mechanic_display_name: item.mechanic_display_name,
+        mechanic_icon: item.mechanic_icon,
+        mechanic_description: item.mechanic_description,
+        genesis_mechanic_name: item.genesis_mechanic_name,
+        genesis_mechanic_display_name: item.genesis_mechanic_display_name,
+        genesis_mechanic_icon: item.genesis_mechanic_icon,
+        genesis_mechanic_description: item.genesis_mechanic_description,
+        is_dead: item.is_dead || false
+    }));
+    if (userCollection.length > 0) lastCardId = userCollection[0].instanceId;
+    stackCards();
+    updateSetFilter();
+}
+
 
 function updateSetFilter() {
     const filterInfo = document.getElementById('set-filter');
     if (!filterInfo) return;
 
-
-    const sets = new Set(uniqueCards.map(c => c.set_name));
-
+    const sets = new Set(uniqueCards.map((c) => c.set_name));
+    if (Array.isArray(window.__binderCatalogSetNames)) {
+        window.__binderCatalogSetNames.forEach((n) => sets.add(n));
+    }
+    if (activeSetFilter && activeSetFilter !== 'all') {
+        sets.add(activeSetFilter);
+    }
 
     const current = filterInfo.value;
 
-    let html = '<option value="all">All Sets</option>';
-    [...sets].sort().forEach(set => {
-        html += `<option value="${set}">${set}</option>`;
+    filterInfo.innerHTML = '';
+    const optAll = document.createElement('option');
+    optAll.value = 'all';
+    optAll.textContent = 'All Sets';
+    filterInfo.appendChild(optAll);
+    [...sets].sort((a, b) => String(a || '').localeCompare(String(b || ''))).forEach((set) => {
+        const o = document.createElement('option');
+        o.value = set;
+        o.textContent = set;
+        filterInfo.appendChild(o);
     });
 
-    filterInfo.innerHTML = html;
-
-
-    if (sets.has(current)) {
+    if (activeSetFilter === 'all') {
+        filterInfo.value = 'all';
+    } else if (sets.has(activeSetFilter)) {
+        filterInfo.value = activeSetFilter;
+    } else if (current === 'all' || sets.has(current)) {
         filterInfo.value = current;
     } else {
         filterInfo.value = 'all';
@@ -8898,8 +10067,13 @@ function updateSetFilter() {
     }
 }
 
-function renderBinder() {
+async function renderBinder() {
+    stackCards();
+    updateSetFilter();
+
     const grid = document.getElementById('binder-grid');
+    if (!grid) return;
+
     grid.innerHTML = '';
 
     const isCustomBinder = activeBinderId !== 'all';
@@ -9036,7 +10210,7 @@ function renderBinder() {
 
     if (isCustomBinder) {
         document.getElementById('binder-grid')?.classList.toggle('binder-editing', isEditingBinder);
-        initCardSortable();
+        await initCardSortable();
     } else {
         document.getElementById('binder-grid')?.classList.remove('binder-editing');
     }
@@ -9044,36 +10218,23 @@ function renderBinder() {
 
 function renderCardInSlot(container, card, isCustomBinder = false) {
     container.classList.add('is-occupied');
-    const rLow = card.rarity.toLowerCase();
-    const rarityClass = `rarity-${rLow}`;
-    const countBadge = (card.count && card.count > 1) ? `<div class="absolute top-3 right-3 bg-void-bg/90 backdrop-blur-md text-void-text text-[10px] font-black px-2 py-0.5 rounded-full border border-white/10 z-20 shadow-sm transition-transform group-hover:scale-110">×${card.count}</div>` : '';
-    const isGlare = card.rarity === 'Epic' || card.rarity === 'Legendary';
+    const rLow = normalizeBinderRarity(card);
+    const rarityClass = `rarity-${escapeHTML(rLow)}`;
+    const countBadge = (card.count && card.count > 1) ? `<div class="absolute top-3 right-3 bg-void-bg/90 backdrop-blur-md text-void-text text-[10px] font-black px-2 py-0.5 rounded-full border border-white/10 z-20 shadow-sm transition-transform group-hover:scale-110">×${parseInt(card.count)}</div>` : '';
+    const isGlare = rLow === 'epic' || rLow === 'legendary';
 
     const holoClass = ['rare', 'epic', 'legendary'].includes(rLow) ? ` holo-${rLow}` : '';
     const hasShine  = ['epic', 'legendary'].includes(rLow);
 
-    const removeBtn = (isEditingBinder && activeBinderId !== 'all') ? `<button onclick="removeCardFromBinder('${card.instanceId}')" class="delete-btn absolute top-3 left-3 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center z-30 transition-all shadow-lg hover:bg-black group-hover:scale-110"><i class="fa-solid fa-xmark text-[12px]"></i></button>` : '';
-
-    let mechanicBadge = '';
-    if (card.mechanic_icon || card.genesis_mechanic_icon) {
-        mechanicBadge = `<div class="absolute top-3 left-3 flex gap-1 z-20">`;
-        if (card.genesis_mechanic_icon) {
-            mechanicBadge += `<div class="w-7 h-7 bg-void-accent/20 backdrop-blur-md rounded-full flex items-center justify-center text-[12px] border border-void-accent/40 shadow-sm" title="Genesis: ${card.genesis_mechanic_name}">${card.genesis_mechanic_icon}</div>`;
-        }
-        if (card.mechanic_icon) {
-            mechanicBadge += `<div class="w-7 h-7 bg-void-bg/80 backdrop-blur-md rounded-full flex items-center justify-center text-[12px] border border-white/10 shadow-sm" title="${card.mechanic_name}">${card.mechanic_icon}</div>`;
-        }
-        mechanicBadge += `</div>`;
-    }
-
+    const removeBtn = (isEditingBinder && activeBinderId !== 'all') ? `<button onclick="removeCardFromBinder('${escapeHTML(card.instanceId)}')" class="delete-btn absolute top-3 left-3 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center z-30 transition-all shadow-lg hover:bg-black group-hover:scale-110"><i class="fa-solid fa-xmark text-[12px]"></i></button>` : '';
 
     const isGlobalView = window.activeStreamerFilter === 'all';
     const creatorName = card.brand_name || card.streamer_username || 'Unknown';
-    const originBadge = isGlobalView ? `<div class="absolute top-3 left-1/2 -translate-x-1/2 bg-void-bg/95 backdrop-blur-md border border-white/10 rounded-full py-1 px-3 z-20 flex items-center justify-center gap-1.5 shadow-xl shrink-0 whitespace-nowrap"><i class="fa-solid fa-satellite-dish text-[7px] text-void-accent animate-pulse"></i><span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/90">${creatorName}</span></div>` : '';
+    const originBadge = isGlobalView ? `<div class="absolute top-3 left-1/2 -translate-x-1/2 bg-void-bg/95 backdrop-blur-md border border-white/10 rounded-full py-1 px-3 z-20 flex items-center justify-center gap-1.5 shadow-xl shrink-0 whitespace-nowrap"><i class="fa-solid fa-satellite-dish text-[7px] text-void-accent animate-pulse"></i><span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/90">${escapeHTML(creatorName)}</span></div>` : '';
 
 
     const rawUrl = (card.image_url && card.image_url.trim()) ? String(card.image_url) : '/pack.png';
-    const imgSrc = rawUrl.replace(/"/g, '%22');
+    const imgSrc = escapeHTML(rawUrl.replace(/"/g, '%22'));
     
 
     const maskStyle = holoClass || hasShine
@@ -9087,26 +10248,297 @@ function renderCardInSlot(container, card, isCustomBinder = false) {
     container.innerHTML = `
             ${dragHandle}
             <div class="binder-card group cursor-pointer ${rarityClass}${holoClass}" 
-                data-instance-id="${card.instanceId}" 
+                data-instance-id="${escapeHTML(card.instanceId)}" 
                 role="button" tabindex="0"
-                onclick="if(!isEditingBinder) showCardDetail('${card.instanceId}')"
-                onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); if(!isEditingBinder) showCardDetail('${card.instanceId}'); }">
+                onclick="if(!isEditingBinder) showCardDetail('${escapeHTML(card.instanceId)}')"
+                onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); if(!isEditingBinder) showCardDetail('${escapeHTML(card.instanceId)}'); }">
                 <div class="binder-card-face">
-                    <img src="${imgSrc}" class="absolute inset-0 w-full h-full object-cover z-0" onerror="this.onerror=null;this.src='/pack.png';">
+                    <img src="${imgSrc}" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover z-0" onerror="this.onerror=null;this.src='/pack.png';">
                     ${holoClass ? `<div class="holo-layer" style="${maskStyle}"></div>` : ''}
                     ${hasShine   ? `<div class="holo-shine" style="${maskStyle}"></div>`  : ''}
                 </div>
                 ${removeBtn}
-                ${mechanicBadge}
                 ${countBadge}
                 ${originBadge}
             </div>`;
 }
 
 
+function toggleCardDetailFlip(event) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    const scene = document.getElementById('card-detail-flip-scene');
+    if (!scene) return;
+    scene.classList.toggle('is-flipped');
+    scene.setAttribute('aria-pressed', scene.classList.contains('is-flipped') ? 'true' : 'false');
+}
+
+
+/**
+ * Normalize API/display rarity so holo tiers match binder (handles spacing, casing, stray text).
+ * Checks alternate field names in case API/view shape differs per card.
+ */
+function normalizeBinderRarity(card) {
+    if (!card) return 'common';
+    const raw =
+        card.rarity != null && String(card.rarity).trim() !== ''
+            ? String(card.rarity)
+            : card.cards_rarity != null
+              ? String(card.cards_rarity)
+              : card.card_rarity != null
+                ? String(card.card_rarity)
+                : '';
+    let r = raw.trim().toLowerCase();
+    if (!r) return 'common';
+    r = r.replace(/\s+/g, ' ');
+    if (r.includes('legend')) return 'legendary';
+    if (r === 'epic' || r.startsWith('epic ')) return 'epic';
+    if (r === 'rare' || r.startsWith('rare ')) return 'rare';
+    if (r === 'common' || r.startsWith('common ')) return 'common';
+    if (['common', 'rare', 'epic', 'legendary'].includes(r)) return r;
+    return 'common';
+}
+
+
+/**
+ * CSS mask for card-detail holo layers: same asset as the art, sized with contain to match object-contain.
+ * Use JSON.stringify for url() — do NOT use escapeHTML() (it turns & into &amp; and breaks query strings).
+ */
+function cardDetailHoloMaskStyleFromUrl(rawUrl) {
+    const u = rawUrl && String(rawUrl).trim() ? String(rawUrl) : '/pack.png';
+    const urlToken = `url(${JSON.stringify(u)})`;
+    return [
+        `mask-image: ${urlToken}`,
+        `-webkit-mask-image: ${urlToken}`,
+        'mask-size: contain',
+        '-webkit-mask-size: contain',
+        'mask-position: center',
+        '-webkit-mask-position: center',
+        'mask-repeat: no-repeat',
+        '-webkit-mask-repeat: no-repeat',
+        'mask-mode: alpha',
+        '-webkit-mask-mode: alpha'
+    ].join('; ');
+}
+
+function applyCardDetailHoloMaskFromUrl(rawUrl, includeShine) {
+    const holoLayer = document.getElementById('card-detail-holo-layer');
+    const holoShine = document.getElementById('card-detail-holo-shine');
+    if (!holoLayer) return;
+    const st = cardDetailHoloMaskStyleFromUrl(rawUrl);
+    holoLayer.setAttribute('style', st);
+    if (includeShine && holoShine) {
+        holoShine.setAttribute('style', st);
+    } else if (holoShine) {
+        holoShine.removeAttribute('style');
+    }
+}
+
+
+/** Card detail: idle matches .card-detail-flip-scene.holo-* in CSS; max used while dragging. */
+const CARD_DETAIL_DRAG_FOIL = {
+    rare: { maxH: 0.12, maxS: 0.48, idleH: 0.07, idleS: 0.16, tilt: 15 },
+    epic: { maxH: 0.18, maxS: 0.48, idleH: 0.11, idleS: 0.24, tilt: 15 },
+    legendary: { maxH: 0.26, maxS: 0.48, idleH: 0.16, idleS: 0.36, tilt: 15 }
+};
+
+
+function getCardDetailDragFoilProfile(scene) {
+    if (!scene) return null;
+    if (scene.classList.contains('holo-legendary')) return CARD_DETAIL_DRAG_FOIL.legendary;
+    if (scene.classList.contains('holo-epic')) return CARD_DETAIL_DRAG_FOIL.epic;
+    if (scene.classList.contains('holo-rare')) return CARD_DETAIL_DRAG_FOIL.rare;
+    return null;
+}
+
+
+/** Fixed portrait slot for all cards; art is object-contain inside (same on-screen size for every card). */
+function sizeCardDetailArtFromImage() {
+    const scene = document.getElementById('card-detail-flip-scene');
+    if (!scene) return;
+
+    const maxH = Math.min(window.innerHeight * 0.7, 548);
+    const maxW = Math.min(window.innerWidth * 0.92, 358);
+    let h = maxH;
+    let w = (h * 5) / 7;
+    if (w > maxW) {
+        w = maxW;
+        h = (w * 7) / 5;
+    }
+    scene.style.width = `${Math.round(w)}px`;
+    scene.style.height = `${Math.round(h)}px`;
+    scene.style.aspectRatio = '';
+}
+
+
+function resetCardDetailTiltVisuals() {
+    const scene = document.getElementById('card-detail-flip-scene');
+    const tilt = scene?.querySelector('.card-detail-tilt-wrap');
+    if (tilt) {
+        tilt.style.transition = '';
+        tilt.style.transform = '';
+    }
+    if (scene) {
+        scene.style.removeProperty('--holo-o');
+        scene.style.removeProperty('--shine-o');
+        scene.style.removeProperty('--foil-x');
+        scene.style.removeProperty('--foil-y');
+        scene.style.removeProperty('--foil-angle');
+        scene.classList.remove('is-card-tilting');
+    }
+}
+
+
+let __cardDetailPointerBound = false;
+
+function initCardDetailCardInteraction() {
+    const scene = document.getElementById('card-detail-flip-scene');
+    if (!scene || __cardDetailPointerBound) return;
+    const tiltWrap = scene.querySelector('.card-detail-tilt-wrap');
+    if (!tiltWrap) return;
+    __cardDetailPointerBound = true;
+
+    /** If pointer moves farther than this from the start point at any time, gesture = drag only (no flip on release). */
+    const TAP_MOVE_LIMIT_PX = 5;
+
+
+    let dragging = false;
+    /** True once movement exceeds TAP_MOVE_LIMIT_PX — release will never flip. */
+    let engagedDrag = false;
+    let maxDistFromStart = 0;
+    let startX = 0;
+    let startY = 0;
+
+    const prefersReduced = () =>
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function readTiltHoloVars() {
+        const p = getCardDetailDragFoilProfile(scene);
+        if (p) {
+            return {
+                holoMax: p.maxH,
+                shineMax: p.maxS,
+                holoIdle: p.idleH,
+                shineIdle: p.idleS,
+                tiltRange: p.tilt
+            };
+        }
+        const cs = getComputedStyle(scene);
+        return {
+            holoMax: parseFloat(cs.getPropertyValue('--holo-max').trim()) || 0.22,
+            shineMax: parseFloat(cs.getPropertyValue('--shine-max').trim()) || 0.5,
+            holoIdle: parseFloat(cs.getPropertyValue('--holo-idle').trim()) || 0,
+            shineIdle: parseFloat(cs.getPropertyValue('--shine-idle').trim()) || 0,
+            tiltRange: parseFloat(cs.getPropertyValue('--tilt').trim()) || 14
+        };
+    }
+
+    function hasFoilLayers() {
+        return (
+            scene.classList.contains('holo-rare') ||
+            scene.classList.contains('holo-epic') ||
+            scene.classList.contains('holo-legendary')
+        );
+    }
+
+    function applyTilt(clientX, clientY) {
+        if (prefersReduced()) return;
+        const rect = scene.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2) return;
+        const mx = (clientX - rect.left) / rect.width;
+        const my = (clientY - rect.top) / rect.height;
+        const v = readTiltHoloVars();
+        const rx = (0.5 - my) * v.tiltRange;
+        const ry = (mx - 0.5) * v.tiltRange;
+        tiltWrap.style.transition = 'transform 0.05s linear';
+        tiltWrap.style.transform = `perspective(720px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(10px)`;
+
+        const foilAngle = (Math.atan2(my - 0.5, mx - 0.5) * 180) / Math.PI;
+        scene.style.setProperty('--foil-x', mx.toFixed(5));
+        scene.style.setProperty('--foil-y', my.toFixed(5));
+        scene.style.setProperty('--foil-angle', foilAngle.toFixed(2));
+
+
+        if (hasFoilLayers()) {
+            scene.style.setProperty('--holo-o', String(v.holoMax));
+            scene.style.setProperty('--shine-o', String(v.shineMax));
+        } else {
+            scene.style.setProperty('--holo-o', '0');
+            scene.style.setProperty('--shine-o', '0');
+        }
+        scene.classList.add('is-card-tilting');
+    }
+
+
+
+    function resetTilt() {
+        const v = readTiltHoloVars();
+        tiltWrap.style.transition = 'transform 0.55s cubic-bezier(0.23, 1, 0.32, 1)';
+        tiltWrap.style.transform = '';
+        if (hasFoilLayers()) {
+            scene.style.setProperty('--holo-o', String(v.holoIdle));
+            scene.style.setProperty('--shine-o', String(v.shineIdle));
+        } else {
+            scene.style.setProperty('--holo-o', '0');
+            scene.style.setProperty('--shine-o', '0');
+        }
+        scene.classList.remove('is-card-tilting');
+    }
+
+    scene.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        dragging = true;
+        engagedDrag = false;
+        maxDistFromStart = 0;
+        startX = e.clientX;
+        startY = e.clientY;
+        try {
+            scene.setPointerCapture(e.pointerId);
+        } catch (_) {
+            /* ignore */
+        }
+    });
+
+    scene.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const d = Math.hypot(e.clientX - startX, e.clientY - startY);
+        maxDistFromStart = Math.max(maxDistFromStart, d);
+        if (maxDistFromStart > TAP_MOVE_LIMIT_PX) {
+            engagedDrag = true;
+            if (!prefersReduced()) applyTilt(e.clientX, e.clientY);
+        }
+    });
+
+    function endPointer(e) {
+        if (!dragging) return;
+        dragging = false;
+        try {
+            scene.releasePointerCapture(e.pointerId);
+        } catch (_) {
+            /* ignore */
+        }
+        resetTilt();
+        /* Flip only on a true tap: movement never exceeded the limit (drag never engages). */
+        if (!engagedDrag) toggleCardDetailFlip();
+        engagedDrag = false;
+        maxDistFromStart = 0;
+    }
+
+    scene.addEventListener('pointerup', endPointer);
+    scene.addEventListener('pointercancel', endPointer);
+
+    scene.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleCardDetailFlip(e);
+        }
+    });
+}
+
+
 function showCardDetail(instanceId) {
     console.log("Showing card detail for:", instanceId);
-    const card = userCollection.find(c => c.instanceId === instanceId) || uniqueCards.find(c => c.id === instanceId);
+    const card = userCollection.find(c => c.instanceId === instanceId) || uniqueCards.find(c => c.instanceId === instanceId);
     if (!card) {
         console.error("Card not found:", instanceId);
         return;
@@ -9123,63 +10555,130 @@ function showCardDetail(instanceId) {
     const set = document.getElementById('card-detail-set');
     const count = document.getElementById('card-detail-count');
     const id = document.getElementById('card-detail-id');
-    const glare = document.getElementById('card-detail-glare');
+    const backImg = document.getElementById('card-detail-back-image');
+    const flipScene = document.getElementById('card-detail-flip-scene');
+    const holoLayer = document.getElementById('card-detail-holo-layer');
+    const holoShine = document.getElementById('card-detail-holo-shine');
+
+    const rLow = normalizeBinderRarity(card);
+    const hasHolo = ['rare', 'epic', 'legendary'].includes(rLow);
+    const hasShine = ['rare', 'epic', 'legendary'].includes(rLow);
+
+
+    if (flipScene) {
+        flipScene.classList.remove('is-flipped');
+        flipScene.setAttribute('aria-pressed', 'false');
+        flipScene.classList.remove('holo-rare', 'holo-epic', 'holo-legendary');
+        if (hasHolo) flipScene.classList.add(`holo-${rLow}`);
+    }
+
+    const artUrl = (card.image_url && String(card.image_url).trim()) ? String(card.image_url) : '/pack.png';
+
+    if (holoLayer && holoShine) {
+        if (hasHolo) {
+            holoLayer.classList.remove('hidden');
+            if (hasShine) {
+                holoShine.classList.remove('hidden');
+            } else {
+                holoShine.classList.add('hidden');
+            }
+            applyCardDetailHoloMaskFromUrl(artUrl, hasShine);
+        } else {
+            holoLayer.classList.add('hidden');
+            holoLayer.removeAttribute('style');
+            holoShine.classList.add('hidden');
+            holoShine.removeAttribute('style');
+        }
+        if (flipScene && hasHolo) {
+            const foil = CARD_DETAIL_DRAG_FOIL[rLow];
+            if (foil) {
+                flipScene.style.setProperty('--holo-o', String(foil.idleH));
+                flipScene.style.setProperty('--shine-o', String(foil.idleS));
+            }
+        } else if (flipScene) {
+            flipScene.style.setProperty('--holo-o', '0');
+            flipScene.style.setProperty('--shine-o', '0');
+        }
+    }
 
     if (img) {
-        img.src = card.image_url || '/pack.png';
-        img.onerror = function () { this.onerror = null; this.src = '/pack.png'; };
+        img.src = artUrl;
+        img.onload = function () {
+            if (!['rare', 'epic', 'legendary'].includes(normalizeBinderRarity(card))) return;
+            applyCardDetailHoloMaskFromUrl(this.currentSrc || this.src || artUrl, hasShine);
+        };
+        img.onerror = function () {
+            this.onerror = null;
+            this.src = '/pack.png';
+            if (['rare', 'epic', 'legendary'].includes(normalizeBinderRarity(card))) {
+                applyCardDetailHoloMaskFromUrl('/pack.png', hasShine);
+            }
+        };
+        if (hasHolo && img.complete && img.naturalWidth) {
+            applyCardDetailHoloMaskFromUrl(img.currentSrc || img.src, hasShine);
+        }
+    }
+    if (backImg) {
+        backImg.src = resolveCardBackUrl();
+        backImg.onerror = function () {
+            this.onerror = null;
+            this.src = '/Castle_Default_Cardback.png';
+        };
     }
     if (name) name.innerText = card.name;
-    const rarityColor = getRarityColor(card.rarity);
     if (rarity) {
-        rarity.innerText = card.rarity;
-        rarity.className = `text-[10px] font-black uppercase tracking-[0.2em] mb-1 text-${rarityColor}`;
+        rarity.textContent = card.rarity || '—';
+        const rk = rLow.replace(/\s+/g, '-');
+        rarity.setAttribute('data-rarity', rk || 'common');
     }
-    if (set) set.innerText = card.set_name;
-    if (count) count.innerText = card.count || 1;
+    if (set) {
+        const sn = card.set_name;
+        set.textContent =
+            sn != null && String(sn).trim() !== '' && String(sn).toLowerCase() !== 'null'
+                ? String(sn)
+                : '—';
+    }
+
+    const sameCardCopies = (userCollection || []).filter((c) => c.id === card.id);
+    const totalOwned = sameCardCopies.length > 0 ? sameCardCopies.length : (card.count || 1);
+    if (count) count.innerText = totalOwned;
+
+    const traitsBreakdown = document.getElementById('card-detail-traits-breakdown');
+    const traitsList = document.getElementById('card-detail-traits-breakdown-list');
+    if (traitsBreakdown && traitsList) {
+        const byVariant = new Map();
+        const rows = sameCardCopies.length > 0 ? sameCardCopies : [card];
+        rows.forEach((row) => {
+            const k = traitVariantKey(row);
+            if (!byVariant.has(k)) byVariant.set(k, { sample: row, n: 0 });
+            byVariant.get(k).n++;
+        });
+        const entries = [...byVariant.entries()].sort((a, b) =>
+            formatTraitVariantLabel(a[1].sample).localeCompare(formatTraitVariantLabel(b[1].sample))
+        );
+        traitsList.innerHTML = entries.map(([, { sample, n }]) => htmlCardDetailTraitVariant(sample, n)).join('');
+        traitsBreakdown.classList.remove('hidden');
+    }
 
     const numEl = document.getElementById('card-detail-number');
     const descEl = document.getElementById('card-detail-description');
     const atkEl = document.getElementById('card-detail-attack');
     const defEl = document.getElementById('card-detail-defense');
 
-    if (numEl) numEl.innerText = card.card_number || '--';
+    if (numEl) {
+        const raw = card.card_number;
+        const numStr =
+            raw != null && String(raw).trim() !== '' && String(raw).toLowerCase() !== 'null'
+                ? String(raw)
+                : '—';
+        numEl.textContent = numStr;
+    }
     if (descEl) descEl.innerText = card.description || 'No description available for this card.';
     if (atkEl) atkEl.innerText = card.attack || 0;
     if (defEl) defEl.innerText = card.defense || 0;
 
-
-    const mechanicContainer = document.getElementById('card-detail-mechanic-container');
-    if (mechanicContainer) {
-        if (card.mechanic_name) {
-            mechanicContainer.classList.remove('hidden');
-            document.getElementById('card-detail-mechanic-icon').innerText = card.mechanic_icon || '⚙️';
-            document.getElementById('card-detail-mechanic-name').innerText = card.mechanic_display_name || card.mechanic_name;
-            document.getElementById('card-detail-mechanic-desc').innerText = card.mechanic_description || 'Special effect active.';
-        } else {
-            mechanicContainer.classList.add('hidden');
-        }
-    }
-
-    const genesisContainer = document.getElementById('card-detail-genesis-mechanic-container');
-    if (genesisContainer) {
-        if (card.genesis_mechanic_name) {
-            genesisContainer.classList.remove('hidden');
-            document.getElementById('card-detail-genesis-mechanic-icon').innerText = card.genesis_mechanic_icon || '✨';
-            document.getElementById('card-detail-genesis-mechanic-name').innerText = card.genesis_mechanic_display_name || card.genesis_mechanic_name;
-            document.getElementById('card-detail-genesis-mechanic-desc').innerText = card.genesis_mechanic_description || 'Genesis trait active.';
-        } else {
-            genesisContainer.classList.add('hidden');
-        }
-    }
-
-    if (glare) {
-        if (card.rarity === 'Epic' || card.rarity === 'Legendary') {
-            glare.classList.remove('hidden');
-        } else {
-            glare.classList.add('hidden');
-        }
-    }
+    initCardDetailCardInteraction();
+    sizeCardDetailArtFromImage();
 
     modal.classList.remove('hidden');
     scrollLock();
@@ -9187,6 +10686,12 @@ function showCardDetail(instanceId) {
 
 function hideCardDetail() {
     const m = document.getElementById('card-detail-modal');
+    const scene = document.getElementById('card-detail-flip-scene');
+    if (scene) {
+        scene.classList.remove('is-flipped');
+        scene.setAttribute('aria-pressed', 'false');
+    }
+    resetCardDetailTiltVisuals();
     if (m) m.classList.add('hidden');
     scrollUnlock();
 }
@@ -9195,38 +10700,21 @@ function initGlareCards() {
     const grid = document.getElementById('binder-grid');
     if (!grid) return;
 
-    grid.querySelectorAll('.binder-card').forEach(card => {
-
-        const holoMax   = parseFloat(getComputedStyle(card).getPropertyValue('--holo-max').trim()) || 0.18;
-        const shineMax  = parseFloat(getComputedStyle(card).getPropertyValue('--shine-max').trim()) || 0.5;
-        const holoIdle  = parseFloat(getComputedStyle(card).getPropertyValue('--holo-idle').trim()) || 0;
+    grid.querySelectorAll('.binder-card').forEach((card) => {
+        const holoMax = parseFloat(getComputedStyle(card).getPropertyValue('--holo-max').trim()) || 0.18;
+        const shineMax = parseFloat(getComputedStyle(card).getPropertyValue('--shine-max').trim()) || 0.5;
+        const holoIdle = parseFloat(getComputedStyle(card).getPropertyValue('--holo-idle').trim()) || 0;
         const shineIdle = parseFloat(getComputedStyle(card).getPropertyValue('--shine-idle').trim()) || 0;
-        const tiltRange = parseFloat(getComputedStyle(card).getPropertyValue('--tilt').trim()) || 15;
 
-        card.addEventListener('mousemove', e => {
-            const rect  = card.getBoundingClientRect();
-            const mx    = (e.clientX - rect.left)  / rect.width;
-            const my    = (e.clientY - rect.top)   / rect.height;
-            const rx    = (0.5 - my) * tiltRange;
-            const ry    = (mx - 0.5) * tiltRange;
-
-
-            card.style.transition = 'transform 0.05s linear, filter 0.3s ease';
-            card.style.transform  = `perspective(700px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(8px) scale(1.04)`;
-
-
-            card.style.setProperty('--holo-o',  holoMax);
+        /** Binder: holo/shine on hover only — no 3D tilt (that stays on the card detail modal). */
+        card.addEventListener('mouseenter', () => {
+            card.style.setProperty('--holo-o', holoMax);
             card.style.setProperty('--shine-o', shineMax);
-            card.classList.add('is-tilting');
         });
 
         card.addEventListener('mouseleave', () => {
-
-            card.style.transition = 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), filter 0.3s ease';
-            card.style.transform  = '';
-            card.style.setProperty('--holo-o',  holoIdle);
+            card.style.setProperty('--holo-o', holoIdle);
             card.style.setProperty('--shine-o', shineIdle);
-            card.classList.remove('is-tilting');
         });
     });
 }
@@ -9237,10 +10725,10 @@ function renderRecentDrops() {
     if (recentCards.length > 0) {
         list.innerHTML = recentCards.map(c => `
                 <div class="p-3 rounded-2xl bg-void-bg border border-white/5 void-shadow flex items-center gap-4 group cursor-pointer hover:border-void-accent/20 transition-all">
-                    <div class="w-12 h-12 rounded-xl bg-void-text/5 bg-cover bg-center flex-shrink-0 border border-white/10 group-hover:scale-105 transition-transform" style="background-image:url('${c.image_url}')"></div>
+                    <div class="w-12 h-12 rounded-xl bg-void-text/5 bg-cover bg-center flex-shrink-0 border border-white/10 group-hover:scale-105 transition-transform" style="background-image:url('${escapeHTML(c.image_url)}')"></div>
                     <div class="min-w-0">
-                        <div class="text-[10px] font-black text-void-muted uppercase tracking-[0.2em] mb-0.5">${c.rarity}</div>
-                        <div class="text-xs font-bold text-void-text truncate uppercase italic">${c.name}</div>
+                        <div class="text-[10px] font-black text-void-muted uppercase tracking-[0.2em] mb-0.5">${escapeHTML(c.rarity)}</div>
+                        <div class="text-xs font-bold text-void-text truncate uppercase italic">${escapeHTML(c.name)}</div>
                     </div>
                 </div>
             `).join('');
@@ -9273,10 +10761,10 @@ function renderPrizedPossession() {
         const rarityColor = getRarityColor(prizedCard.rarity);
         container.innerHTML = `
                 <div class="p-4 rounded-[2rem] bg-void-bg border-2 border-void-accent void-shadow flex items-center gap-5 group cursor-pointer">
-                    <div class="w-16 h-16 rounded-2xl bg-void-text/5 bg-cover bg-center flex-shrink-0 border border-white/10 group-hover:rotate-3 transition-transform" style="background-image:url('${prizedCard.image_url}')"></div>
+                    <div class="w-16 h-16 rounded-2xl bg-void-text/5 bg-cover bg-center flex-shrink-0 border border-white/10 group-hover:rotate-3 transition-transform" style="background-image:url('${escapeHTML(prizedCard.image_url)}')"></div>
                     <div class="min-w-0">
-                        <div class="text-[10px] font-black text-void-accent uppercase tracking-[0.2em] mb-1">${prizedCard.rarity} Highlight</div>
-                        <div class="text-lg font-black text-void-text truncate uppercase italic leading-none">${prizedCard.name}</div>
+                        <div class="text-[10px] font-black text-void-accent uppercase tracking-[0.2em] mb-1">${escapeHTML(prizedCard.rarity)} Highlight</div>
+                        <div class="text-lg font-black text-void-text truncate uppercase italic leading-none">${escapeHTML(prizedCard.name)}</div>
                     </div>
                 </div>
             `;
@@ -9316,7 +10804,20 @@ if (cardSearch) {
     cardSearch.addEventListener('input', (e) => {
         searchQuery = e.target.value.toLowerCase();
         currentPage = 1;
-        renderBinder();
+        void renderBinder();
+    });
+}
+
+if (!window.__binderSetSelectorDelegated) {
+    window.__binderSetSelectorDelegated = true;
+    document.addEventListener('click', (e) => {
+        const sel = document.getElementById('set-selector');
+        const btn = e.target.closest('[data-binder-set]');
+        if (!sel || !btn || !sel.contains(btn)) return;
+        e.preventDefault();
+        const v = btn.getAttribute('data-binder-set');
+        if (v === 'all') filterBySet('all');
+        else filterBySet(decodeURIComponent(v));
     });
 }
 
@@ -9325,7 +10826,7 @@ if (rarityFilterEl) {
     rarityFilterEl.addEventListener('change', (e) => {
         rarityFilter = e.target.value;
         currentPage = 1;
-        renderBinder();
+        void renderBinder();
     });
 }
 
@@ -9607,13 +11108,14 @@ function renderDustBuyCards() {
         mechGrid.innerHTML = (dustMechanics || []).map(m => {
             const baseCost = m.dust_buy_cost ?? 50;
             const canAffordAny = magicDustBalance >= baseCost;
+            const iconMarkup = htmlMechanicIcon(m.icon || '⚙️', 'w-8 h-8 mx-auto object-contain');
             return `
             <div class="dust-buy-mechanic cursor-grab active:cursor-grabbing rounded-lg border p-3 text-center transition-all ${canAffordAny ? 'border-white/20 dust-mechanic-hover' : 'border-white/5 opacity-50'}"
                 draggable="${canAffordAny}" data-mechanic-id="${m.id}" data-base-cost="${baseCost}"
                 data-mechanic-name="${(m.display_name || m.name || '').replace(/"/g, '&quot;')}"
                 data-mechanic-icon="${(m.icon || '⚙️').replace(/"/g, '&quot;')}"
                 title="Drag onto a card to add (or click then click card)">
-                <span class="text-xl">${m.icon || '⚙️'}</span>
+                <span class="block min-h-[2rem] flex items-center justify-center">${iconMarkup}</span>
                 <div class="text-[9px] font-black text-white mt-1">${(m.display_name || m.name || '').replace(/</g, '&lt;')}</div>
                 <div class="text-[8px] text-[var(--dust-muted)]">from ${baseCost} dust</div>
             </div>
@@ -9761,10 +11263,13 @@ function renderTrades() {
             accepted: { color: 'text-void-accent/40', label: 'Completed' },
             rejected: { color: 'text-red-400', label: 'Rejected' },
             cancelled: { color: 'text-gray-400', label: 'Withdrawn' }
-        }[trade.status] || { color: 'text-gray-400', label: trade.status };
+        }[trade.status] || { color: 'text-gray-400', label: escapeHTML(trade.status) };
 
         const myItems = trade.items.filter(i => String(i.owner_id) === String(currentUser.twitch_id));
         const theirItems = trade.items.filter(i => String(i.owner_id) !== String(currentUser.twitch_id));
+
+        const escapedTradeId = escapeHTML(trade.id);
+        const otherUsername = escapeHTML(otherParty.username);
 
         return `
                 <div class="p-8 rounded-[3rem] bg-void-bg border border-white/5 void-shadow flex flex-col gap-8 relative overflow-hidden group mb-6">
@@ -9773,20 +11278,20 @@ function renderTrades() {
                     <div class="flex justify-between items-start relative z-10">
                         <div class="flex items-center gap-5">
                             <div class="relative">
-                                <img src="${otherParty.avatar_url}" class="w-14 h-14 rounded-[1.2rem] border-2 border-void-bg void-shadow">
+                                <img src="${escapeHTML(otherParty.avatar_url)}" class="w-14 h-14 rounded-[1.2rem] border-2 border-void-bg void-shadow">
                                 <div class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-void-accent border-2 border-void-bg ${trade.status === 'accepted' ? '' : 'hidden'}"></div>
                             </div>
                             <div class="min-w-0">
                                 <div class="text-[9px] font-black text-void-muted uppercase tracking-[0.2em] mb-1">
                                     ${isSender ? 'To' : 'From'}
                                 </div>
-                                <div class="text-void-text font-black text-xl italic uppercase tracking-tight">${otherParty.username}</div>
+                                <div class="text-void-text font-black text-xl italic uppercase tracking-tight">${otherUsername}</div>
                             </div>
                         </div>
                         <div class="text-right">
                             <div class="text-[9px] font-black text-void-muted uppercase tracking-[0.2em] mb-1">Trade Status</div>
                             <div class="text-[10px] font-black ${statusInfo.color} uppercase tracking-[0.15em] px-4 py-1.5 bg-void-text/5 rounded-full border border-white/5">
-                                ${statusInfo.label}
+                                ${escapeHTML(statusInfo.label)}
                             </div>
                         </div>
                     </div>
@@ -9798,14 +11303,17 @@ function renderTrades() {
                                 <div class="h-px flex-1 bg-void-text/5 mx-4"></div>
                             </div>
                             <div class="flex flex-wrap gap-4">
-                                ${myItems.map(i => `
+                                ${myItems.map(i => {
+                                    const cardImg = escapeHTML(i.card.image_url || i.card.card_data?.image_url || '/pack.png');
+                                    const cardName = escapeHTML(i.card.name || 'Card');
+                                    return `
                                     <div class="relative group/card w-20 h-28">
                                         <div class="absolute inset-0 bg-void-accent/20 blur-xl rounded-2xl opacity-0 group-hover/card:opacity-100 transition-all"></div>
-                                        <img src="${i.card.image_url || i.card.card_data?.image_url}" 
+                                        <img src="${cardImg}" 
                                              class="w-full h-full object-cover rounded-xl border-2 border-void-bg void-shadow relative z-10"
-                                             title="${i.card.name}">
+                                             title="${cardName}">
                                     </div>
-                                `).join('') || '<div class="text-[9px] text-void-muted font-black italic uppercase py-4 opacity-40">Scanning Inventory...</div>'}
+                                `;}).join('') || '<div class="text-[9px] text-void-muted font-black italic uppercase py-4 opacity-40">Scanning Inventory...</div>'}
                             </div>
                         </div>
 
@@ -9815,14 +11323,17 @@ function renderTrades() {
                                 <div class="h-px flex-1 bg-void-text/5 mx-4"></div>
                             </div>
                             <div class="flex flex-wrap gap-4">
-                                ${theirItems.map(i => `
+                                ${theirItems.map(i => {
+                                    const cardImg = escapeHTML(i.card.image_url || i.card.card_data?.image_url || '/pack.png');
+                                    const cardName = escapeHTML(i.card.name || 'Card');
+                                    return `
                                     <div class="relative group/card w-20 h-28">
                                         <div class="absolute inset-0 bg-void-accent/10 blur-xl rounded-2xl opacity-0 group-hover/card:opacity-100 transition-all"></div>
-                                        <img src="${i.card.image_url || i.card.card_data?.image_url}" 
+                                        <img src="${cardImg}" 
                                              class="w-full h-full object-cover rounded-xl border-2 border-void-bg void-shadow relative z-10"
-                                             title="${i.card.name}">
+                                             title="${cardName}">
                                     </div>
-                                `).join('') || '<div class="text-[9px] text-void-muted font-black italic uppercase py-4 opacity-40">Awaiting Offer</div>'}
+                                `;}).join('') || '<div class="text-[9px] text-void-muted font-black italic uppercase py-4 opacity-40">Awaiting Offer</div>'}
                             </div>
                         </div>
                     </div>
@@ -9830,11 +11341,11 @@ function renderTrades() {
                     ${trade.status === 'pending' ? `
                         <div class="flex gap-4 relative z-10">
                             ${isReceiver ? `
-                                <button onclick="prepareTradeReply('${trade.id}', '${trade.sender.username}')" 
+                                <button onclick="prepareTradeReply('${escapedTradeId}', '${otherUsername}')" 
                                         class="flex-1 bg-void-accent text-white py-4 rounded-[1.5rem] font-black text-[10px] tracking-[0.2em] transition-all void-shadow uppercase hover:scale-[1.02]">
                                     COUNTER OFFER
                                 </button>
-                                <button onclick="respondToTrade('${trade.id}', 'reject')" 
+                                <button onclick="respondToTrade('${escapedTradeId}', 'reject')" 
                                         class="px-8 bg-void-text/5 hover:bg-red-500/10 py-4 rounded-[1.5rem] font-black text-[10px] tracking-[0.2em] text-void-muted hover:text-red-500 transition-all border border-white/10 uppercase">
                                     REJECT
                                 </button>
@@ -9843,7 +11354,7 @@ function renderTrades() {
                                     <div class="w-1.5 h-1.5 rounded-full bg-void-accent animate-pulse"></div>
                                     Awaiting Delivery
                                 </div>
-                                <button onclick="respondToTrade('${trade.id}', 'cancel')" 
+                                <button onclick="respondToTrade('${escapedTradeId}', 'cancel')" 
                                         class="px-8 bg-void-text/5 hover:bg-void-text/10 py-4 rounded-[1.5rem] font-black text-[10px] tracking-[0.2em] text-void-muted transition-all border border-white/10 uppercase">
                                     CANCEL
                                 </button>
@@ -9855,11 +11366,11 @@ function renderTrades() {
                     ${trade.status === 'offered' ? `
                         <div class="flex gap-4 relative z-10">
                             ${isSender ? `
-                                <button onclick="respondToTrade('${trade.id}', 'accept')" 
+                                <button onclick="respondToTrade('${escapedTradeId}', 'accept')" 
                                         class="flex-1 bg-void-accent text-white py-4 rounded-[1.5rem] font-black text-[10px] tracking-[0.2em] transition-all void-shadow uppercase hover:scale-[1.02]">
                                     CONFIRM TRADE
                                 </button>
-                                <button onclick="respondToTrade('${trade.id}', 'cancel')" 
+                                <button onclick="respondToTrade('${escapedTradeId}', 'cancel')" 
                                         class="px-8 bg-void-text/5 hover:bg-void-text/10 py-4 rounded-[1.5rem] font-black text-[10px] tracking-[0.2em] text-void-muted transition-all border border-white/10 uppercase">
                                     CANCEL
                                 </button>
@@ -9868,7 +11379,7 @@ function renderTrades() {
                                     <div class="w-1.5 h-1.5 rounded-full bg-void-accent animate-pulse"></div>
                                     Awaiting Confirmation
                                 </div>
-                                <button onclick="respondToTrade('${trade.id}', 'reject')" 
+                                <button onclick="respondToTrade('${escapedTradeId}', 'reject')" 
                                         class="px-8 bg-void-text/5 hover:bg-red-500/10 py-4 rounded-[1.5rem] font-black text-[10px] tracking-[0.2em] text-void-muted hover:text-red-500 transition-all border border-white/10 uppercase">
                                     REJECT
                                 </button>
@@ -9887,7 +11398,7 @@ function copyTradeCode() {
     const code = el.innerText;
     if (!code || code === 'LOADING...') return;
     navigator.clipboard.writeText(code);
-    showToast("Trade code copied to clipboard!", "success");
+    showToast("Castle code copied to clipboard!", "success");
 }
 
 async function respondToTrade(tradeId, action) {
@@ -9921,7 +11432,7 @@ async function initiateTrade() {
     if (!codeInput) return;
     const code = codeInput.value.trim().toUpperCase();
     if (!code) {
-        showToast("Please enter a trade code", "error");
+        showToast("Please enter a castle code", "error");
         return;
     }
     if (code === myTradeCode) {
@@ -9931,7 +11442,7 @@ async function initiateTrade() {
     try {
         const res = await fetch(`${BACKEND_URL}/api/public/collection/${code}`, { credentials: 'include' });
         if (!res.ok) {
-            showToast("Invalid trade code or user has no cards", "error");
+            showToast("Invalid castle code or user has no cards", "error");
             return;
         }
         const targetPublicCollection = await res.json();
@@ -9995,20 +11506,25 @@ function openTradeBuilder(targetCode, targetCards, isReply = false) {
     scrollLock();
 
     const myCardsGrid = document.getElementById('trade-builder-my-cards');
-    if (myCardsGrid) myCardsGrid.innerHTML = userCollection.map(card => `
-        <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'my', '${card.instanceId}')">
-            <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
-            <div class="text-[8px] text-gray-500 truncate mt-1">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
+    if (myCardsGrid) myCardsGrid.innerHTML = userCollection.map(card => {
+        const escapedId = escapeHTML(card.instanceId);
+        return `
+        <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'my', '${escapedId}')">
+            <img src="${escapeHTML((card.image_url || '/pack.png')).replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
+            <div class="text-[8px] text-gray-500 truncate mt-1">${escapeHTML(card.name || 'Card')}</div>
         </div>
-    `).join('');
+    `;}).join('');
 
     const theirCardsGrid = document.getElementById('trade-builder-their-cards');
-    if (theirCardsGrid) theirCardsGrid.innerHTML = targetCards.map(card => `
-        <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'their', '${(card.user_card_id || card.id || '').toString().replace(/"/g, '')}')">
-            <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
-            <div class="text-[8px] text-gray-500 truncate mt-1">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
+    if (theirCardsGrid) theirCardsGrid.innerHTML = targetCards.map(card => {
+        const id = (card.user_card_id || card.id || '').toString();
+        const escapedId = escapeHTML(id);
+        return `
+        <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'their', '${escapedId}')">
+            <img src="${escapeHTML((card.image_url || '/pack.png')).replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
+            <div class="text-[8px] text-gray-500 truncate mt-1">${escapeHTML(card.name || 'Card')}</div>
         </div>
-    `).join('');
+    `;}).join('');
 
     updateTradeOfferCounts();
 }
@@ -10160,19 +11676,19 @@ function renderDeckSlot(slot) {
     const rarityColors = { legendary: '#fbbf24', epic: '#a855f7', rare: '#3b82f6', common: '#94a3b8' };
     const borderColor = rarityColors[(card.rarity || 'common').toLowerCase()] || '#94a3b8';
     const mechanicBadge = card.mechanic_icon ? `
-        <div class="absolute top-1 right-1 text-base leading-none" title="${card.mechanic_name || ''}">${card.mechanic_icon}</div>
+        <div class="absolute top-1 right-1 w-7 h-7 flex items-center justify-center leading-none" title="${escapeHTML(card.mechanic_name || '')}">${htmlMechanicIcon(card.mechanic_icon, 'w-7 h-7 object-contain')}</div>
     ` : '';
 
     el.className = 'battle-deck-card-slot aspect-[5/7] rounded-2xl overflow-hidden relative cursor-pointer transition-all hover:scale-105 border border-white/5 shadow-2xl';
     el.innerHTML = `
-        <img src="${card.image_url || ''}" class="absolute inset-0 w-full h-full object-cover" onerror="this.src='https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(card.name)}'">
+        <img src="${escapeHTML(card.image_url || '')}" class="absolute inset-0 w-full h-full object-cover" onerror="this.src='https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(card.name)}'">
         <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent"></div>
         ${mechanicBadge}
         <div class="absolute bottom-0 left-0 right-0 p-3 space-y-1.5 z-10">
-            <div class="text-[10px] font-black text-void-text uppercase italic tracking-tighter truncate">${card.name}</div>
+            <div class="text-[10px] font-black text-void-text uppercase italic tracking-tighter truncate">${escapeHTML(card.name)}</div>
             <div class="flex gap-2">
                 <div class="flex items-center gap-1.5 bg-blue-500/90 px-2 py-0.5 rounded-md text-[9px] font-black text-white shadow-lg border border-white/10">
-                    <i class="fa-solid fa-bolt-lightning text-[7px]"></i> ${card.attack}
+                    <i class="fa-solid fa-bolt-lightning text-[7px]"></i> ${parseInt(card.attack)}
                 </div>
                 <div class="flex items-center gap-1.5 bg-red-500/90 px-2 py-0.5 rounded-md text-[9px] font-black text-white shadow-lg border border-white/10">
                     <i class="fa-solid fa-shield-halved text-[7px]"></i> ${card.defense}
@@ -10305,7 +11821,7 @@ function renderPickerGrid(cards) {
                 <img src="${imageUrl}" class="absolute inset-0 w-full h-full object-cover"
                     onerror="this.src='https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(name)}'">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent"></div>
-                ${mechanicIcon ? `<div class="absolute top-2 right-2 flex items-center justify-center p-1 bg-void-bg/80 backdrop-blur-md rounded-lg text-xs leading-none border border-white/5 z-10" title="${mechanicName}">${mechanicIcon}</div>` : ''}
+                ${mechanicIcon ? `<div class="absolute top-2 right-2 flex items-center justify-center p-1 bg-void-bg/80 backdrop-blur-md rounded-lg text-xs leading-none border border-white/5 z-10 w-9 h-9" title="${escapeHTML(mechanicName)}">${htmlMechanicIcon(mechanicIcon, 'w-7 h-7 object-contain')}</div>` : ''}
                 <div class="absolute bottom-0 left-0 right-0 p-3 space-y-1.5 z-10">
                     <div class="text-[9px] font-black text-white uppercase italic tracking-tight truncate">${name}</div>
                     <div class="flex gap-1.5">
@@ -10408,22 +11924,25 @@ window.loadSavedDecks = async function () {
             const hasS3 = !!d.slot_3;
             const isActive = d.is_active;
 
+            const escapedId = escapeHTML(d.id);
+            const escapedName = escapeHTML(d.name);
+
             return `
                 <div class="flex flex-col gap-2 p-4 rounded-xl bg-white/5 border ${isActive ? 'border-void-accent/60 bg-void-accent/5' : 'border-white/5'} hover:border-void-accent/40 transition-all group relative overflow-hidden">
                     ${isActive ? `<div class="absolute -right-12 -top-12 w-24 h-24 bg-void-accent/10 blur-2xl rounded-full"></div>` : ''}
                     <div class="flex items-center justify-between mb-2 z-10">
                         <div class="flex items-center gap-2">
-                            <div class="text-sm font-black uppercase tracking-tight text-white">${d.name}</div>
+                            <div class="text-sm font-black uppercase tracking-tight text-white">${escapedName}</div>
                             ${isActive ? `<span class="px-1.5 py-0.5 rounded bg-void-accent/20 text-void-accent text-[8px] font-black uppercase tracking-widest border border-void-accent/30">Active</span>` : ''}
                         </div>
                         <div class="flex gap-2">
-                            ${!isActive ? `<button onclick="activateSavedDeck('${d.id}')" title="Set as Active" class="w-8 h-8 rounded-lg bg-void-accent/20 text-void-accent/60 hover:bg-void-accent hover:text-white transition-colors flex items-center justify-center text-xs">
+                            ${!isActive ? `<button onclick="activateSavedDeck('${escapedId}')" title="Set as Active" class="w-8 h-8 rounded-lg bg-void-accent/20 text-void-accent/60 hover:bg-void-accent hover:text-white transition-colors flex items-center justify-center text-xs">
                                 <i class="fa-solid fa-play"></i>
                             </button>` : ''}
-                            <button onclick="loadDeckIntoActive('${d.id}')" title="Preview / Edit" class="w-8 h-8 rounded-lg bg-white/10 text-white/40 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center text-xs">
+                            <button onclick="loadDeckIntoActive('${escapedId}')" title="Preview / Edit" class="w-8 h-8 rounded-lg bg-white/10 text-white/40 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center text-xs">
                                 <i class="fa-solid fa-eye"></i>
                             </button>
-                            <button onclick="deleteSavedDeck('${d.id}', '${d.name.replace(/'/g, "\\'")}')" title="Delete Deck" class="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center text-xs">
+                            <button onclick="deleteSavedDeck('${escapedId}', '${escapedName.replace(/'/g, "\\'")}')" title="Delete Deck" class="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center text-xs">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
                         </div>
@@ -10432,13 +11951,13 @@ window.loadSavedDecks = async function () {
                 <div class="grid grid-cols-3 gap-2 z-10">
                     <!-- Tiny preview slots -->
                     <div class="aspect-[5/7] rounded-md overflow-hidden bg-black/40 border border-white/5 relative">
-                        ${hasS1 ? `<img src="${d.slot_1.card.image_url}" class="absolute inset-0 w-full h-full object-cover">` : ''}
+                        ${hasS1 ? `<img src="${escapeHTML(d.slot_1.card.image_url)}" class="absolute inset-0 w-full h-full object-cover">` : ''}
                     </div>
                     <div class="aspect-[5/7] rounded-md overflow-hidden bg-black/40 border border-white/5 relative">
-                        ${hasS2 ? `<img src="${d.slot_2.card.image_url}" class="absolute inset-0 w-full h-full object-cover">` : ''}
+                        ${hasS2 ? `<img src="${escapeHTML(d.slot_2.card.image_url)}" class="absolute inset-0 w-full h-full object-cover">` : ''}
                     </div>
                     <div class="aspect-[5/7] rounded-md overflow-hidden bg-black/40 border border-white/5 relative">
-                        ${hasS3 ? `<img src="${d.slot_3.card.image_url}" class="absolute inset-0 w-full h-full object-cover">` : ''}
+                        ${hasS3 ? `<img src="${escapeHTML(d.slot_3.card.image_url)}" class="absolute inset-0 w-full h-full object-cover">` : ''}
                     </div>
                 </div>
                 </div>
@@ -10665,7 +12184,7 @@ let _layerCurrentTool = 'select';
 let _layerTextClickHandler = null;
 
 
-function openCardLayerEditor(cardId, cardName, imageUrl, onSave) {
+async function openCardLayerEditor(cardId, cardName, imageUrl, onSave) {
     _layerEditorCardId = cardId;
     _layerEditorOnSave = onSave;
     const title = document.getElementById('layer-editor-title');
@@ -10677,6 +12196,8 @@ function openCardLayerEditor(cardId, cardName, imageUrl, onSave) {
     const nav = document.getElementById('app-navbar');
     if (nav) nav.classList.add('hidden');
     scrollLock();
+    await ensureFabricLoaded();
+    await ensureSortableLoaded();
     _initLayerFabric(imageUrl);
     _initLayerEditorEvents();
 }
@@ -10985,6 +12506,11 @@ window.redoLayerEditor = function () {
 
 
 function _renderLayerList() {
+    void _renderLayerListAsync();
+}
+
+async function _renderLayerListAsync() {
+    await ensureSortableLoaded();
     const list = document.getElementById('layer-editor-layer-list');
     if (!list || !_layerFabric) return;
     const objects = [..._layerFabric.getObjects()].reverse();
@@ -11267,12 +12793,66 @@ async function _leUploadAndPatchCard(cardId, blob) {
 }
 
 
-window.openLayerEditorForCard = function (cardId) {
+window.openLayerEditorForCard = async function (cardId) {
     const card = editorAllCards.find(c => c.id === cardId);
     if (!card) return;
-    openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob) => {
+    await openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob) => {
         await _leUploadAndPatchCard(cardId, blob);
     });
+};
+
+window.buyPackCheckout = async function() {
+    if (!APP_STREAMER || !APP_STREAMER.id) {
+        showToast("Error: No streamer context found.", "error");
+        return;
+    }
+
+    if (!currentUser) {
+        showToast("Please sign in to buy packs.", "error");
+        return;
+    }
+
+    if (!csrfToken) await fetchCSRFToken();
+
+    const btn = event?.currentTarget;
+    const originalContent = btn ? btn.innerHTML : '';
+    
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Preparing Checkout...';
+        }
+
+        showToast("Opening secure checkout...", "info");
+
+        const res = await fetch(`${BACKEND_URL}/api/payment/create-checkout-session`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({
+                streamer_id: APP_STREAMER.id
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Checkout failed to initialize");
+
+        if (data.url) {
+            window.location.href = data.url;
+        } else {
+            throw new Error("No checkout URL returned");
+        }
+    } catch (e) {
+        console.error("[Stripe] Checkout error:", e);
+        showToast(e.message, "error");
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+        }
+    }
 };
 
 document.addEventListener('DOMContentLoaded', () => {

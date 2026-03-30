@@ -22,6 +22,14 @@
 }
 
 
+/* Brand marks: /White_Castle.png (dark UI), /Black_Castle.png (favicon & light chrome) */
+img.brand-castle-mark {
+    display: block;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+
 body {
     background-color: var(--void-bg);
     color: var(--void-text);
@@ -114,6 +122,15 @@ select option {
     color: var(--void-text);
 }
 
+
+/* Binder toolbar: keep search from swallowing width; fixed dropdown column width */
+@media (min-width: 640px) {
+    #binder-filter-row .binder-filter-dropdown {
+        width: 11rem;
+        min-width: 11rem;
+        max-width: 11rem;
+    }
+}
 
 .void-dropdown {
     position: relative;
@@ -254,6 +271,412 @@ select option {
 
 .void-shadow {
     box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.6);
+}
+
+/* Card detail modal — full-screen blur, no panel chrome; content sized to card column */
+.card-detail-modal-backdrop {
+    background: rgba(3, 5, 8, 0.72);
+    backdrop-filter: blur(28px) saturate(1.15);
+    -webkit-backdrop-filter: blur(28px) saturate(1.15);
+}
+
+/* 3D: tilt-wrap = pointer drag; flip-track = click flip. No fixed “card box” frame — art uses object-contain. */
+.card-detail-flip-scene {
+    perspective: 1100px;
+    perspective-origin: 50% 50%;
+    cursor: grab;
+    touch-action: none;
+    --holo-o: 0;
+    --shine-o: 0;
+    --tilt: 14;
+    /* Pocket-style foil: driven by pointer (set in JS while dragging) */
+    --foil-x: 0.5;
+    --foil-y: 0.5;
+    --foil-angle: 0;
+}
+
+.card-detail-flip-scene:active {
+    cursor: grabbing;
+}
+
+.card-detail-flip-scene.holo-rare,
+.card-detail-flip-scene.holo-epic,
+.card-detail-flip-scene.holo-legendary {
+    --holo-o: var(--holo-idle);
+    --shine-o: var(--shine-idle);
+}
+
+.card-detail-tilt-wrap {
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.55s cubic-bezier(0.23, 1, 0.32, 1);
+    will-change: transform;
+    filter: drop-shadow(0 10px 36px rgba(0, 0, 0, 0.38));
+    border-radius: 1rem;
+}
+
+.card-detail-flip-track {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.85s var(--ease-premium, cubic-bezier(0.16, 1, 0.3, 1));
+    will-change: transform;
+}
+
+.card-detail-flip-scene.is-flipped .card-detail-flip-track {
+    transform: rotateY(180deg);
+}
+
+.card-detail-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.card-detail-face--front {
+    transform: rotateY(0deg) translateZ(1px);
+}
+
+.card-detail-face--back {
+    transform: rotateY(180deg) translateZ(1px);
+}
+
+.card-detail-flip-scene:focus-visible {
+    box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb), 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card-detail-flip-track {
+        transition: none;
+    }
+}
+
+/* Card detail: reactive holofoil (Pocket-like) — pause idle shimmer while dragging; follow pointer */
+.card-detail-flip-scene.is-card-tilting .holo-layer--card-detail {
+    animation: none !important;
+    transition:
+        opacity 0.06s linear,
+        filter 0.08s linear,
+        background-position 0.06s linear,
+        transform 0.08s linear;
+    background-position: calc(var(--foil-x) * 100%) calc(var(--foil-y) * 100%);
+    filter: hue-rotate(calc((var(--foil-x) - 0.5) * 55deg)) saturate(1.35) brightness(1.08);
+    transform: rotate(calc(var(--foil-angle) * 0.45deg));
+}
+
+.card-detail-flip-scene.is-card-tilting.holo-legendary .holo-layer--card-detail {
+    animation: none !important;
+}
+
+.card-detail-flip-scene.is-card-tilting .holo-shine--card-detail {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    z-index: 5 !important;
+    mix-blend-mode: screen !important;
+    animation: none !important;
+    
+    /* CodePen-inspired dual-gradient: sharp light beam + soft color foil */
+    background: 
+        linear-gradient(
+            115deg, 
+            transparent 35%, 
+            rgba(255, 255, 255, 0.7) 48%, 
+            rgba(255, 255, 255, 0.9) 50%, 
+            rgba(255, 255, 255, 0.7) 52%, 
+            transparent 65%
+        ),
+        linear-gradient(
+            115deg,
+            transparent 0%,
+            rgba(0, 231, 255, 0.3) 30%,
+            rgba(255, 0, 231, 0.3) 70%,
+            transparent 100%
+        ) !important;
+    
+    background-size: 300% 300% !important;
+    /* Inverted mapping for "fake light" reflection feel (light source feels static while card moves) */
+    background-position: calc((1 - var(--foil-x)) * 100%) calc((1 - var(--foil-y)) * 100%);
+
+    transition: 
+        opacity 0.06s linear,
+        transform 0.08s linear,
+        background-position 0.08s linear;
+}
+
+
+
+.card-detail-rarity-label {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--void-muted);
+}
+
+.card-detail-rarity-label[data-rarity='common'],
+.card-detail-rarity-label[data-rarity=''] {
+    color: var(--rarity-common);
+}
+
+.card-detail-rarity-label[data-rarity='rare'] {
+    color: var(--rarity-rare);
+}
+
+.card-detail-rarity-label[data-rarity='epic'] {
+    color: var(--rarity-epic);
+}
+
+.card-detail-rarity-label[data-rarity='legendary'] {
+    color: var(--rarity-legendary);
+}
+
+.card-detail-stat-pill {
+    border-radius: 0.85rem;
+    padding: 0.6rem 0.7rem;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+.card-detail-stat-label {
+    display: block;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(148, 163, 184, 0.7);
+    margin-bottom: 0.2rem;
+}
+
+.card-detail-stat-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--void-text);
+    line-height: 1;
+}
+
+.card-detail-trait-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.card-detail-variant-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.card-detail-variant-boxes {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.card-detail-trait-box {
+    border-radius: 0.65rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(0, 0, 0, 0.38);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+}
+
+.card-detail-trait-box--genesis {
+    border-color: rgba(196, 165, 116, 0.22);
+    background: rgba(20, 16, 10, 0.45);
+}
+
+.card-detail-trait-box--genesis-combo {
+    border-color: rgba(196, 165, 116, 0.26);
+    background: rgba(18, 14, 10, 0.48);
+    padding: 0.5rem 0.6rem;
+}
+
+.card-detail-trait-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.card-detail-trait-row-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.card-detail-trait-row-line--tippable {
+    position: relative;
+    cursor: help;
+    border-radius: 0.35rem;
+    outline-offset: 2px;
+}
+
+.card-detail-trait-row-line--tippable:focus-visible {
+    outline: 1px solid rgba(var(--void-accent-rgb), 0.55);
+}
+
+.card-detail-trait-tooltip {
+    position: absolute;
+    z-index: 80;
+    left: 0;
+    /* Slight overlap so the pointer can move from the row into the tooltip without losing hover */
+    bottom: calc(100% - 6px);
+    width: max-content;
+    min-width: 11rem;
+    max-width: min(19rem, calc(100vw - 3rem));
+    max-height: none;
+    overflow: hidden; /* no scrollbars — body uses line-clamp for long text */
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.6rem;
+    color: rgba(248, 250, 252, 0.95);
+    background: rgba(8, 10, 14, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+        0 12px 32px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        opacity 0.14s ease,
+        visibility 0.14s ease;
+}
+
+.card-detail-trait-tooltip-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.card-detail-trait-tooltip-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 0.65rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    font-size: 1.65rem;
+    line-height: 1;
+}
+
+.card-detail-trait-tooltip-icon-wrap .card-detail-trait-tooltip-icon-img {
+    width: 2.1rem;
+    height: 2.1rem;
+    object-fit: contain;
+    display: block;
+}
+
+.card-detail-trait-tooltip-body {
+    margin: 0;
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.45;
+    color: rgba(248, 250, 252, 0.92);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 9;
+    line-clamp: 9;
+    overflow: hidden;
+}
+
+.card-detail-trait-row-line--tippable:hover .card-detail-trait-tooltip,
+.card-detail-trait-row-line--tippable:focus-within .card-detail-trait-tooltip {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.card-detail-trait-row-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 0.05rem 0;
+}
+
+.card-detail-trait-box--mech {
+    border-color: rgba(var(--void-accent-rgb), 0.18);
+    background: rgba(5, 12, 14, 0.5);
+}
+
+.card-detail-trait-box--base {
+    border-color: rgba(148, 163, 184, 0.12);
+}
+
+.card-detail-trait-box-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.card-detail-trait-box-inner--stack {
+    display: block;
+    width: 100%;
+}
+
+.card-detail-trait-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0.9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-detail-trait-icon-img {
+    width: 0.95rem;
+    height: 0.95rem;
+    object-fit: contain;
+    flex-shrink: 0;
+    display: block;
+}
+
+.card-detail-trait-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(252, 250, 247, 0.94);
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-detail-trait-title--muted {
+    color: rgba(148, 163, 184, 0.85);
+    font-weight: 500;
+}
+
+.card-detail-variant-count {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: rgba(var(--void-accent-rgb), 0.78);
+    flex-shrink: 0;
+    line-height: 1;
+    align-self: center;
 }
 
 .void-fade {
@@ -438,13 +861,11 @@ select option {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    transform-style: preserve-3d;
-    will-change: transform;
     --holo-o: 0;
     --shine-o: 0;
     --tilt: 12;
-    
-    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), filter 0.3s ease;
+
+    transition: filter 0.3s ease;
 }
 
 
@@ -527,6 +948,44 @@ select option {
 .holo-rare      { --holo-max: 0.10; --shine-max: 0.35; --tilt: 10; --holo-idle: 0.04; --shine-idle: 0.12; }
 .holo-epic      { --holo-max: 0.18; --shine-max: 0.50; --tilt: 15; --holo-idle: 0.06; --shine-idle: 0.18; }
 .holo-legendary { --holo-max: 0.28; --shine-max: 0.60; --tilt: 18; --holo-idle: 0.08; --shine-idle: 0.25; }
+
+/* Card detail: holo mask is set in JS (same URL as art, mask-size: contain) so foil matches object-contain silhouette. */
+.card-detail-card-face {
+    isolation: isolate;
+}
+
+.card-detail-card-face .holo-layer--card-detail,
+.card-detail-card-face .holo-shine--card-detail {
+    position: absolute;
+    inset: 0;
+    border-radius: 0;
+}
+
+.card-detail-card-face .holo-layer--card-detail {
+    z-index: 4;
+    /* Screen reads on dark art; color-dodge/soft-light often vanish once masked */
+    mix-blend-mode: screen;
+}
+
+.card-detail-card-face .holo-shine--card-detail {
+    z-index: 5;
+    mix-blend-mode: screen;
+}
+
+.card-detail-flip-scene.holo-rare {
+    --holo-idle: 0.07;
+    --shine-idle: 0.16;
+}
+
+.card-detail-flip-scene.holo-epic {
+    --holo-idle: 0.11;
+    --shine-idle: 0.24;
+}
+
+.card-detail-flip-scene.holo-legendary {
+    --holo-idle: 0.16;
+    --shine-idle: 0.36;
+}
 
 
 .holo-epic .holo-layer {

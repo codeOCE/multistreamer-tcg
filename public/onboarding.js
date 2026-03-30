@@ -1,11 +1,24 @@
-/* public/onboarding.js */
-
-const API_BASE = `${window.location.origin}/api`;
+const CASTLE_ORIGIN =
+    typeof getCastleBackendOrigin === 'function' ? getCastleBackendOrigin() : window.location.origin;
+const API_BASE = `${CASTLE_ORIGIN}/api`;
 let currentStep = 1;
 let streamerData = null;
 let collectorData = null;
 let currentRole = null; // 'creator' or 'collector'
 let csrfToken = null;
+let isAuthenticated = false;
+/** Session user from /api/onboarding/status (includes kick_linked). */
+let onboardingUser = null;
+
+const ONBOARDING_METHOD_KEYS = [
+    'subs',
+    'bits',
+    'channel_points',
+    'kick_subscriptions',
+    'kick_gifts',
+    'kick_rewards',
+    'website',
+];
 
 // Initialization
 document.addEventListener('DOMContentLoaded', async () => {
@@ -34,18 +47,22 @@ async function checkStatus() {
 
         const res = await fetch(`${API_BASE}/onboarding/status`, { credentials: 'include' });
         if (res.status === 401) {
-            window.location.href = '/login';
-            return;
+            isAuthenticated = false;
+            onboardingUser = null;
+        } else if (res.ok) {
+            isAuthenticated = true;
+            const data = await res.json();
+            streamerData = data.streamer;
+            onboardingUser = data.user || null;
+        } else {
+            onboardingUser = null;
         }
-
-        const data = await res.json();
-        streamerData = data.streamer;
 
         // Determine if they should be on collector or creator flow
         if (currentRole === 'collector') {
             await initCollectorOnboarding();
         } else if (currentRole === 'creator') {
-            await initCreatorOnboarding(data);
+            await initCreatorOnboarding();
         } else {
             // No role specified, show picker
             showRolePicker();
@@ -83,19 +100,120 @@ function selectRole(role) {
     }
 }
 
-async function initCreatorOnboarding(data) {
+function applyCreatorConnectPlatformsUI() {
+    const twitchStatus = document.getElementById('twitch-status-text');
+    const twitchBtn = document.getElementById('twitch-connect-btn');
+    const kickStatus = document.getElementById('kick-status-text');
+    const kickBtn = document.getElementById('kick-connect-btn');
+    const step3Continue = document.querySelector('#c-step-3 .btn-void');
+
+    const u = onboardingUser;
+    const isKickPrimary = !!(u && String(u.twitch_id || '').startsWith('kick_'));
+    const kickLinked = !!(u && u.kick_linked);
+
+    if (twitchStatus) {
+        twitchStatus.classList.remove('text-void-accent', 'text-void-text');
+        twitchStatus.classList.add('text-void-muted');
+    }
+    if (kickStatus) {
+        kickStatus.classList.remove('text-void-accent', 'text-void-text');
+        kickStatus.classList.add('text-void-muted');
+    }
+
+    if (!isAuthenticated) {
+        if (twitchStatus) twitchStatus.textContent = 'Not connected';
+        if (twitchBtn) {
+            twitchBtn.disabled = false;
+            twitchBtn.innerHTML = 'Connect <i class="fa-brands fa-twitch ml-1"></i>';
+            twitchBtn.className =
+                'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
+            twitchBtn.onclick = () => {
+                window.location.href = `${CASTLE_ORIGIN}/auth/twitch?role=creator`;
+            };
+        }
+        if (kickStatus) kickStatus.textContent = 'Not connected';
+        if (kickBtn) {
+            kickBtn.disabled = false;
+            kickBtn.innerHTML =
+                'Connect <img src="/kick-mark.svg" alt="" width="14" height="14" class="inline-block w-3.5 h-3.5 ml-1 align-middle" />';
+            kickBtn.className =
+                'px-4 py-2 rounded-lg bg-[#00e701]/15 border border-[#00e701]/35 text-[#b8f5c0] text-xs font-bold uppercase tracking-widest shrink-0 hover:bg-[#00e701]/25';
+            kickBtn.onclick = () => {
+                window.location.href = `${CASTLE_ORIGIN}/auth/kick?role=creator`;
+            };
+        }
+        if (step3Continue) {
+            step3Continue.disabled = true;
+            step3Continue.classList.add('opacity-50');
+            step3Continue.textContent = 'Sign in to continue';
+        }
+        return;
+    }
+
+    if (isKickPrimary) {
+        if (twitchStatus) twitchStatus.textContent = 'Not linked (optional)';
+        if (twitchBtn) {
+            twitchBtn.disabled = false;
+            twitchBtn.innerHTML = 'Link Twitch <i class="fa-brands fa-twitch ml-1"></i>';
+            twitchBtn.className =
+                'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
+            twitchBtn.onclick = () => {
+                window.location.href = `${CASTLE_ORIGIN}/auth/twitch?role=creator`;
+            };
+        }
+    } else {
+        if (twitchStatus) twitchStatus.textContent = 'Connected';
+        if (twitchBtn) {
+            twitchBtn.innerHTML = 'Active <i class="fa-solid fa-check ml-1"></i>';
+            twitchBtn.disabled = true;
+            twitchBtn.onclick = null;
+            twitchBtn.className =
+                'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
+        }
+    }
+
+    if (kickLinked || isKickPrimary) {
+        if (kickStatus) kickStatus.textContent = isKickPrimary ? 'Signed in with Kick' : 'Connected';
+        if (kickBtn) {
+            kickBtn.innerHTML = 'Active <i class="fa-solid fa-check ml-1"></i>';
+            kickBtn.disabled = true;
+            kickBtn.onclick = null;
+            kickBtn.className =
+                'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
+        }
+    } else {
+        if (kickStatus) kickStatus.textContent = 'Not connected';
+        if (kickBtn) {
+            kickBtn.disabled = false;
+            kickBtn.innerHTML =
+                'Connect <img src="/kick-mark.svg" alt="" width="14" height="14" class="inline-block w-3.5 h-3.5 ml-1 align-middle" />';
+            kickBtn.className =
+                'px-4 py-2 rounded-lg bg-[#00e701]/15 border border-[#00e701]/35 text-[#b8f5c0] text-xs font-bold uppercase tracking-widest shrink-0 hover:bg-[#00e701]/25';
+            kickBtn.onclick = () => {
+                window.location.href = `${CASTLE_ORIGIN}/auth/kick?mode=link&role=creator`;
+            };
+        }
+    }
+
+    if (step3Continue) {
+        step3Continue.disabled = false;
+        step3Continue.classList.remove('opacity-50');
+        step3Continue.textContent = 'Continue';
+    }
+}
+
+async function initCreatorOnboarding() {
     document.getElementById('creator-steps').classList.remove('hidden');
     document.getElementById('collector-steps').classList.add('hidden');
 
     const headerRole = document.getElementById('header-role');
     if (headerRole) headerRole.textContent = 'Creator';
 
-    if (data && data.streamer) {
-        streamerData = data.streamer;
+    applyCreatorConnectPlatformsUI();
 
+    if (streamerData) {
         // Populate fields if they exist
         if (streamerData.brand_name) document.getElementById('brand-name').value = streamerData.brand_name;
-        if (streamerData.brand_tagline) document.getElementById('brand-tagline').value = streamerData.brand_tagline;
         if (streamerData.binder_color) {
             document.getElementById('binder-color').value = streamerData.binder_color;
             document.getElementById('binder-color-hex').value = streamerData.binder_color;
@@ -105,10 +223,11 @@ async function initCreatorOnboarding(data) {
         if (streamerData.tos_accepted) document.getElementById('tos-check').checked = true;
 
         // Populate collection methods (only if they've been saved before)
-        if (streamerData.collection_methods && Object.keys(streamerData.collection_methods).length > 0) {
+        if (streamerData.collection_methods && typeof streamerData.collection_methods === 'object') {
             const methods = streamerData.collection_methods;
-            document.querySelectorAll('input[name="method"]').forEach(input => {
-                input.checked = !!methods[input.value];
+            ONBOARDING_METHOD_KEYS.forEach((key) => {
+                const el = document.querySelector(`input[name="method"][value="${key}"]`);
+                if (el) el.checked = methods[key] === true;
             });
         }
 
@@ -118,15 +237,224 @@ async function initCreatorOnboarding(data) {
         showStep(1, 'c');
     }
 
-    // Binder color sync
+    // Binder color sync and preview update
     const colorPicker = document.getElementById('binder-color');
     const colorHex = document.getElementById('binder-color-hex');
-    if (colorPicker && colorHex) {
-        colorPicker.addEventListener('input', (e) => colorHex.value = e.target.value);
-        colorHex.addEventListener('input', (e) => {
-            if (/^#[0-9A-F]{6}$/i.test(e.target.value)) colorPicker.value = e.target.value;
+    const brandNameInput = document.getElementById('brand-name');
+    
+    // New preview elements
+    const previewBinderItem = document.getElementById('preview-binder-item');
+    const previewBinderName = document.getElementById('preview-binder-name');
+    const previewSidebarBinder = document.getElementById('preview-sidebar-binder');
+    const previewSidebarBinderName = document.getElementById('preview-sidebar-binder-name');
+    const previewNavCollection = document.getElementById('preview-nav-collection');
+    const previewShareCollectionName = document.getElementById('preview-share-collection-name');
+    const previewAccentLogoShell = document.getElementById('preview-accent-logo-shell');
+    const previewAccentWordmark = document.getElementById('preview-accent-wordmark');
+    const previewAccentRole = document.getElementById('preview-accent-role');
+    const previewAccentShareMark = document.getElementById('preview-accent-share-mark');
+    const previewAccentTrophy = document.getElementById('preview-accent-trophy');
+
+    const swatch = document.getElementById('color-preview-swatch');
+    const popover = document.getElementById('void-picker-popover');
+    const satValContainer = document.getElementById('sat-val-container');
+    const satValPointer = document.getElementById('sat-val-pointer');
+    const hueContainer = document.getElementById('hue-container');
+    const huePointer = document.getElementById('hue-pointer');
+    const pickerMiniSwatch = document.getElementById('picker-mini-swatch');
+    const closePickerBtn = document.getElementById('close-picker');
+
+    let currentH = 180, currentS = 100, currentV = 100;
+
+    function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+
+    function rgbToHsv(r, g, b) {
+        r /= 255, g /= 255, b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, v = max;
+        const d = max - min;
+        s = max === 0 ? 0 : d / max;
+        if (max === min) h = 0;
+        else {
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return { h: h * 360, s: s * 100, v: v * 100 };
+    }
+
+    function hsvToHex(h, s, v) {
+        s /= 100; v /= 100;
+        const c = v * s;
+        const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        const m = v - c;
+        let r, g, b;
+        if (h < 60) [r, g, b] = [c, x, 0];
+        else if (h < 120) [r, g, b] = [x, c, 0];
+        else if (h < 180) [r, g, b] = [0, c, x];
+        else if (h < 240) [r, g, b] = [0, x, c];
+        else if (h < 300) [r, g, b] = [x, 0, c];
+        else [r, g, b] = [c, 0, x];
+        const toHex = x => Math.round((x + m) * 255).toString(16).padStart(2, '0');
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+    }
+
+    function updateFromPicker() {
+        const hex = hsvToHex(currentH, currentS, currentV);
+        colorPicker.value = hex;
+        colorHex.value = hex.replace('#', '');
+        updatePreviewColor(hex);
+        
+        // Update picker UI
+        if (satValContainer) satValContainer.style.backgroundColor = hsvToHex(currentH, 100, 100);
+        if (satValPointer) {
+            satValPointer.style.left = `${currentS}%`;
+            satValPointer.style.top = `${100 - currentV}%`;
+        }
+        if (huePointer) huePointer.style.left = `${(currentH / 360) * 100}%`;
+        if (pickerMiniSwatch) pickerMiniSwatch.style.backgroundColor = hex;
+    }
+
+    function normalizePreviewHex(hex) {
+        let n = (hex != null && String(hex).trim()) ? String(hex).trim() : '#00f2fe';
+        if (!n.startsWith('#')) n = '#' + n.replace(/^#/, '');
+        n = n.toUpperCase();
+        if (!/^#[0-9A-F]{6}$/.test(n)) n = '#00F2FE';
+        return n;
+    }
+
+    function updatePreviewColor(hex) {
+        const normalized = normalizePreviewHex(hex);
+        const rgb = hexToRgb(normalized);
+        const ra = (a) => (rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : `rgba(0,242,254,${a})`);
+
+        const colorSwatch = document.getElementById('color-preview-swatch');
+        if (colorSwatch) {
+            colorSwatch.style.backgroundColor = normalized;
+            colorSwatch.style.boxShadow = `0 0 20px ${normalized}33`;
+        }
+
+        if (previewBinderItem) {
+            previewBinderItem.style.background = ra(0.12);
+            previewBinderItem.style.borderColor = ra(0.2);
+        }
+        if (previewSidebarBinder) {
+            previewSidebarBinder.style.background = ra(0.08);
+            previewSidebarBinder.style.borderColor = ra(0.25);
+        }
+        if (previewNavCollection) {
+            previewNavCollection.style.background = ra(0.15);
+        }
+        if (previewAccentLogoShell) previewAccentLogoShell.style.backgroundColor = ra(0.12);
+        if (previewAccentWordmark) previewAccentWordmark.style.color = normalized;
+        if (previewAccentRole) previewAccentRole.style.color = normalized;
+        if (previewAccentShareMark) previewAccentShareMark.style.backgroundColor = ra(0.2);
+        if (previewAccentTrophy) previewAccentTrophy.style.color = normalized;
+    }
+
+    if (swatch) {
+        swatch.addEventListener('click', (e) => {
+            e.stopPropagation();
+            popover.classList.toggle('hidden');
+            // Init picker from current color
+            const rgb = hexToRgb(colorPicker.value);
+            if (rgb) {
+                const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+                currentH = hsv.h; currentS = hsv.s; currentV = hsv.v;
+                updateFromPicker();
+            }
         });
     }
+
+    if (closePickerBtn) {
+        closePickerBtn.addEventListener('click', () => popover.classList.add('hidden'));
+    }
+
+    document.addEventListener('click', (e) => {
+        if (popover && !popover.contains(e.target) && e.target !== swatch) {
+            popover.classList.add('hidden');
+        }
+    });
+
+    if (satValContainer) {
+        const handleMove = (e) => {
+            const rect = satValContainer.getBoundingClientRect();
+            currentS = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            currentV = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+            updateFromPicker();
+        };
+        satValContainer.addEventListener('mousedown', (e) => {
+            handleMove(e);
+            const moveHandler = (me) => handleMove(me);
+            const upHandler = () => {
+                window.removeEventListener('mousemove', moveHandler);
+                window.removeEventListener('mouseup', upHandler);
+            };
+            window.addEventListener('mousemove', moveHandler);
+            window.addEventListener('mouseup', upHandler);
+        });
+    }
+
+    if (hueContainer) {
+        const handleMove = (e) => {
+            const rect = hueContainer.getBoundingClientRect();
+            currentH = Math.max(0, Math.min(360, ((e.clientX - rect.left) / rect.width) * 360));
+            updateFromPicker();
+        };
+        hueContainer.addEventListener('mousedown', (e) => {
+            handleMove(e);
+            const moveHandler = (me) => handleMove(me);
+            const upHandler = () => {
+                window.removeEventListener('mousemove', moveHandler);
+                window.removeEventListener('mouseup', upHandler);
+            };
+            window.addEventListener('mousemove', moveHandler);
+            window.addEventListener('mouseup', upHandler);
+        });
+    }
+
+    if (colorPicker && colorHex) {
+        colorPicker.addEventListener('input', (e) => {
+            const hex = e.target.value.toUpperCase();
+            colorHex.value = hex.replace('#', '');
+            updatePreviewColor(hex);
+        });
+        colorHex.addEventListener('input', (e) => {
+            let val = e.target.value.toUpperCase();
+            if (!val.startsWith('#')) val = '#' + val;
+            if (/^#[0-9A-F]{6}$/i.test(val)) {
+                colorPicker.value = val;
+                updatePreviewColor(val);
+            }
+        });
+        
+        updatePreviewColor(colorPicker.value.toUpperCase());
+    }
+
+    function syncBrandNameToPreview(val) {
+        const name = val || 'My Collection';
+        if (previewBinderName) previewBinderName.textContent = name;
+        if (previewSidebarBinderName) previewSidebarBinderName.textContent = name;
+        if (previewShareCollectionName) previewShareCollectionName.textContent = name;
+    }
+
+    if (brandNameInput) {
+        brandNameInput.addEventListener('input', (e) => {
+            syncBrandNameToPreview(e.target.value);
+        });
+        syncBrandNameToPreview(brandNameInput.value);
+    }
+
 }
 
 async function initCollectorOnboarding() {
@@ -135,6 +463,17 @@ async function initCollectorOnboarding() {
 
     const headerRole = document.getElementById('header-role');
     if (headerRole) headerRole.textContent = 'Collector';
+
+    if (!isAuthenticated) {
+        document.getElementById('col-auth-section').classList.remove('hidden');
+        const startBtn = document.getElementById('btn-col-tos');
+        if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.classList.add('opacity-50');
+        }
+        showStep(1, 'col');
+        return;
+    }
 
     try {
         const res = await fetch(`${API_BASE}/onboarding/collector/status`, { credentials: 'include' });
@@ -154,8 +493,8 @@ async function initCollectorOnboarding() {
 }
 
 function showStep(step, prefix) {
-    // Hide all step blocks
-    document.querySelectorAll('.step-card').forEach(el => {
+    // Hide all top-level step containers
+    document.querySelectorAll('.animate-step').forEach(el => {
         el.classList.add('hidden');
         el.classList.remove('active');
     });
@@ -165,6 +504,18 @@ function showStep(step, prefix) {
     if (nextStepEl) {
         nextStepEl.classList.remove('hidden');
         setTimeout(() => nextStepEl.classList.add('active'), 10);
+    }
+
+    // Toggle Branding Preview
+    const brandingPreview = document.getElementById('branding-preview-container');
+    if (brandingPreview) {
+        if (prefix === 'c' && step === 4) {
+            brandingPreview.classList.remove('hidden');
+            setTimeout(() => brandingPreview.classList.add('visible'), 10);
+        } else {
+            brandingPreview.classList.remove('visible');
+            setTimeout(() => brandingPreview.classList.add('hidden'), 600);
+        }
     }
 
     currentStep = step;
@@ -239,6 +590,11 @@ function showStep(step, prefix) {
         loadFollows();
     }
 
+    if (prefix === 'c' && step === 8) {
+        const savedAnim = localStorage.getItem('onboarding_pack_animation') || 'style1';
+        setTimeout(() => selectAnimation(savedAnim), 60);
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -248,6 +604,7 @@ async function nextStep(step) {
 }
 
 async function saveStepProgress(step) {
+    if (!isAuthenticated) return;
     try {
         await fetch(`${API_BASE}/onboarding/step`, {
             method: 'POST',
@@ -273,6 +630,11 @@ async function saveTOS() {
 
     errorEl.classList.add('hidden');
 
+    if (!isAuthenticated) {
+        nextStep(3);
+        return;
+    }
+
     try {
         const res = await fetch(`${API_BASE}/onboarding/tos`, {
             method: 'POST',
@@ -282,7 +644,7 @@ async function saveTOS() {
         });
         if (res.ok) nextStep(3);
         else throw new Error('Failed to save TOS');
-    } catch (e) { 
+    } catch (e) {
         showVisualError('Failed to save TOS. Please try again.', 'c-step-2');
     }
 }
@@ -313,19 +675,20 @@ function showVisualError(message, stepId) {
 }
 
 async function saveBranding() {
+    if (!isAuthenticated) return;
     const nameInput = document.getElementById('brand-name');
     const nameGroup = document.getElementById('brand-name-group');
     const name = nameInput.value;
     const color = document.getElementById('binder-color').value;
-    
-    if (!name) { 
+
+    if (!name) {
         nameGroup.classList.add('shake');
         nameInput.classList.add('border-red-500/50');
         setTimeout(() => {
             nameGroup.classList.remove('shake');
             nameInput.classList.remove('border-red-500/50');
         }, 500);
-        return; 
+        return;
     }
 
     try {
@@ -334,7 +697,7 @@ async function saveBranding() {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({
                 brand_name: name,
-                brand_tagline: document.getElementById('brand-tagline').value,
+                brand_tagline: streamerData?.brand_tagline ?? '',
                 binder_color: color,
                 battles_enabled: document.getElementById('toggle-battles').checked,
                 trading_enabled: document.getElementById('toggle-trading').checked
@@ -348,7 +711,7 @@ async function saveBranding() {
             nextStep(5);
         }
         else throw new Error('Failed to save branding');
-    } catch (e) { 
+    } catch (e) {
         console.error(e);
         const btn = document.querySelector('#c-step-4 .btn-void');
         btn.classList.add('bg-red-500/20', 'text-red-500');
@@ -361,7 +724,6 @@ async function saveBranding() {
 }
 
 function selectAnimation(style) {
-    console.log('Selected OBS style:', style);
     document.querySelectorAll('#c-step-8 .option-card').forEach(card => {
         card.classList.remove('selected');
         const onclick = card.getAttribute('onclick');
@@ -370,33 +732,29 @@ function selectAnimation(style) {
         }
     });
 
-    const preview = document.getElementById('pack-preview');
-    if (!preview) return;
+    localStorage.setItem('onboarding_pack_animation', style);
 
-    // Reset preview
-    preview.innerHTML = '';
-    preview.className = 'preview-content';
+    const placeholder = document.getElementById('pack-preview-placeholder');
+    const wrap = document.getElementById('pack-preview-frame-wrap');
+    const frame = document.getElementById('pack-overlay-preview-frame');
+    if (!placeholder || !wrap || !frame) return;
 
     if (style === 'none' || style === 'bot') {
-        preview.innerHTML = '<div class="text-void-muted opacity-50 text-[10px] uppercase tracking-widest">No Overlay / Bot Only</div>';
+        placeholder.classList.remove('hidden');
+        wrap.classList.add('hidden');
+        frame.removeAttribute('src');
         return;
     }
 
-    // Create mock card
-    const card = document.createElement('div');
-    card.className = 'preview-card-mock';
+    placeholder.classList.add('hidden');
+    wrap.classList.remove('hidden');
 
-    if (style === 'style1') card.classList.add('animate-preview-standard');
-    else if (style === 'style2') card.classList.add('animate-preview-cosmic');
-    else if (style === 'style3') card.classList.add('animate-preview-brutalist');
-
-    preview.appendChild(card);
-
-    // Save choice (locally for now, could be sent in nextStep)
-    localStorage.setItem('onboarding_pack_animation', style);
+    const src = `/obs.html?preview=${encodeURIComponent(style)}&_cb=${Date.now()}`;
+    frame.src = src;
 }
 
 async function saveOBSStyle() {
+    if (!isAuthenticated) return;
     const anim = localStorage.getItem('onboarding_pack_animation') || 'style1';
     try {
         const res = await fetch(`${API_BASE}/onboarding/obs-style`, {
@@ -436,9 +794,11 @@ function updateOBSLinks() {
 }
 
 async function saveCollectionMethods() {
+    if (!isAuthenticated) return;
     const methods = {};
-    document.querySelectorAll('input[name="method"]').forEach(input => {
-        methods[input.value] = input.checked;
+    ONBOARDING_METHOD_KEYS.forEach((key) => {
+        const el = document.querySelector(`input[name="method"][value="${key}"]`);
+        methods[key] = !!(el && el.checked);
     });
 
     try {
@@ -589,7 +949,7 @@ async function completeCollectorOnboarding() {
 }
 
 function linkTwitch() {
-    window.location.href = `${API_BASE.replace('/api', '')}/auth/twitch?onboarding=true`;
+    window.location.href = `${CASTLE_ORIGIN}/auth/twitch?onboarding=true`;
 }
 
 async function activateCollection() {
@@ -617,12 +977,12 @@ async function activateCollection() {
             const err = await res.json();
             showVisualError(err.error || 'Activation failed.', 'c-step-10');
             btn.disabled = false;
-            btn.innerHTML = 'Go Live <i class="fa-solid fa-bolt"></i>';
+            btn.innerHTML = 'Launch Collection <i class="fa-solid fa-bolt"></i>';
         }
     } catch (e) {
         showVisualError('Activation error.', 'c-step-10');
         btn.disabled = false;
-        btn.innerHTML = 'Go Live <i class="fa-solid fa-bolt"></i>';
+        btn.innerHTML = 'Launch Collection <i class="fa-solid fa-bolt"></i>';
     }
 }
 

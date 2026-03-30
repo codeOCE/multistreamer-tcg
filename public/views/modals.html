@@ -149,54 +149,58 @@
 </div>
 
 
-<div id="card-detail-modal" class="fixed inset-0 bg-void-bg/95 backdrop-blur-xl z-[2000] hidden flex items-center justify-center p-6 lg:p-12 overflow-y-auto" onclick="if(event.target===this) hideCardDetail()">
-    <div class="max-w-2xl w-full mx-auto relative void-fade bg-void-bg-alt/90 border border-white/10 rounded-3xl overflow-hidden shadow-2xl" onclick="event.stopPropagation()">
-        <button onclick="hideCardDetail()" class="absolute top-4 right-4 z-10 w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-colors">
-            <i class="fa-solid fa-xmark text-xl"></i>
-        </button>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 md:p-10">
-            <div class="relative">
-                <img id="card-detail-image" src="/pack.png" alt="" class="w-full aspect-[5/7] object-cover rounded-2xl border border-white/10 shadow-xl">
-                <div id="card-detail-glare" class="hidden absolute inset-0 rounded-2xl pointer-events-none bg-gradient-to-br from-transparent via-white/5 to-transparent"></div>
+<div id="card-detail-modal" class="fixed inset-0 z-[2000] hidden card-detail-modal-backdrop overflow-y-auto overflow-x-hidden">
+    <button type="button" onclick="hideCardDetail()" aria-label="Close" class="fixed top-5 right-5 z-[2010] w-10 h-10 rounded-full border border-white/10 bg-black/30 backdrop-blur-md hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-colors duration-200">
+        <i class="fa-solid fa-xmark text-base"></i>
+    </button>
+    <div class="min-h-full w-full flex items-center justify-center p-6 pt-16 pb-10 sm:p-10" onclick="if(event.target===this) hideCardDetail()">
+        <div class="card-detail-modal-layout void-fade w-full max-w-[min(100%,38rem)] lg:max-w-[min(100%,46rem)] mx-auto grid grid-cols-1 lg:grid-cols-[auto_minmax(0,19rem)] gap-6 lg:gap-8 lg:items-center" onclick="event.stopPropagation()">
+            <div class="card-detail-art-col flex justify-center lg:justify-start items-center shrink-0">
+                <div id="card-detail-flip-scene" class="card-detail-flip-scene card-detail-foil-drag-only outline-none select-none" tabindex="0" role="button" aria-label="Card — tap to flip; drag to tilt — dragging never flips" aria-pressed="false">
+                    <div class="card-detail-tilt-wrap">
+                        <div class="card-detail-flip-track">
+                            <div class="card-detail-face card-detail-face--front overflow-hidden bg-transparent rounded-2xl">
+                                <div class="card-detail-card-face absolute inset-0 rounded-2xl overflow-hidden">
+                                    <img id="card-detail-image" src="/pack.png" alt="" class="absolute inset-0 h-full w-full object-contain object-center block z-0 pointer-events-none rounded-2xl">
+                                    <div id="card-detail-holo-layer" class="holo-layer holo-layer--card-detail hidden" aria-hidden="true"></div>
+                                    <div id="card-detail-holo-shine" class="holo-shine holo-shine--card-detail hidden" aria-hidden="true"></div>
+                                </div>
+                            </div>
+                            <div class="card-detail-face card-detail-face--back overflow-hidden bg-transparent rounded-2xl">
+                                <img id="card-detail-back-image" src="/Castle_Default_Cardback.png" alt="" class="h-full w-full object-contain object-center block pointer-events-none rounded-2xl" draggable="false">
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="flex flex-col justify-center space-y-4">
-                <div>
-                    <div id="card-detail-rarity" class="text-[10px] font-black uppercase tracking-[0.2em] mb-1 text-void-muted">—</div>
-                    <h3 id="card-detail-name" class="text-2xl font-display font-black uppercase italic tracking-tight text-white">—</h3>
-                    <div class="flex gap-4 mt-2 text-[10px] font-bold text-void-muted">
-                        <span>Set: <span id="card-detail-set">—</span></span>
-                        <span>#<span id="card-detail-number">—</span></span>
-                        <span>×<span id="card-detail-count">1</span></span>
+            <div class="card-detail-body flex flex-col min-w-0 gap-4 lg:gap-4 lg:max-h-[min(70vh,548px)] lg:overflow-y-auto lg:pr-1 custom-scrollbar">
+                <header class="space-y-2">
+                    <div id="card-detail-rarity" class="card-detail-rarity-label leading-none" data-rarity="common">—</div>
+                    <h3 id="card-detail-name" class="font-display text-xl sm:text-2xl font-bold uppercase tracking-tight text-white leading-tight">—</h3>
+                    <div class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-snug text-void-muted/90">
+                        <span class="inline-flex items-baseline gap-1"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">Set</span> <span id="card-detail-set" class="text-void-text/85 font-semibold">—</span></span>
+                        <span class="text-white/12 px-0.5 select-none" aria-hidden="true">·</span>
+                        <span id="card-detail-number-wrap" class="inline-flex items-baseline gap-0.5"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">No.</span> <span id="card-detail-number" class="text-void-text/85 font-semibold tabular-nums">—</span></span>
+                        <span class="text-white/12 px-0.5 select-none" aria-hidden="true">·</span>
+                        <span class="inline-flex items-baseline gap-0.5"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">Owned</span> <span class="text-void-text/85 font-semibold tabular-nums">×<span id="card-detail-count">1</span></span></span>
+                    </div>
+                </header>
+                <p id="card-detail-description" class="card-detail-description text-[12px] sm:text-[13px] text-void-muted/90 leading-relaxed pl-3 border-l border-white/[0.07]">—</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="card-detail-stat-pill">
+                        <span class="card-detail-stat-label">Attack</span>
+                        <div id="card-detail-attack" class="card-detail-stat-value">0</div>
+                    </div>
+                    <div class="card-detail-stat-pill">
+                        <span class="card-detail-stat-label">Defense</span>
+                        <div id="card-detail-defense" class="card-detail-stat-value">0</div>
                     </div>
                 </div>
-                <p id="card-detail-description" class="text-sm text-void-muted leading-relaxed">—</p>
-                <div class="flex gap-4">
-                    <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                        <span class="text-[9px] text-void-muted uppercase font-black">Attack</span>
-                        <div id="card-detail-attack" class="text-lg font-black text-white">0</div>
-                    </div>
-                    <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                        <span class="text-[9px] text-void-muted uppercase font-black">Defense</span>
-                        <div id="card-detail-defense" class="text-lg font-black text-white">0</div>
-                    </div>
+                <div id="card-detail-traits-breakdown" class="hidden flex flex-col gap-2">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-void-muted/70">Copies by variant</div>
+                    <div id="card-detail-traits-breakdown-list" class="card-detail-trait-list"></div>
                 </div>
-                <div id="card-detail-mechanic-container" class="hidden p-4 rounded-xl bg-void-accent/10 border border-void-accent/20 space-y-2">
-                    <div class="text-[9px] font-black text-void-accent uppercase tracking-widest">Mechanic</div>
-                    <div class="flex items-center gap-2">
-                        <span id="card-detail-mechanic-icon" class="text-xl">⚙️</span>
-                        <span id="card-detail-mechanic-name" class="font-black text-white">—</span>
-                    </div>
-                    <p id="card-detail-mechanic-desc" class="text-[10px] text-void-muted">—</p>
-                </div>
-                <div id="card-detail-genesis-mechanic-container" class="hidden p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
-                    <div class="text-[9px] font-black text-amber-400 uppercase tracking-widest">Genesis Trait</div>
-                    <div class="flex items-center gap-2">
-                        <span id="card-detail-genesis-mechanic-icon" class="text-xl">✨</span>
-                        <span id="card-detail-genesis-mechanic-name" class="font-black text-white">—</span>
-                    </div>
-                    <p id="card-detail-genesis-mechanic-desc" class="text-[10px] text-void-muted">—</p>
-                </div>
-                <div id="card-detail-id" class="text-[8px] text-void-muted/50 font-mono hidden"></div>
+                <div id="card-detail-id" class="text-[8px] text-void-muted/35 font-mono tracking-tight hidden"></div>
             </div>
         </div>
     </div>
@@ -381,6 +385,72 @@
                     Cancel
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+
+
+<div id="twitch-settings-modal"
+    class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1050] hidden flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+    role="dialog" aria-modal="true" aria-labelledby="twitch-settings-title"
+    onclick="if(event.target===this&&typeof closeTwitchSettings==='function')closeTwitchSettings()">
+    <div class="glass-panel w-full max-w-lg rounded-2xl border border-white/10 max-h-[90vh] flex flex-col my-4" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between p-5 sm:p-6 border-b border-white/5 shrink-0">
+            <div>
+                <h3 id="twitch-settings-title" class="text-lg font-display font-black uppercase italic tracking-tight text-white">Twitch Channel Points</h3>
+                <p class="text-[10px] text-void-muted uppercase tracking-widest mt-1">Pack &amp; event rewards</p>
+            </div>
+            <button type="button" onclick="closeTwitchSettings()" aria-label="Close"
+                class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-all">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="p-5 sm:p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
+            <div class="space-y-3">
+                <label class="text-[10px] font-black uppercase tracking-widest text-void-muted">Pack reward ID</label>
+                <p class="text-[10px] text-void-muted">From Twitch or use <span class="text-void-text/90">Dashboard → Channel Points</span> to create it.</p>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" id="twitch-reward-id" placeholder="e.g. abc-def-…"
+                        class="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-void-text focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/20 outline-none" />
+                    <button type="button" onclick="autoCreateTwitchReward('twitch-reward-id')"
+                        class="shrink-0 px-4 py-3 rounded-xl bg-[#9146FF]/20 border border-[#9146FF]/40 text-[10px] font-black uppercase tracking-widest text-[#c4b5fd] hover:bg-[#9146FF]/30 transition-all">
+                        Create on Twitch
+                    </button>
+                </div>
+                <button type="button" onclick="validateRewardId('twitch-reward-id')"
+                    class="text-[10px] font-black uppercase tracking-widest text-void-accent hover:underline">Check ID format</button>
+            </div>
+            <div class="space-y-3">
+                <label class="text-[10px] font-black uppercase tracking-widest text-void-muted">Battle reward ID (optional)</label>
+                <input type="text" id="twitch-battle-reward-id" placeholder="Separate Twitch reward for battles"
+                    class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-void-text focus:border-void-accent/50 outline-none" />
+            </div>
+            <div class="pt-2 border-t border-white/5 space-y-3">
+                <label class="text-[10px] font-black uppercase tracking-widest text-void-muted">Event cards</label>
+                <p class="text-[10px] text-void-muted mb-2">Reward ID + card. Presets live on the dashboard.</p>
+                <div class="flex flex-col gap-2">
+                    <input type="text" id="cp-fixed-reward-id" placeholder="Event reward ID from Twitch"
+                        class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono text-void-text focus:border-void-accent/50 outline-none" />
+                    <input type="text" id="cp-fixed-label" placeholder="Label (optional, e.g. Subathon Day 1)"
+                        class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-void-text focus:border-void-accent/50 outline-none" />
+                    <select id="cp-fixed-card-select"
+                        class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-void-text focus:border-void-accent/50 outline-none">
+                        <option value="">Select catalog card…</option>
+                    </select>
+                    <button type="button" onclick="addChannelPointFixedCardRow()"
+                        class="w-full py-3 rounded-xl bg-void-accent/15 border border-void-accent/30 text-[10px] font-black uppercase tracking-widest text-void-accent hover:bg-void-accent/25 transition-all">
+                        Link reward to card
+                    </button>
+                </div>
+                <div id="cp-fixed-cards-list" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar text-xs"></div>
+            </div>
+            <div id="webhook-status-indicator" class="flex items-center gap-2 text-[10px] text-void-muted"></div>
+        </div>
+        <div class="flex gap-3 p-5 sm:p-6 border-t border-white/5 shrink-0">
+            <button type="button" onclick="closeTwitchSettings()"
+                class="flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest text-void-muted hover:text-white bg-white/5 hover:bg-white/10 transition-all">Cancel</button>
+            <button type="button" onclick="saveTwitchSettings()"
+                class="flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest bg-void-accent text-void-bg hover:opacity-95 transition-all">Save</button>
         </div>
     </div>
 </div>

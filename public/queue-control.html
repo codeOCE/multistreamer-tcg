@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue Control · Castle TCG</title>
+    <link rel="icon" type="image/png" href="/Black_Castle.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ── Reset & Base ───────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:          #05070a;
+            --bg-alt:      #0a0d12;
+            --bg-card:     rgba(255,255,255,0.03);
+            --border:      rgba(255,255,255,0.07);
+            --border-hover:rgba(255,255,255,0.14);
+            --accent:      #00f2fe;
+            --accent-glow: rgba(0,242,254,0.18);
+            --text:        #f1f5f9;
+            --muted:       #64748b;
+            --legendary:   #facc15;
+            --epic:        #c084fc;
+            --rare:        #60a5fa;
+            --common:      #94a3b8;
+            --green:       #4ade80;
+            --red:         #f87171;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+
+        /* ── Layout ─────────────────────────────────── */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 0;
+        }
+
+        /* ── Top Bar ─────────────────────────────────── */
+        #topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: rgba(0,242,254,0.04);
+            border-bottom: 1px solid rgba(0,242,254,0.12);
+            flex-shrink: 0;
+        }
+
+        #topbar .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--accent);
+        }
+
+        #topbar .brand img { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+
+        #status-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #live-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: blink 2s ease-in-out infinite;
+        }
+        @keyframes blink {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.35; }
+        }
+        #live-dot.paused { background: var(--muted); box-shadow: none; animation: none; }
+
+        #pending-count {
+            font-size: 9px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--accent);
+            background: var(--accent-glow);
+            border: 1px solid rgba(0,242,254,0.2);
+            padding: 2px 8px;
+            border-radius: 99px;
+        }
+
+        /* ── Tabs ────────────────────────────────────── */
+        #tab-bar {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 8px 4px;
+            font-size: 9px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--muted);
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+        .tab-btn:hover:not(.active) { color: var(--text); }
+
+        /* ── Controls bar ────────────────────────────── */
+        #controls-bar {
+            display: flex;
+            gap: 6px;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .ctrl-btn {
+            flex: 1;
+            padding: 6px 8px;
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border-radius: 7px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .ctrl-btn:hover { background: var(--border-hover); color: var(--text); }
+        .ctrl-btn.danger { border-color: rgba(248,113,113,0.25); color: var(--red); }
+        .ctrl-btn.danger:hover { background: rgba(248,113,113,0.1); }
+        .ctrl-btn:active { transform: scale(0.96); }
+        .ctrl-btn.pause-btn { border-color: rgba(251,191,36,0.3); color: #fbbf24; }
+        .ctrl-btn.pause-btn:hover { background: rgba(251,191,36,0.12); }
+        .ctrl-btn.pause-btn.paused { background: rgba(251,191,36,0.15); border-color: #fbbf24; color: #fbbf24; }
+        .ctrl-btn.skip-btn { border-color: rgba(129,140,248,0.3); color: #818cf8; }
+        .ctrl-btn.skip-btn:hover { background: rgba(129,140,248,0.12); }
+        #paused-banner {
+            display: none;
+            background: rgba(251,191,36,0.12);
+            border-bottom: 1px solid rgba(251,191,36,0.3);
+            color: #fbbf24;
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            text-align: center;
+            padding: 5px 0;
+            flex-shrink: 0;
+        }
+        #paused-banner.visible { display: block; }
+
+        /* ── Panel views ─────────────────────────────── */
+        .panel { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+        .panel.active { display: flex; }
+
+        .panel-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 8px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.1) transparent;
+        }
+        .panel-scroll::-webkit-scrollbar { width: 4px; }
+        .panel-scroll::-webkit-scrollbar-track { background: transparent; }
+        .panel-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+        /* ── Section label ───────────────────────────── */
+        .section-label {
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--muted);
+            padding: 8px 4px 4px;
+        }
+
+        /* ── Queue row ───────────────────────────────── */
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0)     scale(1); }
+        }
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateX(0);     max-height: 60px; margin-bottom: 3px; }
+            to   { opacity: 0; transform: translateX(20px);  max-height: 0;    margin-bottom: 0;  padding: 0; }
+        }
+        @keyframes flashNew {
+            0%   { box-shadow: 0 0 0 2px rgba(0,242,254,0.6); }
+            100% { box-shadow: none; }
+        }
+
+        .q-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            margin-bottom: 3px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            transition: background 0.15s, border-color 0.15s;
+            overflow: hidden;
+        }
+        .q-row:hover { background: rgba(255,255,255,0.05); border-color: var(--border-hover); }
+        .q-row.next-up {
+            border-color: rgba(0,242,254,0.3);
+            background: rgba(0,242,254,0.04);
+        }
+        .q-row.entering { animation: slideIn 0.28s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        .q-row.new-flash { animation: slideIn 0.28s cubic-bezier(0.34,1.56,0.64,1), flashNew 0.8s ease 0.28s forwards; }
+        .q-row.leaving  { animation: slideOut 0.22s ease forwards; pointer-events: none; }
+
+        .q-thumb {
+            width: 28px;
+            height: 36px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+            background: var(--bg-alt);
+        }
+        .q-thumb-placeholder {
+            width: 28px;
+            height: 36px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+            background: var(--bg-alt);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        .q-rarity-bar {
+            width: 3px;
+            border-radius: 2px;
+            flex-shrink: 0;
+            align-self: stretch;
+        }
+
+        .q-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .q-name {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .q-meta {
+            font-size: 9px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .q-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .q-btn {
+            padding: 4px 7px;
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-radius: 5px;
+            border: 1px solid var(--border);
+            background: none;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.12s;
+            white-space: nowrap;
+        }
+        .q-btn:hover { background: var(--border-hover); color: var(--text); }
+        .q-btn.skip  { border-color: rgba(248,113,113,0.2); color: var(--red); }
+        .q-btn.skip:hover { background: rgba(248,113,113,0.1); }
+        .q-btn.replay { border-color: rgba(0,242,254,0.2); color: var(--accent); }
+        .q-btn.replay:hover { background: rgba(0,242,254,0.08); }
+
+        /* ── Rarity badge ─────────────────────────────── */
+        .rarity-chip {
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 1px 5px;
+            border-radius: 3px;
+        }
+
+        /* ── Empty / loading states ───────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 32px 16px;
+            color: var(--muted);
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            opacity: 0.55;
+        }
+        .empty-state i { font-size: 20px; display: block; margin-bottom: 8px; }
+
+        /* ── Filter panel ─────────────────────────────── */
+        .filter-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-radius: 7px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            margin-bottom: 4px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+        .filter-row:hover { border-color: var(--border-hover); }
+
+        .filter-row label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .filter-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+        }
+
+        /* ── Custom rarity toggle switch ─────────────── */
+        .filter-cb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 30px;
+            height: 16px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.1);
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+            transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+        .filter-cb::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            top: 2px;
+            left: 2px;
+            transition: transform 0.2s ease, background 0.2s;
+        }
+        .filter-cb:checked::after {
+            transform: translateX(14px);
+        }
+        /* Per-rarity checked colours */
+        #filter-legendary .filter-cb:checked {
+            background: rgba(255,180,0,0.15);
+            border-color: var(--legendary);
+            box-shadow: 0 0 8px var(--legendary)55;
+        }
+        #filter-legendary .filter-cb:checked::after { background: var(--legendary); }
+
+        #filter-epic .filter-cb:checked {
+            background: rgba(168,85,247,0.15);
+            border-color: var(--epic);
+            box-shadow: 0 0 8px var(--epic)55;
+        }
+        #filter-epic .filter-cb:checked::after { background: var(--epic); }
+
+        #filter-rare .filter-cb:checked {
+            background: rgba(96,165,250,0.15);
+            border-color: var(--rare);
+            box-shadow: 0 0 8px var(--rare)55;
+        }
+        #filter-rare .filter-cb:checked::after { background: var(--rare); }
+
+        #filter-common .filter-cb:checked {
+            background: rgba(148,163,184,0.12);
+            border-color: var(--common);
+        }
+        #filter-common .filter-cb:checked::after { background: var(--common); }
+
+        /* Glow the row when checked */
+        #filter-legendary:has(.filter-cb:checked) { border-color: rgba(255,180,0,0.25); }
+        #filter-epic:has(.filter-cb:checked)      { border-color: rgba(168,85,247,0.25); }
+        #filter-rare:has(.filter-cb:checked)      { border-color: rgba(96,165,250,0.25); }
+        #filter-common:has(.filter-cb:checked)    { border-color: rgba(148,163,184,0.2); }
+
+        .save-filter-btn {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            font-size: 9px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border-radius: 8px;
+            border: 1px solid rgba(0,242,254,0.25);
+            background: rgba(0,242,254,0.08);
+            color: var(--accent);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .save-filter-btn:hover { background: rgba(0,242,254,0.15); }
+        .save-filter-btn:active { transform: scale(0.97); }
+
+        /* ── Toast ───────────────────────────────────── */
+        #toast {
+            position: fixed;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%) translateY(60px);
+            background: #1e293b;
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 7px 14px;
+            border-radius: 8px;
+            white-space: nowrap;
+            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 9999;
+            pointer-events: none;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+        #toast.success { border-color: rgba(74,222,128,0.3); color: var(--green); }
+        #toast.error   { border-color: rgba(248,113,113,0.3); color: var(--red); }
+
+        /* ── Error screen ─────────────────────────────── */
+        #error-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 20px;
+            text-align: center;
+            gap: 10px;
+            flex: 1;
+        }
+        #error-screen i { font-size: 28px; color: var(--red); }
+        #error-screen h2 { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
+        #error-screen p  { font-size: 9px; color: var(--muted); line-height: 1.7; }
+    </style>
+</head>
+<body>
+<div id="app">
+
+    
+    <div id="topbar">
+        <div class="brand">
+            <img src="/White_Castle.png" alt="" width="18" height="18">
+            Queue Control
+        </div>
+        <div id="status-row">
+            <div id="live-dot"></div>
+            <div id="pending-count">0 Pending</div>
+        </div>
+    </div>
+
+    
+    <div id="error-screen">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <h2 id="error-title">Access Denied</h2>
+        <p id="error-msg">Missing or invalid token. Open this page from your Creator Dashboard → Queue tab → Pop Out.</p>
+    </div>
+
+    
+    <div id="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('queue')">
+            <i class="fa-solid fa-list-check"></i> Queue
+        </button>
+        <button class="tab-btn" onclick="switchTab('history')">
+            <i class="fa-solid fa-clock-rotate-left"></i> History
+        </button>
+        <button class="tab-btn" onclick="switchTab('filter')">
+            <i class="fa-solid fa-sliders"></i> Filter
+        </button>
+    </div>
+
+    
+    <div id="paused-banner"><i class="fa-solid fa-pause"></i> &nbsp;QUEUE PAUSED</div>
+
+    
+    <div id="controls-bar">
+        <button id="btn-pause" class="ctrl-btn pause-btn" onclick="togglePause()">
+            <i class="fa-solid fa-pause"></i> Pause
+        </button>
+        <button class="ctrl-btn skip-btn" onclick="skipNow()">
+            <i class="fa-solid fa-forward-step"></i> Skip
+        </button>
+        <button class="ctrl-btn" onclick="refreshQueue()">
+            <i class="fa-solid fa-rotate-right"></i> Refresh
+        </button>
+        <button class="ctrl-btn danger" onclick="clearQueue()">
+            <i class="fa-solid fa-trash-can"></i> Clear
+        </button>
+    </div>
+
+    
+    <div id="panel-queue" class="panel active">
+        <div class="panel-scroll">
+            <div class="section-label">Up Next</div>
+            <div id="queue-list">
+                <div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i>Loading…</div>
+            </div>
+        </div>
+    </div>
+
+    
+    <div id="panel-history" class="panel">
+        <div class="panel-scroll">
+            <div class="section-label">Recently Played</div>
+            <div id="history-list">
+                <div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i>Loading…</div>
+            </div>
+        </div>
+    </div>
+
+    
+    <div id="panel-filter" class="panel">
+        <div class="panel-scroll">
+            <div class="section-label" style="margin-bottom:8px">OBS Display Filter</div>
+            <p style="font-size:9px;color:var(--muted);line-height:1.7;margin-bottom:12px;padding:0 2px">Only selected rarities trigger the on-screen animation. Others are silently consumed from the queue.</p>
+
+            <div class="filter-row" id="filter-legendary">
+                <label>
+                    <div class="filter-dot" style="background:var(--legendary);box-shadow:0 0 6px var(--legendary)"></div>
+                    <span style="color:var(--legendary)">Legendary</span>
+                </label>
+                <input type="checkbox" class="filter-cb" value="legendary" checked>
+            </div>
+            <div class="filter-row" id="filter-epic">
+                <label>
+                    <div class="filter-dot" style="background:var(--epic);box-shadow:0 0 6px var(--epic)"></div>
+                    <span style="color:var(--epic)">Epic</span>
+                </label>
+                <input type="checkbox" class="filter-cb" value="epic" checked>
+            </div>
+            <div class="filter-row" id="filter-rare">
+                <label>
+                    <div class="filter-dot" style="background:var(--rare);box-shadow:0 0 6px var(--rare)"></div>
+                    <span style="color:var(--rare)">Rare</span>
+                </label>
+                <input type="checkbox" class="filter-cb" value="rare" checked>
+            </div>
+            <div class="filter-row" id="filter-common">
+                <label>
+                    <div class="filter-dot" style="background:var(--common)"></div>
+                    <span style="color:var(--common)">Common</span>
+                </label>
+                <input type="checkbox" class="filter-cb" value="common" checked>
+            </div>
+
+            <button class="save-filter-btn" onclick="saveFilter()">
+                <i class="fa-solid fa-floppy-disk"></i> Save Filter
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+    /* ── Config ──────────────────────────────────────── */
+    const params   = new URLSearchParams(window.location.search);
+    const STREAMER = params.get('streamer') || '';
+    const TOKEN    = params.get('token')    || '';
+    const API      = window.location.origin;
+    const POLL_MS  = 3000; // silent background poll interval
+
+    const RARITY_COLOR = {
+        legendary: 'var(--legendary)',
+        epic:      'var(--epic)',
+        rare:      'var(--rare)',
+        common:    'var(--common)',
+    };
+
+    // Live state — track what's currently in the DOM
+    let knownPendingIds  = new Set();
+    let knownConsumedIds = new Set();
+    let pollTimer        = null;
+    let initialised      = false;
+    let isPaused         = false;
+
+    /* ── Init ────────────────────────────────────────── */
+    window.addEventListener('DOMContentLoaded', () => {
+        if (!STREAMER || !TOKEN) {
+            showError('Missing Parameters', 'Open this page from your Creator Dashboard → Queue tab → Pop Out for OBS.');
+            return;
+        }
+        poll();                              // first load (full render)
+        pollTimer = setInterval(poll, POLL_MS);
+    });
+
+    /* ── Silent background poll ──────────────────────── */
+    async function poll() {
+        try {
+            const res = await fetch(`${API}/api/obs/queue-ctl?streamer=${encodeURIComponent(STREAMER)}&token=${encodeURIComponent(TOKEN)}`);
+            if (res.status === 403) { stopPolling(); showError('Access Denied', 'Invalid or expired token. Please regenerate from the dashboard.'); return; }
+            const data = await res.json();
+            if (data.error) { stopPolling(); showError('API Error', data.error); return; }
+
+            patchQueue(data.pending   || []);
+            patchHistory(data.consumed || []);
+            if (!initialised) { applyFilterSettings(data.obs_settings); initialised = true; }
+            syncPauseState(!!data.obs_paused);
+        } catch (err) {
+            // network hiccup — stay silent, try again next tick
+            console.warn('[Queue] Poll error:', err.message);
+        }
+    }
+
+    function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
+
+    /* ── Force refresh (manual button) ──────────────── */
+    async function refreshQueue() {
+        knownPendingIds.clear();
+        knownConsumedIds.clear();
+        document.getElementById('queue-list').innerHTML   = '';
+        document.getElementById('history-list').innerHTML = '';
+        await poll();
+    }
+
+    /* ── Tab switching ───────────────────────────────── */
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+            const name = b.textContent.trim().toLowerCase();
+            b.classList.toggle('active',
+                (tab === 'queue'   && name.includes('queue'))   ||
+                (tab === 'history' && name.includes('history'))  ||
+                (tab === 'filter'  && name.includes('filter'))
+            );
+        });
+        document.getElementById('panel-queue').classList.toggle('active',   tab === 'queue');
+        document.getElementById('panel-history').classList.toggle('active', tab === 'history');
+        document.getElementById('panel-filter').classList.toggle('active',  tab === 'filter');
+    }
+
+    /* ── Helpers ─────────────────────────────────────── */
+    function timeAgo(iso) {
+        const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+        if (d < 60)   return `${d}s ago`;
+        if (d < 3600) return `${Math.floor(d/60)}m ago`;
+        return `${Math.floor(d/3600)}h ago`;
+    }
+    function rarityColor(r) { return RARITY_COLOR[(r||'common').toLowerCase()] || RARITY_COLOR.common; }
+
+    function makeRowEl(item, isPending, isFirst, isNew) {
+        const card  = item.cards || {};
+        const user  = item.users || {};
+        const color = rarityColor(card.rarity);
+        const label = (card.rarity||'common').charAt(0).toUpperCase() + (card.rarity||'common').slice(1).toLowerCase();
+
+        const el = document.createElement('div');
+        el.className = 'q-row' + (isFirst && isPending ? ' next-up' : '') + (isNew ? ' new-flash' : '');
+        el.dataset.id = item.id;
+
+        const thumb = card.image_url
+            ? `<img src="${card.image_url}" class="q-thumb" onerror="this.src='/pack.png'" alt="">`
+            : `<div class="q-thumb-placeholder"><i class="fa-solid fa-image"></i></div>`;
+
+        const actions = isPending
+            ? `<button class="q-btn skip"   onclick="skipItem('${item.id}')"><i class="fa-solid fa-forward"></i> Skip</button>`
+            : `<button class="q-btn replay" onclick="replayItem('${item.id}')"><i class="fa-solid fa-rotate-left"></i></button>`;
+
+        el.innerHTML = `
+            ${thumb}
+            <div class="q-rarity-bar" style="background:${color};box-shadow:0 0 4px ${color}55"></div>
+            <div class="q-info">
+                <div class="q-name">${card.name || 'Unknown Card'}</div>
+                <div class="q-meta">
+                    ${user.username ? `<i class="fa-brands fa-twitch" style="color:#9146ff;font-size:8px"></i> ${user.username} · ` : ''}
+                    <span style="color:${color}">${label}</span> · ${timeAgo(item.created_at)}
+                </div>
+            </div>
+            <div class="q-actions">${actions}</div>`;
+        return el;
+    }
+
+    /* ── Diffing patch for pending queue ─────────────── */
+    function patchQueue(pending) {
+        const container = document.getElementById('queue-list');
+        const newIds    = new Set(pending.map(i => i.id));
+
+        // Remove items no longer pending (played or skipped)
+        for (const id of knownPendingIds) {
+            if (!newIds.has(id)) {
+                const el = container.querySelector(`[data-id="${id}"]`);
+                if (el) removeWithAnim(el);
+                knownPendingIds.delete(id);
+            }
+        }
+
+        // Add new items — insert at correct position
+        const itemMap = Object.fromEntries(pending.map(i => [i.id, i]));
+        pending.forEach((item, idx) => {
+            const existing = container.querySelector(`[data-id="${item.id}"]`);
+            if (existing) {
+                // update next-up highlight
+                existing.classList.toggle('next-up', idx === 0);
+                return;
+            }
+            // New item — build and insert at position idx
+            const isNew = knownPendingIds.size > 0; // not the very first load
+            const el    = makeRowEl(item, true, idx === 0, isNew);
+            const allRows = [...container.querySelectorAll('.q-row')];
+            if (idx >= allRows.length) {
+                container.appendChild(el);
+            } else {
+                container.insertBefore(el, allRows[idx]);
+            }
+            knownPendingIds.add(item.id);
+        });
+
+        // Empty state
+        const hasRows = container.querySelectorAll('.q-row').length > 0;
+        let emptyEl   = container.querySelector('.empty-state');
+        if (!hasRows && !emptyEl) {
+            emptyEl = document.createElement('div');
+            emptyEl.className = 'empty-state';
+            emptyEl.innerHTML = `<i class="fa-solid fa-check-circle" style="color:var(--green);opacity:0.5"></i>Queue is empty`;
+            container.appendChild(emptyEl);
+        } else if (hasRows && emptyEl) {
+            emptyEl.remove();
+        }
+
+        // Update counter
+        document.getElementById('pending-count').textContent = `${pending.length} Pending`;
+    }
+
+    /* ── Diffing patch for history ───────────────────── */
+    function patchHistory(consumed) {
+        const container = document.getElementById('history-list');
+        const newIds    = new Set(consumed.map(i => i.id));
+
+        // Remove stale (shouldn't happen often but keeps list clean)
+        for (const id of knownConsumedIds) {
+            if (!newIds.has(id)) {
+                const el = container.querySelector(`[data-id="${id}"]`);
+                if (el) el.remove();
+                knownConsumedIds.delete(id);
+            }
+        }
+
+        // Prepend newly consumed items
+        consumed.forEach((item, idx) => {
+            if (knownConsumedIds.has(item.id)) return;
+            const isNew = knownConsumedIds.size > 0;
+            const el    = makeRowEl(item, false, false, isNew);
+            // newest first — insert before first existing row
+            const firstRow = container.querySelector('.q-row');
+            if (firstRow) container.insertBefore(el, firstRow);
+            else          container.appendChild(el);
+            knownConsumedIds.add(item.id);
+        });
+
+        let emptyEl = container.querySelector('.empty-state');
+        const hasRows = container.querySelectorAll('.q-row').length > 0;
+        if (!hasRows && !emptyEl) {
+            emptyEl = document.createElement('div');
+            emptyEl.className = 'empty-state';
+            emptyEl.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i>No history yet`;
+            container.appendChild(emptyEl);
+        } else if (hasRows && emptyEl) {
+            emptyEl.remove();
+        }
+    }
+
+    function removeWithAnim(el) {
+        el.classList.add('leaving');
+        el.addEventListener('animationend', () => el.remove(), { once: true });
+    }
+
+    function applyFilterSettings(settings) {
+        if (!settings?.show_rarities) return;
+        document.querySelectorAll('.filter-cb').forEach(cb => {
+            cb.checked = settings.show_rarities.includes(cb.value);
+        });
+    }
+
+    /* ── Actions ─────────────────────────────────────── */
+    async function skipItem(id) {
+        // Optimistic: animate out immediately
+        const el = document.querySelector(`[data-id="${id}"]`);
+        if (el) removeWithAnim(el);
+        knownPendingIds.delete(id);
+
+        try {
+            const res = await fetch(`${API}/api/obs/queue-ctl/skip?streamer=${encodeURIComponent(STREAMER)}&token=${encodeURIComponent(TOKEN)}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+            toast('Skipped', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+        // next poll will reconcile any discrepancy
+    }
+
+    async function replayItem(id) {
+        // Optimistic: remove from history immediately
+        const el = document.querySelector(`[data-id="${id}"]`);
+        if (el) removeWithAnim(el);
+        knownConsumedIds.delete(id);
+
+        try {
+            const res = await fetch(`${API}/api/obs/queue-ctl/replay?streamer=${encodeURIComponent(STREAMER)}&token=${encodeURIComponent(TOKEN)}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+            toast('Queued for replay', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function clearQueue() {
+        if (!confirm('Clear all pending animations from the queue?')) return;
+        // Optimistic: animate all pending rows out
+        document.querySelectorAll('#queue-list .q-row').forEach(removeWithAnim);
+        knownPendingIds.clear();
+        try {
+            const res = await fetch(`${API}/api/obs/queue-ctl/clear?streamer=${encodeURIComponent(STREAMER)}&token=${encodeURIComponent(TOKEN)}`, { method: 'POST' });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+            toast('Queue cleared', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function saveFilter() {
+        const checked = [...document.querySelectorAll('.filter-cb')].filter(c => c.checked).map(c => c.value);
+        if (!checked.length) { toast('Select at least one rarity', 'error'); return; }
+        try {
+            const res = await fetch(`${API}/api/obs/queue-ctl/settings?streamer=${encodeURIComponent(STREAMER)}&token=${encodeURIComponent(TOKEN)}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ obs_settings: { show_rarities: checked } }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+            toast('Filter saved', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    /* ── Pause / Resume ──────────────────────────────── */
+    function syncPauseState(paused) {
+        isPaused = paused;
+        const btn    = document.getElementById('btn-pause');
+        const banner = document.getElementById('paused-banner');
+        if (paused) {
+            btn.innerHTML = '<i class="fa-solid fa-play"></i> Resume';
+            btn.classList.add('paused');
+            banner.classList.add('visible');
+        } else {
+            btn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+            btn.classList.remove('paused');
+            banner.classList.remove('visible');
+        }
+    }
+
+    async function togglePause() {
+        const endpoint = isPaused ? 'resume' : 'pause';
+        syncPauseState(!isPaused); // optimistic
+        try {
+            const res = await fetch(`${API}/api/obs/queue-ctl/${endpoint}?streamer=${encodeURIComponent(STREAMER)}&token=${encodeURIComponent(TOKEN)}`, { method: 'POST' });
+            if (!res.ok) { syncPauseState(!isPaused); throw new Error((await res.json()).error || 'Failed'); }
+            toast(isPaused ? 'Paused — no new animations will play' : 'Resumed', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    /* ── Skip currently-playing animation ────────────── */
+    async function skipNow() {
+        try {
+            const res = await fetch(`${API}/api/obs/queue-ctl/skip-now?streamer=${encodeURIComponent(STREAMER)}&token=${encodeURIComponent(TOKEN)}`, { method: 'POST' });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+            toast('Skip signal sent', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    /* ── Error screen ────────────────────────────────── */
+    function showError(title, msg) {
+        document.getElementById('tab-bar').style.display      = 'none';
+        document.getElementById('controls-bar').style.display  = 'none';
+        document.getElementById('paused-banner').style.display = 'none';
+        document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+        const err = document.getElementById('error-screen');
+        err.style.display = 'flex';
+        document.getElementById('error-title').textContent = title;
+        document.getElementById('error-msg').textContent   = msg;
+    }
+
+    /* ── Toast ───────────────────────────────────────── */
+    let toastTimer = null;
+    function toast(msg, type = '') {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className   = `show ${type}`;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.className = type; }, 2200);
+    }
+</script>
+</body>
+</html>

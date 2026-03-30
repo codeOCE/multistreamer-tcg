@@ -1,4 +1,9 @@
-/* public/onboarding.css */
+img.brand-castle-mark {
+    display: block;
+    object-fit: contain;
+    pointer-events: none;
+}
+
 
 :root {
     --void-bg: #05070a;
@@ -15,15 +20,24 @@
 }
 
 .step-card {
-    background: rgba(10, 12, 16, 0.6);
-    backdrop-filter: blur(20px);
+    background: rgba(5, 7, 10, 0.58);
+    backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.05);
     transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Keep same quiet frame as Brand Settings — no cyan "active" ring on the card */
 .step-card.active {
-    border-color: var(--void-accent);
-    box-shadow: 0 0 30px rgba(0, 242, 254, 0.1);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+/* Match Brand Settings step titles: Outfit, italic, tight tracking */
+.step-card h2.font-display,
+#role-picker h2.font-display {
+    font-style: italic;
+    letter-spacing: -0.02em;
+    color: var(--void-text);
 }
 
 .input-void {
@@ -38,6 +52,17 @@
     background: rgba(255, 255, 255, 0.05);
     outline: none;
     box-shadow: 0 0 15px rgba(0, 242, 254, 0.15);
+}
+
+/* Default UA blue focus ring off for onboarding chrome; text fields still show .input-void focus glow. */
+.onboarding-gradient :where(button, a):focus,
+.onboarding-gradient :where(button, a):focus-visible {
+    outline: none;
+}
+
+.onboarding-gradient input:focus,
+.onboarding-gradient input:focus-visible {
+    outline: none;
 }
 
 .btn-void {
@@ -114,7 +139,7 @@
     animation: fadeInScale 0.4s ease-out forwards;
 }
 
-/* Custom Scrollbar */
+
 .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
 }
@@ -133,15 +158,15 @@
     background: rgba(0, 242, 254, 0.4);
 }
 
-/* Better Layout Centering */
+
 .onboarding-container {
-    min-height: calc(100vh - 160px);
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    min-height: 0;
 }
 
-/* Collector Specifics */
+
 .btn-void-accent {
     background: var(--void-accent);
     color: #05070a;
@@ -157,16 +182,16 @@
 }
 
 #role-picker {
-    max-width: 800px;
+    width: 100%;
     margin: 0 auto;
 }
 
-/* Custom Checkboxes */
+
 .checkbox-custom {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.5rem;
+    padding: 1.25rem;
     border-radius: 1rem;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
@@ -215,7 +240,7 @@ input:checked + .checkbox-visual i,
     opacity: 1;
 }
 
-/* Mini Preview Display */
+
 .preview-display {
     aspect-ratio: 16 / 9;
     background: #000;
@@ -238,7 +263,46 @@ input:checked + .checkbox-visual i,
     letter-spacing: 0.1em;
 }
 
-/* Option Cards (Grid selection) */
+/* Live OBS pack animation (obs.html ?preview=style*) embedded in onboarding */
+.preview-display--obs .pack-preview-obs-root {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    text-transform: none;
+    letter-spacing: normal;
+    color: inherit;
+    font-size: inherit;
+}
+
+.pack-overlay-preview-viewport {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.pack-overlay-preview-frame {
+    border: 0;
+    flex-shrink: 0;
+    width: 400px;
+    height: 560px;
+    transform: scale(0.44);
+    transform-origin: center center;
+}
+
+@media (min-width: 1024px) {
+    .pack-overlay-preview-frame {
+        transform: scale(0.5);
+    }
+}
+
+
 .option-card {
     background: rgba(255, 255, 255, 0.03);
     border: 2px solid transparent;
@@ -258,7 +322,7 @@ input:checked + .checkbox-visual i,
     background: rgba(0, 242, 254, 0.05);
 }
 
-/* Shake Animation */
+
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
     20%, 60% { transform: translateX(-6px); }
@@ -277,56 +341,52 @@ input:checked + .checkbox-visual i,
     animation: fadeInScale 0.2s ease-out;
 }
 
-/* OBS Preview Animations */
-@keyframes preview-standard {
-    0% { transform: translateY(100%) rotateY(0deg); opacity: 0; }
-    40% { transform: translateY(-10%) rotateY(0deg); opacity: 1; }
-    100% { transform: translateY(0) rotateY(180deg); opacity: 1; }
-}
 
-@keyframes preview-cosmic {
-    0% { transform: scale(0) rotate(0deg); filter: blur(20px) brightness(2); opacity: 0; }
-    50% { transform: scale(1.2) rotate(180deg); filter: blur(0px) brightness(1.5); opacity: 1; }
-    100% { transform: scale(1) rotate(360deg); filter: blur(0px) brightness(1); opacity: 1; }
-}
-
-@keyframes preview-brutalist {
-    0% { transform: translate(10px, -10px) skew(10deg); opacity: 0; filter: grayscale(1); }
-    20% { transform: translate(-5px, 5px) skew(-5deg); opacity: 1; }
-    40% { transform: translate(8px, -2px) skew(2deg); }
-    60% { transform: translate(-10px, 8px) skew(-8deg); }
-    80% { transform: translate(5px, -5px) skew(5deg); }
-    100% { transform: translate(0) skew(0); opacity: 1; filter: grayscale(0); }
-}
-
-.animate-preview-standard {
-    animation: preview-standard 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.animate-preview-cosmic {
-    animation: preview-cosmic 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-.animate-preview-brutalist {
-    animation: preview-brutalist 0.8s steps(5) forwards;
-}
-
-.preview-card-mock {
-    width: 60px;
-    height: 84px;
-    background: linear-gradient(135deg, var(--void-accent) 0%, #a855f7 100%);
-    border-radius: 6px;
-    border: 2px solid rgba(255,255,255,0.2);
-    box-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
+/* Color Swatches & Floating Preview */
+.color-swatch {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
     position: relative;
 }
 
-.preview-card-mock::after {
-    content: '🏰';
+.color-swatch:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.color-swatch.active {
+    border-color: white !important;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+
+.color-swatch.active::after {
+    content: '\f00c';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
     position: absolute;
     inset: 0;
     display: flex;
-    align-items: center;
+    align-items: center;      
     justify-content: center;
-    font-size: 1.5rem;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    font-size: 0.75rem;
+}
+
+/* In-flow with the form (no off-screen absolute column — fewer layout jumps, preview sits beside inputs). */
+#branding-preview-container {
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    opacity: 0;
+    transform: translateY(6px);
+    pointer-events: none;
+}
+
+#branding-preview-container.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
 }

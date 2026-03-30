@@ -1,6 +1,6 @@
-/* arena.css — Premium Battle Arena */
 
-/* ── VS Screen ───────────────────────────────────────────────────────────── */
+
+
 .vs-bg {
     background: radial-gradient(ellipse 140% 100% at 50% 60%,
             rgba(15, 10, 30, 0.97) 0%,
@@ -106,7 +106,7 @@
     flex-shrink: 0;
 }
 
-/* ── Battle Board glows ──────────────────────────────────────────────────── */
+
 .arena-glow-red {
     position: absolute;
     top: 0;
@@ -127,7 +127,7 @@
     pointer-events: none;
 }
 
-/* ── Player bars ─────────────────────────────────────────────────────────── */
+
 .player-bar {
     display: inline-flex;
     align-items: center;
@@ -193,7 +193,7 @@
     box-shadow: 0 0 8px #f87171;
 }
 
-/* ── Battlefield strip ───────────────────────────────────────────────────── */
+
 .battlefield-strip {
     position: absolute;
     top: 50%;
@@ -227,7 +227,7 @@
     border: 1px solid rgba(251, 191, 36, 0.18);
 }
 
-/* ── Battle Cards ─────────────────────────────────────────────────────────── */
+
 .battle-card {
     transition: transform 0.3s, filter 0.3s, box-shadow 0.3s;
 }
@@ -265,15 +265,23 @@
     background: rgba(185, 28, 28, 0.95);
 }
 
-.badge-reanimate {
+.badge-reanimate,
+.badge-revive {
     background: rgba(22, 163, 74, 0.95);
+}
+
+.mechanic-badge img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 2px;
 }
 
 .badge-mimic {
     background: rgba(126, 34, 206, 0.95);
 }
 
-/* ── Dead card ─────────────────────────────────────────────────────────── */
+
 .card-dead {
     filter: grayscale(100%) brightness(0.3) !important;
     transform: scale(0.91) translateY(5px) !important;
@@ -281,7 +289,7 @@
     transition: all 0.5s ease !important;
 }
 
-/* ── Combat animations ───────────────────────────────────────────────────── */
+
 @keyframes take-damage {
     0% {
         transform: translateX(0) rotate(0);
@@ -348,7 +356,7 @@
     animation: screen-shake 0.35s ease-in-out;
 }
 
-/* ── Trait popups ───────────────────────────────────────────────────────── */
+
 @keyframes trait-pop {
     0% {
         transform: translate(-50%, -50%) scale(0.2);
@@ -388,6 +396,15 @@
     filter: drop-shadow(0 0 16px currentColor);
 }
 
+.anim-trait-pop .trait-popup-icon {
+    width: 4rem;
+    height: 4rem;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+    filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.85));
+}
+
 @keyframes shield-flash {
     0% {
         transform: translate(-50%, -50%) scale(0.2);
@@ -425,7 +442,7 @@
     filter: drop-shadow(0 0 20px rgba(251, 191, 36, 0.9));
 }
 
-/* ── Floating Text Styles ───────────────────────────────────────────────── */
+
 .floating-text-heal {
     color: #4ade80 !important;
     text-shadow: 0 0 10px rgba(74, 222, 128, 0.8) !important;
@@ -441,7 +458,7 @@
     text-shadow: 0 0 10px rgba(34, 211, 238, 0.8) !important;
 }
 
-/* ── Mimic Morph Animation ──────────────────────────────────────────────── */
+
 @keyframes mimic-morph {
     0% {
         filter: hue-rotate(0deg) brightness(1) contrast(1);
@@ -477,7 +494,7 @@
     animation: mimic-morph 0.8s cubic-bezier(0.45, 0.05, 0.55, 0.95);
 }
 
-/* ── Round banner ────────────────────────────────────────────────────────── */
+
 .round-banner {
     position: absolute;
     top: 50%;
@@ -515,7 +532,7 @@
     }
 }
 
-/* ── Coin Flip ────────────────────────────────────────────────────────────── */
+
 @keyframes coinFlipSpin {
     0% {
         transform: translateY(0) rotateX(0deg) scale(1);
@@ -564,7 +581,7 @@
     }
 }
 
-/* ── Winner screen ────────────────────────────────────────────────────────── */
+
 .winner-label {
     font-size: 0.7rem;
     font-weight: 900;
@@ -631,7 +648,7 @@
     margin-top: 6px;
 }
 
-/* ── Idle pulse ─────────────────────────────────────────────────────────── */
+
 .idle-pulse {
     animation: idleBlink 3s ease-in-out infinite;
 }

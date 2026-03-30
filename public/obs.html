@@ -15,11 +15,12 @@
         html {
             width: 100%;
             height: 100%;
+            background: transparent;
         }
 
         body {
             overflow: hidden;
-            background: transparent;
+            background: transparent !important;
             font-family: 'Segoe UI', sans-serif;
             width: 100%;
             height: 100%;
@@ -37,6 +38,7 @@
             justify-content: center;
             perspective: 1200px;
             pointer-events: none;
+            background: transparent;
         }
 
         /*
@@ -46,6 +48,7 @@
          */
         #obs-pack-offset {
             transform: translateY(-105px);
+            background: transparent;
         }
 
         /* pack-scene: 400×560 */
@@ -53,6 +56,7 @@
             position: relative;
             width: 400px;
             height: 560px;
+            background: transparent;
         }
 
         /* Pack body — z-index ABOVE card so the card hides inside it */
@@ -68,7 +72,10 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
+            object-position: center;
             display: block;
+            /* Allow PNG alpha to show through to OBS */
+            background: transparent;
         }
 
         /* Shine sweep */
@@ -113,6 +120,7 @@
             height: 1000%;
             object-fit: contain;
             object-position: top center;
+            background: transparent;
         }
 
         /* On rip: tear cap flies off, pack body clips the torn top strip away */
@@ -152,22 +160,13 @@
 
         /* Card back */
         #card-back {
-            background: linear-gradient(145deg, #064e3b 0%, #065f46 30%, #047857 50%, #065f46 70%, #064e3b 100%);
+            background-image: url('/Castle_Default_Cardback_Borderless.png');
+            background-size: cover;
+            background-position: center;
             border: 2px solid rgba(255, 255, 255, 0.15);
             box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            gap: 10px;
         }
 
-        #card-back::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(255, 255, 255, .03) 6px, rgba(255, 255, 255, .03) 12px);
-        }
 
         .back-card {
             font-size: 48px;
@@ -247,20 +246,17 @@
 
             
             <div id="pack-face">
-                <img src="/pack.png" alt="Pack">
+                <img src="/default_pack.png" alt="Pack">
             </div>
 
             
             <div id="tear-cap">
-                <img src="/pack.png" alt="">
+                <img src="/default_pack.png" alt="">
             </div>
 
             
             <div id="card-flipper">
-                <div class="card-face" id="card-back">
-                    <div class="back-card">🏰</div>
-                    <div class="back-text">Castle TCG</div>
-                </div>
+                <div class="card-face" id="card-back"></div>
                 <div class="card-face" id="card-front">
                     <img id="card-img" src="" alt="">
                 </div>
@@ -415,7 +411,8 @@
             const cardImg = document.getElementById('card-img');
             const animStyle = streamerConfig?.pack_animation_style || 'style1';
 
-            cardImg.src = card.image_url || '';
+            cardImg.removeAttribute('src');
+            // Card URL is applied after pack fade-in so art doesn't show through transparent pack PNG
 
             // ── AUDIO ──
             const audio = new Audio('/packopensound.wav');
@@ -437,14 +434,18 @@
             packFace.style.transition = '';
 
             flipper.style.zIndex = '6';
-            setFlip(flipper, { opacity: 1, rotateY: 0, translateY: 300, scale: 1, transition: 'none' });
+            /* opacity 0 until phase 4 — avoids card/back showing through transparent pack art */
+            setFlip(flipper, { opacity: 0, rotateY: 0, translateY: 300, scale: 1, transition: 'none' });
             await wait(50);
 
-            // PHASE 1 — Pack fades in
+            // PHASE 1 — Pack fades in first (whole scene invisible until now)
             scene.style.transition = 'opacity 0.5s ease';
             scene.style.opacity = '1';
             audio.play().catch(e => console.warn('Audio play failed:', e));
             await skippableWait(700);
+
+            // Load card art while flipper is still invisible (shake/rip gives decode time)
+            await preloadCardImage(cardImg, card.image_url || '');
 
             // PHASE 2 — Shake
             scene.classList.add('shaking');
@@ -456,7 +457,7 @@
             scene.classList.add('ripping');
             await skippableWait(800);
 
-            // PHASE 4 — Card Reveal Sequence Branching (skip jumps straight to fade-out)
+            // PHASE 4 — Card reveal (flipper becomes visible here)
             if (!skipRequested) {
                 if (animStyle === 'style2') { // COSMIC BURST
                     setFlip(flipper, {
@@ -535,6 +536,27 @@
             el.style.transition = transition;
             el.style.opacity = opacity;
             el.style.transform = `rotateY(${rotateY}deg) translateY(${translateY}px) scale(${scale})`;
+        }
+
+        /** Set card image src after pack is visible; wait so phase 4 doesn't flash a loading frame */
+        function preloadCardImage(img, url) {
+            if (!url || !String(url).trim()) {
+                img.removeAttribute('src');
+                return Promise.resolve();
+            }
+            img.src = url;
+            return new Promise((resolve) => {
+                const finish = () => {
+                    if (img.decode && typeof img.decode === 'function') {
+                        img.decode().then(resolve).catch(resolve);
+                    } else resolve();
+                };
+                if (img.complete && img.naturalWidth > 0) finish();
+                else {
+                    img.onload = () => finish();
+                    img.onerror = () => resolve();
+                }
+            });
         }
 
         function wait(ms) { return new Promise(r => setTimeout(r, ms)); }

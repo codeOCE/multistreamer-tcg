@@ -1,4 +1,7 @@
-/* public/onboarding-test.js */
+/* public/onboarding-test.js
+ * Playground / flow test only: no POSTs that persist onboarding, favorites, or activation.
+ * Safe reads (status, follows) still hit the API so the UI can show real data when logged in.
+ */
 
 const API_BASE = `${window.location.origin}/api`;
 let currentStep = 1;
@@ -6,12 +9,22 @@ let streamerData = null;
 let collectorData = null;
 let currentRole = null; // 'creator' or 'collector'
 let csrfToken = null;
+/** Favorites toggled during this session only (collector step 2); never POSTed from this page */
+const testFlowFavoriteIds = new Set();
 
 // Initialization
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('[TEST MODE] Initializing onboarding playground...');
     await fetchCSRFToken();
     await checkStatus();
+
+    const tosCheck = document.getElementById('tos-check');
+    const tosError = document.getElementById('tos-error');
+    if (tosCheck && tosError) {
+        tosCheck.addEventListener('change', () => {
+            if (tosCheck.checked) tosError.classList.add('hidden');
+        });
+    }
 });
 
 async function fetchCSRFToken() {
@@ -99,7 +112,6 @@ async function initCreatorOnboarding(data) {
 
         // Populate fields if they exist
         if (streamerData.brand_name) document.getElementById('brand-name').value = streamerData.brand_name;
-        if (streamerData.brand_tagline) document.getElementById('brand-tagline').value = streamerData.brand_tagline;
         if (streamerData.binder_color) {
             document.getElementById('binder-color').value = streamerData.binder_color;
             document.getElementById('binder-color-hex').value = streamerData.binder_color;
@@ -122,16 +134,243 @@ async function initCreatorOnboarding(data) {
         showStep(1, 'c');
     }
 
-    // Binder color sync
+    // Binder color sync and preview update
     const colorPicker = document.getElementById('binder-color');
     const colorHex = document.getElementById('binder-color-hex');
-    if (colorPicker && colorHex) {
-        colorPicker.addEventListener('input', (e) => colorHex.value = e.target.value);
-        colorHex.addEventListener('input', (e) => {
-            if (/^#[0-9A-F]{6}$/i.test(e.target.value)) colorPicker.value = e.target.value;
+    const brandNameInput = document.getElementById('brand-name');
+    const hueSlider = document.getElementById('hue-slider');
+    
+    // New preview elements
+    const previewBinderItem = document.getElementById('preview-binder-item');
+    const previewBinderName = document.getElementById('preview-binder-name');
+    const previewSidebarBinder = document.getElementById('preview-sidebar-binder');
+    const previewSidebarBinderName = document.getElementById('preview-sidebar-binder-name');
+    const previewNavCollection = document.getElementById('preview-nav-collection');
+    const previewShareCollectionName = document.getElementById('preview-share-collection-name');
+    const previewAccentLogoShell = document.getElementById('preview-accent-logo-shell');
+    const previewAccentWordmark = document.getElementById('preview-accent-wordmark');
+    const previewAccentRole = document.getElementById('preview-accent-role');
+    const previewAccentShareMark = document.getElementById('preview-accent-share-mark');
+    const previewAccentTrophy = document.getElementById('preview-accent-trophy');
+
+    const swatch = document.getElementById('color-preview-swatch');
+    const popover = document.getElementById('void-picker-popover');
+    const satValContainer = document.getElementById('sat-val-container');
+    const satValPointer = document.getElementById('sat-val-pointer');
+    const hueContainer = document.getElementById('hue-container');
+    const huePointer = document.getElementById('hue-pointer');
+    const pickerMiniSwatch = document.getElementById('picker-mini-swatch');
+    const closePickerBtn = document.getElementById('close-picker');
+
+    let currentH = 180, currentS = 100, currentV = 100;
+
+    function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+
+    function rgbToHsv(r, g, b) {
+        r /= 255, g /= 255, b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, v = max;
+        const d = max - min;
+        s = max === 0 ? 0 : d / max;
+        if (max === min) h = 0;
+        else {
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return { h: h * 360, s: s * 100, v: v * 100 };
+    }
+
+    function hsvToHex(h, s, v) {
+        s /= 100; v /= 100;
+        const c = v * s;
+        const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        const m = v - c;
+        let r, g, b;
+        if (h < 60) [r, g, b] = [c, x, 0];
+        else if (h < 120) [r, g, b] = [x, c, 0];
+        else if (h < 180) [r, g, b] = [0, c, x];
+        else if (h < 240) [r, g, b] = [0, x, c];
+        else if (h < 300) [r, g, b] = [x, 0, c];
+        else [r, g, b] = [c, 0, x];
+        const toHex = x => Math.round((x + m) * 255).toString(16).padStart(2, '0');
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+    }
+
+    function updateFromPicker() {
+        const hex = hsvToHex(currentH, currentS, currentV);
+        colorPicker.value = hex;
+        colorHex.value = hex.replace('#', '');
+        updatePreviewColor(hex);
+        
+        // Update picker UI
+        if (satValContainer) satValContainer.style.backgroundColor = hsvToHex(currentH, 100, 100);
+        if (satValPointer) {
+            satValPointer.style.left = `${currentS}%`;
+            satValPointer.style.top = `${100 - currentV}%`;
+        }
+        if (huePointer) huePointer.style.left = `${(currentH / 360) * 100}%`;
+        if (pickerMiniSwatch) pickerMiniSwatch.style.backgroundColor = hex;
+    }
+
+    function normalizePreviewHex(hex) {
+        let n = (hex != null && String(hex).trim()) ? String(hex).trim() : '#00f2fe';
+        if (!n.startsWith('#')) n = '#' + n.replace(/^#/, '');
+        n = n.toUpperCase();
+        if (!/^#[0-9A-F]{6}$/.test(n)) n = '#00F2FE';
+        return n;
+    }
+
+    function updatePreviewColor(hex) {
+        const normalized = normalizePreviewHex(hex);
+        const rgb = hexToRgb(normalized);
+        const ra = (a) => (rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : `rgba(0,242,254,${a})`);
+
+        const colorSwatch = document.getElementById('color-preview-swatch');
+        if (colorSwatch) {
+            colorSwatch.style.backgroundColor = normalized;
+            colorSwatch.style.boxShadow = `0 0 20px ${normalized}33`;
+        }
+
+        if (previewBinderItem) {
+            previewBinderItem.style.background = ra(0.12);
+            previewBinderItem.style.borderColor = ra(0.2);
+        }
+        if (previewSidebarBinder) {
+            previewSidebarBinder.style.background = ra(0.08);
+            previewSidebarBinder.style.borderColor = ra(0.25);
+        }
+        if (previewNavCollection) {
+            previewNavCollection.style.background = ra(0.15);
+        }
+        if (previewAccentLogoShell) previewAccentLogoShell.style.backgroundColor = ra(0.12);
+        if (previewAccentWordmark) previewAccentWordmark.style.color = normalized;
+        if (previewAccentRole) previewAccentRole.style.color = normalized;
+        if (previewAccentShareMark) previewAccentShareMark.style.backgroundColor = ra(0.2);
+        if (previewAccentTrophy) previewAccentTrophy.style.color = normalized;
+    }
+
+    if (swatch) {
+        swatch.addEventListener('click', (e) => {
+            e.stopPropagation();
+            popover.classList.toggle('hidden');
+            if (!popover.classList.contains('hidden')) {
+                // Fade in effect
+                setTimeout(() => {
+                    popover.style.opacity = '1';
+                    popover.style.transform = 'scale(1)';
+                }, 10);
+            } else {
+                popover.style.opacity = '0';
+                popover.style.transform = 'scale(0.95)';
+            }
+            // Init picker from current color
+            const rgb = hexToRgb(colorPicker.value);
+            if (rgb) {
+                const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+                currentH = hsv.h; currentS = hsv.s; currentV = hsv.v;
+                updateFromPicker();
+            }
         });
     }
+
+    if (closePickerBtn) {
+        closePickerBtn.addEventListener('click', () => {
+            popover.style.opacity = '0';
+            popover.style.transform = 'scale(0.95)';
+            setTimeout(() => popover.classList.add('hidden'), 200);
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (popover && !popover.contains(e.target) && e.target !== swatch) {
+            popover.style.opacity = '0';
+            popover.style.transform = 'scale(0.95)';
+            setTimeout(() => popover.classList.add('hidden'), 200);
+        }
+    });
+
+    if (satValContainer) {
+        const handleMove = (e) => {
+            const rect = satValContainer.getBoundingClientRect();
+            currentS = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            currentV = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+            updateFromPicker();
+        };
+        satValContainer.addEventListener('mousedown', (e) => {
+            handleMove(e);
+            const moveHandler = (me) => handleMove(me);
+            const upHandler = () => {
+                window.removeEventListener('mousemove', moveHandler);
+                window.removeEventListener('mouseup', upHandler);
+            };
+            window.addEventListener('mousemove', moveHandler);
+            window.addEventListener('mouseup', upHandler);
+        });
+    }
+
+    if (hueContainer) {
+        const handleMove = (e) => {
+            const rect = hueContainer.getBoundingClientRect();
+            currentH = Math.max(0, Math.min(360, ((e.clientX - rect.left) / rect.width) * 360));
+            updateFromPicker();
+        };
+        hueContainer.addEventListener('mousedown', (e) => {
+            handleMove(e);
+            const moveHandler = (me) => handleMove(me);
+            const upHandler = () => {
+                window.removeEventListener('mousemove', moveHandler);
+                window.removeEventListener('mouseup', upHandler);
+            };
+            window.addEventListener('mousemove', moveHandler);
+            window.addEventListener('mouseup', upHandler);
+        });
+    }
+
+    if (colorPicker && colorHex) {
+        colorPicker.addEventListener('input', (e) => {
+            const hex = e.target.value.toUpperCase();
+            colorHex.value = hex.replace('#', '');
+            updatePreviewColor(hex);
+        });
+        colorHex.addEventListener('input', (e) => {
+            let val = e.target.value.toUpperCase();
+            if (!val.startsWith('#')) val = '#' + val;
+            if (/^#[0-9A-F]{6}$/i.test(val)) {
+                colorPicker.value = val;
+                updatePreviewColor(val);
+            }
+        });
+        
+        updatePreviewColor(colorPicker.value.toUpperCase());
+    }
+
+    function syncBrandNameToPreview(val) {
+        const name = val || 'My Collection';
+        if (previewBinderName) previewBinderName.textContent = name;
+        if (previewSidebarBinderName) previewSidebarBinderName.textContent = name;
+        if (previewShareCollectionName) previewShareCollectionName.textContent = name;
+    }
+
+    if (brandNameInput) {
+        brandNameInput.addEventListener('input', (e) => {
+            syncBrandNameToPreview(e.target.value);
+        });
+        syncBrandNameToPreview(brandNameInput.value);
+    }
+
 }
+
 
 async function initCollectorOnboarding() {
     document.getElementById('collector-steps').classList.remove('hidden');
@@ -159,8 +398,8 @@ async function initCollectorOnboarding() {
 
 function showStep(step, prefix) {
     console.log(`[TEST MODE] Showing step ${prefix}-${step}`);
-    // Hide all step blocks
-    document.querySelectorAll('.step-card').forEach(el => {
+    // Hide all top-level step containers
+    document.querySelectorAll('.animate-step').forEach(el => {
         el.classList.add('hidden');
         el.classList.remove('active');
     });
@@ -170,6 +409,18 @@ function showStep(step, prefix) {
     if (nextStepEl) {
         nextStepEl.classList.remove('hidden');
         setTimeout(() => nextStepEl.classList.add('active'), 10);
+    }
+
+    // Toggle Branding Preview
+    const brandingPreview = document.getElementById('branding-preview-container');
+    if (brandingPreview) {
+        if (prefix === 'c' && step === 4) {
+            brandingPreview.classList.remove('hidden');
+            setTimeout(() => brandingPreview.classList.add('visible'), 10);
+        } else {
+            brandingPreview.classList.remove('visible');
+            setTimeout(() => brandingPreview.classList.add('hidden'), 600);
+        }
     }
 
     currentStep = step;
@@ -244,6 +495,11 @@ function showStep(step, prefix) {
         loadFollows();
     }
 
+    if (prefix === 'c' && step === 8) {
+        const savedAnim = localStorage.getItem('onboarding_pack_animation') || 'style1';
+        setTimeout(() => selectAnimation(savedAnim), 60);
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -253,15 +509,7 @@ async function nextStep(step) {
 }
 
 async function saveStepProgress(step) {
-    console.log('[TEST MODE] Saving progress to step:', step);
-    try {
-        await fetch(`${API_BASE}/onboarding/step`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ step }),
-            credentials: 'include'
-        });
-    } catch (e) { console.error('Failed to save step:', e); }
+    console.log('[TEST MODE] Skipping server save for step', step, '(flow test only)');
 }
 
 function showVisualError(message, stepId) {
@@ -291,23 +539,20 @@ function showVisualError(message, stepId) {
 
 async function saveTOS() {
     const check = document.getElementById('tos-check');
+    const errorEl = document.getElementById('tos-error');
+
     if (!check.checked) {
-        showVisualError('Please accept the Terms of Service to continue.', 'c-step-2');
+        check.parentElement.parentElement.classList.add('shake');
+        errorEl.classList.remove('hidden');
+        setTimeout(() => {
+            check.parentElement.parentElement.classList.remove('shake');
+        }, 500);
         return;
     }
 
-    try {
-        const res = await fetch(`${API_BASE}/onboarding/tos`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ accepted: true }),
-            credentials: 'include'
-        });
-        if (res.ok) nextStep(3);
-        else throw new Error('Failed to save TOS');
-    } catch (e) { 
-        showVisualError('Failed to save TOS. Please try again.', 'c-step-2');
-    }
+    errorEl.classList.add('hidden');
+    console.log('[TEST MODE] TOS accept not persisted (flow test only)');
+    nextStep(3);
 }
 
 async function saveBranding() {
@@ -318,54 +563,24 @@ async function saveBranding() {
         return; 
     }
 
-    try {
-        const res = await fetch(`${API_BASE}/onboarding/identity`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({
-                brand_name: name,
-                brand_tagline: document.getElementById('brand-tagline').value,
-                binder_color: document.getElementById('binder-color').value,
-                battles_enabled: document.getElementById('toggle-battles').checked,
-                trading_enabled: document.getElementById('toggle-trading').checked
-            }),
-            credentials: 'include'
-        });
-        if (res.ok) {
-            const updatedStreamer = await res.json();
-            streamerData = updatedStreamer;
-            updateOBSLinks();
-            nextStep(5);
-        }
-        else throw new Error('Failed to save branding');
-    } catch (e) { showVisualError('Error saving branding.', 'c-step-4'); }
+    console.log('[TEST MODE] Branding not persisted (flow test only)');
+    streamerData = {
+        ...(streamerData || {}),
+        brand_name: name,
+        brand_tagline: streamerData?.brand_tagline ?? '',
+        binder_color: document.getElementById('binder-color').value,
+        battles_enabled: document.getElementById('toggle-battles').checked,
+        trading_enabled: document.getElementById('toggle-trading').checked
+    };
+    updateOBSLinks();
+    nextStep(5);
 }
 
 async function saveOBSStyle() {
     const anim = localStorage.getItem('onboarding_pack_animation') || 'style1';
-    console.log('[TEST MODE] Saving OBS style:', anim);
-    try {
-        const res = await fetch(`${API_BASE}/onboarding/obs-style`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ pack_style: anim }),
-            credentials: 'include'
-        });
-        if (res.ok) nextStep(9);
-        else throw new Error('Failed to save OBS style');
-    } catch (e) {
-        console.error(e);
-        const btn = document.querySelector('#c-step-8 .btn-void');
-        if (btn) {
-            const originalText = btn.textContent;
-            btn.classList.add('bg-red-500/20', 'text-red-500');
-            btn.textContent = 'Error Saving';
-            setTimeout(() => {
-                btn.classList.remove('bg-red-500/20', 'text-red-500');
-                btn.textContent = originalText;
-            }, 2000);
-        }
-    }
+    console.log('[TEST MODE] OBS style not persisted:', anim, '(flow test only)');
+    if (streamerData) streamerData.pack_animation_style = anim;
+    nextStep(9);
 }
 
 function updateOBSLinks() {
@@ -382,7 +597,6 @@ function updateOBSLinks() {
 }
 
 function selectAnimation(style) {
-    console.log('[TEST MODE] Selected OBS style:', style);
     document.querySelectorAll('#c-step-8 .option-card').forEach(card => {
         card.classList.remove('selected');
         const onclick = card.getAttribute('onclick');
@@ -391,46 +605,30 @@ function selectAnimation(style) {
         }
     });
 
-    const preview = document.getElementById('pack-preview');
-    if (!preview) return;
+    localStorage.setItem('onboarding_pack_animation', style);
 
-    // Reset preview
-    preview.innerHTML = '';
-    preview.className = 'preview-content';
+    const placeholder = document.getElementById('pack-preview-placeholder');
+    const wrap = document.getElementById('pack-preview-frame-wrap');
+    const frame = document.getElementById('pack-overlay-preview-frame');
+    if (!placeholder || !wrap || !frame) return;
 
     if (style === 'none' || style === 'bot') {
-        preview.innerHTML = '<div class="text-void-muted opacity-50 text-[10px] uppercase tracking-widest">No Overlay / Bot Only</div>';
+        placeholder.classList.remove('hidden');
+        wrap.classList.add('hidden');
+        frame.removeAttribute('src');
         return;
     }
 
-    // Create mock card
-    const card = document.createElement('div');
-    card.className = 'preview-card-mock';
+    placeholder.classList.add('hidden');
+    wrap.classList.remove('hidden');
 
-    if (style === 'style1') card.classList.add('animate-preview-standard');
-    else if (style === 'style2') card.classList.add('animate-preview-cosmic');
-    else if (style === 'style3') card.classList.add('animate-preview-brutalist');
-
-    preview.appendChild(card);
+    const src = `/obs.html?preview=${encodeURIComponent(style)}&_cb=${Date.now()}`;
+    frame.src = src;
 }
 
 async function saveCollectionMethods() {
-    console.log('[TEST MODE] Saving collection methods...');
-    const methods = {};
-    document.querySelectorAll('input[name="method"]').forEach(input => {
-        methods[input.value] = input.checked;
-    });
-
-    try {
-        const res = await fetch(`${API_BASE}/onboarding/collection-methods`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ methods }),
-            credentials: 'include'
-        });
-        if (res.ok) nextStep(8);
-        else throw new Error('Failed to save methods');
-    } catch (e) { showVisualError('Error saving methods.', 'c-step-7'); }
+    console.log('[TEST MODE] Collection methods not persisted (flow test only)');
+    nextStep(8);
 }
 
 function copyToClipboard(id) {
@@ -446,18 +644,8 @@ function copyToClipboard(id) {
 }
 
 async function nextCollectorStep(step) {
-    try {
-        await fetch(`${API_BASE}/onboarding/collector/step`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ step }),
-            credentials: 'include'
-        });
-        showStep(step, 'col');
-    } catch (e) {
-        console.error('Failed to save collector step:', e);
-        showStep(step, 'col');
-    }
+    console.log('[TEST MODE] Collector step not persisted:', step, '(flow test only)');
+    showStep(step, 'col');
 }
 
 async function loadFollows() {
@@ -482,18 +670,25 @@ async function loadFollows() {
         }
 
         grid.classList.remove('hidden');
-        grid.innerHTML = streamers.map(s => `
+        testFlowFavoriteIds.clear();
+        streamers.forEach(s => {
+            if (s.is_favorited) testFlowFavoriteIds.add(s.id);
+        });
+        grid.innerHTML = streamers.map(s => {
+            const fav = !!s.is_favorited;
+            return `
             <div class="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10 hover:border-void-accent/30 transition-all group">
                 <img src="${s.avatar_url || '/placeholder.png'}" class="w-12 h-12 rounded-full border border-white/10">
                 <div class="flex-grow min-w-0">
                     <h4 class="font-bold text-sm truncate">${s.brand_name || s.display_name}</h4>
                     <p class="text-[10px] text-void-muted truncate">${s.brand_tagline || `@${s.username}`}</p>
                 </div>
-                <button onclick="toggleFavorite('${s.id}', this)" class="p-2 rounded-lg bg-white/5 hover:bg-void-accent/20 ${s.is_favorited ? 'bg-void-accent/20 text-void-accent' : 'text-void-muted'} hover:text-void-accent transition-all">
-                    <i class="${s.is_favorited ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+                <button onclick="toggleFavorite('${s.id}', this)" class="p-2 rounded-lg bg-white/5 hover:bg-void-accent/20 ${fav ? 'bg-void-accent/20 text-void-accent' : 'text-void-muted'} hover:text-void-accent transition-all">
+                    <i class="${fav ? 'fa-solid' : 'fa-regular'} fa-star"></i>
                 </button>
             </div>
-        `).join('');
+        `;
+        }).join('');
     } catch (e) {
         console.error('Follows fetch error:', e);
         loading.classList.add('hidden');
@@ -502,27 +697,20 @@ async function loadFollows() {
 }
 
 async function toggleFavorite(streamerId, btn) {
-    try {
-        const res = await fetch(`${API_BASE}/favorites/toggle`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ streamer_id: streamerId }),
-            credentials: 'include'
-        });
-        const data = await res.json();
+    if (testFlowFavoriteIds.has(streamerId)) testFlowFavoriteIds.delete(streamerId);
+    else testFlowFavoriteIds.add(streamerId);
+    const favorited = testFlowFavoriteIds.has(streamerId);
+    console.log('[TEST MODE] Favorite toggled locally only:', streamerId, favorited);
 
-        const icon = btn.querySelector('i');
-        if (data.favorited) {
-            icon.classList.replace('fa-regular', 'fa-solid');
-            icon.classList.add('text-void-accent');
-            btn.classList.add('bg-void-accent/20');
-        } else {
-            icon.classList.replace('fa-solid', 'fa-regular');
-            icon.classList.remove('text-void-accent');
-            btn.classList.remove('bg-void-accent/20');
-        }
-    } catch (e) {
-        console.error('Favorite toggle failed:', e);
+    const icon = btn.querySelector('i');
+    if (favorited) {
+        icon.classList.remove('fa-regular');
+        icon.classList.add('fa-solid', 'text-void-accent');
+        btn.classList.add('bg-void-accent/20', 'text-void-accent');
+    } else {
+        icon.classList.remove('fa-solid', 'text-void-accent');
+        icon.classList.add('fa-regular');
+        btn.classList.remove('bg-void-accent/20', 'text-void-accent');
     }
 }
 
@@ -531,70 +719,43 @@ function prevStep(step) {
 }
 
 async function completeCollectorOnboarding() {
-    console.log('[TEST MODE] Finalizing collector onboarding...');
+    console.log('[TEST MODE] Collector complete not persisted (flow test only)');
     const btn = document.getElementById('btn-col-complete');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Finalizing...';
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Simulating...';
 
-    try {
-        const res = await fetch(`${API_BASE}/onboarding/collector/complete`, {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': csrfToken },
-            credentials: 'include'
-        });
+    await new Promise(r => setTimeout(r, 500));
+    btn.disabled = false;
+    btn.innerHTML = 'Get Started <i class="fa-solid fa-circle-play"></i>';
 
-        if (res.ok) {
-            sessionStorage.clear();
-            btn.innerHTML = 'All Set! Redirecting...';
-            setTimeout(() => {
-                window.location.href = '/';
-            }, 1500);
-        } else {
-            const err = await res.json();
-            showVisualError(err.error || 'Failed to complete onboarding.', 'col-step-3');
-            btn.disabled = false;
-            btn.innerHTML = 'Get Started <i class="fa-solid fa-circle-play"></i>';
-        }
-    } catch (e) {
-        showVisualError('Onboarding error. Please try again.', 'col-step-3');
-        btn.disabled = false;
-        btn.innerHTML = 'Get Started <i class="fa-solid fa-circle-play"></i>';
+    let note = document.getElementById('test-flow-collector-complete-note');
+    if (!note) {
+        note = document.createElement('p');
+        note.id = 'test-flow-collector-complete-note';
+        note.className = 'text-xs text-void-muted text-center mt-3 max-w-sm mx-auto leading-snug';
+        btn.parentElement.appendChild(note);
     }
+    note.textContent = 'Playground only: collector onboarding was not saved on the server. You can still open the hub below.';
 }
 
 async function activateCollection() {
-    console.log('[TEST MODE] Activating collection...');
+    console.log('[TEST MODE] Launch collection not persisted (flow test only)');
     const btn = document.getElementById('btn-activate');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Activating...';
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Simulating...';
 
-    try {
-        const res = await fetch(`${API_BASE}/onboarding/activate`, {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': csrfToken },
-            credentials: 'include'
-        });
+    await new Promise(r => setTimeout(r, 600));
+    btn.disabled = false;
+    btn.innerHTML = 'Launch Collection <i class="fa-solid fa-bolt"></i>';
 
-        if (res.ok) {
-            // Clear session cache to ensure app.js picks up new active status
-            sessionStorage.clear();
-
-            btn.innerHTML = 'Success! Redirecting...';
-            setTimeout(() => {
-                const slug = streamerData?.username?.toLowerCase() || 'dashboard';
-                window.location.href = `/${slug}`;
-            }, 1500);
-        } else {
-            const err = await res.json();
-            showVisualError(err.error || 'Activation failed.', 'c-step-10');
-            btn.disabled = false;
-            btn.innerHTML = 'Go Live <i class="fa-solid fa-bolt"></i>';
-        }
-    } catch (e) {
-        showVisualError('Activation error.', 'c-step-10');
-        btn.disabled = false;
-        btn.innerHTML = 'Go Live <i class="fa-solid fa-bolt"></i>';
+    let note = document.getElementById('test-flow-activate-note');
+    if (!note) {
+        note = document.createElement('p');
+        note.id = 'test-flow-activate-note';
+        note.className = 'text-xs text-void-muted text-center mt-3 max-w-sm mx-auto leading-snug';
+        btn.parentElement.appendChild(note);
     }
+    note.textContent = 'Playground only: your collection was not activated on the server. Use the real onboarding page to go live.';
 }
 
 function validateColTOS() {
@@ -609,27 +770,8 @@ function validateColTOS() {
 // --- TEST MODE HELPERS ---
 
 async function resetTestState() {
-    if (!confirm('This will RESET your onboarding progress for testing. Continue?')) return;
+    if (!confirm('Reload this playground? Nothing on the server is changed; your real onboarding progress stays as-is.')) return;
 
-    console.log('[TEST MODE] Resetting onboarding state...');
-    try {
-        // We'll call a special debug endpoint (to be added) or just reset locally and go to step 1
-        const res = await fetch(`${API_BASE}/onboarding/reset-test`, {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': csrfToken },
-            credentials: 'include'
-        });
-
-        if (res.ok) {
-            console.log('[TEST MODE] State reset successful.');
-            window.location.reload();
-        } else {
-            console.error('[TEST MODE] Server reset failed.');
-            // Fallback: just reload and hope
-            window.location.reload();
-        }
-    } catch (e) {
-        console.error('[TEST MODE] Reset error:', e);
-        window.location.reload();
-    }
+    console.log('[TEST MODE] Reloading page (no server reset)');
+    window.location.reload();
 }
