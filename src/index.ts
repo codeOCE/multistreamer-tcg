@@ -30,6 +30,7 @@ interface GrantBody {
 const SESSION_COOKIE_NAME = '__Host-castle-session';
 const CSRF_COOKIE_NAME = 'castle_csrf_token';
 const GLOBAL_PACK_PRICE_CENTS = 500; // $5.00 for 5-card pack
+const BITS_PER_CARD = 100;
 
 /** Built-in Channel Point “slots” (event cards). Keys stored on streamer_channel_point_fixed_cards.preset_key */
 const CHANNEL_POINT_PRESET_DEFS: { key: string; label: string; default_title: string; default_cost: number }[] = [
@@ -359,7 +360,9 @@ interface Env {
   CREATOR_CDN_BASE: string; // The URL for serve R2 assets
   PLATFORM_ADMIN_IDS?: string; // Comma-separated Twitch IDs
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
-  CARD_IMAGES: any; // R2Bucket
+  CARD_IMAGES: any; // R2Bucket (Main bucket: assets)
+  IMAGE_ASSETS: any; // R2Bucket (Main bucket: assets)
+  multistreamer_tcg_cards?: any; // R2Bucket (Old bucket: multistreamer-tcg-cards)
   WORKER_DEV_URL?: string; // Specific workers.dev URL for CORS — avoids .workers.dev wildcard
   /** Set to "1" or "true" to enable bootstrap Server-Timing, x-debug-* headers, and verbose logs. */
   DEBUG_BOOTSTRAP?: string;
@@ -383,7 +386,7 @@ function shouldLogBootstrapVerbose(env: Env): boolean {
 }
 
 /** mechanics:list — public read cache (Upstash JSON). */
-const CACHE_KEY_MECHANICS_LIST = 'cache:v1:mechanics:list';
+const CACHE_KEY_MECHANICS_LIST = 'v2:mechanics_list';
 const CACHE_KEY_STREAMERS_ACTIVE = 'cache:v1:streamers:active';
 const CACHE_TTL_MECHANICS_SEC = 600;
 const CACHE_TTL_STREAMERS_SEC = 90;
@@ -417,7 +420,7 @@ const COLLECTION_MAX_LIMIT = 2000;
 
 /** Columns needed for binder/collection UI (avoids select * on enriched_user_cards). */
 const ENRICHED_USER_CARDS_COLLECTION_SELECT =
-  'user_card_id, twitch_id, card_id, streamer_id, attack, defense, max_hp, current_hp, mechanic_id, genesis_mechanic_id, is_dead, revive_used, granted_by_streamer, is_obs_consumed, granted_at, created_at, name, rarity, image_url, type, description, card_number, streamer_username, brand_name, brand_emoji, brand_color_primary, brand_color_secondary, pack_image_url, set_name, set_code, mechanic_name, mechanic_display_name, mechanic_icon, mechanic_description, genesis_mechanic_name, genesis_mechanic_display_name, genesis_mechanic_icon, genesis_mechanic_description';
+  'user_card_id, twitch_id, card_id, streamer_id, attack, defense, max_hp, current_hp, mechanic_id, genesis_mechanic_id, is_dead, revive_used, granted_by_streamer, is_obs_consumed, granted_at, created_at, trait_list, baked_image_url, name, rarity, image_url, foil_mask_url, type, description, card_number, template_id, streamer_username, brand_name, brand_emoji, brand_color_primary, brand_color_secondary, pack_image_url, set_name, set_code, mechanic_name, mechanic_display_name, mechanic_icon, mechanic_description, genesis_mechanic_name, genesis_mechanic_display_name, genesis_mechanic_icon, genesis_mechanic_description';
 
 // Helper to wrap database queries in a cache check
 async function fetchWithCache(env: Env, redis: Redis | null, key: string, ttlSeconds: number, fetcher: () => Promise<any>, ctx?: any) {
@@ -481,7 +484,7 @@ async function fetchWithCache(env: Env, redis: Redis | null, key: string, ttlSec
 async function fetchAchievementsWithCache(env: Env, supabase: any, redis: Redis | null, twitchId: string, streamerId: string, customNames: any, ctx?: any) {
   const cacheKey = `achv:v1:${twitchId}:${streamerId}`;
   
-  return await fetchWithCache(env, redis, cacheKey, 600, async () => {
+  return await fetchWithCache(env || {} as Env, redis, cacheKey, 600, async () => {
     const { data: allAchievements } = await supabase.from('achievements').select('*');
     const { data: userAchievements } = await supabase
       .from('user_achievements')
@@ -826,6 +829,55 @@ async function refreshTwitchUserAccessToken(
   }
 }
 
+/** OAuth refresh for Kick; persists new tokens on users row */
+async function refreshKickUserAccessToken(
+  supabase: any,
+  twitchId: string,
+  refreshTokenPlain: string,
+  env: Env
+): Promise<string | null> {
+  try {
+    const tokenResp = await fetch('https://id.kick.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: String(env.KICK_CLIENT_ID || ''),
+        client_secret: String(env.KICK_CLIENT_SECRET || ''),
+        grant_type: 'refresh_token',
+        refresh_token: refreshTokenPlain
+      })
+    });
+    const tokenData: any = await tokenResp.json();
+    if (!tokenResp.ok || !tokenData.access_token) {
+      console.error('[Kick] Token refresh failed:', tokenResp.status, tokenData);
+      return null;
+    }
+
+    const encKey = env.ENCRYPTION_SECRET ?? env.SESSION_SECRET;
+    const encryptedAccess = await encryptSensitive(tokenData.access_token, encKey);
+    const encryptedRefresh = tokenData.refresh_token
+      ? await encryptSensitive(tokenData.refresh_token, encKey)
+      : null;
+
+    const tokenScope = Array.isArray(tokenData.scope)
+      ? tokenData.scope.join(' ')
+      : (tokenData.scope || null);
+
+    const tokenUpdate = {
+      kick_access_token_encrypted: encryptedAccess,
+      ...(encryptedRefresh ? { kick_refresh_token_encrypted: encryptedRefresh } : {}),
+      ...(tokenScope ? { kick_token_scope: tokenScope } : {}),
+    };
+
+    await supabase.from('users').update(tokenUpdate).eq('twitch_id', twitchId);
+
+    return tokenData.access_token as string;
+  } catch (e) {
+    console.error('[Kick] refreshKickUserAccessToken error:', e);
+    return null;
+  }
+}
+
 /** Must match scopes requested in /auth/twitch for viewer vs creator. */
 const TWITCH_VIEWER_SCOPES = ['user:read:email', 'user:read:follows'];
 const TWITCH_CREATOR_EXTRA_SCOPES = [
@@ -854,69 +906,105 @@ async function computeTwitchAuthHealth(
   needs_reauth: boolean;
 }> {
   const required = twitchScopesRequiredForCreator(isCreator);
-  const { data: row } = await supabase
-    .from('users')
-    .select('twitch_access_token_encrypted, twitch_refresh_token_encrypted, twitch_token_scope')
-    .eq('twitch_id', twitchId)
-    .maybeSingle();
-
-  if (!row?.twitch_access_token_encrypted) {
-    return {
-      token_valid: false,
-      token_error: 'no_twitch_token',
-      scopes_granted: [],
-      scopes_required: required,
-      scopes_missing: required,
-      needs_reauth: true,
-    };
-  }
-
-  const twSecret = twitchTokenEncryptSecret(env);
-  let accessToken = await decryptSensitive(row.twitch_access_token_encrypted, twSecret);
-  let scopeStr = row.twitch_token_scope || '';
-  let granted = scopeStr.split(/\s+/).filter(Boolean);
-
-  let tokenValid = false;
-  try {
-    let r = await fetch('https://api.twitch.tv/helix/users', {
-      headers: { 'Client-Id': env.TWITCH_CLIENT_ID, Authorization: `Bearer ${accessToken}` },
-    });
-    if (r.ok) {
-      tokenValid = true;
-    } else if (r.status === 401 && row.twitch_refresh_token_encrypted) {
-      const refreshPlain = await decryptSensitive(row.twitch_refresh_token_encrypted, twSecret);
-      const refreshed = await refreshTwitchUserAccessToken(supabase, twitchId, refreshPlain, env);
-      if (refreshed) {
-        accessToken = refreshed;
-        const { data: row2 } = await supabase
-          .from('users')
-          .select('twitch_token_scope')
-          .eq('twitch_id', twitchId)
-          .maybeSingle();
-        scopeStr = row2?.twitch_token_scope || scopeStr;
-        granted = scopeStr.split(/\s+/).filter(Boolean);
-        r = await fetch('https://api.twitch.tv/helix/users', {
-          headers: { 'Client-Id': env.TWITCH_CLIENT_ID, Authorization: `Bearer ${accessToken}` },
-        });
-        tokenValid = r.ok;
-      }
-    }
-  } catch {
-    tokenValid = false;
-  }
-
-  const grantedSet = new Set(granted);
-  const missing = required.filter((s) => !grantedSet.has(s));
-  const needsReauth = !tokenValid || missing.length > 0;
-
-  return {
-    token_valid: tokenValid,
-    token_error: tokenValid ? undefined : 'twitch_token_invalid_or_revoked',
-    scopes_granted: granted,
+  const failSafe = (): {
+    token_valid: boolean;
+    token_error: string;
+    scopes_granted: string[];
+    scopes_required: string[];
+    scopes_missing: string[];
+    needs_reauth: boolean;
+  } => ({
+    token_valid: false,
+    token_error: 'health_check_failed',
+    scopes_granted: [],
     scopes_required: required,
-    scopes_missing: missing,
-    needs_reauth: needsReauth,
-  };
+    scopes_missing: required,
+    needs_reauth: true,
+  });
+
+  try {
+    const { data: row } = await supabase
+      .from('users')
+      .select('twitch_access_token_encrypted, twitch_refresh_token_encrypted, twitch_token_scope')
+      .eq('twitch_id', twitchId)
+      .maybeSingle();
+
+    if (!row?.twitch_access_token_encrypted) {
+      return {
+        token_valid: false,
+        token_error: 'no_twitch_token',
+        scopes_granted: [],
+        scopes_required: required,
+        scopes_missing: required,
+        needs_reauth: true,
+      };
+    }
+
+    const twSecret = twitchTokenEncryptSecret(env);
+    let accessToken: string;
+    try {
+      accessToken = await decryptSensitive(row.twitch_access_token_encrypted, twSecret);
+    } catch (decErr) {
+      console.error('[TwitchAuthHealth] decrypt access failed:', decErr);
+      return failSafe();
+    }
+    let scopeStr = row.twitch_token_scope || '';
+    let granted = scopeStr.split(/\s+/).filter(Boolean);
+
+    let tokenValid = false;
+    try {
+      let r = await fetch('https://api.twitch.tv/helix/users', {
+        headers: { 'Client-Id': env.TWITCH_CLIENT_ID, Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) {
+        tokenValid = true;
+      } else if (r.status === 401 && row.twitch_refresh_token_encrypted) {
+        let refreshPlain: string;
+        try {
+          refreshPlain = await decryptSensitive(row.twitch_refresh_token_encrypted, twSecret);
+        } catch (refDecErr) {
+          console.error('[TwitchAuthHealth] decrypt refresh failed:', refDecErr);
+          tokenValid = false;
+          refreshPlain = '';
+        }
+        if (refreshPlain) {
+          const refreshed = await refreshTwitchUserAccessToken(supabase, twitchId, refreshPlain, env);
+          if (refreshed) {
+            accessToken = refreshed;
+            const { data: row2 } = await supabase
+              .from('users')
+              .select('twitch_token_scope')
+              .eq('twitch_id', twitchId)
+              .maybeSingle();
+            scopeStr = row2?.twitch_token_scope || scopeStr;
+            granted = scopeStr.split(/\s+/).filter(Boolean);
+            r = await fetch('https://api.twitch.tv/helix/users', {
+              headers: { 'Client-Id': env.TWITCH_CLIENT_ID, Authorization: `Bearer ${accessToken}` },
+            });
+            tokenValid = r.ok;
+          }
+        }
+      }
+    } catch {
+      tokenValid = false;
+    }
+
+    const grantedSet = new Set(granted);
+    const missing = required.filter((s) => !grantedSet.has(s));
+    const needsReauth = !tokenValid || missing.length > 0;
+
+    return {
+      token_valid: tokenValid,
+      token_error: tokenValid ? undefined : 'twitch_token_invalid_or_revoked',
+      scopes_granted: granted,
+      scopes_required: required,
+      scopes_missing: missing,
+      needs_reauth: needsReauth,
+    };
+  } catch (e) {
+    console.error('[TwitchAuthHealth] unexpected:', e);
+    return failSafe();
+  }
 }
 
 /**
@@ -977,7 +1065,7 @@ async function computeKickAuthHealth(
   const encKey = env.ENCRYPTION_SECRET ?? env.SESSION_SECRET;
   const { data: row } = await supabase
     .from('users')
-    .select('kick_access_token_encrypted')
+    .select('kick_access_token_encrypted, kick_refresh_token_encrypted')
     .eq('twitch_id', canonicalId)
     .maybeSingle();
 
@@ -985,14 +1073,33 @@ async function computeKickAuthHealth(
     return { token_valid: false, needs_reauth: true, token_error: 'no_kick_token' };
   }
 
-  try {
-    const accessToken = await decryptSensitive(row.kick_access_token_encrypted, encKey);
+  const checkToken = async (token: string) => {
     const r = await fetch('https://api.kick.com/public/v1/users', {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
+    return r;
+  };
+
+  try {
+    let accessToken = await decryptSensitive(row.kick_access_token_encrypted, encKey);
+    let r = await checkToken(accessToken);
+
     if (r.ok) return { token_valid: true, needs_reauth: false };
+
+    // If 401 and we have a refresh token, try to refresh
+    if (r.status === 401 && row.kick_refresh_token_encrypted) {
+      console.log(`[Kick] Token expired for ${canonicalId}, attempting refresh...`);
+      const refreshPlain = await decryptSensitive(row.kick_refresh_token_encrypted, encKey);
+      const newAccess = await refreshKickUserAccessToken(supabase, canonicalId, refreshPlain, env);
+      if (newAccess) {
+        r = await checkToken(newAccess);
+        if (r.ok) return { token_valid: true, needs_reauth: false };
+      }
+    }
+
     return { token_valid: false, needs_reauth: true, token_error: 'kick_token_invalid' };
-  } catch {
+  } catch (e) {
+    console.error('[Kick] computeKickAuthHealth error:', e);
     return { token_valid: false, needs_reauth: true, token_error: 'kick_error' };
   }
 }
@@ -1063,7 +1170,7 @@ async function resolveStreamerContext(request: Request, supabase: any, url: URL)
   const rawParam = url.searchParams.get('streamer_id') || url.searchParams.get('creator_id') || url.searchParams.get('streamer');
   const streamerId = rawParam;
   if (streamerId) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(streamerId);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(streamerId);
     if (isUuid) {
       const { data: streamer } = await supabase.from('streamers').select('*').eq('id', streamerId).maybeSingle();
       if (streamer) return streamer;
@@ -1072,6 +1179,31 @@ async function resolveStreamerContext(request: Request, supabase: any, url: URL)
     if (streamerByNick) return streamerByNick;
   }
   return null;
+}
+
+async function resolveStreamerContextWithCache(
+  request: Request,
+  env: Env,
+  ctx: any,
+  supabase: any,
+  url: URL
+): Promise<any | null> {
+  const rawParam = url.searchParams.get('streamer_id') || url.searchParams.get('creator_id') || url.searchParams.get('streamer');
+  if (!rawParam) return null;
+
+  const cacheKey = `streamer:branding:v1:${rawParam.toLowerCase()}`;
+  const cached = await (env as any).KV_CACHE?.get(cacheKey);
+  if (cached) {
+    console.log(`[Perf] Streamer context CACHE HIT for ${rawParam}`);
+    return JSON.parse(cached);
+  }
+
+  console.log(`[Perf] Streamer context CACHE MISS for ${rawParam}`);
+  const streamer = await resolveStreamerContext(request, supabase, url);
+  if (streamer && (env as any).KV_CACHE) {
+    ctx.waitUntil((env as any).KV_CACHE.put(cacheKey, JSON.stringify(streamer), { expirationTtl: 3600 })); // 1 hour
+  }
+  return streamer;
 }
 
 // --- TWITCH SIGNATURE VERIFIER ---
@@ -1177,6 +1309,7 @@ const EVENTSUB_WEBHOOK_TYPES: { type: string; version: string }[] = [
   { type: 'channel.subscription.message', version: '1' },
   { type: 'channel.subscription.gift', version: '1' },
   { type: 'channel.channel_points_custom_reward_redemption.add', version: '1' },
+  { type: 'channel.cheer', version: '1' },
 ];
 
 async function helixCreateEventSub(
@@ -1380,7 +1513,7 @@ function assertModeratorPackSettingsOnly(body: Record<string, any>) {
 // --- HELPER FUNCTIONS ---
 
 
-async function handleTwitchWebhook(req: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
+async function handleTwitchWebhook(req: Request, env: Env, ctx?: any): Promise<Response> {
   console.log('[Webhook] Received request');
 
   const signature = req.headers.get('Twitch-Eventsub-Message-Signature');
@@ -1499,7 +1632,9 @@ async function handleTwitchWebhook(req: Request, env: Env, ctx?: ExecutionContex
         twitchGrantOpts
       );
       await logTwitchGrantToActivity(supabase, streamer.id, g, 'Channel Points');
-      if (g?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
+    const gAny = g as any;
+    if (gAny?._deferAchievementSync && ctx) ctx.waitUntil(syncUserAchievements(supabase, userId, streamer.id));
+    else if (gAny?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
     }
 
     // Battle Initiation
@@ -1537,7 +1672,9 @@ async function handleTwitchWebhook(req: Request, env: Env, ctx?: ExecutionContex
           { ...twitchGrantOpts, forcedCardId: fixedRow.card_id, isSilent: silent }
         );
         await logTwitchGrantToActivity(supabase, streamer.id, g, 'Channel Points (event card)');
-        if (g?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
+      const gAny = g as any;
+    if (gAny?._deferAchievementSync && ctx) ctx.waitUntil(syncUserAchievements(supabase, userId, streamer.id));
+    else if (gAny?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
       }
     }
   }
@@ -1559,7 +1696,9 @@ async function handleTwitchWebhook(req: Request, env: Env, ctx?: ExecutionContex
         twitchGrantOpts
       );
       await logTwitchGrantToActivity(supabase, streamer.id, g, 'New subscription');
-      if (g?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
+    const gAny = g as any;
+    if (gAny?._deferAchievementSync && ctx) ctx.waitUntil(syncUserAchievements(supabase, userId, streamer.id));
+    else if (gAny?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
     }
   }
 
@@ -1576,7 +1715,9 @@ async function handleTwitchWebhook(req: Request, env: Env, ctx?: ExecutionContex
       twitchGrantOpts
     );
     await logTwitchGrantToActivity(supabase, streamer.id, g, 'Resub');
-    if (g?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
+    const gAny = g as any;
+    if (gAny?._deferAchievementSync && ctx) ctx.waitUntil(syncUserAchievements(supabase, userId, streamer.id));
+    else if (gAny?._deferAchievementSync) await syncUserAchievements(supabase, userId, streamer.id);
   }
 
   // 4. Handle Gift Multiplier (The Gifter gets the reward) — batched like dashboard bulk (Worker subrequest limit).
@@ -1627,13 +1768,83 @@ async function handleTwitchWebhook(req: Request, env: Env, ctx?: ExecutionContex
     }
   }
 
+  // 5. Handle Cheers (Bits)
+  if (type === 'channel.cheer') {
+    // Skip anonymous cheers as we can't grant cards to an unknown user
+    if (event.is_anonymous) {
+      console.log(`[Webhook] Anonymous cheer in ${streamer.username}'s stream - skipping reward.`);
+      return;
+    }
+
+    // Check if bits are enabled for this streamer
+    const collectionMethods = streamer.collection_methods || {};
+    if (collectionMethods.bits === false) {
+      console.log(`[Webhook] Bits are disabled for streamer ${streamer.id} (collection_methods.bits=false)`);
+      return;
+    }
+
+    const bits = parseInt(String(event.bits ?? 0), 10) || 0;
+    const cardCount = Math.floor(bits / BITS_PER_CARD);
+
+    if (cardCount > 0) {
+      console.log(`[Webhook] ${userName} cheered ${bits} bits! Granting ${cardCount} cards.`);
+      try {
+        const { granted, lastResult } = await bulkGrantRandomCardsToTwitchUser(
+          supabase,
+          env,
+          streamer.id,
+          userId,
+          userName,
+          cardCount,
+          {
+            skipRedis: true,
+            isObsConsumedForIndex: (i) => i > 0,
+            buildNotification: (i, total, randomCard, isGenesis) => ({
+              message: isGenesis
+                ? `🌌 GENESIS! Bits Cheer Reward! (${i + 1}/${total})`
+                : `💎 Bits Cheer Reward! (${i + 1}/${total})`,
+              data: {
+                card_id: randomCard.id,
+                name: randomCard.name,
+                rarity: randomCard.rarity,
+                image_url: randomCard.image_url,
+                is_genesis: isGenesis,
+              },
+            }),
+          },
+          ctx
+        );
+        await logTwitchGrantToActivity(
+          supabase,
+          streamer.id,
+          lastResult,
+          granted > 1 ? `Cheer ×${bits} bits (${granted} cards)` : `Cheer ×${bits} bits (1 card)`
+        );
+        if (ctx) ctx.waitUntil(syncUserAchievements(supabase, userId, streamer.id));
+        else await syncUserAchievements(supabase, userId, streamer.id);
+      } catch (e: any) {
+        console.error('[Webhook] Cheer grant failed:', e?.message || e);
+        logGrantIssueCopyPaste('channel.cheer grant failed', {
+          step: 'twitch_webhook.cheer',
+          streamer_id: streamer.id,
+          twitch_id: userId,
+          bits: bits,
+          message: e?.message,
+        });
+      }
+    } else {
+      console.log(`[Webhook] ${userName} cheered ${bits} bits (less than threshold ${BITS_PER_CARD}) - No cards granted.`);
+    }
+  }
+
   if (
     messageType === 'notification' &&
     type &&
     type !== 'channel.channel_points_custom_reward_redemption.add' &&
     type !== 'channel.subscribe' &&
     type !== 'channel.subscription.message' &&
-    type !== 'channel.subscription.gift'
+    type !== 'channel.subscription.gift' &&
+    type !== 'channel.cheer'
   ) {
     console.log(`[Webhook] No card grant handler for type=${type} (add EventSub subscription in Twitch console if needed)`);
   }
@@ -1756,7 +1967,7 @@ async function logKickGrantToActivity(
   );
 }
 
-async function handleKickWebhook(req: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
+async function handleKickWebhook(req: Request, env: Env, ctx?: any): Promise<Response> {
   const rawBody = await req.text();
   const messageId = req.headers.get('Kick-Event-Message-Id') || '';
   const ts = req.headers.get('Kick-Event-Message-Timestamp') || '';
@@ -1818,7 +2029,9 @@ async function handleKickWebhook(req: Request, env: Env, ctx?: ExecutionContext)
         kickGrantOpts
       );
       await logKickGrantToActivity(supabase, streamer.id, g, label);
-      if (g?._deferAchievementSync) await syncUserAchievements(supabase, uid, streamer.id);
+      const gAny = g as any;
+      if (gAny?._deferAchievementSync && ctx) ctx.waitUntil(syncUserAchievements(supabase, uid, streamer.id));
+      else if (gAny?._deferAchievementSync) await syncUserAchievements(supabase, uid, streamer.id);
       return new Response('OK', { status: 200 });
     }
 
@@ -1873,7 +2086,8 @@ async function handleKickWebhook(req: Request, env: Env, ctx?: ExecutionContext)
           lastResult,
           granted > 1 ? `Kick sub gifts ×${granted}` : 'Kick sub gift'
         );
-        await syncUserAchievements(supabase, uid, streamer.id);
+        if (ctx) ctx.waitUntil(syncUserAchievements(supabase, uid, streamer.id));
+        else await syncUserAchievements(supabase, uid, streamer.id);
       } catch (e: any) {
         console.error('[KickWebhook] bulk gift grant failed:', e?.message || e);
       }
@@ -1908,7 +2122,9 @@ async function handleKickWebhook(req: Request, env: Env, ctx?: ExecutionContext)
         kickGrantOpts
       );
       await logKickGrantToActivity(supabase, streamer.id, g, 'Kicks gifted');
-      if (g?._deferAchievementSync) await syncUserAchievements(supabase, uid, streamer.id);
+      const gAny = g as any;
+      if (gAny?._deferAchievementSync && ctx) ctx.waitUntil(syncUserAchievements(supabase, uid, streamer.id));
+      else if (gAny?._deferAchievementSync) await syncUserAchievements(supabase, uid, streamer.id);
       return new Response('OK', { status: 200 });
     }
 
@@ -1943,7 +2159,9 @@ async function handleKickWebhook(req: Request, env: Env, ctx?: ExecutionContext)
         kickGrantOpts
       );
       await logKickGrantToActivity(supabase, streamer.id, g, `Reward: ${rewardTitle}`);
-      if (g?._deferAchievementSync) await syncUserAchievements(supabase, uid, streamer.id);
+      const gAny = g as any;
+      if (gAny?._deferAchievementSync && ctx) ctx.waitUntil(syncUserAchievements(supabase, uid, streamer.id));
+      else if (gAny?._deferAchievementSync) await syncUserAchievements(supabase, uid, streamer.id);
       return new Response('OK', { status: 200 });
     }
 
@@ -2022,13 +2240,13 @@ async function assignMechanic(env: Env, supabase: any, redis?: Redis | null, ctx
       return data;
     };
     
-    const mechanics = await fetchWithCache(env, redis as Redis | null, 'cache_active_mechanics', 3600, fetcher, ctx);
+    const mechanics = await fetchWithCache(env || {} as Env, redis as Redis | null, 'cache_active_mechanics', 3600, fetcher, ctx);
 
     if (!mechanics || mechanics.length === 0) return null;
 
     // Weighted random using Efraimidis-Spirakis reservoir sampling.
     // Key = random() ^ (1 / weight). Higher weight → key closer to 1.0 → wins more often.
-    // Guard=32 & Vampire=32 & Revive=33 each win ~32%. Mimic=3 wins ~3%.
+    // Guard=32 & Absorb=32 & Revive=33 each win ~32%. Mimic=3 wins ~3%.
     let best: any = null;
     let bestScore = -Infinity;
     for (const m of mechanics) {
@@ -2040,6 +2258,55 @@ async function assignMechanic(env: Env, supabase: any, redis?: Redis | null, ctx
     console.error('[assignMechanic] Error:', e.message);
     return null;
   }
+}
+
+/**
+ * Helper to roll a set of traits for a card based on its status.
+ * Returns an array of mechanic IDs.
+ * Design Rule: All cards get 1 trait. Genesis cards get 2 traits.
+ * Prioritizes original primaryId and secondaryId if provided (legacy preservation).
+ */
+async function rollTraitsForCard(
+  supabase: any,
+  card: any,
+  preFetchedMechanics?: any[],
+  primaryId?: string | null,
+  secondaryId?: string | null
+): Promise<string[]> {
+  const traitList: string[] = [];
+  if (!card || !card.template_id || (card.auto_roll_traits === false)) return [];
+
+  // 1 trait by default, 2 if genesis status detected
+  const isGenesis = card.is_genesis || card.is_genesis_mint || !!secondaryId;
+  const traitCount = isGenesis ? 2 : 1;
+
+  // Prioritize provided legacy mechanics (Put Genesis/Secondary FIRST if it exists)
+  if (secondaryId && traitCount > 1) traitList.push(secondaryId);
+  if (primaryId) traitList.push(primaryId);
+
+  // Fill remaining slots if needed
+  if (traitList.length < traitCount) {
+    let mechanicsList = preFetchedMechanics;
+    if (!mechanicsList) {
+      const { data: mechanicsRows } = await supabase
+        .from('mechanics')
+        .select('id, name, display_name, rarity_weight')
+        .eq('is_active', true);
+      mechanicsList = mechanicsRows || [];
+    }
+
+    while (traitList.length < traitCount) {
+      const mid = pickWeightedMechanicFromList(mechanicsList);
+      if (mid && !traitList.includes(mid)) {
+        traitList.push(mid);
+      } else if (mechanicsList?.length === traitList.length) {
+        // Edge case: not enough active mechanics to fulfill count
+        break;
+      }
+    }
+  }
+
+  return traitList.slice(0, traitCount);
 }
 
 /** Same distribution as assignMechanic, in-process (single mechanics fetch for bulk grants). */
@@ -2126,6 +2393,8 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
       slot, // 1=Left, 2=Middle, 3=Right
       alive: true,
       reviveUsed: false,
+      status_effects: [] as any[], // { type: 'freeze' | 'frostbite' | 'bounty', value?: number }
+      oncePerCombatUsed: false,
     };
   };
 
@@ -2172,7 +2441,50 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
   recalculateMimics(cCards, [], 'challenger');
   recalculateMimics(tCards, [], 'target');
 
+  // --- Start of Combat Logic (Mirror, Bounty Hunter) ---
+  const handleMirror = (cards: any[], opponents: any[], side: string) => {
+    cards.forEach(card => {
+      if (card.traits.some((t: any) => t.name.toLowerCase() === 'mirror')) {
+        const opp = opponents.find(o => o.slot === card.slot);
+        if (opp) {
+          card.attack = opp.attack;
+          card.defense = opp.defense;
+          card.max_defense = opp.max_defense;
+          card.traits = [...opp.traits];
+          exchanges.push({
+            type: 'mirror_transform',
+            side,
+            card: card.name,
+            targetCard: opp.name,
+          });
+        }
+      }
+    });
+  };
+
+  const applyInitialBounty = (cards: any[], opponents: any[], side: string) => {
+    cards.forEach(card => {
+      if (card.traits.some((t: any) => t.name.toLowerCase() === 'bounty hunter')) {
+        const aliveOpponents = opponents.filter(o => o.alive);
+        if (aliveOpponents.length > 0) {
+          const target = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
+          target.status_effects.push({ type: 'bounty' });
+          exchanges.push({
+            type: 'bounty_placed',
+            side,
+            card: card.name,
+            targetCard: target.name,
+          });
+        }
+      }
+    });
+  };
+
   const exchanges: any[] = [];
+  handleMirror(cCards, tCards, 'challenger');
+  handleMirror(tCards, cCards, 'target');
+  applyInitialBounty(cCards, tCards, 'challenger');
+  applyInitialBounty(tCards, cCards, 'target');
   const coinFlip = Math.random() > 0.5 ? 'challenger' : 'target'; // Rule 1: Coin Flip
   let attackerSide = coinFlip;
   const MAX_EXCHANGES = 50;
@@ -2191,9 +2503,10 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
 
     // Rule 2: Targeting
     let activeDefender = defenders.find((c: any) => c.alive && c.traits.some((t: any) => t.name === 'guard')); // Leftmost Guard
-    if (!activeDefender) activeDefender = defenders.find(c => c.alive); // Leftmost living
-
     if (!activeDefender) break;
+
+    const attackerLabel = attackerSide === 'challenger' ? 'attacker' : 'defender';
+    const defenderLabel = attackerSide === 'challenger' ? 'defender' : 'attacker';
 
     const exchangeData: any = {
       exchange: exchangeCount,
@@ -2205,6 +2518,16 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
 
     const cActive = attackers === cCards ? activeAttacker : activeDefender;
     const tActive = attackers === tCards ? activeAttacker : activeDefender;
+
+    // --- Cleanse (Enemy +2/2, Remove Traits) ---
+    if (activeAttacker.traits.some((t: any) => t.name.toLowerCase() === 'cleanse') && !activeAttacker.oncePerCombatUsed) {
+      activeAttacker.oncePerCombatUsed = true;
+      activeDefender.attack += 2;
+      activeDefender.defense += 2;
+      activeDefender.max_defense += 2;
+      activeDefender.traits = []; // Remove traits
+      exchangeData.events.push({ type: 'cleanse_trigger', card: activeAttacker.name, target: activeDefender.name, side: attackerSide });
+    }
 
     // Snapshot after damage
     const snapshot = (c: any) => ({
@@ -2227,11 +2550,85 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
     console.log(`[BATTLE ATK] ${activeAttacker.name} (ATK: ${atkDmg}) -> ${activeDefender.name} (DEF: ${activeDefender.defense})`);
     console.log(`[BATTLE DEF] ${activeDefender.name} (ATK: ${defDmg}) -> ${activeAttacker.name} (DEF: ${activeAttacker.defense})`);
 
-    activeDefender.defense -= atkDmg;
-    activeAttacker.defense -= defDmg;
+    const applyDamage = (attacker: any, defender: any, damage: number, eventSide: string) => {
+      // Rule 4: Freeze check
+      const freezeIdx = attacker.status_effects.findIndex((se: any) => se.type === 'freeze');
+      if (freezeIdx !== -1) {
+        attacker.status_effects.splice(freezeIdx, 1);
+        exchangeData.events.push({ type: 'frozen_skip', card: attacker.name, side: eventSide });
+        return 0;
+      }
+
+      // Rule: Frostbite damage increase
+      const frostbiteStacks = defender.status_effects.filter((se: any) => se.type === 'frostbite').length;
+      const finalDmg = Math.floor(damage * (1 + (frostbiteStacks * 0.1)));
+
+      defender.defense -= finalDmg;
+
+      // Rule: Rage (+1 ATK on dmg)
+      if (defender.traits.some((t: any) => t.name.toLowerCase() === 'rage')) {
+        defender.attack += 1;
+        exchangeData.events.push({ type: 'rage_gain', card: defender.name, side: eventSide === 'attacker' ? 'defender' : 'attacker' });
+      }
+
+      // Rule: Frost (Apply Freeze/Frostbite on hit)
+      if (attacker.traits.some((t: any) => t.name.toLowerCase() === 'frost')) {
+        const isFreeze = Math.random() > 0.5;
+        if (isFreeze) {
+          defender.status_effects.push({ type: 'freeze' });
+          exchangeData.events.push({ type: 'freeze_applied', card: attacker.name, target: defender.name, side: eventSide });
+        } else {
+          defender.status_effects.push({ type: 'frostbite' });
+          exchangeData.events.push({ type: 'frostbite_applied', card: attacker.name, target: defender.name, side: eventSide });
+        }
+      }
+
+      return finalDmg;
+    };
+
+    const finalAtkDmg = applyDamage(activeAttacker, activeDefender, atkDmg, attackerLabel);
+    const finalDefDmg = applyDamage(activeDefender, activeAttacker, defDmg, defenderLabel);
 
     console.log(`[BATTLE RESULT] ${activeDefender.name} now has ${Math.max(0, activeDefender.defense)} DEF`);
     console.log(`[BATTLE RESULT] ${activeAttacker.name} now has ${Math.max(0, activeAttacker.defense)} DEF`);
+
+    // --- On-Kill Logic (Bounty Hunter, Echo, Absorb) ---
+    const handleOnKill = (killer: any, victim: any, side: string) => {
+      if (killer.alive && !victim.alive) {
+        // Echo (Attack again)
+        if (killer.traits.some((t: any) => t.name.toLowerCase() === 'echo')) {
+          exchangeData.events.push({ type: 'echo_trigger', card: killer.name, side });
+          // In a simple system we just trigger another hit here
+          applyDamage(killer, victim, killer.attack, side); // Re-apply to a dead shell just for logic? No, find NEW target.
+          // For simplicity in this engine we'll just log it and perhaps the next round handles it
+          // OR we recurse slightly? Actually the turn alternates, so we'll just let it hit again if we can.
+          // Better: just do one extra damage instance to the next available defender
+          const nextDefender = side === 'attacker' ? defenders.find(c => c.alive) : attackers.find(c => c.alive);
+          if (nextDefender) {
+            applyDamage(killer, nextDefender, killer.attack, side);
+          }
+        }
+
+        // Bounty Hunter
+        if (killer.traits.some((t: any) => t.name.toLowerCase() === 'bounty hunter') && victim.status_effects.some((se: any) => se.type === 'bounty')) {
+          killer.attack += victim.base_attack;
+          killer.defense += victim.base_defense;
+          killer.max_defense += victim.base_defense;
+          exchangeData.events.push({ type: 'bounty_claimed', card: killer.name, side });
+        }
+
+        // Absorb (+25% victim max HP)
+        if (killer.traits.some((t: any) => t.name.toLowerCase() === 'absorb')) {
+          const gain = Math.floor(victim.max_defense * 0.25);
+          killer.defense += gain;
+          killer.max_defense += gain; // Absorb increases max HP
+          exchangeData.events.push({ type: 'absorb_gain', amount: gain, card: killer.name, side });
+        }
+      }
+    };
+
+    handleOnKill(activeAttacker, activeDefender, attackerLabel);
+    handleOnKill(activeDefender, activeAttacker, defenderLabel);
 
     exchangeData.challengerCard = snapshot(cActive);
     exchangeData.targetCard = snapshot(tActive);
@@ -2245,7 +2642,7 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
             card.traits.some((t: any) => t.name === 'revive' || t.name === 'reanimate') &&
             !card.reviveUsed
           ) {
-            card.defense = 1;
+          card.defense = 1;
             card.reviveUsed = true;
             exchangeData.events.push({ type: 'revive', card: card.name, side: sideLabel });
           } else {
@@ -2258,27 +2655,20 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
       });
     };
 
-    const attackerLabel = attackerSide === 'challenger' ? 'attacker' : 'defender';
-    const defenderLabel = attackerSide === 'challenger' ? 'defender' : 'attacker';
-
-    processDeaths(attackers, attackerLabel);
     processDeaths(defenders, defenderLabel);
 
-    // Rule 5: On-Kill Effects (Vampire)
-    const handleVampire = (killer: any, victim: any, side: string) => {
-      if (killer.alive && !victim.alive && killer.traits.some((t: any) => t.name === 'vampire')) {
-        const heal = Math.floor(victim.max_defense * 0.30); // Rule says X%, using 30% as default
-        const oldDef = killer.defense;
-        killer.defense = Math.min(killer.base_defense, killer.defense + heal);
-        const actualHeal = killer.defense - oldDef;
-        if (actualHeal > 0) {
-          exchangeData.events.push({ type: 'vampire_heal', amount: actualHeal, card: killer.name, side });
-        }
+    // Rule 5: On-Kill Effects (Absorb)
+    const handleAbsorb = (killer: any, victim: any, side: string) => {
+      if (killer.alive && !victim.alive && killer.traits.some((t: any) => t.name.toLowerCase() === 'absorb')) {
+        const gain = Math.floor(victim.max_defense * 0.25);
+        killer.defense += gain;
+        killer.max_defense += gain; // Absorb increases max HP
+        exchangeData.events.push({ type: 'absorb_gain', amount: gain, card: killer.name, side });
       }
     };
 
-    handleVampire(activeAttacker, activeDefender, attackerLabel);
-    handleVampire(activeDefender, activeAttacker, defenderLabel);
+    handleAbsorb(activeAttacker, activeDefender, attackerLabel);
+    handleAbsorb(activeDefender, activeAttacker, defenderLabel);
 
     // Rule 6: Passive Recalculation (Mimic)
     recalculateMimics(cCards, exchangeData.events, 'challenger');
@@ -2414,7 +2804,7 @@ async function loadBulkGrantRarityWeights(
       const { data: configData } = await supabase.from('platform_config').select('*');
       return configData;
     };
-    const configData = await fetchWithCache(env as Env, redis as Redis | null, 'cache_platform_config', 3600, fetcher, ctx);
+    const configData = await fetchWithCache(env || {} as Env, redis as Redis | null, 'cache_platform_config', 3600, fetcher, ctx);
     const weightingConfig = configData?.find((c: any) => c.id === 'rarity_weights')?.data;
     rarityWeights = weightingConfig || { common: 70, rare: 20, epic: 8, legendary: 2 };
   }
@@ -2576,7 +2966,8 @@ type BulkGrantToRecipientOptions = {
     index: number,
     total: number,
     randomCard: any,
-    isGenesis: boolean
+    isGenesis: boolean,
+    userCardId: string
   ) => { message: string; data: Record<string, unknown> };
   /** Skip Upstash for this batch (Twitch webhooks — fewer Worker subrequests). */
   skipRedis?: boolean;
@@ -2600,15 +2991,17 @@ async function bulkGrantRandomCardsToTwitchUser(
   const total = qty;
   const buildNotif =
     options.buildNotification ??
-    ((index: number, tot: number, randomCard: any, isGenesis: boolean) => ({
+    ((index: number, tot: number, randomCard: any, isGenesis: boolean, userCardId: string) => ({
       message: isGenesis
         ? `🌌 GENESIS CARD! You got a dual-trait card: ${randomCard.name}!`
         : `🏰 You got a new card: ${randomCard.name}!`,
       data: {
         card_id: randomCard.id,
+        user_card_id: userCardId,
         name: randomCard.name,
         rarity: randomCard.rarity,
         image_url: randomCard.image_url,
+        has_template: !!randomCard.template_id,
         is_genesis: isGenesis,
       },
     }));
@@ -2641,15 +3034,32 @@ async function bulkGrantRandomCardsToTwitchUser(
     ctx
   );
 
+  const { data: mechanicsRows } = await supabase
+    .from('mechanics')
+    .select('id, name, display_name, rarity_weight')
+    .eq('is_active', true);
+  const mechanicsList = mechanicsRows || [];
+
+  // Pre-fetch templates for all picked cards in one query (deduped by template_id).
+  // This avoids N individual fetches inside the forEach and supplies the template
+  // data needed for pull-time image baking.
+  const pickedTemplateIds = [...new Set(
+    picked.filter((c: any) => c.template_id).map((c: any) => c.template_id as string)
+  )];
+  const templateMap = new Map<string, any>();
+  if (pickedTemplateIds.length > 0) {
+    const { data: templateRows } = await supabase
+      .from('card_templates')
+      .select('*')
+      .in('id', pickedTemplateIds);
+    templateRows?.forEach((t: any) => templateMap.set(t.id, t));
+  }
+
   if (userRowBulk?.is_linked) {
-    const { data: mechanicsRows } = await supabase
-      .from('mechanics')
-      .select('id, name, display_name, rarity_weight')
-      .eq('is_active', true);
-    const mechanicsList = mechanicsRows || [];
     const userCardRows: any[] = [];
     const notifRows: any[] = [];
-    picked.forEach((randomCard: any, idx: number) => {
+    const total = picked.length;
+    for (const [idx, randomCard] of (picked as any[]).entries()) {
       const { grade: cardGrade, isGenesisMint } = generateGrade();
       const isGenesis = Math.random() < 0.01;
       let primaryMechanicId = pickWeightedMechanicFromList(mechanicsList);
@@ -2662,25 +3072,11 @@ async function bulkGrantRandomCardsToTwitchUser(
           retries++;
         }
       }
+      const traitList = await rollTraitsForCard(supabase, randomCard, mechanicsList, primaryMechanicId, secondaryMechanicId);
 
-      // Automatic Trait Rolling for Dynamic Card Templates
-      let traitList = randomCard.trait_list || [];
-      if (randomCard.template_id && (randomCard.auto_roll_traits || traitList.length === 0)) {
-        const rarityKey = (randomCard.rarity || 'common').toLowerCase();
-        let traitCount = 1;
-        if (rarityKey === 'rare') traitCount = 2;
-        else if (rarityKey === 'epic') traitCount = 3;
-        else if (rarityKey === 'legendary') traitCount = 4;
-
-        const rolledTraits: string[] = [];
-        for (let i = 0; i < traitCount; i++) {
-          const mid = pickWeightedMechanicFromList(mechanicsList);
-          if (mid) rolledTraits.push(mid);
-        }
-        traitList = rolledTraits;
-      }
-
+      const userCardId = crypto.randomUUID();
       userCardRows.push({
+        id: userCardId,
         twitch_id: twitchId,
         card_id: randomCard.id,
         streamer_id: streamerId,
@@ -2695,7 +3091,7 @@ async function bulkGrantRandomCardsToTwitchUser(
         is_genesis_mint: isGenesisMint,
         trait_list: traitList,
       });
-      const { message, data } = buildNotif(idx, total, randomCard, isGenesis);
+      const { message, data } = buildNotif(idx, total, randomCard, isGenesis, userCardId);
       notifRows.push({
         twitch_id: twitchId,
         streamer_id: streamerId,
@@ -2703,7 +3099,7 @@ async function bulkGrantRandomCardsToTwitchUser(
         message,
         data,
       });
-    });
+    }
     const { error: cardErrBulk } = await supabase.from('user_cards').insert(userCardRows);
     if (cardErrBulk) {
       logGrantIssueCopyPaste('user_cards batch insert failed', {
@@ -2719,24 +3115,70 @@ async function bulkGrantRandomCardsToTwitchUser(
       const { error: notifErrBulk } = await supabase.from('notifications').insert(notifRows);
       if (notifErrBulk) console.error('[Grant] Batch notification insert:', notifErrBulk.message);
     }
-    await syncUserAchievements(supabase, twitchId, streamerId);
+
+    // Kick off image baking asynchronously — doesn't block the pack-open response.
+    // Each card with a template_id and rolled traits gets its image generated,
+    // uploaded to R2 (deduped by traitHash), and its baked_image_url persisted.
+    if (ctx && env) {
+      const bakingTasks = userCardRows
+        .map((uc: any, idx: number) => {
+          const randomCard = picked[idx];
+          const template = randomCard.template_id ? templateMap.get(randomCard.template_id) : null;
+          if (!template || !uc.trait_list?.length) return null;
+          return bakeCardImage(env as Env, supabase, uc.id, randomCard, template, uc.trait_list, 'user_cards', !!uc.is_genesis_mint || !!uc.genesis_mechanic_id);
+        })
+        .filter(Boolean) as Promise<string | null>[];
+      if (bakingTasks.length > 0) {
+        ctx.waitUntil(Promise.all(bakingTasks));
+      }
+    }
+
+    if (ctx) ctx.waitUntil(syncUserAchievements(supabase, twitchId, streamerId));
+    else await syncUserAchievements(supabase, twitchId, streamerId);
   } else {
     if (!userRowBulk) {
       await supabase
         .from('users')
         .upsert({ twitch_id: twitchId, username, is_linked: false }, { onConflict: 'twitch_id' });
     }
-    const pendingRows = picked.map((randomCard: any, idx: number) => {
+    const pendingRows: any[] = [];
+    for (const [idx, randomCard] of (picked as any[]).entries()) {
       const { grade: pendingGrade, isGenesisMint: pendingIsGenesisMint } = generateGrade();
-      return {
+      
+      const isGenesis = Math.random() < 0.01;
+      let primaryMechanicId = pickWeightedMechanicFromList(mechanicsList);
+      let secondaryMechanicId: string | null = null;
+      if (isGenesis) {
+        let retries = 0;
+        while (retries < 5) {
+          secondaryMechanicId = pickWeightedMechanicFromList(mechanicsList);
+          if (secondaryMechanicId !== primaryMechanicId) break;
+          retries++;
+        }
+      }
+
+      // Automatic Trait Rolling
+      const traitList = await rollTraitsForCard(supabase, randomCard, mechanicsList, primaryMechanicId, secondaryMechanicId);
+
+
+      const rewardId = crypto.randomUUID();
+      pendingRows.push({
+        id: rewardId,
         twitch_id: twitchId,
         card_id: randomCard.id,
         streamer_id: streamerId,
         is_obs_consumed: isObsFor(idx),
         grade: pendingGrade,
         is_genesis_mint: pendingIsGenesisMint,
-      };
-    });
+        attack: randomCard.attack,
+        defense: randomCard.defense,
+        max_hp: randomCard.defense,
+        mechanic_id: isGenesis ? secondaryMechanicId : primaryMechanicId,
+        genesis_mechanic_id: isGenesis ? primaryMechanicId : null,
+        trait_list: traitList,
+      });
+    }
+
     const { error: rewardErrBulk } = await supabase.from('pending_rewards').insert(pendingRows);
     if (rewardErrBulk) {
       logGrantIssueCopyPaste('pending_rewards batch insert failed', {
@@ -2747,6 +3189,21 @@ async function bulkGrantRandomCardsToTwitchUser(
         supabase_error: supabaseErrSnapshot(rewardErrBulk),
       });
       throw new Error(rewardErrBulk.message || 'pending_rewards batch insert failed');
+    }
+
+    // Kick off image baking asynchronously for pending rewards.
+    if (ctx && env) {
+      const bakingTasksRewards = pendingRows
+        .map((pr: any, idx: number) => {
+          const randomCard = picked[idx];
+          const template = randomCard.template_id ? templateMap.get(randomCard.template_id) : null;
+          if (!template || !pr.trait_list?.length) return null;
+          return bakeCardImage(env as Env, supabase, pr.id, randomCard, template, pr.trait_list, 'pending_rewards', !!pr.is_genesis_mint || !!pr.genesis_mechanic_id);
+        })
+        .filter(Boolean) as Promise<string | null>[];
+      if (bakingTasksRewards.length > 0) {
+        ctx.waitUntil(Promise.all(bakingTasksRewards));
+      }
     }
   }
 
@@ -3049,7 +3506,31 @@ async function grantRandomCard(
         }
       }
 
+      // Roll dynamic traits if this card has a template configured
+      let traitList: string[] = [];
+      if (randomCard.template_id && (randomCard.auto_roll_traits || true)) {
+        const rarityKey = (randomCard.rarity || 'common').toLowerCase();
+        let traitCount = 1;
+        if (rarityKey === 'rare') traitCount = 2;
+        else if (rarityKey === 'epic') traitCount = 3;
+        else if (rarityKey === 'legendary') traitCount = 4;
+
+        const { data: mechanicsRows } = await supabase
+          .from('mechanics')
+          .select('id, name, display_name, rarity_weight')
+          .eq('is_active', true);
+        const mechanicsList = mechanicsRows || [];
+        for (let i = 0; i < traitCount; i++) {
+          const mid = pickWeightedMechanicFromList(mechanicsList);
+          if (mid) traitList.push(mid);
+        }
+      }
+
+      // Pre-generate UUID so the notification and DB row share the same ID
+      const userCardId = crypto.randomUUID();
+
       const { error: cardErr } = await supabase.from('user_cards').insert({
+        id: userCardId,
         twitch_id: userId,
         card_id: randomCard.id,
         streamer_id: creatorId,
@@ -3062,6 +3543,7 @@ async function grantRandomCard(
         genesis_mechanic_id: isGenesis ? primaryMechanicId : null,
         grade: cardGrade,
         is_genesis_mint: isGenesisMint,
+        trait_list: traitList,
       });
 
       if (cardErr) {
@@ -3077,6 +3559,20 @@ async function grantRandomCard(
         return null;
       }
 
+      // Kick off image baking async — doesn't block the grant response
+      if (env && ctx && randomCard.template_id && traitList.length > 0) {
+        const { data: tmpl } = await supabase
+          .from('card_templates')
+          .select('*')
+          .eq('id', randomCard.template_id)
+          .maybeSingle();
+        if (tmpl) {
+          ctx.waitUntil(
+            bakeCardImage(env, supabase, userCardId, randomCard, tmpl, traitList)
+          );
+        }
+      }
+
       const notificationMsg = isGenesis
         ? `🌌 GENESIS CARD! ${customMessage || `You got a dual-trait card: ${randomCard.name}!`}`
         : customMessage || `🏰 You got a new card: ${randomCard.name}!`;
@@ -3088,10 +3584,12 @@ async function grantRandomCard(
         message: notificationMsg,
         data: {
           card_id: randomCard.id,
+          user_card_id: userCardId,
           name: randomCard.name,
           rarity: randomCard.rarity,
           image_url: randomCard.image_url,
-          is_genesis: isGenesis
+          has_template: !!randomCard.template_id,
+          is_genesis: isGenesis,
         }
       });
 
@@ -3114,13 +3612,56 @@ async function grantRandomCard(
       // Generate grade at reward time so it's locked in before account linking
       const { grade: pendingGrade, isGenesisMint: pendingIsGenesisMint } = generateGrade();
 
+      // Genesis Trait System (1% chance for dual traits)
+      const isGenesisStatus = Math.random() < 0.01;
+      const primaryMechId = await assignMechanic(env || {} as Env, supabase, redis, ctx);
+      let secondaryMechId = null;
+
+      if (isGenesisStatus) {
+        let retriesCount = 0;
+        while (retriesCount < 5) {
+          secondaryMechId = await assignMechanic(env || {} as Env, supabase, redis, ctx);
+          if (secondaryMechId !== primaryMechId) break;
+          retriesCount++;
+        }
+      }
+
+      // Roll dynamic traits if template is present
+      let rolledTraitList: string[] = [];
+      if (randomCard.template_id && (randomCard.auto_roll_traits || true)) {
+        const rarityKey = (randomCard.rarity || 'common').toLowerCase();
+        let tCount = 1;
+        if (rarityKey === 'rare') tCount = 2;
+        else if (rarityKey === 'epic') tCount = 3;
+        else if (rarityKey === 'legendary') tCount = 4;
+
+        const { data: mechRows } = await supabase
+          .from('mechanics')
+          .select('id, name, display_name, rarity_weight')
+          .eq('is_active', true);
+        const mechList = mechRows || [];
+        for (let i = 0; i < tCount; i++) {
+          const mid = pickWeightedMechanicFromList(mechList);
+          if (mid) rolledTraitList.push(mid);
+        }
+      }
+
+      const rewardId = crypto.randomUUID();
+
       const { error: rewardErr } = await supabase.from('pending_rewards').insert({
+        id: rewardId,
         twitch_id: userId,
         card_id: randomCard.id,
         streamer_id: creatorId,
         is_obs_consumed: isSilent || false,
         grade: pendingGrade,
         is_genesis_mint: pendingIsGenesisMint,
+        attack: randomCard.attack,
+        defense: randomCard.defense,
+        max_hp: randomCard.defense,
+        mechanic_id: isGenesisStatus ? secondaryMechId : primaryMechId,
+        genesis_mechanic_id: isGenesisStatus ? primaryMechId : null,
+        trait_list: rolledTraitList,
       });
 
       if (rewardErr) {
@@ -3135,6 +3676,42 @@ async function grantRandomCard(
         setGrantFail(rewardErr.message || 'pending_rewards insert failed');
         return null;
       }
+
+      // Kick off image baking async for pending reward
+      if (env && ctx && randomCard.template_id && rolledTraitList.length > 0) {
+        const { data: tmplRow } = await supabase
+          .from('card_templates')
+          .select('*')
+          .eq('id', randomCard.template_id)
+          .maybeSingle();
+        if (tmplRow) {
+          ctx.waitUntil(
+            bakeCardImage(env, supabase, rewardId, randomCard, tmplRow, rolledTraitList, 'pending_rewards')
+          );
+        }
+      }
+
+      // Notification for unlinked user (they can see it later when they link)
+      const pendingNotifMsg = isGenesisStatus
+        ? `🌌 GENESIS CARD! ${customMessage || `You got a dual-trait card: ${randomCard.name}!`}`
+        : customMessage || `🏰 You got a new card: ${randomCard.name}!`;
+
+      await supabase.from('notifications').insert({
+        twitch_id: userId,
+        streamer_id: creatorId,
+        type: 'card_drop',
+        message: pendingNotifMsg,
+        data: {
+          card_id: randomCard.id,
+          user_card_id: rewardId,
+          name: randomCard.name,
+          rarity: randomCard.rarity,
+          image_url: randomCard.image_url,
+          has_template: !!randomCard.template_id,
+          is_genesis: isGenesisStatus,
+        }
+      });
+
       return grantSummary;
     }
   } catch (e: any) {
@@ -3367,126 +3944,52 @@ async function checkAndUnlockAchievements(supabase: any, twitchId: string, card:
     console.log('[Achievements] Streamer:', streamerId);
     console.log('[Achievements] Card:', card.id, card.name, card.rarity);
 
-    // Get user's card count for THIS streamer
-    const { count: cardCount, error: countError } = await supabase
-      .from('user_cards')
-      .select('*', { count: 'exact', head: true })
-      .eq('twitch_id', twitchId)
-      .eq('streamer_id', streamerId);
-
-    if (countError) {
-      console.error('[Achievements] Error getting card count:', countError);
-      return;
-    }
-
-    console.log('[Achievements] Total cards owned:', cardCount);
-
-    // Get already unlocked achievements for THIS streamer
-    const { data: unlocked, error: unlockedError } = await supabase
-      .from('user_achievements')
-      .select('achievement_id')
-      .eq('twitch_id', twitchId)
-      .eq('streamer_id', streamerId);
-
-    if (unlockedError) {
-      console.error('[Achievements] Error getting unlocked achievements:', unlockedError);
-      return;
-    }
+    const [
+      { count: cardCount },
+      { data: unlocked },
+      { count: totalCards },
+      { count: uniqueCardsOwned },
+      { data: setResults },
+      { data: lastPulls }
+    ] = await Promise.all([
+      supabase.from('user_cards').select('*', { count: 'exact', head: true }).eq('twitch_id', twitchId).eq('streamer_id', streamerId),
+      supabase.from('user_achievements').select('achievement_id').eq('twitch_id', twitchId).eq('streamer_id', streamerId),
+      supabase.from('cards').select('*', { count: 'exact', head: true }).eq('streamer_id', streamerId),
+      supabase.from('user_cards').select('card_id', { count: 'exact', head: true }).eq('twitch_id', twitchId).eq('streamer_id', streamerId),
+      supabase.from('enriched_user_cards').select('set_id').eq('twitch_id', twitchId).eq('streamer_id', streamerId),
+      supabase.from('enriched_user_cards').select('rarity').eq('twitch_id', twitchId).eq('streamer_id', streamerId).order('created_at', { ascending: false }).limit(3)
+    ]);
 
     const unlockedIds = new Set(unlocked?.map((a: any) => a.achievement_id) || []);
-    console.log('[Achievements] Already unlocked:', Array.from(unlockedIds).join(', ') || 'none');
-
+    console.log('[Achievements] Total cards:', cardCount, 'Owned unique:', uniqueCardsOwned, '/', totalCards);
+    
     const toUnlock: string[] = [];
 
-    // First card achievement
-    if (cardCount === 1 && !unlockedIds.has('first_card')) {
-      toUnlock.push('first_card');
-      console.log('[Achievements] ✓ Qualifies for: first_card');
-    }
+    // Milestone Logic
+    if (cardCount === 1 && !unlockedIds.has('first_card')) toUnlock.push('first_card');
+    if (cardCount >= 10 && !unlockedIds.has('collector_10')) toUnlock.push('collector_10');
+    if (cardCount >= 50 && !unlockedIds.has('collector_50')) toUnlock.push('collector_50');
 
-    // Collector milestones
-    if (cardCount >= 10 && !unlockedIds.has('collector_10')) {
-      toUnlock.push('collector_10');
-      console.log('[Achievements] ✓ Qualifies for: collector_10');
-    }
-    if (cardCount >= 50 && !unlockedIds.has('collector_50')) {
-      toUnlock.push('collector_50');
-      console.log('[Achievements] ✓ Qualifies for: collector_50');
-    }
-
-    // Rarity-based achievements
+    // Rarity Logic
     const rarity = card.rarity?.toLowerCase();
-    console.log('[Achievements] Card rarity (lowercase):', rarity);
+    if (rarity === 'rare' && !unlockedIds.has('rare_finder')) toUnlock.push('rare_finder');
+    if (rarity === 'epic' && !unlockedIds.has('epic_moment')) toUnlock.push('epic_moment');
+    if (rarity === 'legendary' && !unlockedIds.has('legendary_luck')) toUnlock.push('legendary_luck');
 
-    if (rarity === 'rare' && !unlockedIds.has('rare_finder')) {
-      toUnlock.push('rare_finder');
-      console.log('[Achievements] ✓ Qualifies for: rare_finder');
-    }
-    if (rarity === 'epic' && !unlockedIds.has('epic_moment')) {
-      toUnlock.push('epic_moment');
-      console.log('[Achievements] ✓ Qualifies for: epic_moment');
-    }
-    if (rarity === 'legendary' && !unlockedIds.has('legendary_luck')) {
-      toUnlock.push('legendary_luck');
-      console.log('[Achievements] ✓ Qualifies for: legendary_luck');
-    }
+    // Completionist
+    if (uniqueCardsOwned >= totalCards && !unlockedIds.has('completionist')) toUnlock.push('completionist');
 
-    // Completionist achievement - check if user has all cards for THIS streamer
-    const { count: totalCards } = await supabase
-      .from('cards')
-      .select('*', { count: 'exact', head: true })
-      .eq('streamer_id', streamerId);
-
-    const { count: uniqueCardsOwned } = await supabase
-      .from('user_cards')
-      .select('card_id', { count: 'exact', head: true })
-      .eq('twitch_id', twitchId)
-      .eq('streamer_id', streamerId);
-
-    console.log('[Achievements] Unique cards owned:', uniqueCardsOwned, '/', totalCards);
-
-    if (uniqueCardsOwned >= totalCards && !unlockedIds.has('completionist')) {
-      toUnlock.push('completionist');
-      console.log('[Achievements] ✓ Qualifies for: completionist (ALL CARDS COLLECTED!)');
-    }
-
-    // NEW: Set Collector achievement - collected cards from 2+ different sets
+    // Set Collector
     if (!unlockedIds.has('set_collector')) {
-      const { data: setCounts } = await supabase
-        .from('enriched_user_cards')
-        .select('set_id')
-        .eq('twitch_id', twitchId)
-        .eq('streamer_id', streamerId);
-
-      const distinctSets = new Set(setCounts?.map((c: any) => c.set_id).filter(Boolean) || []);
-      console.log('[Achievements] Distinct sets owned:', distinctSets.size);
-
-      if (distinctSets.size >= 2) {
-        toUnlock.push('set_collector');
-        console.log('[Achievements] ✓ Qualifies for: set_collector');
-      }
+      const distinctSets = new Set(setResults?.map((c: any) => c.set_id).filter(Boolean) || []);
+      if (distinctSets.size >= 2) toUnlock.push('set_collector');
     }
 
-    // NEW: Rarity Streak achievement - last 3 cards pulled were Rare or higher
+    // Rarity Streak
     if (!unlockedIds.has('rarity_streak_3')) {
-      const { data: lastPulls } = await supabase
-        .from('enriched_user_cards')
-        .select('rarity')
-        .eq('twitch_id', twitchId)
-        .eq('streamer_id', streamerId)
-        .order('created_at', { ascending: false })
-        .limit(3);
-
       if (lastPulls && lastPulls.length === 3) {
-        const streakStats = lastPulls.every((p: any) => {
-          const r = p.rarity?.toLowerCase();
-          return r === 'rare' || r === 'epic' || r === 'legendary';
-        });
-
-        if (streakStats) {
-          toUnlock.push('rarity_streak_3');
-          console.log('[Achievements] ✓ Qualifies for: rarity_streak_3 (HOT STREAK!)');
-        }
+        const streakStats = lastPulls.every((p: any) => ['rare', 'epic', 'legendary'].includes(p.rarity?.toLowerCase()));
+        if (streakStats) toUnlock.push('rarity_streak_3');
       }
     }
 
@@ -3530,12 +4033,13 @@ async function syncUserAchievements(supabase: any, twitchId: string, streamerId:
   try {
     console.log(`[Achievements] Starting full sync for user ${twitchId} on streamer ${streamerId}`);
 
-    // 1. Get ALL user cards for this streamer
+    // 1. Get ALL user cards for this streamer, ordered by latest first
     const { data: userCards, error: cardsError } = await supabase
       .from('user_cards')
-      .select('card_id, attack, defense, cards(rarity, set_id)')
+      .select('card_id, attack, defense, created_at, cards(rarity, set_id)')
       .eq('twitch_id', twitchId)
-      .eq('streamer_id', streamerId);
+      .eq('streamer_id', streamerId)
+      .order('created_at', { ascending: false });
 
     if (cardsError || !userCards) {
       console.error('[Achievements] Sync failed: error fetching cards', cardsError);
@@ -3545,52 +4049,40 @@ async function syncUserAchievements(supabase: any, twitchId: string, streamerId:
     const cardCount = userCards.length;
     if (cardCount === 0) return { success: true, count: 0 };
 
-    // 2. Get already unlocked
-    const { data: unlocked } = await supabase
-      .from('user_achievements')
-      .select('achievement_id')
-      .eq('twitch_id', twitchId)
-      .eq('streamer_id', streamerId);
+    const [
+      { data: unlocked },
+      { count: totalCardsInPool }
+    ] = await Promise.all([
+      supabase.from('user_achievements').select('achievement_id').eq('twitch_id', twitchId).eq('streamer_id', streamerId),
+      supabase.from('cards').select('*', { count: 'exact', head: true }).eq('streamer_id', streamerId)
+    ]);
 
     const unlockedIds = new Set(unlocked?.map((a: any) => a.achievement_id) || []);
     const toUnlock: string[] = [];
 
-    // --- CHECK CRITERIA ---
-
-    // Milestones
+    // Criteria using in-memory userCards
     if (cardCount >= 1 && !unlockedIds.has('first_card')) toUnlock.push('first_card');
     if (cardCount >= 10 && !unlockedIds.has('collector_10')) toUnlock.push('collector_10');
     if (cardCount >= 50 && !unlockedIds.has('collector_50')) toUnlock.push('collector_50');
 
-    // Rarity Checks (optimized scan)
     const rarities = new Set(userCards.map((c: any) => c.cards?.rarity?.toLowerCase()));
     if (rarities.has('rare') && !unlockedIds.has('rare_finder')) toUnlock.push('rare_finder');
     if (rarities.has('epic') && !unlockedIds.has('epic_moment')) toUnlock.push('epic_moment');
     if (rarities.has('legendary') && !unlockedIds.has('legendary_luck')) toUnlock.push('legendary_luck');
 
-    // Distinct Sets
     if (!unlockedIds.has('set_collector')) {
       const distinctSets = new Set(userCards.map((c: any) => c.cards?.set_id).filter(Boolean));
       if (distinctSets.size >= 2) toUnlock.push('set_collector');
     }
 
-    // Completionist
     if (!unlockedIds.has('completionist')) {
-      const { count: totalCardsInPool } = await supabase.from('cards').select('*', { count: 'exact', head: true }).eq('streamer_id', streamerId);
       const uniqueOwned = new Set(userCards.map((c: any) => c.card_id)).size;
       if (uniqueOwned >= (totalCardsInPool || 999)) toUnlock.push('completionist');
     }
 
-    // Rarity Streak - hardest to backfill perfectly but we check the last 3 most recent
     if (!unlockedIds.has('rarity_streak_3')) {
-      const { data: last3 } = await supabase
-        .from('user_cards')
-        .select('cards(rarity)')
-        .eq('twitch_id', twitchId)
-        .eq('streamer_id', streamerId)
-        .order('created_at', { ascending: false })
-        .limit(3);
-      if (last3?.length === 3 && last3.every((c: any) => ['rare', 'epic', 'legendary'].includes(c.cards?.rarity?.toLowerCase()))) {
+      const last3 = userCards.slice(0, 3);
+      if (last3.length === 3 && last3.every((c: any) => ['rare', 'epic', 'legendary'].includes(c.cards?.rarity?.toLowerCase()))) {
         toUnlock.push('rarity_streak_3');
       }
     }
@@ -3623,60 +4115,246 @@ async function syncUserAchievements(supabase: any, twitchId: string, streamerId:
 }
 
 
-/** Generates an SVG card with trait blocks (Icon + Name + Description) overlaid on a template image. */
-function generateCardSVG(template: any, traits: any[]): string {
+/** Escapes characters that are unsafe in SVG text/attribute content. */
+function escapeXml(s: string): string {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Fetches a URL and returns a base64 data URI, or null on failure.
+ * Used to inline images into SVG so they render correctly when the SVG
+ * is loaded via an <img> tag (cross-origin <image href> is blocked by browsers).
+ */
+async function fetchAsDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { cf: { cacheEverything: true } } as any);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+    const ct = res.headers.get('content-type') || 'image/jpeg';
+    return `data:${ct};base64,${btoa(bin)}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generates a fully self-contained SVG card with trait text overlaid.
+ *
+ * Uses pure SVG <text> and <image> elements (no <foreignObject>) so the SVG
+ * renders correctly when loaded via an HTML <img> tag.
+ * Inlines the base card art as a base64 data URI so there are no cross-origin
+ * image requests inside the SVG (which browsers block in <img> context).
+ */
+async function generateCardSVG(template: any, traits: any[], isGenesis: boolean = false): Promise<string> {
   const { trait_area, font_size, font_color, text_align, image_url, icon_size } = template;
-  const { x, y, w, h } = trait_area || { x: 0, y: 0, w: 750, h: 1050 };
-  
-  const align = text_align === 'center' ? 'center' : (text_align === 'right' ? 'flex-end' : 'flex-start');
-  const textAlign = text_align || 'center';
+  const area = trait_area || { x: 60, y: 820, w: 630, h: 200 };
 
-  const traitBlocks = traits.map(t => {
-      let iconUrl = t.icon || '';
-      if (iconUrl.startsWith('/')) iconUrl = `${template.origin || ''}${iconUrl}`;
-      const iSize = icon_size || 32;
-      const iconHtml = iconUrl ? `<img src="${iconUrl}" style="width: ${iSize}px; height: ${iSize}px; margin-right: 12px; border-radius: 50%;" />` : '';
-      return `
-        <div style="margin-bottom: 20px; width: 100%; display: flex; flex-direction: column; align-items: ${align}; font-family: 'Inter', sans-serif;">
-            <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                ${iconHtml}
-                <div style="font-weight: 900; font-size: ${font_size || 24}px; color: ${font_color || '#ffffff'}; text-transform: uppercase; letter-spacing: -0.02em;">
-                    ${t.display_name || t.name}
-                </div>
-            </div>
-            <div style="font-weight: 500; font-size: ${(font_size || 24) * 0.7}px; color: ${font_color || '#ffffff'}; opacity: 0.8; line-height: 1.4;">
-                ${t.description || ''}
-            </div>
-        </div>
-      `;
-  }).join('');
+  const fSize  = Math.min(parseInt(font_size, 10) || 26, 42);
+  const iSize  = Math.min(parseInt(icon_size, 10) || 32, 56);
+  const color  = escapeXml(font_color || '#ffffff');
+  const dFSize = Math.max(Math.round(fSize * 0.62), 14);
 
-  return `
-<svg width="750" height="1050" viewBox="0 0 750 1050" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&amp;display=swap');
-    </style>
-  </defs>
-  <image href="${image_url}" width="750" height="1050" />
-  <foreignObject x="${x}" y="${y}" width="${w}" height="${h}">
-    <div xmlns="http://www.w3.org/1999/xhtml" style="
-      display: flex;
-      flex-direction: column;
-      align-items: ${align};
-      justify-content: flex-start;
-      height: 100%;
-      color: ${font_color || '#ffffff'};
-      font-family: 'Inter', sans-serif;
-      font-size: ${font_size || 24}px;
-      text-align: ${textAlign};
-      padding: 10px;
-    ">
-      ${traitBlocks}
-    </div>
-  </foreignObject>
-</svg>
-  `;
+  const anchor = text_align === 'right' ? 'end' : text_align === 'center' ? 'middle' : 'start';
+  const baseX  = text_align === 'right'  ? area.x + area.w - 10
+               : text_align === 'center' ? area.x + area.w / 2
+               : area.x + 10;
+
+  // Collect all unique remote asset URLs upfront so we can fetch in parallel.
+  // Icons that start with '/' are worker-relative — resolve using template.origin.
+  const uniqueIconUrls = [...new Set(
+    traits
+      .map(t => (t.icon || '').trim())
+      .filter(icon => icon.startsWith('/') || icon.startsWith('http'))
+      .map(icon => icon.startsWith('/') ? `${template.origin || ''}${icon}` : icon)
+  )];
+
+  // Force-include the Genesis icon if this is a Genesis card
+  const genesisIconUrl = `https://cdn.codeoce.com/traits/Genesis-Icon.png`;
+  if (isGenesis) {
+    uniqueIconUrls.push(genesisIconUrl);
+  }
+
+  // Fetch card art + all unique icon URLs concurrently
+  const [artDataUri, ...iconResults] = await Promise.all([
+    image_url ? fetchAsDataUri(image_url) : Promise.resolve(null),
+    ...uniqueIconUrls.map(u => fetchAsDataUri(u)),
+  ]);
+
+  // Map absolute URL → inlined data URI (or null on failure)
+  const iconDataUriMap = new Map<string, string | null>();
+  uniqueIconUrls.forEach((u, i) => iconDataUriMap.set(u, iconResults[i]));
+
+  const artHref = artDataUri ?? escapeXml(image_url || '');
+  const genesisIconDataUri = iconDataUriMap.get(genesisIconUrl);
+
+  // Build SVG trait rows
+  let svgRows = '';
+  let curY = area.y + iSize;
+
+  for (let idx = 0; idx < traits.length; idx++) {
+    const t = traits[idx];
+    if (curY > area.y + area.h) break;
+
+    const isGenesisTrait = isGenesis && idx === 0;
+    let name = escapeXml((t.display_name || t.name || '').toUpperCase());
+    if (isGenesisTrait) name = `GENESIS: ${name}`;
+
+    const desc = (t.description || '').trim();
+    const rawIcon = (t.icon || '').trim();
+    const isUrlIcon = rawIcon.startsWith('/') || rawIcon.startsWith('http');
+
+    // Icon element (image URL or emoji text)
+    let iconX = text_align === 'right'  ? baseX - iSize
+                : text_align === 'center' ? baseX - iSize / 2 - 4
+                : area.x + 10;
+
+    if (isGenesisTrait && genesisIconDataUri) {
+       // Render Genesis icon first
+       svgRows += `<image href="${genesisIconDataUri}" x="${Math.round(iconX)}" y="${Math.round(curY - iSize + 2)}" width="${iSize}" height="${iSize}" />`;
+       iconX += iSize + 6; // Move next icon
+    }
+
+    if (rawIcon) {
+      if (isUrlIcon) {
+        const absUrl = rawIcon.startsWith('/') ? `${template.origin || ''}${rawIcon}` : rawIcon;
+        const iconHref = iconDataUriMap.get(absUrl) ?? escapeXml(absUrl);
+        svgRows += `<image href="${iconHref}" x="${Math.round(iconX)}" y="${Math.round(curY - iSize + 2)}" width="${iSize}" height="${iSize}" />`;
+      } else {
+        svgRows += `<text x="${Math.round(iconX + iSize / 2)}" y="${Math.round(curY - 4)}" font-size="${iSize}" text-anchor="middle">${escapeXml(rawIcon)}</text>`;
+      }
+    }
+
+    // Trait name — sits to the right of the icon(s)
+    let nameX = rawIcon ? iconX + iSize + 16 : baseX;
+    if (text_align === 'right') nameX = iconX - 8;
+    if (text_align === 'center') nameX = iconX + iSize / 2 + 6;
+
+    const nameAnchor = (rawIcon && text_align === 'center') ? 'start' : anchor;
+
+    svgRows += `<text x="${Math.round(nameX)}" y="${Math.round(curY)}" `
+      + `font-family="Arial Black, Arial, sans-serif" font-size="${fSize}" font-weight="900" `
+      + `fill="${color}" text-anchor="${nameAnchor}" `
+      + `style="text-transform:uppercase;letter-spacing:-0.5px">${name}</text>`;
+
+    curY += dFSize + 6;
+
+    // Description — simple word-wrap at ~36 chars per line
+    if (desc) {
+      const words = desc.split(/\s+/);
+      let line = '';
+      for (const word of words) {
+        const test = line ? `${line} ${word}` : word;
+        if (test.length > 36 && line) {
+          svgRows += `<text x="${Math.round(baseX)}" y="${Math.round(curY)}" `
+            + `font-family="Arial, sans-serif" font-size="${dFSize}" font-weight="400" `
+            + `fill="${color}" opacity="0.78" text-anchor="${anchor}">${escapeXml(line)}</text>`;
+          curY += dFSize + 3;
+          line = word;
+        } else {
+          line = test;
+        }
+      }
+      if (line) {
+        svgRows += `<text x="${Math.round(baseX)}" y="${Math.round(curY)}" `
+          + `font-family="Arial, sans-serif" font-size="${dFSize}" font-weight="400" `
+          + `fill="${color}" opacity="0.78" text-anchor="${anchor}">${escapeXml(line)}</text>`;
+        curY += dFSize + 3;
+      }
+    }
+
+    curY += (traits.length > 2 ? 10 : 18); // tighter gap if many traits
+  }
+
+  return `<svg width="750" height="1050" viewBox="0 0 750 1050" xmlns="http://www.w3.org/2000/svg">
+  <image href="${artHref}" width="750" height="1050" />
+  ${svgRows}
+</svg>`;
+}
+
+/**
+ * Bakes a card image (SVG with traits overlaid) at pull-time and stores it in R2.
+ *
+ * Key design properties:
+ * - Deterministic R2 key based on baseCardId + sorted trait IDs → deduplication.
+ *   Two users who pull identical traits on the same card share one stored image.
+ * - Fully self-contained SVG: card art and icons are base64-inlined, no external
+ *   requests required when the SVG is served directly from the CDN.
+ * - Writes the CDN URL back to user_cards.baked_image_url so subsequent collection
+ *   fetches return the stable URL without hitting the worker endpoint.
+ */
+async function bakeCardImage(
+  env: Env,
+  supabase: any,
+  userCardId: string,
+  baseCard: { id: string; image_url: string },
+  template: any,
+  traitIds: string[],
+  tableName: string = 'user_cards',
+  isGenesis: boolean = false
+): Promise<string | null> {
+  try {
+    if (!env.CARD_IMAGES) return null;
+
+    // 1. Deterministic dedup key: hash(baseCardId + isGenesis + sorted trait IDs)
+    const sortedTraits = [...traitIds].sort().join(',');
+    const hashInput = new TextEncoder().encode(`${baseCard.id}:genesis=${isGenesis}:v3:${sortedTraits}`);
+    const hashBuf = await crypto.subtle.digest('SHA-256', hashInput);
+    const traitHash = Array.from(new Uint8Array(hashBuf))
+      .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+    const r2Key = `card_images/baked/${baseCard.id}/${traitHash}.svg`;
+
+    // 2. Dedup check — if already baked, just update the user_card URL and return
+    const existing = await env.CARD_IMAGES.head(r2Key);
+    if (existing) {
+      const cdnUrl = creatorCdnPublicUrl(env, r2Key);
+      await supabase.from(tableName).update({ baked_image_url: cdnUrl }).eq('id', userCardId);
+      return cdnUrl;
+    }
+
+    // 3. Fetch full mechanic details for these trait IDs
+    let fullTraits: any[] = [];
+    if (traitIds.length > 0) {
+      const { data: mechDetails } = await supabase
+        .from('mechanics')
+        .select('id, name, display_name, description, icon')
+        .in('id', traitIds);
+      fullTraits = traitIds.map(tid => mechDetails?.find((m: any) => m.id === tid)).filter(Boolean);
+    }
+
+    // 4. Generate fully self-contained SVG
+    //    Use FRONTEND_URL as the origin for resolving relative icon paths (e.g. /icon.svg)
+    const svgTemplate = {
+      ...template,
+      image_url: baseCard.image_url,
+      origin: (env.FRONTEND_URL || '').replace(/\/$/, ''),
+    };
+    const svg = await generateCardSVG(svgTemplate, fullTraits, isGenesis);
+
+    // 5. Upload to R2 with immutable cache headers (content never changes for this key)
+    await env.CARD_IMAGES.put(r2Key, svg, {
+      httpMetadata: {
+        contentType: 'image/svg+xml',
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+    });
+
+    const cdnUrl = creatorCdnPublicUrl(env, r2Key);
+
+    // 6. Persist the CDN URL on the user_card instance
+    await supabase.from(tableName).update({ baked_image_url: cdnUrl }).eq('id', userCardId);
+
+    return cdnUrl;
+  } catch (e: any) {
+    console.error('[BakeCardImage] Failed for userCardId=%s: %s', userCardId, e.message);
+    return null;
+  }
 }
 
 export default {
@@ -3731,15 +4409,37 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type, Twitch-ID, X-CSRF-Token',
     };
 
+    // --- R2 ASSET SERVING ---
+    // Specifically serving traits, core icons, and now card_images from the unified bucket.
+    const isCdnRequest = url.hostname === 'cdn.codeoce.com' || path.startsWith('/traits') || path.startsWith('/core') || path.startsWith('/card_images');
+    if (isCdnRequest && method === 'GET') {
+      const key = url.pathname.replace(/^\//, '');
+      try {
+        const object = await env.IMAGE_ASSETS.get(key);
+        if (object !== null) {
+          const headers = new Headers(corsHeaders);
+          object.writeHttpMetadata(headers);
+          headers.set('etag', object.httpEtag);
+          headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+          return new Response(object.body, { headers });
+        }
+      } catch (e: any) {
+        console.error('[R2 Servo] Error for', key, e);
+      }
+    }
+
+
     // --- EDGE CACHE LAYER (Layer 3) ---
     let cacheKeyUrl = url.toString();
-    const cacheablePaths = ['/api/v2/bootstrap', '/api/collection', '/api/mechanics', '/api/leaderboard', '/api/stats', '/api/cards/count'];
+    // /api/collection is NOT edge-cached — it's real-time user state (grants/trades/consumptions
+    // must appear immediately). Performance comes from DB indexes, not edge cache.
+    const cacheablePaths = ['/api/v2/bootstrap', '/api/mechanics', '/api/leaderboard', '/api/stats', '/api/cards/count', '/api/public/catalog', '/api/public/streamer'];
     const isCacheable = method === 'GET' && cacheablePaths.some(p => path.startsWith(p));
     let cache: any = null;
 
     if (isCacheable) {
       // For user-private data, append Twitch ID to cache key to prevent data leakage
-      const isPrivate = path.startsWith('/api/v2/bootstrap') || path.startsWith('/api/collection');
+      const isPrivate = path.startsWith('/api/v2/bootstrap');
       if (isPrivate) {
         const cookie = request.headers.get('Cookie') || '';
         const token = cookie.match(/(?:^|; )session=([^;]*)/)?.[1];
@@ -4201,6 +4901,34 @@ export default {
         return handleKickWebhook(request, env, ctx);
       }
 
+      // Image proxy — serves CDN images with CORS headers for WebGL texture loading.
+      // Bypasses R2 CORS configuration issues entirely.
+      if (method === 'GET' && path === '/api/img-proxy') {
+        const imgUrl = url.searchParams.get('url');
+        if (!imgUrl) {
+          return new Response('Missing ?url=', { status: 400 });
+        }
+        const allowedHosts = ['cdn.codeoce.com', 'cdn2.codeoce.com'];
+        let parsedUrl: URL;
+        try {
+          parsedUrl = new URL(imgUrl);
+        } catch {
+          return new Response('Invalid URL', { status: 400 });
+        }
+        if (!allowedHosts.includes(parsedUrl.hostname)) {
+          return new Response('Forbidden host', { status: 403 });
+        }
+        try {
+          const imgRes = await fetch(imgUrl, { cf: { cacheEverything: true, cacheTtl: 86400 } } as RequestInit);
+          const headers = new Headers(imgRes.headers);
+          headers.set('Access-Control-Allow-Origin', '*');
+          headers.set('Cache-Control', 'public, max-age=86400');
+          return new Response(imgRes.body, { status: imgRes.status, headers });
+        } catch (e: any) {
+          return new Response(`Proxy error: ${e.message}`, { status: 502 });
+        }
+      }
+
       // Stripe Webhook — handle early (skip rate limits, assets, and heavy API routing)
       if (method === 'POST' && path === '/api/payment/webhook') {
         const stripeWebhook = new Stripe(env.STRIPE_SECRET_KEY, {
@@ -4456,19 +5184,14 @@ export default {
         return new Response('Queue control page not found', { status: 404 });
       }
 
-      // If NOT an API/Auth route, try serving from assets.
-      // If asset not found and it's a GET, fallback to index.html (SPA routing).
+      // Try serving exact static assets BEFORE rate limiting to avoid blocking CSS/JS
       if (env.ASSETS && !path.startsWith('/api') && !path.startsWith('/auth') && path !== '/twitch/eventsub' && !path.startsWith('/api/obs') && path !== '/obs-overlay' && path !== '/queue-control') {
         try {
           const assetRes = await env.ASSETS.fetch(request.clone());
+          // If the asset exists exactly, serve it and bypass all further logic/rate limits
           if (assetRes.status !== 404) return assetRes;
-
-          if (method === 'GET') {
-            const indexRes = await env.ASSETS.fetch(new Request(`${url.origin}/index.html`));
-            if (indexRes.ok) return indexRes;
-          }
         } catch (e) {
-          console.error('[Assets] Error:', e);
+          console.error('[Assets Early] Error:', e);
         }
       }
 
@@ -4583,7 +5306,53 @@ export default {
             twitchStatusHdr
           );
         } catch (e: any) {
-          return secureResponse({ error: e.message || 'Failed to check Twitch status' }, 500, corsHeaders, true);
+          console.error('[twitch-status] fatal:', e);
+          // Never 500: Connections UI expects JSON 200. Best-effort session for degraded fields.
+          try {
+            const u = await getUserFromSession(request, env, supabase);
+            if (u) {
+              const kickPrimary = String(u.twitch_id || '').startsWith('kick_');
+              return secureResponse(
+                {
+                  authenticated: true,
+                  username: u.username,
+                  is_creator: false,
+                  auth_provider: kickPrimary ? 'kick' : 'twitch',
+                  twitch: kickPrimary
+                    ? null
+                    : {
+                        token_valid: false,
+                        needs_reauth: true,
+                        scopes_granted: [],
+                        scopes_required: [],
+                        scopes_missing: [],
+                        token_error: 'status_degraded',
+                      },
+                  kick: kickPrimary
+                    ? { token_valid: false, needs_reauth: true, token_error: 'status_degraded' }
+                    : null,
+                  kick_linked: kickPrimary ? true : !!(u as { kick_linked?: boolean }).kick_linked,
+                  status_degraded: true,
+                },
+                200,
+                twitchStatusHdr
+              );
+            }
+          } catch {
+            /* fall through */
+          }
+          return secureResponse(
+            {
+              authenticated: false,
+              twitch: null,
+              kick: null,
+              kick_linked: false,
+              status_degraded: true,
+              status_error: e?.message || 'status_check_failed',
+            },
+            200,
+            twitchStatusHdr
+          );
         }
       }
 
@@ -4617,7 +5386,7 @@ export default {
 
           let streamer = isGlobal
             ? { id: 'all', username: 'all', display_name: 'Creator Hub', brand_name: 'Global' }
-            : await resolveStreamerContext(request, supabase, url);
+            : await resolveStreamerContextWithCache(request, env, ctx, supabase, url);
 
           // When URL has ?streamer=slug (e.g. /binder/mavro), never substitute the logged-in viewer's creator row
           if (!streamer && explicitSlug) {
@@ -4648,8 +5417,15 @@ export default {
           msRpc = Date.now() - _rpcStart;
 
           if (rpcErr) {
-            console.error('[Bootstrap] RPC Error:', rpcErr.message);
-            throw rpcErr;
+            console.error('[Bootstrap] RPC Error:', rpcErr.message, rpcErr.hint || '', rpcErr.details || '');
+            // Return a structured error response so the dashboard can show a helpful message
+            // instead of crashing. Common cause: enriched_user_cards view is missing after
+            // a partial migration — run migrations/058_fix_enriched_view_recovery.sql to fix.
+            return secureResponse({
+              error: 'bootstrap_rpc_failed',
+              message: rpcErr.message,
+              hint: 'If you see "relation does not exist", run migration 058_fix_enriched_view_recovery.sql in Supabase.',
+            }, 503, corsHeaders, true);
           }
 
           // Map RPC results to the variables used downstream
@@ -4763,7 +5539,7 @@ export default {
 
                 if (fullUser?.twitch_access_token_encrypted) {
                   try {
-                    const twTokSecret = twitchTokenEncryptSecret(env);
+                    const twTokSecret = env ? twitchTokenEncryptSecret(env) : '';
                     let accessToken = await decryptSensitive(fullUser.twitch_access_token_encrypted, twTokSecret);
                     
                     let { follows, errorStatus, errorBody } = await getTwitchFollows(user.twitch_id, accessToken, env.TWITCH_CLIENT_ID);
@@ -5004,8 +5780,8 @@ export default {
             ? url.searchParams.get('inspect') 
             : user?.twitch_id;
 
-          // 2. Parallelize: Master RPC + User Collection Page 1
-          const [rpcRes, collectionRes] = await Promise.all([
+          // 2. Parallelize: Master RPC + User Collection Page 1 + Hydrated Achievements
+          const [rpcRes, collectionRes, hydratedAchievements] = await Promise.all([
             supabase.rpc('get_bootstrap_data_v4', {
               p_user_twitch_id: targetTwitchId || null,
               p_current_streamer_id: isGlobal ? null : streamer?.id
@@ -5016,11 +5792,41 @@ export default {
               .eq('twitch_id', targetTwitchId)
               .eq('streamer_id', streamer?.id)
               .order('created_at', { ascending: false })
-              .limit(50) : Promise.resolve({ data: [] })
+              .limit(50) : Promise.resolve({ data: [] }),
+            user ? fetchAchievementsWithCache(
+              env,
+              supabase,
+              reqRedis,
+              user.twitch_id,
+              streamer?.id || 'all',
+              (streamer as any)?.achievement_names || {},
+              ctx
+            ) : Promise.resolve([])
           ]);
 
-          if (rpcRes.error) throw rpcRes.error;
+          if (rpcRes.error) {
+            const rpcErr = rpcRes.error;
+            console.error('[Bootstrap V2] RPC Error:', rpcErr.message, rpcErr.hint || '', rpcErr.details || '');
+            return secureResponse({
+              error: 'bootstrap_rpc_failed',
+              message: rpcErr.message,
+              hint: rpcErr.hint || 'Run migration 059_recreate_bootstrap_rpc.sql in Supabase to recreate the function.',
+              details: rpcErr.details || null,
+            }, 503, corsHeaders, true);
+          }
           const rpc = rpcRes.data;
+          if (rpc == null || typeof rpc !== 'object') {
+            console.error('[Bootstrap V2] RPC returned empty data');
+            return secureResponse(
+              {
+                error: 'bootstrap_no_data',
+                message: 'get_bootstrap_data_v4 returned no payload — check RPC and migrations.',
+              },
+              503,
+              corsHeaders,
+              true
+            );
+          }
 
           // 3. Assemble Response (Sharing mostly with V1 logic)
           // [Note: In a real refactor we would extract the mapping logic to a helper]
@@ -5030,6 +5836,10 @@ export default {
             followed: [], 
             discovery: rpc.discovery || []
           };
+
+          const isHttpsBoot = request.url.startsWith('https');
+          const secureFlagBoot = isHttpsBoot ? '; Secure' : '';
+          const csrfTokenV2 = crypto.randomUUID();
 
           const bootstrapBody = {
             user: user ? { ...user, is_creator: !!rpc.creator_data?.stats } : null,
@@ -5041,10 +5851,11 @@ export default {
             },
             collection: collectionRes.data || [],
             recent_drops: rpc.recent_drops || [],
-            binders: rpc.binders || [],
-            achievements: rpc.achievements || [],
+             binders: rpc.binders || [],
+             achievements: hydratedAchievements || [],
             leaderboard: rpc.leaderboard || [],
             bootstrap_lite: bootstrapLite,
+            csrf_token: csrfTokenV2,
             timing: {
               total_ms: Date.now() - bootT0
             }
@@ -5052,7 +5863,8 @@ export default {
 
           const response = secureResponse(bootstrapBody, 200, corsHeaders, false, {
             'Cache-Control': 'public, max-age=30, stale-while-revalidate=300',
-            'X-Response-Version': 'V2'
+            'X-Response-Version': 'V2',
+            'Set-Cookie': `csrf=${csrfTokenV2}${secureFlagBoot}; SameSite=Lax; Path=/`
           });
           if (cache && cacheKeyUrl) {
             ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
@@ -5811,6 +6623,182 @@ export default {
         } catch (e: any) {
           console.error('[ShareImage]', e);
           return secureResponse('Fetch failed', 502, corsHeaders, true);
+        }
+      }
+
+      // ── Public Profile API (no auth required) ──────────────────────────────
+      if (method === 'GET' && path.startsWith('/api/public/profile/')) {
+        const profileUsername = path.slice('/api/public/profile/'.length).split('?')[0].trim().toLowerCase();
+        if (!profileUsername) return secureResponse('Missing username', 400, corsHeaders, true);
+        try {
+          // 1. Resolve user
+          const { data: userRow, error: userErr } = await supabase
+            .from('users')
+            .select('twitch_id, username, avatar_url, trade_code, profile_layout, featured_card_ids')
+            .ilike('username', profileUsername)
+            .maybeSingle();
+          if (userErr || !userRow) return secureResponse('Profile not found', 404, corsHeaders, true);
+
+          // 2. Check if creator
+          const { data: streamerRow } = await supabase
+            .from('streamers')
+            .select('id, is_active')
+            .eq('twitch_id', userRow.twitch_id)
+            .maybeSingle();
+          const isCreator = !!(streamerRow && streamerRow.is_active);
+
+          // 3. Aggregate card stats
+          const selectCols = ENRICHED_USER_CARDS_COLLECTION_SELECT;
+          const { data: allCards, error: cardsErr } = await supabase
+            .from('enriched_user_cards')
+            .select(selectCols)
+            .eq('twitch_id', userRow.twitch_id)
+            .order('granted_at', { ascending: false })
+            .limit(2000);
+          const cards = Array.isArray(allCards) ? allCards : [];
+
+          // Aggregate stats
+          const totalCards = cards.length;
+          const uniqueStreamers = new Set(cards.map((c: any) => c.streamer_id).filter(Boolean)).size;
+          const legendaryCount = cards.filter((c: any) => (c.rarity || '').toLowerCase() === 'legendary').length;
+          const epicCount = cards.filter((c: any) => (c.rarity || '').toLowerCase() === 'epic').length;
+          const rareCount = cards.filter((c: any) => (c.rarity || '').toLowerCase() === 'rare').length;
+
+          // Battles
+          let battlesWon = 0; let battlesLost = 0;
+          try {
+            const { data: battles } = await supabase
+              .from('battles')
+              .select('winner_id, loser_id')
+              .or(`winner_id.eq.${userRow.twitch_id},loser_id.eq.${userRow.twitch_id}`);
+            if (Array.isArray(battles)) {
+              battlesWon = battles.filter((b: any) => b.winner_id === userRow.twitch_id).length;
+              battlesLost = battles.filter((b: any) => b.loser_id === userRow.twitch_id).length;
+            }
+          } catch { /* battles table may not exist */ }
+
+          // Trades completed
+          let tradesCompleted = 0;
+          try {
+            const { count } = await supabase
+              .from('trade_offers')
+              .select('id', { count: 'exact', head: true })
+              .eq('status', 'accepted')
+              .or(`sender_id.eq.${userRow.twitch_id},receiver_id.eq.${userRow.twitch_id}`);
+            tradesCompleted = count ?? 0;
+          } catch { /* trades table may not exist or use different col names */ }
+
+          // 4. Rarity sort helper (for trophy + showcase)
+          const RARITY_ORDER: Record<string, number> = { legendary: 4, epic: 3, rare: 2, common: 1 };
+          const rarityScore = (c: any) => RARITY_ORDER[(c.rarity || '').toLowerCase()] || 0;
+          const sorted = [...cards].sort((a, b) => rarityScore(b) - rarityScore(a));
+
+          // Latest 8 cards (already ordered by granted_at desc)
+          const latestCards = cards.slice(0, 8).map((c: any) => ({
+            user_card_id: c.user_card_id, name: c.name, rarity: c.rarity,
+            image_url: c.image_url, granted_at: c.granted_at, brand_name: c.brand_name
+          }));
+
+          // Top 8 by rarity (trophy cabinet)
+          const trophyCards = sorted.slice(0, 8).map((c: any) => ({
+            user_card_id: c.user_card_id, name: c.name, rarity: c.rarity,
+            image_url: c.image_url, mechanic_name: c.mechanic_name
+          }));
+
+          // 5. Showcase cards: priority to manually pinned ones, fallback to rarest
+          const pinnedIds = Array.isArray(userRow.featured_card_ids) ? userRow.featured_card_ids as string[] : [];
+          let showcaseCards: any[] = [];
+          
+          if (pinnedIds.length > 0) {
+            // Find the pinned cards in the user's collection
+            showcaseCards = pinnedIds.map(id => cards.find((c: any) => c.user_card_id === id)).filter(Boolean);
+          }
+          
+          // Fallback/fill if less than 10 (user can pin up to 10)
+          if (showcaseCards.length < 10) {
+            const fallbackSorted = sorted.filter(c => !showcaseCards.some(s => s.user_card_id === c.user_card_id));
+            const fillCount = 10 - showcaseCards.length;
+            const uniqueFill = fallbackSorted
+              .filter((c, i, arr) => arr.findIndex(x => x.card_id === c.card_id) === i)
+              .slice(0, fillCount);
+            showcaseCards = [...showcaseCards, ...uniqueFill];
+          }
+
+          const finalShowcase = showcaseCards.slice(0, 10).map((c: any) => ({
+            user_card_id: c.user_card_id, name: c.name, rarity: c.rarity,
+            image_url: c.image_url, streamer_username: c.streamer_username, brand_name: c.brand_name
+          }));
+
+          const payload = {
+            user: {
+              username: userRow.username,
+              display_name: userRow.username,
+              avatar_url: userRow.avatar_url,
+              trade_code: userRow.trade_code,
+              is_creator: isCreator,
+              profile_layout: userRow.profile_layout,
+              featured_card_ids: userRow.featured_card_ids,
+            },
+            stats: {
+              total_cards: totalCards,
+              unique_streamers: uniqueStreamers,
+              legendary_count: legendaryCount,
+              epic_count: epicCount,
+              rare_count: rareCount,
+              battles_won: battlesWon,
+              battles_lost: battlesLost,
+              trades_completed: tradesCompleted,
+            },
+            showcase_cards: finalShowcase,
+            trophy_cards: trophyCards,
+            latest_cards: latestCards,
+          };
+          return secureResponse(payload, 200, { ...corsHeaders, 'Cache-Control': 'public, max-age=60, stale-while-revalidate=120' });
+        } catch (e: any) {
+          console.error('[PublicProfile]', e);
+          return secureResponse('Internal error', 500, corsHeaders, true);
+        }
+      }
+
+      // Save public profile widget layout
+      if (method === 'POST' && path === '/api/viewer/profile-layout') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+
+        try {
+          const body = await request.json() as any;
+          if (!Array.isArray(body.layout)) return secureResponse('Invalid layout array', 400, corsHeaders, true);
+          
+          const { error } = await supabase
+            .from('users')
+            .update({ profile_layout: body.layout })
+            .eq('twitch_id', user.twitch_id);
+
+          if (error) throw error;
+          return secureResponse({ success: true }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message || 'Failed to save layout', 500, corsHeaders, true);
+        }
+      }
+
+      // Save public profile featured cards
+      if (method === 'POST' && path === '/api/viewer/profile/featured-cards') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+
+        try {
+          const body = await request.json() as any;
+          if (!Array.isArray(body.featured_card_ids)) return secureResponse('Invalid array', 400, corsHeaders, true);
+          
+          const { error } = await supabase
+            .from('users')
+            .update({ featured_card_ids: body.featured_card_ids.slice(0, 10) }) // Limit to 10
+            .eq('twitch_id', user.twitch_id);
+
+          if (error) throw error;
+          return secureResponse({ success: true }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message || 'Failed to save featured cards', 500, corsHeaders, true);
         }
       }
 
@@ -6692,20 +7680,21 @@ export default {
           const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
           const ext = (file.type === 'image/webp' ? '.webp' : (file.name.match(/\.[^/.]+$/) || ['.webp'])[0]);
           const fileName = `${Date.now()}-${baseName}${ext}`;
-          const filePath = `${fileName}`;
+          const userFolder = streamer?.username ? streamer.username.toLowerCase() : 'platform';
+          const r2FilePath = `card_images/${userFolder}/${fileName}`;
 
-          const { data, error } = await supabase.storage
-            .from('card-images')
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              upsert: false
-            });
+          if (!env.CARD_IMAGES) {
+            return secureResponse('Server error: No CARD_IMAGES R2 bucket binding found', 500, corsHeaders, true);
+          }
 
-          if (error) throw error;
+          await env.CARD_IMAGES.put(r2FilePath, file, {
+            httpMetadata: {
+              contentType: file.type || 'application/octet-stream',
+              cacheControl: 'public, max-age=31536000'
+            }
+          });
 
-          const { data: { publicUrl } } = supabase.storage
-            .from('card-images')
-            .getPublicUrl(filePath);
+          const publicUrl = creatorCdnPublicUrl(env, r2FilePath);
 
           return secureResponse({ success: true, url: publicUrl }, 200, corsHeaders);
         } catch (e: any) {
@@ -7023,6 +8012,7 @@ export default {
             font_size: parseInt(body.font_size, 10) || 32,
             font_color: body.font_color || '#ffffff',
             text_align: body.text_align || 'center',
+            icon_size: parseInt(body.icon_size, 10) || 32,
           };
 
           if (templateId) {
@@ -7073,7 +8063,8 @@ export default {
           const cardId = cardImageMatch[1];
           
           // --- R2 CACHE LAYER ---
-          const cacheKey = `rendered/${cardId}.svg`;
+          // v2 prefix busts any stale SVGs generated before the pure-SVG rewrite
+          const cacheKey = `card_images/rendered/v2/${cardId}.svg`;
           try {
             const cachedObject = await env.CARD_IMAGES.get(cacheKey);
             if (cachedObject) {
@@ -7093,6 +8084,7 @@ export default {
           let traits: string[] = [];
           let template: any = null;
           let imageUrl = '';
+          let isGenesis = false;
 
           const { data: userCard, error: userCardErr } = await supabase
             .from('user_cards')
@@ -7100,13 +8092,58 @@ export default {
             .eq('id', cardId)
             .maybeSingle();
 
-          if (userCard && userCard.cards?.card_templates) {
-            template = userCard.cards.card_templates;
-            traits = userCard.trait_list || [];
-            imageUrl = userCard.cards.image_url;
+          let rewardRow: any = null;
+          if (!userCard) {
+            const { data: rewardRowData } = await supabase
+              .from('pending_rewards')
+              .select('*, cards(*, card_templates(*))')
+              .eq('id', cardId)
+              .maybeSingle();
+            rewardRow = rewardRowData;
+          }
+
+          const targetRow = userCard || rewardRow;
+          const targetTable = userCard ? 'user_cards' : (rewardRow ? 'pending_rewards' : null);
+
+          // If already baked, redirect straight to the CDN URL — no generation needed
+          if (targetRow?.baked_image_url) {
+            return Response.redirect(targetRow.baked_image_url, 302);
+          }
+
+          console.log(`[CardImage] cardId=${cardId} targetRow=${targetRow?.id ?? 'null'} template_id=${targetRow?.cards?.template_id ?? 'null'} card_templates=${targetRow?.cards?.card_templates?.id ?? 'null'}`);
+
+          if (targetRow && targetRow.cards?.card_templates) {
+            template = targetRow.cards.card_templates;
+            traits = targetRow.trait_list || [];
+            imageUrl = targetRow.cards.image_url;
+            isGenesis = targetRow.is_genesis_mint || !!targetRow.genesis_mechanic_id || targetRow.cards?.is_genesis;
+
+            // --- SELF-HEALING LOGIC ---
+            // If the card has a template but NO traits, it was likely granted during a broken state.
+            // We auto-roll them now and save them back to the DB to fix the card forever.
+            if (traits.length === 0 && (targetRow.cards.auto_roll_traits !== false)) {
+              console.log(`[Self-Healing] Rolling traits for card ${cardId} in table ${targetTable}...`);
+              const rolled = await rollTraitsForCard(supabase, targetRow.cards, undefined, targetRow.mechanic_id, targetRow.genesis_mechanic_id);
+              if (rolled.length > 0) {
+                traits = rolled;
+                // Persist back to DB so it's healed forever
+                if (targetTable) {
+                  const { error: healErr } = await supabase
+                    .from(targetTable)
+                    .update({ trait_list: traits })
+                    .eq('id', cardId);
+                  if (healErr) console.error(`[Self-Healing] Failed to save traits for ${cardId}:`, healErr.message);
+                }
+              }
+            }
+          } else if (targetRow && targetRow.cards && !targetRow.cards.template_id) {
+            // targetRow found but its base card has no template — redirect to base image
+            const rawImageUrl = targetRow.cards.image_url;
+            if (rawImageUrl) return Response.redirect(rawImageUrl, 302);
+            return new Response('Card has no template configured', { status: 404, headers: corsHeaders });
           } else {
-            // 2. Fall back to Base Card
-            const { data: card, error: cardErr } = await supabase
+            // Fall back: caller passed a base card id directly
+            const { data: card } = await supabase
               .from('cards')
               .select('*, card_templates(*)')
               .eq('id', cardId)
@@ -7114,48 +8151,112 @@ export default {
 
             if (card && card.card_templates) {
               template = card.card_templates;
-              traits = card.trait_list || [];
+              traits = (card as any).trait_list || [];
               imageUrl = card.image_url;
+              isGenesis = !!(card as any).is_genesis;
+            } else if (card) {
+              if (card.image_url) return Response.redirect(card.image_url, 302);
+              return new Response('Card has no template configured', { status: 404, headers: corsHeaders });
             }
           }
 
           if (!template) {
-            // If no template found, or it's not a dynamic card, redirect to the raw image if it was a base card
-            const { data: cardRaw } = await supabase.from('cards').select('image_url').eq('id', cardId).maybeSingle();
-            if (cardRaw?.image_url) return Response.redirect(cardRaw.image_url, 302);
-            return new Response('Card/Template not found', { status: 404, headers: corsHeaders });
+            console.log(`[CardImage] No template resolved for cardId=${cardId}`);
+            return new Response('Card or template not found', { status: 404, headers: corsHeaders });
           }
 
-          // Fetch full mechanic details for the trait IDs
+          // Lazy bake: use the same bakeCardImage pipeline so we get dedup + CDN URL +
+          // baked_image_url persisted. For user card instances or pending rewards, bakeCardImage handles
+          // everything; for base-card direct lookups (no instance) we fall back to
+          // inline generate + R2 cache only.
+          if (targetRow && targetTable) {
+            template.origin = url.origin;
+            // bakeCardImage runs sync here so we can return the CDN redirect immediately.
+            // It writes baked_image_url to the appropriate table and uploads to R2.
+            const isGenesis = targetRow.is_genesis_mint || !!targetRow.genesis_mechanic_id || targetRow.cards?.is_genesis;
+            const cdnUrl = await bakeCardImage(
+              env, supabase, cardId,
+              { id: targetRow.card_id, image_url: imageUrl },
+              template,
+              traits,
+              targetTable,
+              isGenesis
+            );
+            if (cdnUrl) return Response.redirect(cdnUrl, 302);
+          }
+
+          // Fallback for base-card direct lookups (no user card instance)
+          template.origin = url.origin;
           let fullTraits: any[] = [];
           if (traits.length > 0) {
             const { data: mechDetails } = await supabase
               .from('mechanics')
               .select('id, name, display_name, description, icon')
               .in('id', traits);
-            
-            // Maintain the order from trait_list
-            fullTraits = traits.map(tid => mechDetails?.find(m => m.id === tid)).filter(Boolean);
+            fullTraits = traits.map(tid => mechDetails?.find((m: any) => m.id === tid)).filter(Boolean);
           }
-
-          // Generate SVG
-          const svg = generateCardSVG(template, fullTraits);
-
-          // --- ASYNC R2 PERSISTENCE ---
-          ctx.waitUntil(env.CARD_IMAGES.put(cacheKey, svg, {
-            httpMetadata: { contentType: 'image/svg+xml' }
-          }).catch((e: any) => console.error('[R2 Cache] Put failed:', e)));
-
-          // Return SVG as image/svg+xml
+          const svg = await generateCardSVG(template, fullTraits, isGenesis);
+          ctx.waitUntil(
+            env.CARD_IMAGES.put(cacheKey, svg, {
+              httpMetadata: { contentType: 'image/svg+xml', cacheControl: 'public, max-age=86400' }
+            }).catch((e: any) => console.error('[R2 Cache] Put failed:', e))
+          );
           return new Response(svg, {
             headers: {
               'Content-Type': 'image/svg+xml',
               'Cache-Control': 'public, max-age=3600',
-              'X-Cache': 'MISS'
+              'X-Cache': 'MISS',
             }
           });
         } catch (e: any) {
           return new Response(e.message, { status: 500, headers: corsHeaders });
+        }
+      }
+
+      // ── DEBUG: Inspect card image state ──
+      // GET /api/debug/card-image/:id — returns raw DB state for a user_card or base card
+      // Remove or gate behind auth once issue is resolved.
+      const debugCardMatch = path.match(/^\/api\/debug\/card-image\/([^\/]+)$/);
+      if (method === 'GET' && debugCardMatch) {
+        try {
+          const debugId = debugCardMatch[1];
+          // Query only columns that are guaranteed to exist (no migration-dependent columns)
+          const { data: uc, error: ucErr } = await supabase
+            .from('user_cards')
+            .select('id, card_id, trait_list, cards(id, name, image_url, template_id)')
+            .eq('id', debugId)
+            .maybeSingle();
+
+          const { data: bc, error: bcErr } = await supabase
+            .from('cards')
+            .select('id, name, image_url, template_id')
+            .eq('id', debugId)
+            .maybeSingle();
+
+          return secureResponse({
+            queried_id: debugId,
+            user_card_query_error: ucErr?.message ?? null,
+            base_card_query_error: bcErr?.message ?? null,
+            user_card: uc ? {
+              id: uc.id,
+              card_id: uc.card_id,
+              trait_list: uc.trait_list,
+              card: uc.cards ? {
+                id: (uc.cards as any).id,
+                name: (uc.cards as any).name,
+                image_url: (uc.cards as any).image_url,
+                template_id: (uc.cards as any).template_id,
+              } : null,
+            } : null,
+            base_card: bc ? {
+              id: bc.id,
+              name: bc.name,
+              image_url: bc.image_url,
+              template_id: bc.template_id,
+            } : null,
+          }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 500, corsHeaders, true);
         }
       }
 
@@ -8228,12 +9329,16 @@ export default {
               description: b.description || '',
               attack: b.attack || 0,
               defense: b.defense || 0,
-              image_url: b.image_url || '/pack.png',
+              image_url: b.image_url || '',
+              foil_mask_url: b.foil_mask_url ?? null,
+              layer_data: b.layer_data ?? null,
               is_battle_eligible: b.is_battle_eligible !== undefined ? b.is_battle_eligible : true,
               is_trading_eligible: b.is_trading_eligible !== undefined ? b.is_trading_eligible : true,
               is_approved: true,
               set_id: b.set_id || null,
               card_number: b.card_number || null,
+              template_id: b.template_id || null,
+              auto_roll_traits: !!b.auto_roll_traits,
               created_at: new Date().toISOString()
             };
           }
@@ -8509,7 +9614,7 @@ export default {
             counts[cid] = {
               id: cid,
               name: uc.cards?.name || 'Unknown',
-              image_url: uc.cards?.image_url || '/pack.png',
+              image_url: uc.cards?.image_url || '',
               rarity: uc.cards?.rarity || 'common',
               collection_count: 0
             };
@@ -8649,7 +9754,7 @@ export default {
           const { streamer } = await checkCreator(request, supabase);
           const days = parseInt(url.searchParams.get('days') || '30');
           const cacheKey = `cache:v1:analytics:combined:${streamer.id}:${days}`;
-          const combined = await fetchWithCache(env, sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, async () => {
+          const combined = await fetchWithCache(env || {} as Env, sharedRedis, cacheKey, CACHE_TTL_ANALYTICS_SEC, async () => {
             const [overview, cards, packs, collectors] = await Promise.all([
               internalGetOverview(supabase, streamer.id, days),
               internalGetCards(supabase, streamer.id, days),
@@ -9174,10 +10279,10 @@ export default {
           const cardId = path.split('/').pop();
           const b = await request.json() as any;
 
-          // Verify ownership and get current image_url for optional R2 cleanup
+          // Verify ownership and get current URLs for optional R2 cleanup
           const { data: existingCard, error: checkErr } = await supabase
             .from('cards')
-            .select('id, streamer_id, image_url')
+            .select('id, streamer_id, image_url, foil_mask_url')
             .eq('id', cardId)
             .eq('streamer_id', streamer.id)
             .single();
@@ -9189,6 +10294,9 @@ export default {
           if (b.image_url) {
             await deleteReplacedCdnObject(env, existingCard.image_url, b.image_url);
           }
+          if ('foil_mask_url' in b) {
+            await deleteReplacedCdnObject(env, existingCard.foil_mask_url, b.foil_mask_url ?? '');
+          }
 
           const updateData: any = {};
           if (b.name) updateData.name = b.name;
@@ -9197,6 +10305,7 @@ export default {
           if (b.attack !== undefined) updateData.attack = b.attack;
           if (b.defense !== undefined) updateData.defense = b.defense;
           if (b.image_url) updateData.image_url = b.image_url;
+          if ('foil_mask_url' in b) updateData.foil_mask_url = b.foil_mask_url ?? null;
           if (b.set_id !== undefined) updateData.set_id = b.set_id;
           if (b.card_number !== undefined) updateData.card_number = b.card_number;
           if (b.is_battle_eligible !== undefined) updateData.is_battle_eligible = b.is_battle_eligible;
@@ -9451,6 +10560,7 @@ export default {
           // Only set id if provided (otherwise let DB generate it)
           if (b.id) setData.id = b.id;
           if (b.icon_url) setData.icon_url = b.icon_url;
+          if (b.pack_image_url !== undefined) setData.pack_image_url = b.pack_image_url;
           if (b.release_date) setData.release_date = b.release_date;
           if (b.end_date) setData.end_date = b.end_date;
           if (b.is_active !== undefined) setData.is_active = b.is_active;
@@ -9489,6 +10599,7 @@ export default {
           if (b.code) updateData.code = b.code;
           if (b.description !== undefined) updateData.description = b.description;
           if (b.icon_url !== undefined) updateData.icon_url = b.icon_url;
+          if (b.pack_image_url !== undefined) updateData.pack_image_url = b.pack_image_url;
           if (b.release_date !== undefined) updateData.release_date = b.release_date;
           if (b.end_date !== undefined) updateData.end_date = b.end_date;
           if (b.is_active !== undefined) updateData.is_active = b.is_active;
@@ -9678,6 +10789,110 @@ export default {
       // --- SETS MANAGEMENT ---
 
       // Public: sets for progress / binder UI — pass ?streamer=username (or streamer_id) to scope to one creator
+      // Public catalog: all cards for a streamer, with set info merged in.
+      // Used by the /[username] creator collection page. Edge-cached for 5 min.
+      if (method === 'GET' && path === '/api/public/catalog') {
+        try {
+          const streamer = await resolveStreamerContext(request, supabase, url);
+          if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
+
+          const [{ data: cardsData, error: cardsErr }, { data: setsData }] = await Promise.all([
+            supabase
+              .from('cards')
+              .select('id, name, image_url, rarity, type, description, card_number, set_id')
+              .eq('streamer_id', streamer.id)
+              .order('rarity', { ascending: false })
+              .order('card_number', { ascending: true, nullsFirst: false }),
+            supabase
+              .from('streamer_sets')
+              .select('id, name, code, image_url, release_date')
+              .eq('streamer_id', streamer.id),
+          ]);
+
+          if (cardsErr) throw cardsErr;
+
+          const setMap: Record<string, any> = {};
+          (setsData || []).forEach((s: any) => { setMap[s.id] = s; });
+
+          const mapped = (cardsData || []).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            image_url: c.image_url,
+            rarity: c.rarity,
+            type: c.type,
+            description: c.description,
+            card_number: c.card_number,
+            set_id: c.set_id,
+            set_name: setMap[c.set_id]?.name || null,
+            set_code: setMap[c.set_id]?.code || null,
+            set_image_url: setMap[c.set_id]?.image_url || null,
+          }));
+
+          const response = secureResponse(mapped, 200, corsHeaders);
+          if (cache && cacheKeyUrl) {
+            ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+          }
+          return response;
+        } catch (e: any) {
+          return secureResponse(e.message, 500, corsHeaders, true);
+        }
+      }
+
+      // Public streamer info — used by the /{username} collection page.
+      // Returns only non-sensitive, public-facing fields.  Edge-cached 5 min.
+      if (method === 'GET' && path === '/api/public/streamer') {
+        try {
+          const streamer = await resolveStreamerContext(request, supabase, url);
+          if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
+
+          const pub = {
+            id:                   streamer.id,
+            username:             streamer.username,
+            display_name:         (streamer as any).display_name   ?? null,
+            brand_name:           (streamer as any).brand_name      ?? null,
+            brand_tagline:        (streamer as any).brand_tagline   ?? null,
+            brand_emoji:          (streamer as any).brand_emoji     ?? null,
+            brand_color_primary:  (streamer as any).brand_color_primary   ?? null,
+            brand_color_secondary:(streamer as any).brand_color_secondary ?? null,
+            avatar_url:           (streamer as any).avatar_url      ?? null,
+            is_live:              (streamer as any).is_live         ?? false,
+            kick_username:        (streamer as any).kick_username   ?? null,
+            twitter:              (streamer as any).twitter         ?? null,
+            youtube:              (streamer as any).youtube         ?? null,
+            discord:              (streamer as any).discord         ?? null,
+            pack_image_url:       (streamer as any).pack_image_url  ?? null,
+          };
+
+          const response = secureResponse(pub, 200, corsHeaders);
+          if (cache && cacheKeyUrl) {
+            ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+          }
+          return response;
+        } catch (e: any) {
+          return secureResponse(e.message, 500, corsHeaders, true);
+        }
+      }
+
+      // ── Viewer collection hub ─────────────────────────────────────────────
+      if (method === 'GET' && path === '/api/my-collections') {
+        try {
+          const sessionUser = await getUserFromSession(request, env, supabase);
+          if (!sessionUser) return secureResponse({ error: 'unauthorized' }, 401, corsHeaders, true);
+
+          const { data, error } = await supabase.rpc('get_my_collections', {
+            p_twitch_id: sessionUser.twitch_id,
+          });
+          if (error) {
+            console.error('[MyCollections] RPC error:', error.message);
+            return secureResponse({ error: error.message }, 500, corsHeaders, true);
+          }
+          return secureResponse(data ?? [], 200, corsHeaders);
+        } catch (e: any) {
+          console.error('[MyCollections] Exception:', e);
+          return secureResponse({ error: e.message }, 500, corsHeaders, true);
+        }
+      }
+
       if (method === 'GET' && path === '/api/sets') {
         try {
           const streamer = await resolveStreamerContext(request, supabase, url);
@@ -10006,7 +11221,7 @@ export default {
           }
 
           const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
-          const fileName = `${streamer.id}/${Date.now()}-${baseName}${ext}`;
+          const fileName = `card_images/${streamer.id}/${Date.now()}-${baseName}${ext}`;
           const filePath = `${fileName}`;
 
           await env.CARD_IMAGES.put(filePath, await file.arrayBuffer(), {
@@ -10073,7 +11288,7 @@ export default {
               set_id: genSet.id,
               name: card.name,
               rarity: card.rarity.charAt(0).toUpperCase() + card.rarity.slice(1),
-              image_url: card.image_url || '/pack.png',
+              image_url: card.image_url || '',
               is_approved: true,
               card_number: (idx + 1).toString()
             }));
@@ -10169,17 +11384,11 @@ export default {
         const user = await getUserFromSession(request, env, supabase);
         const streamerParam = url.searchParams.get('streamer') || url.searchParams.get('streamer_id');
 
-        let targetTwitchId = user?.twitch_id;
-
-        // If no user, we might still serve public data if a streamer is provided
         if (!user) {
-          if (!streamerParam) return new Response('Unauthorized', { status: 401, headers: corsHeaders });
-
-          // Fetch the streamer's OWN cards for public view
-          const { data: stUser } = await supabase.from('users').select('twitch_id').ilike('username', streamerParam).single();
-          if (!stUser) return secureResponse('Streamer user not found', 404, corsHeaders, true);
-          targetTwitchId = stUser.twitch_id;
+          return new Response('Unauthorized', { status: 401, headers: corsHeaders });
         }
+
+        const targetTwitchId = user.twitch_id;
 
         const limitRaw = url.searchParams.get('limit');
         let limit = COLLECTION_DEFAULT_LIMIT;
@@ -11025,25 +12234,52 @@ export default {
         }
 
         // Normal Login: Check if this Kick user is already linked to a Twitch ID
-        const { data: existingLinked } = await supabase
+        const { data: existingUser } = await supabase
           .from('users')
-          .select('twitch_id')
+          .select('twitch_id, twitch_access_token_encrypted, twitch_refresh_token_encrypted, twitch_token_scope')
           .eq('kick_user_id', kidStr)
           .maybeSingle();
 
-        const finalTwitchId = existingLinked?.twitch_id || canonicalId;
+        const finalTwitchId = existingUser?.twitch_id || canonicalId;
+
+        // If we're using a different ID (canonicalId fallback), check if it has Twitch tokens to preserve
+        let preservedTwitch = existingUser;
+        if (!preservedTwitch && finalTwitchId !== canonicalId) {
+             // Already handled by existingUser check usually, but just in case
+        } else if (!preservedTwitch) {
+            const { data: twitchOnlyRow } = await supabase
+                .from('users')
+                .select('twitch_access_token_encrypted, twitch_refresh_token_encrypted, twitch_token_scope')
+                .eq('twitch_id', finalTwitchId)
+                .maybeSingle();
+            preservedTwitch = twitchOnlyRow as any;
+        }
+
+        const userUpsertKick: any = {
+          twitch_id: finalTwitchId,
+          username: displayName,
+          avatar_url: avatarUrl,
+          is_linked: true,
+          kick_access_token_encrypted: encryptedAccessKick,
+          kick_refresh_token_encrypted: encryptedRefreshKick,
+          kick_token_scope: tokenScopeKick,
+          kick_user_id: kidStr,
+        };
+
+        if (preservedTwitch) {
+          if (preservedTwitch.twitch_access_token_encrypted) {
+            userUpsertKick.twitch_access_token_encrypted = preservedTwitch.twitch_access_token_encrypted;
+          }
+          if (preservedTwitch.twitch_refresh_token_encrypted) {
+            userUpsertKick.twitch_refresh_token_encrypted = preservedTwitch.twitch_refresh_token_encrypted;
+          }
+          if (preservedTwitch.twitch_token_scope) {
+            userUpsertKick.twitch_token_scope = preservedTwitch.twitch_token_scope;
+          }
+        }
 
         const { error: userErrKick } = await supabase.from('users').upsert(
-          {
-            twitch_id: finalTwitchId,
-            username: displayName,
-            avatar_url: avatarUrl,
-            is_linked: true,
-            kick_access_token_encrypted: encryptedAccessKick,
-            kick_refresh_token_encrypted: encryptedRefreshKick,
-            kick_token_scope: tokenScopeKick,
-            kick_user_id: kidStr,
-          },
+          userUpsertKick,
           { onConflict: 'twitch_id' }
         );
 
@@ -11191,7 +12427,7 @@ export default {
         const user = userData.data[0];
 
         // 1. Mark User as Linked and store tokens (same key as refresh + health checks)
-        const encKey = twitchTokenEncryptSecret(env);
+        const encKey = env ? twitchTokenEncryptSecret(env) : '';
         const encryptedAccess = await encryptSensitive(tokenData.access_token, encKey);
         const encryptedRefresh = tokenData.refresh_token
           ? await encryptSensitive(tokenData.refresh_token, encKey)
@@ -11279,7 +12515,7 @@ export default {
         // 2. Claim Pending Rewards
         const { data: pending } = await supabase
           .from('pending_rewards')
-          .select('card_id, streamer_id, is_obs_consumed, cards!inner(rarity, attack, defense, mechanic_id)')
+          .select('id, card_id, streamer_id, is_obs_consumed, trait_list, mechanic_id, genesis_mechanic_id, attack, defense, max_hp, baked_image_url, grade, is_genesis_mint, cards!inner(rarity, attack, defense, mechanic_id)')
           .eq('twitch_id', user.id);
 
         if (pending && pending.length > 0) {
@@ -11287,23 +12523,25 @@ export default {
 
           const toInsert = [];
           for (const p of pending) {
-            const cardData = Array.isArray(p.cards) ? p.cards[0] : (p.cards as any);
-            // Use the grade locked in at reward time; fall back to generating one
-            // for any legacy pending rows that predate the grading feature
-            const grade    = p.grade           ?? generateGrade().grade;
-            const isGM     = p.is_genesis_mint ?? false;
+            const cardCatalog = Array.isArray(p.cards) ? p.cards[0] : (p.cards as any);
+            
+            // Map columns, falling back to catalog data for legacy rows predating migration 065
             toInsert.push({
+              id: p.id, // Carry over the pre-generated ID so notifications still work
               twitch_id: user.id,
               card_id: p.card_id,
               streamer_id: p.streamer_id,
               granted_by_streamer: p.streamer_id,
               is_obs_consumed: p.is_obs_consumed,
-              attack: cardData?.attack || 0,
-              defense: cardData?.defense || 0,
-              max_hp: cardData?.defense || 0,
-              mechanic_id: cardData?.mechanic_id || null,
-              grade,
-              is_genesis_mint: isGM,
+              attack: p.attack || cardCatalog?.attack || 0,
+              defense: p.defense || cardCatalog?.defense || 0,
+              max_hp: p.max_hp || cardCatalog?.defense || 0,
+              mechanic_id: p.mechanic_id || cardCatalog?.mechanic_id || null,
+              genesis_mechanic_id: p.genesis_mechanic_id || null,
+              grade: p.grade ?? generateGrade().grade,
+              is_genesis_mint: p.is_genesis_mint ?? false,
+              trait_list: p.trait_list || [],
+              baked_image_url: p.baked_image_url || null,
             });
           }
 
@@ -11933,6 +13171,48 @@ export default {
         return secureResponse(battle || null, 200, corsHeaders);
       }
 
+      // --- GET /api/battle/history ---
+      // Returns recent completed battles for the current user for this streamer
+      if (method === 'GET' && path === '/api/battle/history') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse({ error: 'Unauthorized' }, 401, corsHeaders, true);
+        const streamer = await resolveStreamerContext(request, supabase, url);
+        if (!streamer) return secureResponse({ error: 'Streamer not found' }, 404, corsHeaders, true);
+
+        const { data: battles } = await supabase
+          .from('battles')
+          .select('id, challenger_id, challenger_name, target_name, status, completed_at, battle_data')
+          .eq('streamer_id', streamer.id)
+          .eq('status', 'completed')
+          .or(`challenger_id.eq.${user.twitch_id},target_name.ilike.${user.username}`)
+          .order('completed_at', { ascending: false })
+          .limit(10);
+
+        const history = (battles || []).map(b => {
+          const isChallenger = b.challenger_id === user.twitch_id;
+          const opponent = isChallenger ? b.target_name : b.challenger_name;
+          const bd = b.battle_data as any;
+          let won: boolean | null = null;
+          if (bd?.winner) {
+            won = isChallenger
+              ? bd.winner === 'challenger'
+              : bd.winner === 'target';
+          }
+          return { id: b.id, opponent, won, completed_at: b.completed_at };
+        });
+
+        return secureResponse({ history }, 200, corsHeaders);
+      }
+
+      // Same shape for GET list + POST/PATCH single-deck responses (nested slot joins)
+      const BATTLE_SAVED_DECK_SELECT = `
+            id, name, is_active,
+            slot_1_card_id, slot_2_card_id, slot_3_card_id,
+            slot_1:slot_1_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id, mechanic:mechanic_id(name, display_name, icon), genesis_mechanic:genesis_mechanic_id(name, display_name, icon), card:card_id(name, image_url, rarity)),
+            slot_2:slot_2_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id, mechanic:mechanic_id(name, display_name, icon), genesis_mechanic:genesis_mechanic_id(name, display_name, icon), card:card_id(name, image_url, rarity)),
+            slot_3:slot_3_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id, mechanic:mechanic_id(name, display_name, icon), genesis_mechanic:genesis_mechanic_id(name, display_name, icon), card:card_id(name, image_url, rarity))
+          `;
+
       // --- GET /api/battle/saved-decks ---
       // Returns the user's saved decks for this streamer
       if (method === 'GET' && path === '/api/battle/saved-decks') {
@@ -11943,13 +13223,7 @@ export default {
 
         const { data: savedDecks, error } = await supabase
           .from('user_saved_decks')
-          .select(`
-            id, name,
-            slot_1_card_id, slot_2_card_id, slot_3_card_id,
-            slot_1:slot_1_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id, mechanic:mechanic_id(name, display_name, icon), genesis_mechanic:genesis_mechanic_id(name, display_name, icon), card:card_id(name, image_url, rarity)),
-            slot_2:slot_2_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id, mechanic:mechanic_id(name, display_name, icon), genesis_mechanic:genesis_mechanic_id(name, display_name, icon), card:card_id(name, image_url, rarity)),
-            slot_3:slot_3_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id, mechanic:mechanic_id(name, display_name, icon), genesis_mechanic:genesis_mechanic_id(name, display_name, icon), card:card_id(name, image_url, rarity))
-          `)
+          .select(BATTLE_SAVED_DECK_SELECT)
           .eq('twitch_id', user.twitch_id)
           .eq('streamer_id', streamer.id)
           .order('name');
@@ -12089,7 +13363,7 @@ export default {
             slot_2_card_id: slot_2 || null,
             slot_3_card_id: slot_3 || null,
           })
-          .select()
+          .select(BATTLE_SAVED_DECK_SELECT)
           .single();
 
         if (saveError) {
@@ -12100,6 +13374,63 @@ export default {
         }
 
         return secureResponse({ deck: newDeck }, 200, corsHeaders);
+      }
+
+      // --- PATCH /api/battle/saved-decks ---
+      // Updates an existing saved deck's slots (and optionally name)
+      if (method === 'PATCH' && path === '/api/battle/saved-decks') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse({ error: 'Unauthorized' }, 401, corsHeaders, true);
+        const streamer = await resolveStreamerContext(request, supabase, url);
+        if (!streamer) return secureResponse({ error: 'Streamer not found' }, 404, corsHeaders, true);
+
+        const body: any = await request.json();
+        const { id, name, slot_1, slot_2, slot_3 } = body;
+        if (!id) return secureResponse({ error: 'Deck ID required' }, 400, corsHeaders, true);
+
+        // Verify the deck belongs to this user
+        const { data: existing, error: fetchErr } = await supabase
+          .from('user_saved_decks')
+          .select('id')
+          .eq('id', id)
+          .eq('twitch_id', user.twitch_id)
+          .eq('streamer_id', streamer.id)
+          .maybeSingle();
+
+        if (fetchErr || !existing) return secureResponse({ error: 'Deck not found' }, 404, corsHeaders, true);
+
+        // Verify ownership of any provided card slots
+        const slotIds = [slot_1, slot_2, slot_3].filter(Boolean);
+        if (slotIds.length > 0) {
+          const { data: owned } = await supabase
+            .from('user_cards')
+            .select('id')
+            .in('id', slotIds)
+            .eq('twitch_id', user.twitch_id)
+            .eq('streamer_id', streamer.id);
+
+          if (!owned || owned.length !== slotIds.length) {
+            return secureResponse({ error: 'One or more cards do not belong to you' }, 403, corsHeaders, true);
+          }
+        }
+
+        const updates: any = {
+          slot_1_card_id: slot_1 ?? null,
+          slot_2_card_id: slot_2 ?? null,
+          slot_3_card_id: slot_3 ?? null,
+        };
+        if (name && name.trim()) updates.name = name.trim();
+
+        const { data: updated, error: updateErr } = await supabase
+          .from('user_saved_decks')
+          .update(updates)
+          .eq('id', id)
+          .eq('twitch_id', user.twitch_id)
+          .select(BATTLE_SAVED_DECK_SELECT)
+          .single();
+
+        if (updateErr) return secureResponse({ error: updateErr.message }, 500, corsHeaders, true);
+        return secureResponse({ deck: updated }, 200, corsHeaders);
       }
 
       // --- POST /api/battle/saved-decks/activate ---
@@ -12330,39 +13661,76 @@ export default {
       // 6. SPA Routing Fallback
       // If not an API/Auth route, and not a static asset, serve index.html
       if (env.ASSETS) {
-        // Try serving the specific path first (for .js, .css, .png, etc.)
-        const assetRes = await env.ASSETS.fetch(request.clone());
-        if (assetRes.ok) return assetRes;
-
-        // If not found and doesn't look like a file (no extension), serve index.html
-        // Never serve index.html for the OBS overlay or queue control — those have their own handlers.
+        // ── Named HTML routes ───────────────────────────────────────────────
+        // Check these BEFORE the generic env.ASSETS.fetch() call, because
+        // the Assets binding may return index.html (200) as an SPA fallback
+        // for unknown paths, which would short-circuit the checks below.
         if (!path.includes('.') && path !== '/obs-overlay' && path !== '/queue-control') {
-          // Special Test Route
           if (path === '/onboarding') {
             const onbRes = await env.ASSETS.fetch(new Request(`${url.origin}/onboarding.html`));
-            if (onbRes.ok) {
-              return new Response(onbRes.body, {
-                status: 200,
-                headers: { 'Content-Type': 'text/html', ...corsHeaders }
-              });
-            }
+            if (onbRes.ok) return new Response(onbRes.body, { status: 200, headers: { 'Content-Type': 'text/html', ...corsHeaders } });
           }
 
           if (path === '/dashboard') {
             const dashRes = await env.ASSETS.fetch(new Request(`${url.origin}/dashboard.html`));
-            if (dashRes.ok) {
-              return new Response(dashRes.body, {
+            if (dashRes.ok) return new Response(dashRes.body, { status: 200, headers: { 'Content-Type': 'text/html', ...corsHeaders } });
+          }
+
+          if (path === '/my-collection') {
+            const mcRes = await env.ASSETS.fetch(new Request(`${url.origin}/my-collection.html`));
+            if (mcRes.ok) return new Response(mcRes.body, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', ...corsHeaders } });
+          }
+
+          if (path === '/battle') {
+            const btRes = await env.ASSETS.fetch(new Request(`${url.origin}/battle.html`));
+            if (btRes.ok) return new Response(btRes.body, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', ...corsHeaders } });
+          }
+
+          if (path === '/settings') {
+            const stRes = await env.ASSETS.fetch(new Request(`${url.origin}/settings.html`));
+            if (stRes.ok) {
+              return new Response(stRes.body, {
                 status: 200,
-                headers: { 'Content-Type': 'text/html', ...corsHeaders }
+                headers: { 'Content-Type': 'text/html; charset=utf-8', ...corsHeaders }
               });
             }
           }
 
+          // /profile/:username → public profile page
+          if (path.startsWith('/profile/') && path.length > 9) {
+            const profRes = await env.ASSETS.fetch(new Request(`${url.origin}/profile`));
+            if (profRes.ok) {
+              return new Response(profRes.body, {
+                status: 200,
+                headers: { 'Content-Type': 'text/html; charset=utf-8', ...corsHeaders }
+              });
+            }
+          }
+
+          // /{username} → creator collection page
+          const KNOWN_SPA_PATHS = new Set(['/dashboard', '/onboarding', '/arena', '/privacy', '/terms', '/cookies', '/hub', '/binder', '/404', '/my-collection', '/battle', '/profile', '/settings']);
+          if (!KNOWN_SPA_PATHS.has(path) && /^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}$/.test(path)) {
+            const collectionRes = await env.ASSETS.fetch(new Request(`${url.origin}/collection.html`));
+            if (collectionRes.ok) {
+              return new Response(collectionRes.body, {
+                status: 200,
+                headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Debug': 'collection-block', ...corsHeaders }
+              });
+            }
+          }
+        }
+
+        // Try serving the exact static asset path (.js, .css, .png, etc.)
+        const assetRes = await env.ASSETS.fetch(request.clone());
+        if (assetRes.ok) return assetRes;
+
+        // Final fallback: serve index.html for any remaining extension-less paths
+        if (!path.includes('.') && path !== '/obs-overlay' && path !== '/queue-control') {
           const indexRes = await env.ASSETS.fetch(new Request(`${url.origin}/index.html`));
           if (indexRes.ok) {
             return new Response(indexRes.body, {
               status: 200,
-              headers: { 'Content-Type': 'text/html', ...corsHeaders }
+              headers: { 'Content-Type': 'text/html', 'X-Debug': 'index-fallback', ...corsHeaders }
             });
           }
         }

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Queue Control · Castle TCG</title>
-    <link rel="icon" type="image/png" href="/Black_Castle.png">
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* ── Reset & Base ───────────────────────────── */
@@ -496,7 +496,7 @@
     
     <div id="topbar">
         <div class="brand">
-            <img src="/White_Castle.png" alt="" width="18" height="18">
+            <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" width="18" height="18">
             Queue Control
         </div>
         <div id="status-row">
@@ -705,7 +705,7 @@
         el.dataset.id = item.id;
 
         const thumb = card.image_url
-            ? `<img src="${card.image_url}" class="q-thumb" onerror="this.src='/pack.png'" alt="">`
+            ? `<img src="${card.image_url}" class="q-thumb" onerror="this.src=''" alt="">`
             : `<div class="q-thumb-placeholder"><i class="fa-solid fa-image"></i></div>`;
 
         const actions = isPending

@@ -260,6 +260,8 @@
                 teamList.appendChild(buildTeamChannelRow(m));
             });
         }
+
+        updateSwitchViewButton();
     }
 
     function copyCastleCode() {
@@ -276,27 +278,128 @@
 
     function openNavUserSettings() {
         closeNavUserMenu();
-        // Viewer account: Castle code, team channels, blocks, delete account (main SPA #profile-view).
-        // Do not route to dashboard.html's "Settings" tab — that is channel/branding only.
-        if (typeof switchView === 'function' && document.getElementById('profile-view')) {
-            switchView('profile');
-            if (history && history.replaceState) {
-                try {
-                    history.replaceState({ appView: 'profile' }, '', '/profile');
-                } catch (e) { /* ignore */ }
-            }
+        window.location.href = '/settings';
+    }
+
+    function openEditProfile() {
+        closeNavUserMenu();
+        window.location.href = '/settings';
+    }
+
+    function switchView() {
+        closeNavUserMenu();
+        const onDashboard = window.location.pathname === '/dashboard';
+        if (onDashboard) {
+            // Go back to viewer (main SPA)
+            window.location.href = '/';
+        } else {
+            // Go to creator dashboard
+            window.location.href = '/dashboard';
+        }
+    }
+
+    function redeemCode() {
+        closeNavUserMenu();
+        // If the SPA redeem view exists use it, otherwise show a simple prompt
+        if (typeof window.openRedeemModal === 'function') {
+            window.openRedeemModal();
             return;
         }
-        // Standalone creator page (dashboard.html) has no profile view — same-origin /profile loads the SPA.
-        if (document.getElementById('tab-settings')) {
-            window.location.href = '/profile';
+        // Fallback: navigate to home and let SPA handle it
+        const code = window.prompt('Enter your pack or trade code:');
+        if (!code || !code.trim()) return;
+        const backend = getBackendUrl();
+        fetch(`${backend}/api/redeem`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code.trim() }),
+        }).then(r => r.json()).then(data => {
+            const msg = data.message || data.error || (data.success ? 'Code redeemed!' : 'Invalid code.');
+            if (typeof showToast === 'function') showToast(msg, data.success ? 'success' : 'error');
+            else alert(msg);
+        }).catch(() => alert('Something went wrong. Try again.'));
+    }
+
+    function updateSwitchViewButton() {
+        const btn = document.getElementById('nav-user-menu-switch-view');
+        if (!btn) return;
+        const u = getCastleNavUser();
+        const onDashboard = window.location.pathname === '/dashboard';
+        const canSeeDashboard = u && (u.is_creator || (u.team_memberships && u.team_memberships.length > 0));
+        if (!canSeeDashboard && !onDashboard) {
+            btn.style.display = 'none';
             return;
         }
-        if (typeof switchView === 'function') {
-            switchView('profile');
-            return;
+        btn.style.display = '';
+        if (onDashboard) {
+            btn.innerHTML = `
+                <i class="fa-solid fa-eye text-void-muted w-4 text-center shrink-0"></i>
+                <span class="flex flex-col leading-tight normal-case">
+                    <span class="uppercase tracking-widest">Viewer View</span>
+                    <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Back to your collection</span>
+                </span>`;
+        } else {
+            btn.innerHTML = `
+                <i class="fa-solid fa-clapperboard text-void-muted w-4 text-center shrink-0"></i>
+                <span class="flex flex-col leading-tight normal-case">
+                    <span class="uppercase tracking-widest">Creator View</span>
+                    <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Manage your channel</span>
+                </span>`;
         }
-        window.location.href = '/profile';
+    }
+
+    function injectExtraMenuItems(menu) {
+        // Guard: only inject once
+        if (menu.dataset.extraItemsInjected === '1') return;
+        menu.dataset.extraItemsInjected = '1';
+
+        const settingsBtn = document.getElementById('nav-user-menu-settings');
+        if (!settingsBtn) return;
+        const container = settingsBtn.parentElement;
+
+        const makeBtn = (id, innerHTML) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.id = id;
+            btn.setAttribute('role', 'menuitem');
+            btn.className = 'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors';
+            btn.innerHTML = innerHTML;
+            return btn;
+        };
+
+        const editProfileBtn = makeBtn('nav-user-menu-edit-profile', `
+            <i class="fa-solid fa-user-pen text-void-muted w-4 text-center shrink-0"></i>
+            <span class="flex flex-col leading-tight normal-case">
+                <span class="uppercase tracking-widest">Edit Profile</span>
+                <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Public page &amp; display name</span>
+            </span>`);
+
+        const switchViewBtn = makeBtn('nav-user-menu-switch-view', '');
+
+        const redeemBtn = makeBtn('nav-user-menu-redeem', `
+            <i class="fa-solid fa-ticket text-void-muted w-4 text-center shrink-0"></i>
+            <span class="flex flex-col leading-tight normal-case">
+                <span class="uppercase tracking-widest">Redeem a Code</span>
+                <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Pack or trade code</span>
+            </span>`);
+
+        // Insert order: Edit Profile → Creator/Viewer toggle → Redeem → separator → Settings → Logout
+        container.insertBefore(editProfileBtn, settingsBtn);
+        container.insertBefore(switchViewBtn, settingsBtn);
+        container.insertBefore(redeemBtn, settingsBtn);
+
+        // Add a subtle divider before settings
+        const divider = document.createElement('div');
+        divider.className = 'my-1 border-t border-white/5';
+        container.insertBefore(divider, settingsBtn);
+
+        // Wire up new buttons
+        editProfileBtn.addEventListener('click', (e) => { e.stopPropagation(); openEditProfile(); });
+        switchViewBtn.addEventListener('click',  (e) => { e.stopPropagation(); switchView(); });
+        redeemBtn.addEventListener('click',      (e) => { e.stopPropagation(); redeemCode(); });
+
+        updateSwitchViewButton();
     }
 
     async function navUserLogout() {
@@ -321,6 +424,9 @@
         const menu = document.getElementById('nav-user-menu');
         if (!root || !trigger || !menu || root.dataset.navMenuInit === '1') return;
         root.dataset.navMenuInit = '1';
+
+        // Inject extra items (edit profile, switch view, redeem) before first open
+        injectExtraMenuItems(menu);
 
         trigger.addEventListener('click', (e) => {
             e.preventDefault();

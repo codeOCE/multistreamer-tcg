@@ -15690,7 +15690,7 @@ var index_default = {
               description: b.description || "",
               attack: b.attack || 0,
               defense: b.defense || 0,
-              image_url: b.image_url || "/pack.png",
+              image_url: b.image_url || "",
               is_approved: true,
               set_id: b.set_id || null,
               card_number: b.card_number || null,
@@ -15852,7 +15852,7 @@ var index_default = {
               cardCounts[cardId] = {
                 id: cardId,
                 name: uc.cards?.name || "Unknown",
-                image_url: uc.cards?.image_url || "/pack.png",
+                image_url: uc.cards?.image_url || "",
                 rarity: uc.cards?.rarity || "common",
                 collection_count: 0
               };
@@ -16649,7 +16649,7 @@ var index_default = {
               set_id: genSet.id,
               name: card.name,
               rarity: card.rarity.charAt(0).toUpperCase() + card.rarity.slice(1),
-              image_url: card.image_url || "/pack.png",
+              image_url: card.image_url || "",
               is_approved: true,
               card_number: (idx + 1).toString()
             }));

@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Arena · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        /* Ensure .hidden always wins regardless of ID-level display rules */
+        .hidden { display: none !important; }
+
+        /* ── Three-column page layout ── */
+        #bt-layout {
+            display: grid;
+            /* Narrow side rails — center column + deck UI get the extra space */
+            grid-template-columns: minmax(188px, 232px) minmax(0, 1fr) 196px;
+            gap: 0;
+            width: 100%;
+            min-height: calc(100vh - 80px);
+            max-width: 1680px;
+            margin: 0 auto;
+            padding: 0 20px 48px 0; /* flush left */
+            align-items: stretch;
+        }
+
+        /* ── Left: traits ── */
+        #bt-traits-col {
+            padding: 28px 10px 28px 0;
+            min-width: 0;
+            max-width: 232px;
+            border-right: 1px solid rgba(255,255,255,0.05);
+            overflow: visible; /* allow tooltips to escape the column */
+        }
+        .bt-traits-header {
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            padding: 0 8px 14px 4px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            margin-bottom: 10px;
+        }
+        .trait-row {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 8px 9px 2px;
+            border-radius: 10px;
+            transition: background 0.15s;
+            cursor: default;
+        }
+        .trait-row:hover { background: rgba(255,255,255,0.04); }
+        .trait-row img { width: 24px; height: 24px; object-fit: contain; flex-shrink: 0; }
+        .trait-row span {
+            font-size: 0.6rem; font-weight: 700;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--void-muted);
+            transition: color 0.15s;
+        }
+        .trait-row:hover span { color: var(--void-text); }
+
+        /* ── Trait tooltip ── */
+        .trait-tip {
+            position: absolute;
+            left: calc(100% + 14px);
+            top: 50%;
+            transform: translateY(-50%) translateX(-6px);
+            width: 240px;
+            background: #0d1117;
+            border: 1px solid rgba(var(--void-accent-rgb), 0.22);
+            border-radius: 14px;
+            padding: 14px 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 600;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(var(--void-accent-rgb),0.06);
+        }
+        .trait-row:hover .trait-tip {
+            opacity: 1;
+            transform: translateY(-50%) translateX(0);
+            pointer-events: auto; /* allow hovering keywords inside */
+        }
+        .trait-tip-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--void-accent);
+            margin-bottom: 6px;
+        }
+        .trait-tip-desc {
+            font-size: 0.62rem;
+            line-height: 1.55;
+            color: rgba(255,255,255,0.6);
+        }
+        .trait-tip-desc strong {
+            color: var(--void-text);
+            font-weight: 700;
+        }
+        .trait-tip-desc em {
+            color: rgba(255,255,255,0.45);
+            font-style: italic;
+        }
+        /* ── Keyword definition blocks inside trait tooltips ── */
+        .trait-tip-kw-block {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .trait-tip-kw-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .trait-tip-kw-label {
+            font-size: 0.5rem;
+            font-weight: 900;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--void-accent);
+        }
+        .trait-tip-kw-def {
+            font-size: 0.58rem;
+            line-height: 1.45;
+            color: rgba(255,255,255,0.5);
+        }
+
+        /* ── Inline keyword tooltips (Battlegrounds-style) ── */
+        .bt-kw {
+            color: var(--void-text);
+            font-weight: 700;
+            border-bottom: 1px dotted rgba(var(--void-accent-rgb), 0.5);
+            cursor: help;
+            position: relative;
+            display: inline-block;
+        }
+        .bt-kw-tip {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            background: #0a0d14;
+            border: 1px solid rgba(var(--void-accent-rgb), 0.35);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 0.58rem;
+            line-height: 1.5;
+            color: rgba(255,255,255,0.7);
+            font-weight: 400;
+            font-style: normal;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+            z-index: 700;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.7);
+            white-space: normal;
+            text-align: left;
+        }
+        .bt-kw-tip strong { color: var(--void-accent); font-weight: 800; display: block; margin-bottom: 4px; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; }
+        .bt-kw:hover .bt-kw-tip { opacity: 1; }
+        /* Arrow pointing down */
+        .bt-kw-tip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 8px; height: 8px;
+            margin-top: -4px;
+            background: #0a0d14;
+            border-right: 1px solid rgba(var(--void-accent-rgb), 0.35);
+            border-bottom: 1px solid rgba(var(--void-accent-rgb), 0.35);
+        }
+
+        /* ── Status effects glossary (bottom of traits col) ── */
+        #bt-glossary {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+        .bt-glossary-header {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            padding: 0 6px 10px;
+        }
+        .bt-glossary-row {
+            padding: 7px 6px;
+            border-radius: 6px;
+        }
+        .bt-glossary-term {
+            font-size: 0.57rem;
+            font-weight: 800;
+            color: var(--void-accent);
+            letter-spacing: 0.06em;
+            display: block;
+            margin-bottom: 2px;
+        }
+        .bt-glossary-def {
+            font-size: 0.55rem;
+            line-height: 1.5;
+            color: rgba(255,255,255,0.45);
+        }
+
+        /* Arrow pointing left */
+        .trait-tip::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 50%;
+            transform: translateY(-50%) rotate(45deg);
+            width: 10px;
+            height: 10px;
+            background: #0d1117;
+            border-left: 1px solid rgba(var(--void-accent-rgb), 0.22);
+            border-bottom: 1px solid rgba(var(--void-accent-rgb), 0.22);
+        }
+
+        /* ── Center: deck builder ── */
+        #bt-center-col {
+            padding: 32px 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+        }
+
+        /* Page heading */
+        #bt-heading {
+            text-align: center;
+        }
+        #bt-creator-label {
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-bottom: 6px;
+        }
+        #bt-heading h1 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(2rem, 4vw, 3rem);
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }
+        #bt-heading h1 span { color: var(--void-accent); }
+        #bt-heading p {
+            font-size: 0.65rem;
+            color: var(--void-muted);
+            margin-top: 6px;
+        }
+
+        /* Deck tabs */
+        #bt-deck-tabs {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: min(720px, 100%);
+        }
+        .bt-deck-tab {
+            flex: 1;
+            padding: 10px 8px 8px;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            background: transparent;
+            color: rgba(255,255,255,0.4);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            line-height: 1.4;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .bt-deck-tab:hover {
+            border-color: rgba(255,255,255,0.18);
+            color: rgba(255,255,255,0.7);
+            background: rgba(255,255,255,0.02);
+        }
+        .bt-deck-tab.active {
+            border-color: var(--void-accent);
+            color: var(--void-accent);
+            background: rgba(var(--void-accent-rgb), 0.07);
+            box-shadow: 0 0 18px rgba(var(--void-accent-rgb), 0.1);
+        }
+        /* Toggle pill — always shown on every tab that has a deck */
+        .bt-deck-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.44rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.28);
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.18s;
+            white-space: nowrap;
+            font-family: inherit;
+            line-height: 1;
+        }
+        .bt-deck-toggle:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.35);
+            color: rgba(var(--void-accent-rgb), 0.8);
+            background: rgba(var(--void-accent-rgb), 0.06);
+        }
+        .bt-deck-toggle.is-active {
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            color: var(--void-accent);
+            background: rgba(var(--void-accent-rgb), 0.12);
+            cursor: default;
+        }
+        .bt-deck-toggle .bt-toggle-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: currentColor;
+            flex-shrink: 0;
+            transition: all 0.18s;
+        }
+        .bt-deck-toggle:not(.is-active) .bt-toggle-dot {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* Card slots container */
+        #bt-slots-wrap {
+            width: 100%;
+            max-width: min(720px, 100%);
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 20px;
+            padding: 36px 32px 32px;
+        }
+        #bt-slots {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        .bt-slot-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .bt-card-frame {
+            width: 100%;
+            aspect-ratio: 5/7;
+            border-radius: 12px;
+            border: 2px dashed rgba(var(--void-accent-rgb), 0.2);
+            background: rgba(255,255,255,0.02);
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+            transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+        }
+        .bt-card-frame:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.5);
+            transform: translateY(-5px);
+            box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+        }
+        .bt-card-frame.filled { border-style: solid; border-color: rgba(255,255,255,0.12); }
+        .bt-card-frame.filled:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.6);
+            box-shadow: 0 18px 44px rgba(0,0,0,0.65), 0 0 28px rgba(var(--void-accent-rgb), 0.15);
+        }
+        .bt-card-empty-icon {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(var(--void-accent-rgb), 0.18);
+            font-size: 2rem;
+            transition: color 0.2s;
+        }
+        .bt-card-frame:hover .bt-card-empty-icon { color: rgba(var(--void-accent-rgb), 0.5); }
+        .bt-slot-label {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* Trait badge pips */
+        .bt-card-trait {
+            position: absolute;
+            bottom: 7px; left: 7px;
+            display: flex; gap: 3px; flex-wrap: wrap;
+            z-index: 2;
+        }
+        .bt-trait-pip {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.72);
+            border: 1px solid rgba(255,255,255,0.18);
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .bt-trait-pip img { width: 14px; height: 14px; object-fit: contain; }
+
+        #bt-battle-msg.success { color: var(--void-accent); }
+        #bt-battle-msg.error   { color: #f87171; }
+
+        /* Save deck */
+        #bt-deck-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        #bt-save-deck-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 200px;
+            padding: 12px 28px;
+            border-radius: 12px;
+            border: 1px solid rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.12);
+            color: var(--void-accent);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.65rem;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s, opacity 0.2s;
+        }
+        #bt-save-deck-btn:hover:not(:disabled) {
+            background: rgba(var(--void-accent-rgb), 0.2);
+            border-color: rgba(var(--void-accent-rgb), 0.65);
+            transform: translateY(-1px);
+        }
+        #bt-save-deck-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #bt-deck-save-msg {
+            font-size: 0.62rem;
+            font-weight: 600;
+            text-align: center;
+            min-height: 1.2em;
+        }
+        #bt-deck-save-msg.success { color: var(--void-accent); }
+        #bt-deck-save-msg.error   { color: #f87171; }
+
+        /* ── Right: history (narrow, content-sized track) ── */
+        #bt-right-col {
+            padding: 28px 0 0 12px;
+            min-width: 0;
+            box-sizing: border-box;
+            border-left: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .bt-panel {
+            background: none;
+            border: none;
+            border-radius: 0;
+            padding: 0 0 24px;
+        }
+        .bt-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .bt-panel-title {
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            color: var(--void-accent);
+        }
+        .bt-history-row {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .bt-history-row:last-child { border-bottom: none; }
+        .bt-history-vs {
+            font-size: 0.57rem; font-weight: 700;
+            letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .bt-history-result {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.75rem; font-weight: 900;
+            letter-spacing: 0.1em; text-transform: uppercase;
+            margin-top: 2px;
+        }
+        .bt-history-result.win  { color: var(--void-accent); }
+        .bt-history-result.loss { color: #f87171; }
+        .bt-history-result.draw { color: rgba(255,255,255,0.35); }
+
+        .bt-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            text-align: center;
+        }
+        .bt-stat-val {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.55rem; font-weight: 900;
+            line-height: 1;
+        }
+        .bt-stat-val.wins   { color: var(--void-accent); }
+        .bt-stat-val.losses { color: #f87171; }
+        .bt-stat-val.draws  { color: rgba(255,255,255,0.35); }
+        .bt-stat-label {
+            font-size: 0.5rem; font-weight: 800;
+            letter-spacing: 0.2em; text-transform: uppercase;
+            color: var(--void-muted); margin-top: 4px;
+        }
+
+        /* ── Picker modal ── */
+        #bt-picker {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.82);
+            backdrop-filter: blur(10px);
+            z-index: 400;
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+        }
+        #bt-picker-inner {
+            background: var(--void-bg, #0a0a0f);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            width: 100%; max-width: 820px;
+            /* Give a definite height so flex:1 on the grid can expand */
+            height: min(85vh, 720px);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7);
+        }
+        #bt-picker-head {
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+        }
+        #bt-picker-head h4 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900; font-size: 1rem;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        #bt-picker-head p {
+            font-size: 0.58rem; color: var(--void-muted); margin-top: 2px;
+        }
+        #bt-picker-close {
+            width: 38px; height: 38px; flex-shrink: 0;
+            border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(255,255,255,0.04); color: var(--void-text);
+            cursor: pointer; font-size: 1.1rem;
+            transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+        }
+        #bt-picker-close:hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.35); }
+        #bt-picker-search-bar {
+            padding: 12px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .bt-search-input {
+            width: 100%;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 12px;
+            padding: 10px 16px 10px 38px;
+            font-size: 0.7rem; font-weight: 600;
+            color: var(--void-text);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .bt-search-input::placeholder { color: var(--void-muted); }
+        .bt-search-input:focus { border-color: rgba(var(--void-accent-rgb), 0.35); }
+        .bt-search-wrap { position: relative; }
+        .bt-search-wrap i {
+            position: absolute; left: 13px; top: 50%;
+            transform: translateY(-50%);
+            color: var(--void-muted); font-size: 0.7rem;
+        }
+        #bt-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 12px;
+            padding: 20px 24px;
+            overflow-y: auto; flex: 1;
+        }
+        .bt-picker-card {
+            display: flex; flex-direction: column; gap: 6px;
+            cursor: pointer; border-radius: 10px; padding: 5px;
+            border: 1px solid transparent;
+            transition: all 0.18s;
+        }
+        .bt-picker-card:hover {
+            background: rgba(var(--void-accent-rgb), 0.05);
+            border-color: rgba(var(--void-accent-rgb), 0.25);
+        }
+        .bt-picker-img-wrap {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 8px; overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .bt-picker-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .bt-picker-name {
+            font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--void-muted);
+            text-align: center; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap;
+        }
+        .bt-picker-stats {
+            display: flex; justify-content: center; gap: 6px;
+            font-size: 0.48rem; font-weight: 800; letter-spacing: 0.06em;
+        }
+        .bt-atk { color: #f87171; }
+        .bt-def { color: #60a5fa; }
+
+        /* ── Loading / auth ── */
+        #bt-loading, #bt-signin {
+            position: fixed; inset: 0;
+            background: var(--void-bg, #0a0a0f);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 16px; z-index: 200; text-align: center; padding: 24px;
+        }
+        .bt-spin {
+            width: 36px; height: 36px;
+            border: 2px solid rgba(var(--void-accent-rgb), 0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%;
+            animation: bt-spin 0.8s linear infinite;
+        }
+        @keyframes bt-spin { to { transform: rotate(360deg); } }
+
+        /* Stack / hide sidebars only on small screens (was 1024px — too wide, looked “broken” on common laptop widths) */
+        @media (max-width: 768px) {
+            #bt-layout { grid-template-columns: 1fr; }
+            #bt-traits-col, #bt-right-col { display: none !important; }
+            #bt-center-col { padding: 24px 16px; }
+        }
+    </style>
+</head>
+<body class="bg-void-bg text-void-text antialiased">
+<div class="saas-bg-glow"></div>
+
+<!-- Loading -->
+<div id="bt-loading">
+    <div class="bt-spin"></div>
+    <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading Battle Arena…</p>
+</div>
+
+<!-- Not signed in -->
+<div id="bt-signin" class="hidden">
+    <i class="fa-solid fa-swords" style="font-size:3rem;color:rgba(255,255,255,0.08)"></i>
+    <h1 class="font-display font-black text-3xl uppercase tracking-tight">Battle Arena</h1>
+    <p class="text-[0.7rem] text-void-muted max-w-xs leading-relaxed">Sign in to build your decks and challenge other collectors.</p>
+    <a href="/" class="saas-button rounded-xl px-8 py-3 text-[0.65rem]">
+        <i class="fa-brands fa-twitch mr-2"></i>Sign In with Twitch
+    </a>
+</div>
+
+<!-- Nav -->
+<nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl hidden" id="bt-nav">
+    <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-2 group cursor-pointer" style="text-decoration:none;">
+            <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+            </div>
+            <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+        </a>
+        <div class="flex items-center gap-3">
+            <a id="bt-back-link" href="/dashboard"
+               class="flex items-center gap-1.5 text-[0.62rem] font-black uppercase tracking-widest text-void-muted hover:text-void-text transition-colors"
+               style="text-decoration:none;">
+                <i class="fa-solid fa-chevron-left" style="font-size:0.55rem;"></i>
+                <span id="bt-back-label">Back to Binder</span>
+            </a>
+            <div id="nav-user-preview" class="hidden items-center">
+                <span id="nav-username" class="hidden">---</span>
+                <span id="nav-user-role" class="hidden">Collector</span>
+                <div id="nav-user-menu-root" class="relative">
+                    <button type="button" id="nav-user-menu-trigger"
+                        class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                        aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                        <span class="relative inline-block">
+                            <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
+                            <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                        </span>
+                        <i class="fa-solid fa-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                    </button>
+                    <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
+                        <div class="border-b border-white/5">
+                            <button type="button" id="nav-user-identity-toggle"
+                                class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                aria-expanded="false" aria-controls="nav-user-team-panel">
+                                <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                                <div class="min-w-0 flex-1">
+                                    <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                    <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                        <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
+                                        <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                    </div>
+                                </div>
+                                <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                    <i id="nav-user-team-chevron" class="fa-solid fa-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                </span>
+                            </button>
+                            <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                            </div>
+                        </div>
+                        <div class="px-4 py-3 border-b border-white/5">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="min-w-0">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                    <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                </div>
+                                <button type="button" id="nav-user-menu-copy-code"
+                                    class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                            </div>
+                        </div>
+                        <div class="p-1.5">
+                            <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                <i class="fa-solid fa-gear text-void-muted w-4 text-center shrink-0"></i>
+                                <span class="flex flex-col leading-tight normal-case">
+                                    <span class="uppercase tracking-widest">Account settings</span>
+                                    <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                                </span>
+                            </button>
+                            <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                <i class="fa-solid fa-right-from-bracket w-4 text-center"></i> Log out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Main layout -->
+<div id="bt-root" class="hidden" style="padding-top:80px;">
+    <div id="bt-layout">
+
+        <!-- Left: Traits -->
+        <aside id="bt-traits-col">
+            <div class="bt-traits-header">Traits</div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/Genesis-Icon.png" alt=""><span>Genesis</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Genesis</div>
+                    <div class="trait-tip-desc">A rare <strong>Pristine</strong> grade — only a <strong>1% chance</strong> on mint. The highest card quality, above Legendary.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/absorb-icon.png" alt=""><span>Absorb</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Absorb</div>
+                    <div class="trait-tip-desc">If this kills an enemy, gain <strong>25%</strong> of its maximum health.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/bounty-hunter-icon.png" alt=""><span>Bounty Hunter</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Bounty Hunter</div>
+                    <div class="trait-tip-desc">Place a <strong>Bounty</strong> on a random enemy card. If this kills it, gain its maximum stats.</div>
+                    <div class="trait-tip-kw-block">
+                        <div class="trait-tip-kw-item">
+                            <span class="trait-tip-kw-label">Bounty</span>
+                            <span class="trait-tip-kw-def">A target placed on a random enemy. If the Bounty Hunter kills it, the hunter gains the enemy's maximum stats.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/cleanse-icon.png" alt=""><span>Cleanse</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Cleanse</div>
+                    <div class="trait-tip-desc">Gives an enemy <strong>+2/2</strong> and removes its <strong>Traits</strong>. <em>(Once per combat)</em></div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/echo-icon.png" alt=""><span>Echo</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Echo</div>
+                    <div class="trait-tip-desc">If this attacks and <strong>kills an enemy</strong>, it attacks again.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/frost-icon.png" alt=""><span>Frost</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Frost</div>
+                    <div class="trait-tip-desc">Chance to apply <strong>Freeze</strong> or <strong>Frostbite</strong> to an enemy when attacking.</div>
+                    <div class="trait-tip-kw-block">
+                        <div class="trait-tip-kw-item">
+                            <span class="trait-tip-kw-label">Freeze</span>
+                            <span class="trait-tip-kw-def">Forces an enemy to miss its next attack.</span>
+                        </div>
+                        <div class="trait-tip-kw-item">
+                            <span class="trait-tip-kw-label">Frostbite</span>
+                            <span class="trait-tip-kw-def">Enemy takes 10% more damage for the rest of combat. Can be stacked by multiple hits.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/guard-icon.png" alt=""><span>Guard</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Guard</div>
+                    <div class="trait-tip-desc">Will <strong>always be attacked</strong> by enemies first.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/mimic-icon.png" alt=""><span>Mimic</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Mimic</div>
+                    <div class="trait-tip-desc">Gains the <strong>Traits</strong> of the card to the left or right (depending on card creation) of this.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/mirror-icon.png" alt=""><span>Mirror</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Mirror</div>
+                    <div class="trait-tip-desc">Transform into an <strong>exact copy</strong> of the card opposite this one.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/rage-icon.png" alt=""><span>Rage</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Rage</div>
+                    <div class="trait-tip-desc">Gains <strong>1 attack</strong> every time it takes damage.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/revive-icon.png" alt=""><span>Revive</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Revive</div>
+                    <div class="trait-tip-desc">After dying, comes back to life with <strong>1 health</strong>.</div>
+                </div>
+            </div>
+
+
+        </aside>
+
+        <!-- Center: Deck Builder -->
+        <main id="bt-center-col">
+
+            <!-- Heading -->
+            <div id="bt-heading">
+                <p id="bt-creator-label"></p>
+                <h1>⚔ Battle <span>Arena</span></h1>
+                <p>Build your 3-card deck and challenge other collectors.</p>
+            </div>
+
+            <!-- Deck tabs -->
+            <div id="bt-deck-tabs">
+                <button class="bt-deck-tab active" data-deck-idx="0">Battle<br>Deck 1</button>
+                <button class="bt-deck-tab" data-deck-idx="1">Battle<br>Deck 2</button>
+                <button class="bt-deck-tab" data-deck-idx="2">Battle<br>Deck 3</button>
+            </div>
+
+            <!-- Card slots -->
+            <div id="bt-slots-wrap">
+                <div id="bt-slots">
+                    <div class="bt-slot-wrap">
+                        <div class="bt-card-frame" id="bt-slot-1" onclick="window._btOpenPicker(1)">
+                            <div class="bt-card-empty-icon"><i class="fa-solid fa-plus"></i></div>
+                        </div>
+                        <div class="bt-slot-label">Slot 1</div>
+                    </div>
+                    <div class="bt-slot-wrap">
+                        <div class="bt-card-frame" id="bt-slot-2" onclick="window._btOpenPicker(2)">
+                            <div class="bt-card-empty-icon"><i class="fa-solid fa-plus"></i></div>
+                        </div>
+                        <div class="bt-slot-label">Slot 2</div>
+                    </div>
+                    <div class="bt-slot-wrap">
+                        <div class="bt-card-frame" id="bt-slot-3" onclick="window._btOpenPicker(3)">
+                            <div class="bt-card-empty-icon"><i class="fa-solid fa-plus"></i></div>
+                        </div>
+                        <div class="bt-slot-label">Slot 3</div>
+                    </div>
+                </div>
+
+                <div id="bt-deck-actions">
+                    <button type="button" id="bt-save-deck-btn">Save deck</button>
+                    <p id="bt-deck-save-msg" class="hidden" aria-live="polite"></p>
+                </div>
+
+                <!-- bt-battle-msg kept for JS feedback if battle flow returns -->
+                <p id="bt-battle-msg" style="display:none;"></p>
+            </div>
+
+        </main>
+
+        <!-- Right: History + Record -->
+        <aside id="bt-right-col">
+
+            <div class="bt-panel">
+                <div class="bt-panel-header">
+                    <span class="bt-panel-title">Battle History</span>
+                    <i class="fa-solid fa-clock-rotate-left" style="font-size:0.6rem;color:var(--void-accent);opacity:0.5;"></i>
+                </div>
+                <div id="bt-history-list">
+                    <p style="font-size:0.6rem;color:var(--void-muted);opacity:0.5;text-align:center;padding:16px 0;font-style:italic;">No battles yet.</p>
+                </div>
+            </div>
+
+            <div class="bt-panel">
+                <div class="bt-panel-header">
+                    <span class="bt-panel-title">Your Record</span>
+                </div>
+                <div class="bt-stat-grid">
+                    <div>
+                        <div id="bt-stat-wins" class="bt-stat-val wins">—</div>
+                        <div class="bt-stat-label">Wins</div>
+                    </div>
+                    <div>
+                        <div id="bt-stat-losses" class="bt-stat-val losses">—</div>
+                        <div class="bt-stat-label">Losses</div>
+                    </div>
+                    <div>
+                        <div id="bt-stat-draws" class="bt-stat-val draws">—</div>
+                        <div class="bt-stat-label">Draws</div>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+    </div>
+</div>
+
+<!-- Card Picker Modal -->
+<div id="bt-picker" class="hidden">
+    <div id="bt-picker-inner">
+        <div id="bt-picker-head">
+            <div>
+                    <h4>Choose a Card — Slot <span id="bt-picker-slot-label">1</span></h4>
+                        <p>Select a card from your collection · Press <kbd style="font-family:monospace;font-size:0.55rem;padding:1px 5px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:rgba(255,255,255,0.06);">ESC</kbd> to close</p>
+            </div>
+            <button id="bt-picker-close" onclick="window._btClosePicker()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="bt-picker-search-bar">
+            <div class="bt-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input id="bt-picker-search" class="bt-search-input" type="text" placeholder="Search by name or trait…">
+            </div>
+        </div>
+        <div id="bt-picker-grid"></div>
+    </div>
+</div>
+
+<script src="/nav-user-menu.js"></script>
+<script src="/battle.js"></script>
+</body>
+</html>

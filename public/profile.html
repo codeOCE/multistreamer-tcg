@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Castle TCG · Profile</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <style>
+        /* ── Hidden util ── */
+        .hidden { display: none !important; }
+
+        /* ── Page chrome ── */
+        body { min-height: 100vh; }
+        body::before { opacity: 0.05; }
+
+        #pf-page {
+            max-width: 1340px;
+            margin: 0 auto;
+            padding: calc(5rem + env(safe-area-inset-top,0px) + 1.5rem) 24px 80px;
+        }
+        @media (max-width: 640px) { #pf-page { padding-left: 16px; padding-right: 16px; } }
+
+        /* ── Entrance ── */
+        @keyframes pf-rise {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .pf-rise   { animation: pf-rise 0.55s var(--ease-premium, cubic-bezier(0.16,1,0.3,1)) both; }
+        .pf-rise-1 { animation-delay: 0.05s; }
+        .pf-rise-2 { animation-delay: 0.12s; }
+        .pf-rise-3 { animation-delay: 0.20s; }
+
+        /* ── Hero ── */
+        #pf-hero {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding-bottom: 28px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+        #pf-avatar {
+            width: 80px; height: 80px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            object-fit: cover;
+            box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+            background: #0a0c10;
+            flex-shrink: 0;
+        }
+        #pf-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(1.8rem, 5vw, 3rem);
+            line-height: 1;
+            letter-spacing: -0.03em;
+            text-transform: uppercase;
+            color: var(--void-text);
+        }
+        #pf-role-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.6rem;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 100px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: var(--void-muted);
+        }
+        #pf-role-badge.creator {
+            background: rgba(var(--void-accent-rgb),0.12);
+            border-color: rgba(var(--void-accent-rgb),0.35);
+            color: var(--void-accent);
+        }
+        .pf-code-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .pf-code-label {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .pf-code-value {
+            font-family: 'Space Grotesk', monospace;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: var(--void-accent);
+        }
+        #pf-hero-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+        /* ── Edit mode button ── */
+        #pf-edit-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #pf-edit-btn:hover { background: rgba(255,255,255,0.08); color: var(--void-text); border-color: rgba(255,255,255,0.2); }
+        #pf-edit-btn.active {
+            background: rgba(var(--void-accent-rgb),0.12);
+            border-color: rgba(var(--void-accent-rgb),0.4);
+            color: var(--void-accent);
+        }
+
+        /* ── Widget grid ── */
+        #pf-widgets {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+        /* Row 1: showcase spans full width */
+        #widget-showcase { grid-column: 1 / -1; }
+
+        /* Row 2: three columns */
+        @media (min-width: 860px) {
+            #pf-widgets {
+                grid-template-columns: 240px 1fr 240px;
+            }
+            #widget-showcase { grid-column: 1 / -1; }
+        }
+
+        /* ── Widget base ── */
+        .pf-widget {
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 20px;
+            overflow: hidden;
+            transition: all 0.2s var(--ease-premium, cubic-bezier(0.16,1,0.3,1));
+            position: relative;
+        }
+        body.pf-editing .pf-widget {
+            background: rgba(255,255,255,0.03);
+            border: 1px dashed rgba(255,255,255,0.12);
+        }
+        .pf-widget.drag-active { 
+            border-style: solid;
+            border-color: rgba(var(--void-accent-rgb),0.5); 
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.15); 
+        }
+        .pf-widget.drag-over { 
+            border-style: solid;
+            border-color: rgba(var(--void-accent-rgb),0.8); 
+            background: rgba(var(--void-accent-rgb),0.05); 
+        }
+
+        /* Drag handle — shown only in edit mode */
+        .pf-drag-handle {
+            display: none;
+            position: absolute;
+            top: 10px; right: 10px;
+            width: 28px; height: 28px;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: var(--void-muted);
+            font-size: 0.7rem;
+            cursor: grab;
+            z-index: 10;
+            transition: background 0.15s;
+        }
+        body.pf-editing .pf-drag-handle { display: flex; }
+        body.pf-editing .pf-widget { cursor: grab; }
+        body.pf-editing .pf-widget:active { cursor: grabbing; }
+
+        /* ── Widget titles ── */
+        .pf-widget-title {
+            font-size: 0.6rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--void-accent);
+            padding: 16px 18px 0;
+            margin-bottom: 12px;
+        }
+
+        /* ── Showcase carousel ── */
+        #pf-showcase-inner {
+            padding: 0 0 24px;
+            position: relative;
+            height: 420px;
+            perspective: 1400px;
+        }
+        .pf-showcase-slot {
+            position: absolute;
+            width: 220px;
+            height: 308px;
+            border-radius: 16px;
+            overflow: hidden;
+            top: 50%;
+            transition: all 0.7s var(--ease-premium, cubic-bezier(0.16, 1, 0.3, 1));
+            cursor: pointer;
+            background: #0d0f14;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+        }
+        .pf-showcase-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-showcase-slot[data-pos="center"] {
+            left: 50%; transform: translateX(-50%) translateY(-50%) scale(1.12);
+            z-index: 10; box-shadow: 0 0 50px 6px rgba(var(--void-accent-rgb),0.22), 0 25px 60px rgba(0,0,0,0.7);
+        }
+        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 260px); transform: translateX(-50%) translateY(-54%) rotateY(-22deg) scale(0.85); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 480px); transform: translateX(-50%) translateY(-58%) rotateY(-38deg) scale(0.65); z-index: 4; opacity: 0.4; }
+        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 260px); transform: translateX(-50%) translateY(-54%) rotateY(22deg) scale(0.85);  z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 480px); transform: translateX(-50%) translateY(-58%) rotateY(38deg) scale(0.65);   z-index: 4; opacity: 0.4; }
+        .pf-showcase-slot[data-pos="hidden"] { left: 50%; transform: translateX(-50%) translateY(-62%) scale(0.4); z-index: 1; opacity: 0; pointer-events: none; }
+        /* Rarity accent on center slot */
+        .pf-showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 48px 8px rgba(251,191,36,0.3), 0 20px 48px rgba(0,0,0,0.6); }
+        .pf-showcase-slot[data-pos="center"][data-rarity="Epic"]      { box-shadow: 0 0 48px 8px rgba(168,85,247,0.28), 0 20px 48px rgba(0,0,0,0.6); }
+        .pf-showcase-slot[data-pos="center"][data-rarity="Rare"]      { box-shadow: 0 0 40px 4px rgba(59,130,246,0.25), 0 20px 48px rgba(0,0,0,0.6); }
+
+        /* Empty slot placeholder */
+        .pf-showcase-empty {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,0.08); font-size: 2rem;
+        }
+
+        /* Nav dots */
+        #pf-dots { display: flex; justify-content: center; gap: 6px; margin-top: 16px; }
+        .pf-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.12); transition: all 0.3s; cursor: pointer; }
+        .pf-dot.active { width: 18px; border-radius: 3px; background: rgba(var(--void-accent-rgb),0.75); }
+
+        /* ── Stats widget ── */
+        #widget-stats .pf-widget-title { color: rgba(var(--void-accent-rgb),0.9); }
+        .pf-stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 6px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.6rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--void-muted);
+        }
+        .pf-stat-row:last-child { border-bottom: none; }
+        .pf-stat-row .val {
+            font-family: 'Space Grotesk', monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--void-text);
+        }
+        #pf-stats-footer { padding: 14px 18px 18px; }
+
+        /* ── Trophy cabinet ── */
+        #pf-trophy-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            padding: 0 18px 20px;
+        }
+        .pf-trophy-slot {
+            aspect-ratio: 5/7;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.02);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+        .pf-trophy-slot:hover { transform: translateY(-3px); }
+        .pf-trophy-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-trophy-slot.legendary { border-color: rgba(251,191,36,0.4); box-shadow: 0 0 12px rgba(251,191,36,0.15); }
+        .pf-trophy-slot.epic      { border-color: rgba(168,85,247,0.35); box-shadow: 0 0 12px rgba(168,85,247,0.12); }
+        .pf-trophy-slot.rare      { border-color: rgba(59,130,246,0.3);  box-shadow: 0 0 12px rgba(59,130,246,0.1); }
+        .pf-trophy-slot.empty { cursor: default; }
+        .pf-trophy-slot.empty::after {
+            content: '';
+            position: absolute; inset: 0;
+            border: 2px dashed rgba(255,255,255,0.06);
+            border-radius: 9px;
+        }
+        .pf-rarity-pip {
+            position: absolute; top: 5px; right: 5px;
+            width: 6px; height: 6px; border-radius: 50%;
+        }
+        .pf-rarity-pip.legendary { background: #fbbf24; box-shadow: 0 0 5px #fbbf24; }
+        .pf-rarity-pip.epic      { background: #a855f7; box-shadow: 0 0 5px #a855f7; }
+        .pf-rarity-pip.rare      { background: #3b82f6; box-shadow: 0 0 5px #3b82f6; }
+
+        /* ── Latest pack pull ── */
+        #pf-latest-inner { padding: 8px 18px 22px; }
+        .pf-latest-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            cursor: pointer;
+            transition: background 0.15s;
+            border-radius: 8px;
+        }
+        .pf-latest-card:last-child { border-bottom: none; }
+        .pf-latest-card:hover { background: rgba(255,255,255,0.03); padding-left: 6px; }
+        .pf-latest-thumb {
+            width: 36px; height: 50px;
+            border-radius: 6px;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: #0d0f14;
+        }
+        .pf-latest-info { min-width: 0; flex: 1; }
+        .pf-latest-name {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-latest-meta {
+            font-size: 0.55rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-top: 2px;
+        }
+        .pf-rarity-dot-sm {
+            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+        }
+
+        /* ── Card modal (lightweight) ── */
+        #pf-card-modal {
+            position: fixed; inset: 0; z-index: 9000;
+            background: rgba(5,7,10,0.9);
+            backdrop-filter: blur(18px);
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        #pf-card-modal.open { opacity: 1; pointer-events: all; }
+        #pf-modal-inner {
+            position: relative;
+            max-width: 360px; width: 100%;
+            background: rgba(10,12,16,0.96);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.7);
+        }
+        #pf-modal-img { width: 100%; aspect-ratio: 5/7; object-fit: cover; display: block; }
+        #pf-modal-body { padding: 16px 20px 22px; }
+        #pf-modal-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 1.25rem;
+            letter-spacing: -0.02em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            margin-bottom: 4px;
+        }
+        .pf-modal-meta { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--void-muted); }
+        #pf-modal-close {
+            position: absolute; top: 12px; right: 12px;
+            width: 32px; height: 32px;
+            background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--void-muted); font-size: 0.75rem; transition: all 0.15s;
+        }
+        #pf-modal-close:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+
+        /* ── Loading / Not found ── */
+        #pf-loading, #pf-not-found {
+            min-height: 70vh;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 14px; text-align: center; padding: 40px;
+        }
+        .pf-spinner {
+            width: 36px; height: 36px;
+            border: 2px solid rgba(var(--void-accent-rgb),0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%;
+            animation: pf-spin 0.75s linear infinite;
+        }
+        @keyframes pf-spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow"></div>
+    <div id="toast-container"></div>
+
+    <!-- NAV -->
+    <nav class="fixed top-0 left-0 right-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl pt-[env(safe-area-inset-top,0px)]" aria-label="Main">
+        <div class="max-w-[1520px] mx-auto px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 group cursor-pointer">
+                <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+            </a>
+            <a href="/" class="saas-button rounded-xl px-5 py-2.5 text-[9px]">
+                Enter App <i class="fa-solid fa-arrow-right ml-1 opacity-60"></i>
+            </a>
+        </div>
+    </nav>
+
+    <!-- LOADING -->
+    <div id="pf-loading">
+        <div class="pf-spinner"></div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading profile…</p>
+    </div>
+
+    <!-- NOT FOUND -->
+    <div id="pf-not-found" class="hidden">
+        <div class="text-6xl opacity-10"><i class="fa-solid fa-ghost"></i></div>
+        <h1 class="font-display font-black text-2xl uppercase italic tracking-tight">Profile not found</h1>
+        <p class="text-sm text-void-muted max-w-sm">This Castle profile doesn't exist yet, or the username may have changed.</p>
+        <a href="/" class="text-xs text-void-accent hover:underline mt-2">← Back to home</a>
+    </div>
+
+    <!-- MAIN PAGE -->
+    <main id="pf-page" class="hidden">
+
+        <!-- HERO -->
+        <div id="pf-hero" class="pf-rise pf-rise-1">
+            <img id="pf-avatar" src="" alt="Avatar">
+            <div>
+                <div class="flex items-center gap-3 flex-wrap mb-1">
+                    <h1 id="pf-name">—</h1>
+                    <span id="pf-role-badge"><i class="fa-solid fa-user text-[8px]"></i> <span id="pf-role-text">Collector</span></span>
+                </div>
+                <div class="pf-code-row">
+                    <span class="pf-code-label">Castle code</span>
+                    <span id="pf-code" class="pf-code-value">—</span>
+                    <button id="pf-copy-code" class="w-5 h-5 rounded-md bg-white/[0.06] border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent transition-colors" title="Copy code">
+                        <i class="fa-solid fa-copy text-[9px]"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="pf-hero-actions">
+                <button id="pf-edit-btn">
+                    <i class="fa-solid fa-grip-dots-vertical text-[10px]"></i>
+                    <span id="pf-edit-label">Edit layout</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- WIDGETS -->
+        <div id="pf-widgets" class="pf-rise pf-rise-2">
+
+            <!-- SHOWCASE -->
+            <div class="pf-widget" id="widget-showcase" draggable="false">
+                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <div class="pf-widget-title" id="pf-showcase-title">—'s Collection</div>
+                <div id="pf-showcase-inner"></div>
+                <div id="pf-dots"></div>
+            </div>
+
+            <!-- STATS -->
+            <div class="pf-widget" id="widget-stats" draggable="false">
+                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <div class="pf-widget-title" id="pf-stats-title">—'s Castle Stats</div>
+                <div id="pf-stats-rows"></div>
+                <div id="pf-stats-footer"></div>
+            </div>
+
+            <!-- TROPHY CABINET -->
+            <div class="pf-widget" id="widget-trophy" draggable="false">
+                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <div class="pf-widget-title">Trophy Cabinet</div>
+                <div id="pf-trophy-grid"></div>
+            </div>
+
+            <!-- LATEST PACK PULL -->
+            <div class="pf-widget" id="widget-latest" draggable="false">
+                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <div class="pf-widget-title">Latest Pack Pull</div>
+                <div id="pf-latest-inner"></div>
+            </div>
+
+        </div><!-- /pf-widgets -->
+    </main>
+
+    <!-- CARD MODAL -->
+    <div id="pf-card-modal" role="dialog" aria-modal="true">
+        <div id="pf-modal-inner">
+            <button id="pf-modal-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+            <img id="pf-modal-img" src="" alt="">
+            <div id="pf-modal-body">
+                <div id="pf-modal-name">—</div>
+                <div class="pf-modal-meta" id="pf-modal-meta">—</div>
+                
+                <button id="pf-pin-btn" class="hidden w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all font-black uppercase tracking-widest text-[9px]">
+                    <i class="fa-solid fa-thumbtack"></i>
+                    <span id="pf-pin-label">Pin to Showcase</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/castle-auth-origin.js"></script>
+    <script src="/profile.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Castle TCG - OBS Overlay</title>
-    <link rel="icon" type="image/png" href="/Black_Castle.png">
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
     <style>
         * {
             margin: 0;
@@ -160,7 +160,7 @@
 
         /* Card back */
         #card-back {
-            background-image: url('/Castle_Default_Cardback_Borderless.png');
+            background-image: url('https://cdn.codeoce.com/branding/default-card-back-light.png');
             background-size: cover;
             background-position: center;
             border: 2px solid rgba(255, 255, 255, 0.15);
@@ -246,7 +246,7 @@
 
             
             <div id="pack-face">
-                <img src="/default_pack.png" alt="Pack">
+                <img src="https://cdn.codeoce.com/branding/default-pack.png" alt="Pack">
             </div>
 
             
@@ -290,8 +290,8 @@
         async function initOverlay() {
             if (PREVIEW_STYLE) {
                 streamerConfig = { pack_animation_style: PREVIEW_STYLE };
-                setInterval(() => playReveal({ image_url: '/pack.png', user_card_id: 'mock_preview' }), 8000);
-                setTimeout(() => playReveal({ image_url: '/pack.png', user_card_id: 'mock_preview' }), 500);
+                setInterval(() => playReveal({ image_url: '', user_card_id: 'mock_preview' }), 8000);
+                setTimeout(() => playReveal({ image_url: '', user_card_id: 'mock_preview' }), 500);
                 return;
             }
 

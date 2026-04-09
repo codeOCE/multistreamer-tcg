@@ -8,7 +8,7 @@ window.addEventListener('error', function(e) {
         if (e.target.dataset.fallbackApplied) return;
         e.target.dataset.fallbackApplied = 'true';
         const isAvatar = e.target.id?.includes('avatar') || e.target.className?.includes('rounded-full') || e.target.src?.includes('twitchcdn');
-        e.target.src = isAvatar ? 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback' : '/pack.png';
+        e.target.src = isAvatar ? 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback' : '';
     }
 }, true);
 
@@ -410,7 +410,7 @@ async function playBattleSequence(data) {
                 const isChallengerSide = evt.side === 'challenger' || evt.side === 'attacker';
                 const isTargetSide = evt.side === 'target' || evt.side === 'defender';
 
-                if (evt.type === 'vampire_heal') {
+                if (evt.type === 'absorb_heal') {
                     const healerEl = isChallengerSide ? cCardEl : tCardEl;
                     await showTraitPopup(healerEl, '🩸', 'anim-trait-pop', 1400, 'floating-text-heal');
 
@@ -423,7 +423,7 @@ async function playBattleSequence(data) {
                     const reanimEl = isChallengerSide ? cCardEl : (isTargetSide ? tCardEl : null);
                     if (reanimEl) {
                         reanimEl.classList.remove('card-dead');
-                        await showTraitPopup(reanimEl, '/Trait_Icon_-_Revive.png', 'anim-trait-pop', 1400, 'floating-text-revive');
+                        await showTraitPopup(reanimEl, 'https://cdn.codeoce.com/traits/revive-icon.png', 'anim-trait-pop', 1400, 'floating-text-revive');
                         const reHpEl = reanimEl.querySelector('.card-hp');
                         if (reHpEl) reHpEl.textContent = '1';
                     }

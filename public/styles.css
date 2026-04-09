@@ -22,7 +22,7 @@
 }
 
 
-/* Brand marks: /White_Castle.png (dark UI), /Black_Castle.png (favicon & light chrome) */
+/* Brand marks: cdn.codeoce.com/logo/logo_white.png (dark UI), cdn.codeoce.com/logo/logo_black.png (light favicon) */
 img.brand-castle-mark {
     display: block;
     object-fit: contain;
@@ -280,12 +280,13 @@ select option {
     -webkit-backdrop-filter: blur(28px) saturate(1.15);
 }
 
-/* 3D: tilt-wrap = pointer drag; flip-track = click flip. No fixed “card box” frame — art uses object-contain. */
+/* 3D: tilt-wrap = pointer drag; flip-track = click flip. Let the art define its own silhouette — no extra card box. */
 .card-detail-flip-scene {
     perspective: 1100px;
     perspective-origin: 50% 50%;
     cursor: grab;
     touch-action: none;
+    outline: none;
     --holo-o: 0;
     --shine-o: 0;
     --tilt: 14;
@@ -293,6 +294,10 @@ select option {
     --foil-x: 0.5;
     --foil-y: 0.5;
     --foil-angle: 0;
+}
+
+.card-detail-flip-scene:focus {
+    outline: none;
 }
 
 .card-detail-flip-scene:active {
@@ -312,8 +317,6 @@ select option {
     transform-style: preserve-3d;
     transition: transform 0.55s cubic-bezier(0.23, 1, 0.32, 1);
     will-change: transform;
-    filter: drop-shadow(0 10px 36px rgba(0, 0, 0, 0.38));
-    border-radius: 1rem;
 }
 
 .card-detail-flip-track {
@@ -344,27 +347,52 @@ select option {
     transform: rotateY(180deg) translateZ(1px);
 }
 
-.card-detail-flip-scene:focus-visible {
-    box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb), 0.45);
-}
 
 @media (prefers-reduced-motion: reduce) {
-    .card-detail-flip-track {
+    .card-detail-flip-track,
+    .card-detail-tilt-wrap {
         transition: none;
     }
 }
 
+/* User-controlled reduce-motion preference (castle_pref_reduce_motion) */
+.castle-reduce-motion *,
+.castle-reduce-motion *::before,
+.castle-reduce-motion *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+}
+/* Keep foil & 3D static so they don't freeze mid-lerp */
+.castle-reduce-motion .card-detail-tilt-wrap,
+.castle-reduce-motion .card-detail-flip-track {
+    transform: none !important;
+    transition: none !important;
+}
+.castle-reduce-motion .holo-layer--card-detail,
+.castle-reduce-motion .holo-shine--card-detail {
+    opacity: 0 !important;
+    animation: none !important;
+}
+
+
 /* Card detail: reactive holofoil (Pocket-like) — pause idle shimmer while dragging; follow pointer */
 .card-detail-flip-scene.is-card-tilting .holo-layer--card-detail {
     animation: none !important;
-    transition:
-        opacity 0.06s linear,
-        filter 0.08s linear,
-        background-position 0.06s linear,
-        transform 0.08s linear;
-    background-position: calc(var(--foil-x) * 100%) calc(var(--foil-y) * 100%);
-    filter: hue-rotate(calc((var(--foil-x) - 0.5) * 55deg)) saturate(1.35) brightness(1.08);
-    transform: rotate(calc(var(--foil-angle) * 0.45deg));
+    opacity: var(--holo-o) !important;
+    mix-blend-mode: color-dodge !important;
+    background-image: linear-gradient(
+        calc(var(--foil-angle) * 1deg),
+        rgba(180,180,190,0.55),
+        rgba(240,240,248,0.65),
+        rgba(200,200,210,0.55),
+        rgba(255,255,255,0.70),
+        rgba(190,190,200,0.55)
+    ) !important;
+    background-size: 200% 200% !important;
+    background-position: calc(var(--foil-x) * 100%) calc(var(--foil-y) * 100%) !important;
+    transition: opacity 0.1s linear, transform 0.1s linear;
 }
 
 .card-detail-flip-scene.is-card-tilting.holo-legendary .holo-layer--card-detail {
@@ -373,38 +401,32 @@ select option {
 
 .card-detail-flip-scene.is-card-tilting .holo-shine--card-detail {
     display: block !important;
-    opacity: 1 !important;
+    opacity: var(--shine-o) !important;
     visibility: visible !important;
     z-index: 5 !important;
-    mix-blend-mode: screen !important;
+    mix-blend-mode: overlay !important;
     animation: none !important;
     
-    /* CodePen-inspired dual-gradient: sharp light beam + soft color foil */
     background: 
-        linear-gradient(
-            115deg, 
-            transparent 35%, 
-            rgba(255, 255, 255, 0.7) 48%, 
-            rgba(255, 255, 255, 0.9) 50%, 
-            rgba(255, 255, 255, 0.7) 52%, 
-            transparent 65%
+        radial-gradient(
+            circle at calc(var(--foil-x) * 100%) calc(var(--foil-y) * 100%), 
+            rgba(255, 255, 255, 0.9) 0%, 
+            rgba(255, 255, 255, 0.4) 30%, 
+            transparent 60%
         ),
         linear-gradient(
-            115deg,
-            transparent 0%,
-            rgba(0, 231, 255, 0.3) 30%,
-            rgba(255, 0, 231, 0.3) 70%,
-            transparent 100%
+            calc(var(--foil-angle) * 1deg), 
+            transparent 30%, 
+            rgba(255, 255, 255, 0.8) 48%, 
+            rgba(255, 255, 255, 1) 50%, 
+            rgba(255, 255, 255, 0.8) 52%, 
+            transparent 70%
         ) !important;
     
-    background-size: 300% 300% !important;
-    /* Inverted mapping for "fake light" reflection feel (light source feels static while card moves) */
-    background-position: calc((1 - var(--foil-x)) * 100%) calc((1 - var(--foil-y)) * 100%);
+    background-size: 200% 200%, 200% 200% !important;
+    background-position: calc(var(--foil-x) * 100%) calc(var(--foil-y) * 100%), calc((1 - var(--foil-x)) * 100%) calc((1 - var(--foil-y)) * 100%) !important;
 
-    transition: 
-        opacity 0.06s linear,
-        transform 0.08s linear,
-        background-position 0.08s linear;
+    transition: opacity 0.1s linear, transform 0.1s linear;
 }
 
 
@@ -945,13 +967,24 @@ select option {
 }
 
 
-.holo-rare      { --holo-max: 0.10; --shine-max: 0.35; --tilt: 10; --holo-idle: 0.04; --shine-idle: 0.12; }
-.holo-epic      { --holo-max: 0.18; --shine-max: 0.50; --tilt: 15; --holo-idle: 0.06; --shine-idle: 0.18; }
-.holo-legendary { --holo-max: 0.28; --shine-max: 0.60; --tilt: 18; --holo-idle: 0.08; --shine-idle: 0.25; }
+.holo-rare      { --holo-max: 0.30; --shine-max: 0.50; --tilt: 10; --holo-idle: 0.04; --shine-idle: 0.12; }
+.holo-epic      { --holo-max: 0.45; --shine-max: 0.65; --tilt: 15; --holo-idle: 0.06; --shine-idle: 0.18; }
+.holo-legendary { --holo-max: 0.60; --shine-max: 0.85; --tilt: 18; --holo-idle: 0.08; --shine-idle: 0.25; }
 
 /* Card detail: holo mask is set in JS (same URL as art, mask-size: contain) so foil matches object-contain silhouette. */
+/* No isolation:isolate here — Chrome allocates a grey GPU layer when isolation meets
+   backdrop-filter + preserve-3d. Holo blend modes are handled by Three.js in WebGL;
+   CSS fallback layers are suppressed via .three-active (see below). */
 .card-detail-card-face {
-    isolation: isolate;
+    overflow: hidden;
+    background: transparent;
+}
+
+.card-detail-flip-scene,
+.card-detail-tilt-wrap,
+.card-detail-flip-track,
+.card-detail-face {
+    background: transparent;
 }
 
 .card-detail-card-face .holo-layer--card-detail,
@@ -973,18 +1006,57 @@ select option {
 }
 
 .card-detail-flip-scene.holo-rare {
-    --holo-idle: 0.07;
-    --shine-idle: 0.16;
+    --holo-idle: 0.28;
+    --shine-idle: 0.38;
 }
 
 .card-detail-flip-scene.holo-epic {
-    --holo-idle: 0.11;
-    --shine-idle: 0.24;
+    --holo-idle: 0.38;
+    --shine-idle: 0.50;
 }
 
 .card-detail-flip-scene.holo-legendary {
-    --holo-idle: 0.16;
-    --shine-idle: 0.36;
+    --holo-idle: 0.50;
+    --shine-idle: 0.65;
+}
+
+/* ── Card-detail sparkle texture overlay ────────────────────────────────────
+   Shows in CSS-fallback mode (when Three.js is unavailable or CORS-blocked).
+   Suppressed by .three-active once the WebGL canvas takes over.               */
+.card-detail-sparkle {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    /* SVG feTurbulence noise thresholded to bright isolated points (diamond dust) */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85 0.85' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 10 -4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+    mix-blend-mode: screen;
+    animation: sparkle-drift 14s ease-in-out infinite alternate;
+}
+
+@keyframes sparkle-drift {
+    0%   { background-position: 0px 0px; }
+    100% { background-position: 60px 40px; }
+}
+
+/* Sparkle is Three.js-only — keep hidden in CSS fallback to avoid grain overlay */
+.card-detail-flip-scene .card-detail-sparkle { opacity: 0; }
+
+/* When Three.js is active it renders the full foil effect in WebGL.
+   Suppress ALL CSS holo overlay layers so they cannot bleed or flash. */
+.card-detail-flip-scene.three-active .holo-layer--card-detail,
+.card-detail-flip-scene.three-active .holo-shine--card-detail {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card-detail-sparkle { animation: none; }
 }
 
 
@@ -992,12 +1064,12 @@ select option {
     background:
         linear-gradient(
             135deg,
-            #c084fc 0%,
-            #e0d4ff 20%,
-            #7dd3fc 40%,
-            #e0d4ff 60%,
-            #c084fc 80%,
-            #e0d4ff 100%
+            #a0a0b0 0%,
+            #e8e8f0 20%,
+            #b8b8c8 40%,
+            #f5f5ff 60%,
+            #a8a8b8 80%,
+            #e0e0ec 100%
         );
     background-size: 400% 400%;
 }
@@ -1163,7 +1235,7 @@ select option {
 
 .sharing-mode .binder-card {
     transform: none !important;
-    box-shadow: 0 15px 35px rgba(0,0,0,0.6) !important;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6) !important;
 }
 
 .sharing-mode .binder-slot button,
@@ -1647,8 +1719,7 @@ select option {
     font-size: clamp(1.75rem, 4vw, 2.5rem);
     font-weight: 900;
     color: var(--dust-accent);
-    letter-spacing: -0.02em;
-    tabular-nums: tabular-nums;
+    font-variant-numeric: tabular-nums;
 }
 
 .dust-vat-unit {
@@ -1835,4 +1906,12 @@ select option {
     100% {
         box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
     }
+}
+
+/* ThreeJS Hologram Canvas */
+.three-holo-canvas {
+    pointer-events: none;
+    z-index: 10;
+    mix-blend-mode: normal;
+    image-rendering: high-quality;
 }

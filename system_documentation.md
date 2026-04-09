@@ -40,7 +40,7 @@ Each card is defined by several core attributes:
     *   **Genesis Mint (Grade 11)**: A rare 1% "Pristine" grade that overrides standard grading.
 *   **Traits/Mechanics**:
     *   **Guard**: Forces opponent targeting.
-    *   **Vampire**: Heals 30% of victim's max HP on kill.
+    *   **Absorb**: Heals card on kill.
     *   **Reanimate**: Revives once per round with 1 HP.
     *   **Mimic**: Copies Stats from the left neighbor and the Trait from the right neighbor.
 
@@ -77,7 +77,7 @@ Each card is defined by several core attributes:
 
 ### Currencies
 *   **Cards**: The primary asset. Can be traded or used in battle.
-*   **Dust**: Earned by selling unwanted cards. Used to "Buy Mechanics" (e.g., adding Vampire to a favorite card).
+*   **Dust**: Earned by selling unwanted cards. Used to "Buy Mechanics" (e.g., adding Absorb to a favorite card).
 *   **Packs**: Obtained via Stripe purchase or streamer-defined milestones.
 
 ### Progression

@@ -38,7 +38,7 @@ async function ensureChartJsLoaded() {
 }
 
 /** Shipped default booster pack art (`public/default_pack.png`) */
-const DEFAULT_PACK_IMAGE_URL = '/default_pack.png';
+const DEFAULT_PACK_IMAGE_URL = 'https://cdn.codeoce.com/branding/default-pack.png';
 
 function escapeHTML(str) {
     if (!str) return "";
@@ -232,7 +232,7 @@ window.addEventListener('error', function(e) {
         if (isAvatar) {
             e.target.src = 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback';
         } else {
-            e.target.src = '/pack.png'; // Main card fallback
+            e.target.src = ''; // Main card fallback
         }
     }
 }, true); // useCapture = true is strictly required for 'error' events which don't bubble
@@ -393,6 +393,9 @@ function hideDashboardVeil(instant = false) {
 async function initDashboard() {
     const cachedData = sessionStorage.getItem(CACHE_KEY);
 
+    // 1. Immediate Chart.js preload (non-blocking)
+    void ensureChartJsLoaded();
+
     if (cachedData) {
         try {
             const data = JSON.parse(cachedData);
@@ -408,10 +411,13 @@ async function initDashboard() {
         setDashboardSkeleton(true);
     }
 
-    // Bootstrap already sets the csrf cookie AND returns the token in its body.
-    // Fetching /api/csrf in parallel would race to overwrite that cookie with a
-    // different token, causing every subsequent mutation to get CSRF-blocked.
-    const bootstrapData = await bootstrapDashboard();
+    // 2. Start all critical fetches in parallel
+    // We start them now, but we'll await bootstrap first since it's the gatekeeper
+    const bootstrapPromise = bootstrapDashboard();
+    const profilePromise = hydrateCreatorStreamerFromProfile();
+    const analyticsPromise = loadAnalytics(true); // silent background load
+
+    const bootstrapData = await bootstrapPromise;
 
     if (bootstrapData?.csrf_token) {
         // Use the token that matches the cookie bootstrap just set
@@ -425,6 +431,7 @@ async function initDashboard() {
     hideDashboardVeil(false);
     initSettingsVoidBinderColorPicker();
     setupEventListeners();
+
     try {
         const sp = new URLSearchParams(window.location.search);
         if (sp.get('kick') === 'linked') {
@@ -437,19 +444,15 @@ async function initDashboard() {
     } catch (_) {
         /* ignore */
     }
-    hydrateCreatorStreamerFromProfile().finally(() => {
-        // Only force switch to analytics if the user hasn't already manually switched tabs
-        // Check if another tab button is already marked as active
-        const activeBtn = document.querySelector('.dashboard-tab-btn.active');
-        if (!activeBtn || activeBtn.id === 'tab-analytics') {
-            switchTab('analytics');
-        }
 
-        // Phase 2: Background prefetch if they are a creator
-        if (currentUser?.streamer) {
-            loadAnalytics(true); // true = silent/background
-        }
-    });
+    // Await remaining parallel tasks
+    await Promise.allSettled([profilePromise, analyticsPromise]);
+
+    // Final UI sync after profile and analytics are in
+    const activeBtn = document.querySelector('.dashboard-tab-btn.active');
+    if (!activeBtn || activeBtn.id === 'tab-analytics') {
+        switchTab('analytics');
+    }
 }
 
 /** Onboarding-style HSV void picker for Settings binder color (matches onboarding.html). */
@@ -967,6 +970,7 @@ function loadSubTabData(parentTab, subTabId) {
         if (subTabId === 'pack') loadPackSettings();
         if (subTabId === 'backs') fetchCardBacks();
         if (subTabId === 'templates') loadTemplates();
+        if (subTabId === 'layer-editor' && typeof renderEditorView === 'function') renderEditorView();
     }
 }
 
@@ -1012,7 +1016,11 @@ function populateOverlaySettings() {
 async function bootstrapDashboard() {
     try {
         const res = await apiFetch(`${BACKEND_URL}/api/bootstrap?streamer=all&lite=1`, { credentials: 'include' });
-        if (!res.ok) throw new Error("Initialization failed");
+        if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            const hint = errBody?.hint ? ` — ${errBody.hint}` : '';
+            throw new Error(`Initialization failed (${res.status})${hint}`);
+        }
 
         const data = await res.json();
         
@@ -1056,6 +1064,7 @@ function applyBootstrapData(data) {
         is_team_helper_only: isTeamHelperOnly,
         streamer: st,
         streamer_id: st.id,
+        trade_code: data.user.trade_code,
         team_memberships: Array.isArray(data.user.team_memberships) ? data.user.team_memberships : [],
         kick_linked: !!data.user.kick_linked
     };
@@ -1107,12 +1116,26 @@ function applyBootstrapData(data) {
 }
 
 async function hydrateCreatorStreamerFromProfile() {
-    if (!currentUser) return;
+    // We proceed even if currentUser is null, as this might be running in parallel with bootstrap
     try {
         const res = await apiFetch(`${BACKEND_URL}/api/creator/profile`, { credentials: 'include' });
         if (!res.ok) return;
         const profile = await res.json();
         if (!profile || !profile.id) return;
+        
+        // If bootstrap hasn't finished yet, we'll store it but wait for applyBootstrapData to run
+        if (!currentUser) {
+            console.warn('[Dashboard] Profile arrived before bootstrap. Retrying assignment...');
+            // Simple retry or just wait for initDashboard to handle it
+            let retries = 0;
+            while (!currentUser && retries < 10) {
+                await new Promise(r => setTimeout(r, 100));
+                retries++;
+            }
+        }
+
+        if (!currentUser) return; // Still not there? Give up.
+
         currentUser.streamer = profile;
         currentUser.streamer_id = profile.id;
         const lbl =
@@ -2069,7 +2092,11 @@ async function fetchCardsForGrid(gridId = 'cards-grid') {
     grid.innerHTML = `<div class="col-span-full py-12 text-center text-void-muted uppercase tracking-widest text-[10px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading Cards...</div>`;
 
     try {
-        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' });
+        // Load templates in parallel so the template dropdown is populated when editing a card
+        const [res] = await Promise.all([
+            apiFetch(`${BACKEND_URL}/api/creator/cards`, { credentials: 'include' }),
+            creatorTemplates.length === 0 ? loadTemplates() : Promise.resolve(),
+        ]);
         if (!res.ok) throw new Error("Access denied");
 
         creatorCards = await res.json();
@@ -2095,7 +2122,7 @@ function renderCardGrid(gridId, cards) {
                 <div class="card-select-item ${isSelected ? 'selected' : ''}" onclick="${bulkSelectMode ? `toggleCardSelection('${escapeHTML(card.id)}')` : `editCard('${escapeHTML(card.id)}')`}">
                     ${bulkSelectMode ? `<div class="card-select-check"></div>` : ''}
                     <div class="aspect-[2/3] w-full rounded-xl overflow-hidden shadow-2xl">
-                        <img src="${escapeHTML(card.image_url || '/pack.png')}" class="w-full h-full object-cover transition-all duration-500 hover:scale-105">
+                        <img src="${escapeHTML(card.image_url || '')}" class="w-full h-full object-cover transition-all duration-500 hover:scale-105">
                     </div>
                     <div class="p-4 bg-white/5 flex flex-col gap-2">
                         <div class="flex justify-between items-start">
@@ -2126,7 +2153,7 @@ function renderCardGrid(gridId, cards) {
         <div class="card-select-item ${card[field] ? 'selected' : ''}" onclick="toggleCardEligibility('${escapeHTML(card.id)}', '${escapeHTML(field)}', this)">
             <div class="card-select-check"></div>
             <div class="aspect-[2/3] w-full flex items-center justify-center">
-                <img src="${escapeHTML(card.image_url || '/pack.png')}" class="w-full h-full object-cover ${card[field] ? '' : 'grayscale opacity-50'} transition-all duration-500">
+                <img src="${escapeHTML(card.image_url || '')}" class="w-full h-full object-cover ${card[field] ? '' : 'grayscale opacity-50'} transition-all duration-500">
             </div>
             <div class="p-3 bg-white/5">
                 <div class="text-[9px] font-black text-white uppercase truncate">${escapeHTML(card.name)}</div>
@@ -2258,7 +2285,7 @@ function renderCardPerformance() {
         topCollected.innerHTML = data.most_collected.slice(0, 5).map((card, idx) => `
             <div class="performance-item">
                 <div class="performance-rank">${idx + 1}</div>
-                <img src="${escapeHTML(card.image_url || '/pack.png')}" class="w-10 h-14 rounded border border-white/10 object-cover">
+                <img src="${escapeHTML(card.image_url || '')}" class="w-10 h-14 rounded border border-white/10 object-cover">
                 <div class="flex-1">
                     <div class="text-[11px] font-black text-white uppercase">${escapeHTML(card.name)}</div>
                     <div class="text-[9px] text-void-accent uppercase mt-0.5">${parseInt(card.collection_count || 0)} Collected</div>
@@ -2271,7 +2298,7 @@ function renderCardPerformance() {
         rarest.innerHTML = data.rarest.slice(0, 5).map((card, idx) => `
             <div class="performance-item hover:border-purple-500/30">
                 <div class="performance-rank bg-purple-500/10 text-purple-400">${idx + 1}</div>
-                <img src="${escapeHTML(card.image_url || '/pack.png')}" class="w-10 h-14 rounded border border-white/10 object-cover">
+                <img src="${escapeHTML(card.image_url || '')}" class="w-10 h-14 rounded border border-white/10 object-cover">
                 <div class="flex-1">
                     <div class="text-[11px] font-black text-white uppercase">${escapeHTML(card.name)}</div>
                     <div class="text-[9px] text-purple-400 uppercase mt-0.5">${parseInt(card.collection_count || 0)} Collected</div>
@@ -3039,7 +3066,28 @@ function resetSetForm() {
     if (iconPreview) { iconPreview.classList.add('hidden'); iconPreview.src = ''; }
     const iconPlaceholder = document.getElementById('set-icon-placeholder');
     if (iconPlaceholder) iconPlaceholder.classList.remove('hidden');
+    // Reset pack art
+    const packPreview = document.getElementById('set-pack-preview');
+    if (packPreview) { packPreview.classList.add('hidden'); packPreview.src = ''; }
+    const packPlaceholder = document.getElementById('set-pack-placeholder');
+    if (packPlaceholder) packPlaceholder.classList.remove('hidden');
+    const packUpload = document.getElementById('set-pack-upload');
+    if (packUpload) packUpload.value = '';
 }
+
+function previewSetPack(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const preview = document.getElementById('set-pack-preview');
+        const placeholder = document.getElementById('set-pack-placeholder');
+        if (preview) { preview.src = e.target.result; preview.classList.remove('hidden'); }
+        if (placeholder) placeholder.classList.add('hidden');
+    };
+    reader.readAsDataURL(file);
+}
+window.previewSetPack = previewSetPack;
 
 function editSet(setId) {
     const set = creatorSets.find(s => s.id === setId);
@@ -3054,6 +3102,14 @@ function editSet(setId) {
     if (isActiveToggle) isActiveToggle.checked = set.is_active !== false; // default true
     const deleteBtn = document.getElementById('set-delete-btn');
     if (deleteBtn) deleteBtn.classList.remove('hidden');
+    // Populate pack art preview if set has one
+    const packPreview = document.getElementById('set-pack-preview');
+    const packPlaceholder = document.getElementById('set-pack-placeholder');
+    if (set.pack_image_url && packPreview) {
+        packPreview.src = set.pack_image_url;
+        packPreview.classList.remove('hidden');
+        if (packPlaceholder) packPlaceholder.classList.add('hidden');
+    }
 }
 
 async function saveSet() {
@@ -3067,11 +3123,35 @@ async function saveSet() {
     showToast("Saving set...", "loading");
 
     try {
+        // Upload pack art if a new file was selected
+        let packImageUrl;
+        const packFile = document.getElementById('set-pack-upload')?.files?.[0];
+        if (packFile) {
+            const formData = new FormData();
+            formData.append('file', packFile);
+            const uploadRes = await apiFetch(`${BACKEND_URL}/api/creator/upload`, {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': csrfToken },
+                body: formData,
+                credentials: 'include'
+            });
+            if (uploadRes.ok) {
+                const uploadData = await uploadRes.json();
+                packImageUrl = uploadData.url;
+            } else {
+                showToast("Pack art upload failed", "error");
+                return;
+            }
+        }
+
+        const payload = { id: setId || undefined, name, description, is_active: isActive };
+        if (packImageUrl !== undefined) payload.pack_image_url = packImageUrl;
+
         const url = setId ? `${BACKEND_URL}/api/creator/sets/${setId}` : `${BACKEND_URL}/api/creator/sets`;
         const res = await apiFetch(url, {
             method: setId ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: setId || undefined, name, description, is_active: isActive }),
+            body: JSON.stringify(payload),
             credentials: 'include'
         });
 
@@ -3328,9 +3408,9 @@ function getHandleAt(mx, my) {
 
 async function loadTemplates() {
     const grid = document.getElementById('templates-list');
-    if (!grid) return;
-
-    grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading templates...</div>';
+    if (grid) {
+        grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading templates...</div>';
+    }
 
     try {
         const res = await apiFetch(`${BACKEND_URL}/api/creator/templates`, { credentials: 'include' });
@@ -3341,11 +3421,11 @@ async function loadTemplates() {
         } else {
             const errText = await res.text();
             console.error("Load templates failed:", res.status, errText);
-            grid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400 uppercase text-[9px]">Failed to load templates: ${res.status} ${errText}</div>`;
+            if (grid) grid.innerHTML = `<div class="col-span-full py-12 text-center text-red-400 uppercase text-[9px]">Failed to load templates: ${res.status} ${errText}</div>`;
         }
     } catch (err) {
         console.error("Load templates error:", err);
-        grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400 uppercase text-[9px]">Network error loading templates</div>';
+        if (grid) grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400 uppercase text-[9px]">Network error loading templates</div>';
     }
 }
 
@@ -3635,7 +3715,7 @@ function drawTemplatePreview() {
         }
 
         const mockIcon = new Image();
-        mockIcon.src = '/Trait_Icon_-_Mimic.png';
+        mockIcon.src = 'https://cdn.codeoce.com/traits/mimic-icon.png';
         if (mockIcon.complete) {
             templateCtx.drawImage(mockIcon, iconX, currentTraitArea.y + 40, iconSize, iconSize);
         } else {
@@ -3743,13 +3823,15 @@ async function saveTemplate() {
 
     showToast("Saving template...", "loading");
 
+    const textAlignVal = document.getElementById('template-text-align')?.value || 'center';
+
     const payload = {
         name,
         image_url: imageUrl,
         trait_area: currentTraitArea,
         font_size: fontSize,
         font_color: fontColor,
-        text_align: textAlign,
+        text_align: textAlignVal,
         icon_size: iconSize
     };
 
@@ -3936,7 +4018,7 @@ async function saveCard() {
             attack,
             defense,
             set_id: setId || null,
-            image_url: imageUrl || '/pack.png',
+            image_url: imageUrl || '',
             is_battle_eligible: isBattleable,
             is_trading_eligible: isTradable,
             template_id: templateId,
@@ -4262,7 +4344,7 @@ function buildQueueRow(item, isPending, isFirst) {
     const user  = item.users  || {};
     const meta  = rarityMeta(card.rarity);
     const thumb = card.image_url
-        ? `<img src="${escapeHTML(card.image_url)}" class="queue-thumb" onerror="this.src='/pack.png'">`
+        ? `<img src="${escapeHTML(card.image_url)}" class="queue-thumb" onerror="this.src=''">`
         : `<div class="queue-thumb flex items-center justify-center bg-white/5 text-void-muted text-xs"><i class="fa-solid fa-cards-blank"></i></div>`;
 
     const actions = isPending

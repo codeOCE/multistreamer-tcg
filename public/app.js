@@ -1,6 +1,27 @@
 const BACKEND_URL =
     typeof getCastleBackendOrigin === 'function' ? getCastleBackendOrigin() : window.location.origin;
 
+/**
+ * Returns the display URL for a card image.
+ * For template-based cards (dynamic SVG with baked-in traits), returns the
+ * /api/cards/:user_card_id/image.png endpoint which renders the trait overlay.
+ * Falls back to the static image_url for non-template cards.
+ *
+ * @param {object} card - Any card object with image_url. May also have:
+ *   - template_id + instanceId  (from userCollection)
+ *   - has_template + user_card_id  (from notification data)
+ */
+function resolveCardImageUrl(card) {
+    if (!card) return '';
+    if (card.template_id && card.instanceId) {
+        return `${BACKEND_URL}/api/cards/${card.instanceId}/image.png`;
+    }
+    if (card.has_template && card.user_card_id) {
+        return `${BACKEND_URL}/api/cards/${card.user_card_id}/image.png`;
+    }
+    return card.image_url || '';
+}
+
 /** Load a vendor script once (Sortable, html2canvas, fabric, Chart.js). */
 function loadScriptOnce(src) {
     return new Promise((resolve, reject) => {
@@ -65,6 +86,268 @@ async function ensureChartJsLoaded() {
     await loadScriptOnce('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js');
     applyChartDefaults();
 }
+
+async function ensureGsapLoaded() {
+    if (typeof gsap !== 'undefined') return;
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js');
+}
+
+async function ensureThreeLoaded() {
+    if (window.THREE) return;
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js');
+}
+
+function render3DCard(container, imageUrl, rarity, foilMaskUrl) {
+    if (!window.THREE) return;
+
+    if (container.__threeCleanup) container.__threeCleanup();
+
+    if (!imageUrl) return;
+
+    const uRarityMultVal = CARD_DETAIL_DRAG_FOIL[rarity]?.foilAmp ?? 1.0;
+
+    const width  = container.clientWidth  || 524;
+    const height = container.clientHeight || 730;
+
+    const threeScene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(width / -2, width / 2, height / 2, height / -2, 0.1, 100);
+    camera.position.z = 10;
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: true });
+    renderer.setClearColor(0x000000, 0);
+    renderer.setClearAlpha(0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Use container size initially, but internally ONLY
+    renderer.setSize(width, height, false);
+    
+    // Start canvas transparent — will fade in on first rendered frame
+    renderer.domElement.classList.add('three-holo-canvas');
+    renderer.domElement.style.cssText =
+        'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10;opacity:0;transition:opacity 0.3s ease;background:transparent!important;border:none!important;box-shadow:none!important;transform:translateZ(1px);';
+
+    container.appendChild(renderer.domElement);
+
+    const parentScene = container.closest('.card-detail-flip-scene');
+
+    /** Graceful CSS-only fallback if fetch or WebGL fails */
+    function showCSSFallback() {
+        renderer.dispose();
+        if (renderer.domElement.parentElement) renderer.domElement.parentElement.removeChild(renderer.domElement);
+        container.__threeCleanup = null;
+        if (parentScene) parentScene.classList.remove('three-active');
+        const underImg = container.querySelector('#card-detail-image');
+        if (underImg) { underImg.style.opacity = '1'; underImg.style.transition = ''; }
+        const holoLayer = document.getElementById('card-detail-holo-layer');
+        const holoShine = document.getElementById('card-detail-holo-shine');
+        if (holoLayer) { holoLayer.classList.remove('hidden'); applyCardDetailHoloMaskFromUrl(imageUrl, true); }
+        if (holoShine) holoShine.classList.remove('hidden');
+    }
+
+    const vertexShader = `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `;
+
+    // mymind-style foil shader — smooth iridescence + specular glare, no grain.
+    // Real TCG foil is a colour-shift wash + hot-spot, not individual dots.
+    const fragmentShader = `
+        uniform sampler2D uImage;
+        uniform sampler2D uFoilMask;
+        uniform float     uHasFoilMask;
+        uniform vec2      uMouse;
+        uniform float     uTime;
+        uniform float     uFoilIntensity;
+        uniform float     uRarityMult;
+        uniform vec2      uResolution;
+        varying vec2 vUv;
+
+        // Silver metallic sweep — grey-white, zero hue shift, barely-there cool/warm variation
+        vec3 silver(float t) {
+            vec3 a = vec3(0.55, 0.55, 0.58);
+            vec3 b = vec3(0.45, 0.45, 0.42);
+            vec3 c = vec3(1.0,  1.0,  1.0 );
+            vec3 d = vec3(0.0,  0.02, 0.05);
+            return clamp(a + b * cos(6.28318 * (c * t + d)), 0.0, 1.0);
+        }
+
+        void main() {
+            vec4 texColor = texture2D(uImage, vUv);
+
+            if (texColor.a < 0.05) discard;
+
+            float intensity = uFoilIntensity * uRarityMult;
+
+            // Parallax UV: art shifts subtly with view angle for depth
+            vec2 parallax  = (uMouse - 0.5) * 0.04;
+            vec2 shiftedUv = vUv + parallax;
+
+            // Multi-layered silver sweep
+            float angle  = atan(uMouse.y - 0.5, uMouse.x - 0.5);
+            float sweep1 = shiftedUv.x * 1.5 + shiftedUv.y * 0.8 + angle * 0.5 + uTime * 0.12;
+            float sweep2 = shiftedUv.y * 1.1 + shiftedUv.x * 0.4 - angle * 0.3 + uTime * 0.08;
+            vec3 foilColor = mix(silver(sweep1), silver(sweep2 + 0.5), 0.5);
+
+            // Adaptability: Calculate luminosity to prevent blowout on bright cards
+            float luma   = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
+            float dampen = 1.0 - smoothstep(0.8, 1.0, luma);
+            
+            // Shape-Aware Masking: exclude very dark ink and very bright paper/text-boxes
+            float inkMask   = smoothstep(0.12, 0.40, luma);
+            float paperMask = 1.0 - smoothstep(0.85, 0.98, luma);
+            
+            // Edge vignette: fade foil out over 8% from each edge — keeps shimmer off the card border art
+            float edgeMask  = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x) *
+                             smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.92, vUv.y);
+
+            // Per-layer foil mask: white = full shine, black = matte.
+            // When no mask is provided (uHasFoilMask == 0) every pixel shines equally.
+            float foilMaskVal = (uHasFoilMask > 0.5)
+                ? texture2D(uFoilMask, vUv).r
+                : 1.0;
+
+            // High-contrast metallic foil layer
+            vec3 metallicFoil = pow(foilColor, vec3(1.6)) * 1.35;
+            
+            // Premium Metallic Blend (Hybrid Overlay/Soft-Light)
+            vec3 blend = texColor.rgb + (metallicFoil - 0.5) * (1.0 - abs(2.0 * texColor.rgb - 1.0));
+            
+            float strength = intensity * inkMask * paperMask * edgeMask * dampen * foilMaskVal * 0.9;
+            vec3 finalColor = mix(texColor.rgb, blend, strength);
+            
+            // Re-render only the alpha channel correctly
+            finalColor = clamp(finalColor, 0.0, 1.0);
+            gl_FragColor = vec4(finalColor, texColor.a);
+        }
+    `;
+
+    const proxyUrl = `/api/img-proxy?url=${encodeURIComponent(imageUrl)}`;
+    fetch(proxyUrl, { mode: 'same-origin', cache: 'force-cache' })
+        .then(res => {
+            if (!res.ok) throw new Error('Proxy error');
+            return res.blob();
+        })
+        .then(blob => {
+            const objectUrl = URL.createObjectURL(blob);
+            new THREE.TextureLoader().load(objectUrl, (texture) => {
+                URL.revokeObjectURL(objectUrl);
+                texture.minFilter = THREE.LinearFilter;
+                texture.generateMipmaps = false;
+
+                const imgW = texture.image.width  || 524;
+                const imgH = texture.image.height || 730;
+
+                // Resize the flip-scene to match the card's actual aspect ratio now that we know it.
+                sizeCardDetailArtFromImage(imgW, imgH);
+
+                // Update internal resolution only — preserve CSS width/height:100%
+                renderer.setSize(imgW, imgH, false);
+                camera.left   = imgW / -2; camera.right  = imgW / 2;
+                camera.top    = imgH /  2; camera.bottom = imgH / -2;
+                camera.updateProjectionMatrix();
+
+                const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uImage:         { value: texture },
+                        uFoilMask:      { value: texture },   // default = art itself (replaced once mask loads)
+                        uHasFoilMask:   { value: 0.0 },       // 0 = no mask, use uniform full-foil
+                        uMouse:         { value: new THREE.Vector2(0.5, 0.5) },
+                        uTime:          { value: 0.0 },
+                        uFoilIntensity: { value: 0.0 },
+                        uRarityMult:    { value: uRarityMultVal },
+                        uResolution:    { value: new THREE.Vector2(imgW, imgH) }
+                    },
+                    vertexShader,
+                    fragmentShader,
+                    transparent: true
+                });
+
+                // Load per-layer foil mask if the card has one
+                if (foilMaskUrl) {
+                    const maskProxyUrl = `/api/img-proxy?url=${encodeURIComponent(foilMaskUrl)}`;
+                    fetch(maskProxyUrl, { mode: 'same-origin', cache: 'force-cache' })
+                        .then(r => r.ok ? r.blob() : Promise.reject())
+                        .then(blob => {
+                            const maskObjectUrl = URL.createObjectURL(blob);
+                            new THREE.TextureLoader().load(maskObjectUrl, (maskTex) => {
+                                URL.revokeObjectURL(maskObjectUrl);
+                                maskTex.minFilter = THREE.LinearFilter;
+                                maskTex.generateMipmaps = false;
+                                if (material && !material.disposed) {
+                                    material.uniforms.uFoilMask.value  = maskTex;
+                                    material.uniforms.uHasFoilMask.value = 1.0;
+                                }
+                            });
+                        })
+                        .catch(() => { /* mask failed — fall back to uniform foil silently */ });
+                }
+
+                const geometry = new THREE.PlaneGeometry(imgW, imgH);
+                threeScene.add(new THREE.Mesh(geometry, material));
+
+                const clock = new THREE.Clock();
+                const lerpTarget = new THREE.Vector2(0.5, 0.5);
+                let rafId      = null;
+                let firstFrame = true;
+                let imgFadeTimer = null;
+
+                container.__threeCleanup = () => {
+                    cancelAnimationFrame(rafId);
+                    clearTimeout(imgFadeTimer);
+                    renderer.dispose();
+                    geometry.dispose();
+                    // Dispose mask texture if it was replaced with the actual mask
+                    const maskTex = material.uniforms.uFoilMask?.value;
+                    if (maskTex && maskTex !== texture) maskTex.dispose();
+                    material.disposed = true;
+                    material.dispose();
+                    texture.dispose();
+                    if (renderer.domElement.parentElement) renderer.domElement.parentElement.removeChild(renderer.domElement);
+                    if (parentScene) parentScene.classList.remove('three-active');
+                    container.__threeCleanup = null;
+                };
+
+                function animate() {
+                    if (!container.isConnected) { container.__threeCleanup?.(); return; }
+                    rafId = requestAnimationFrame(animate);
+
+                    // Respect prefers-reduced-motion: freeze time-based animation
+                    if (!prefersReducedMotion()) {
+                        material.uniforms.uTime.value = clock.getElapsedTime();
+                    }
+
+                    if (parentScene) {
+                        const { x: mx, y: my, holoO } = _cardDetailFoilState;
+
+                        if (window.gsap) {
+                            gsap.to(material.uniforms.uMouse.value,    { x: mx, y: 1.0 - my, duration: 0.4,  ease: 'power2.out', overwrite: true });
+                            gsap.to(material.uniforms.uFoilIntensity,  { value: holoO,        duration: 0.3,  ease: 'power1.out', overwrite: true });
+                        } else {
+                            lerpTarget.set(mx, 1.0 - my);
+                            material.uniforms.uMouse.value.lerp(lerpTarget, 0.15);
+                            material.uniforms.uFoilIntensity.value += (holoO - material.uniforms.uFoilIntensity.value) * 0.15;
+                        }
+                    }
+
+                    renderer.render(threeScene, camera);
+
+                    // First rendered frame: fade canvas in, then fade out the underlying img
+                    if (firstFrame) {
+                        firstFrame = false;
+                        renderer.domElement.style.opacity = '1';
+                        if (parentScene) parentScene.classList.add('three-active');
+                        const underImg = container.querySelector('#card-detail-image');
+                        if (underImg) imgFadeTimer = setTimeout(() => { underImg.style.opacity = '0'; }, 320);
+                    }
+                }
+                animate();
+            }, undefined, () => showCSSFallback());
+        })
+        .catch(() => showCSSFallback());
+}
+
 
 /** Shipped default booster pack art (`public/default_pack.png`) */
 const DEFAULT_PACK_IMAGE_URL = '/default_pack.png';
@@ -738,7 +1021,7 @@ window.addEventListener('error', function (e) {
         if (isAvatar) {
             e.target.src = 'https://api.dicebear.com/9.x/avataaars/svg?seed=fallback';
         } else {
-            e.target.src = '/pack.png';
+            e.target.src = '';
         }
     }
 }, true);
@@ -760,6 +1043,12 @@ const ITEMS_PER_PAGE = 9;
 let lastCardId = null;
 let authInProgress = false;
 let csrfToken = null;
+
+function syncCsrfToWindow() {
+    try {
+        window.csrfToken = csrfToken;
+    } catch (e) { /* ignore */ }
+}
 
 
 const CARD_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
@@ -1555,13 +1844,22 @@ function parseRoute() {
             routeInfo.view = 'home';
         }
     } else if (parts.length === 1) {
-        const reserved = ['onboarding', 'login', 'logout', 'dashboard', 'hub', 'profile', 'privacy', 'terms', 'cookies', '404', 'auth', 'api', 'obs-overlay'];
+        // Account settings are a dedicated page (settings.html); avoid loading the SPA shell on /settings or /profile.
+        if (parts[0] === 'settings' || parts[0] === 'profile') {
+            window.location.replace('/settings');
+            return;
+        }
+        const reserved = ['onboarding', 'login', 'logout', 'dashboard', 'hub', 'privacy', 'terms', 'cookies', '404', 'auth', 'api', 'obs-overlay'];
         if (reserved.includes(parts[0])) {
             routeInfo.view = parts[0];
             routeInfo.slug = null;
         } else {
-            console.log("[Router] Single part route detected. Redirecting to binder...");
-            window.location.replace(`/binder/${parts[0]}`);
+            // Load the creator collection page while keeping the URL clean.
+            // fetch + document.write keeps the browser at /codeoce with no redirect.
+            // After the Worker is deployed this branch never runs — the Worker serves
+            // collection.html directly before index.html ever loads.
+            console.log("[Router] Single part route → redirecting to creator collection page.");
+            window.location.replace(`/collection.html?slug=${encodeURIComponent(parts[0])}`);
             return;
         }
     } else {
@@ -1704,7 +2002,7 @@ function showCardToast(card) {
 
     toast.innerHTML = `
             <div class="toast-card-thumb">
-                <img src="${card.image_url}" alt="${escapeHTML(card.name)}">
+                <img src="${resolveCardImageUrl(card)}" alt="${escapeHTML(card.name)}">
             </div>
             <div class="toast-card-details">
                 <div class="toast-card-rarity">${escapeHTML(card.rarity)}</div>
@@ -1847,7 +2145,7 @@ function revealNextCard() {
 
     slot.innerHTML = `
             <div class="card-reveal h-full w-full relative" style="perspective:800px">
-                <img src="${card.image_url}" alt="${escapeHTML(card.name)}" class="h-full w-full object-cover rounded-2xl shadow-2xl" style="border: 2px solid ${rarityColor}40; box-shadow: 0 0 30px ${rarityColor}30;">
+                <img src="${resolveCardImageUrl(card)}" alt="${escapeHTML(card.name)}" class="h-full w-full object-cover rounded-2xl shadow-2xl" style="border: 2px solid ${rarityColor}40; box-shadow: 0 0 30px ${rarityColor}30;">
                 <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent rounded-b-2xl">
                     <div class="text-[9px] font-black uppercase tracking-[0.2em] mb-0.5" style="color:${rarityColor}">${escapeHTML(card.rarity)}</div>
                     <div class="text-sm font-black text-white leading-tight">${escapeHTML(card.name)}</div>
@@ -1950,14 +2248,13 @@ async function initializeApp() {
     window.scrollTo(0, 0);
     parseRoute();
 
-
     await loadModals();
 
 
     if (routeInfo.view === 'hub') {
         await loadView('hub');
         await loadView('viewer-dashboard');
-    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder' || routeInfo.view === 'profile') {
+    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
         await loadView('viewer-dashboard');
     } else if (routeInfo.view === 'streamer-profile') {
         await loadView('streamer-profile');
@@ -1985,7 +2282,7 @@ async function initializeApp() {
     } else if (routeInfo.view === 'streamer-profile') {
         const profile = document.getElementById('streamer-profile-view');
         if (profile) profile.classList.remove('hidden');
-    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder' || routeInfo.view === 'profile') {
+    } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
         const dashboard = document.getElementById('dashboard-view');
         if (dashboard) dashboard.classList.remove('hidden');
 
@@ -2069,14 +2366,20 @@ async function initializeApp() {
                     APP_STREAMER = bootstrap.streamer;
                     applyBranding(APP_STREAMER);
                 }
-                if (bootstrap.csrf_token) csrfToken = bootstrap.csrf_token;
+                if (bootstrap.csrf_token) {
+                    csrfToken = bootstrap.csrf_token;
+                    syncCsrfToWindow();
+                }
             }
         } catch (e) {  }
         freshFetchPromise = doFetch()
             .then((fresh) => {
                 if (fresh) {
                     sessionStorage.setItem(cacheKey, JSON.stringify(fresh));
-                    if (fresh.csrf_token) csrfToken = fresh.csrf_token;
+                    if (fresh.csrf_token) {
+                        csrfToken = fresh.csrf_token;
+                        syncCsrfToWindow();
+                    }
                     if (fresh.streamer) {
                         APP_STREAMER = fresh.streamer;
                         applyBranding(APP_STREAMER);
@@ -2089,7 +2392,10 @@ async function initializeApp() {
         bootstrap = await doFetch();
         if (bootstrap) {
             sessionStorage.setItem(cacheKey, JSON.stringify(bootstrap));
-            if (bootstrap.csrf_token) csrfToken = bootstrap.csrf_token;
+            if (bootstrap.csrf_token) {
+                csrfToken = bootstrap.csrf_token;
+                syncCsrfToWindow();
+            }
             if (bootstrap.streamer) {
                 APP_STREAMER = bootstrap.streamer;
                 applyBranding(APP_STREAMER);
@@ -2110,12 +2416,18 @@ async function initializeApp() {
             streamer: bootstrap.user.streamer,
             onboarding_collector_step: bootstrap.user.onboarding_collector_step,
             is_onboarding_complete: bootstrap.user.is_onboarding_complete,
+            trade_code: bootstrap.user.trade_code,
             team_memberships: Array.isArray(bootstrap.user.team_memberships) ? bootstrap.user.team_memberships : [],
             kick_linked: !!bootstrap.user.kick_linked
         };
+        try {
+            window.currentUser = currentUser;
+        } catch (e) { /* ignore */ }
 
-
-        if (bootstrap.csrf_token) csrfToken = bootstrap.csrf_token;
+        if (bootstrap.csrf_token) {
+            csrfToken = bootstrap.csrf_token;
+            syncCsrfToWindow();
+        }
         if (bootstrap.streamer) {
             APP_STREAMER = bootstrap.streamer;
             applyBranding(APP_STREAMER);
@@ -2166,6 +2478,7 @@ async function initializeApp() {
                         window.location.href = '/onboarding.html?role=collector';
                     } else {
 
+                        if (window.__collectionPageActive) return; // collection page injected — don't re-render SPA
                         console.log("[App] Background fetch complete. Refreshing UI snap...");
                         if (currentUser && freshBootstrap.user) {
                             currentUser.streamer = freshBootstrap.user.streamer;
@@ -2181,6 +2494,9 @@ async function initializeApp() {
                             if (currentUser.streamer && !viewingBinderBySlug) {
                                 applyBranding(currentUser.streamer);
                             }
+                            try {
+                                window.currentUser = currentUser;
+                            } catch (e) { /* ignore */ }
                         }
                         if (routeInfo.view === 'hub') {
                             // Background fetch started at page load; it may finish AFTER the user toggled a
@@ -2196,7 +2512,7 @@ async function initializeApp() {
                         } else if (routeInfo.view === 'streamer-profile') {
                             applyLoggedInSessionChrome();
                             await renderStreamerProfile(freshBootstrap);
-                        } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder' || routeInfo.view === 'profile') {
+                        } else if (routeInfo.view === 'dashboard' || routeInfo.view === 'binder') {
                             if (routeInfo.view === 'binder' && routeInfo.slug) {
                                 await resolveStreamer();
                             }
@@ -2281,7 +2597,7 @@ async function initializeApp() {
 
     } else {
 
-        if (routeInfo.view === 'dashboard' || routeInfo.view === 'profile') {
+        if (routeInfo.view === 'dashboard') {
             window.location.href = `${BACKEND_URL}/auth/twitch?role=viewer`;
             return;
         } else if (routeInfo.view === 'binder') {
@@ -2520,7 +2836,10 @@ async function toggleFavorite(streamerId) {
                 return;
             }
             const boot = await bootRes.json();
-            if (boot.csrf_token) csrfToken = boot.csrf_token;
+            if (boot.csrf_token) {
+                csrfToken = boot.csrf_token;
+                syncCsrfToWindow();
+            }
             try {
                 const hubCacheKey = `bootstrap_${BACKEND_URL}/api/bootstrap?streamer=all&lite=1`;
                 sessionStorage.setItem(hubCacheKey, JSON.stringify(boot));
@@ -2691,327 +3010,11 @@ async function fetchCSRFToken() {
         if (res.ok) {
             const data = await res.json();
             csrfToken = data.token;
+            syncCsrfToWindow();
         }
     } catch (e) {
         console.error('CSRF token fetch failed:', e);
     }
-}
-
-let viewerProfileSettingsInitialized = false;
-
-function setViewerProfileTab(tab) {
-    const active = 'border-void-accent text-void-text bg-void-accent/10';
-    const inactive = 'border-transparent text-void-muted hover:text-void-text';
-    document.querySelectorAll('.profile-settings-tab').forEach((btn) => {
-        const t = btn.getAttribute('data-profile-tab');
-        const on = t === tab;
-        btn.className = `profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border ${on ? active : inactive}`;
-    });
-    const panels = {
-        channels: document.getElementById('profile-panel-channels'),
-        transactions: document.getElementById('profile-panel-transactions'),
-        security: document.getElementById('profile-panel-security')
-    };
-    Object.entries(panels).forEach(([k, el]) => {
-        if (!el) return;
-        el.classList.toggle('hidden', k !== tab);
-    });
-}
-
-function initViewerProfileSettingsOnce() {
-    if (viewerProfileSettingsInitialized) return;
-    viewerProfileSettingsInitialized = true;
-
-    document.querySelectorAll('.profile-settings-tab').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const tab = btn.getAttribute('data-profile-tab');
-            if (tab) setViewerProfileTab(tab);
-        });
-    });
-
-    document.getElementById('viewer-settings-copy-code')?.addEventListener('click', () => {
-        const el = document.getElementById('viewer-settings-castle-code');
-        const code = el ? el.textContent.trim() : '';
-        if (!code || code === '…' || code === '—') return;
-        navigator.clipboard.writeText(code).then(
-            () => {
-                if (typeof showToast === 'function') showToast('Castle code copied!', 'success');
-            },
-            () => { /* ignore */ }
-        );
-    });
-
-    document.getElementById('viewer-block-streamer-btn')?.addEventListener('click', () => {
-        void addViewerStreamerBlock();
-    });
-
-    document.getElementById('viewer-open-delete-account-modal')?.addEventListener('click', () => {
-        const modal = document.getElementById('viewer-delete-account-modal');
-        const input = document.getElementById('viewer-delete-confirm-input');
-        if (input) input.value = '';
-        modal?.classList.remove('hidden');
-        if (typeof scrollLock === 'function') scrollLock();
-    });
-
-    document.getElementById('viewer-delete-cancel-btn')?.addEventListener('click', () => {
-        document.getElementById('viewer-delete-account-modal')?.classList.add('hidden');
-        if (typeof scrollUnlock === 'function') scrollUnlock();
-    });
-
-    document.getElementById('viewer-delete-submit-btn')?.addEventListener('click', () => {
-        void submitViewerDeleteAccount();
-    });
-
-    document.getElementById('viewer-delete-account-modal')?.addEventListener('click', (e) => {
-        if (e.target && e.target.id === 'viewer-delete-account-modal') {
-            e.currentTarget.classList.add('hidden');
-            if (typeof scrollUnlock === 'function') scrollUnlock();
-        }
-    });
-}
-
-async function renderViewerSettingsConnections() {
-    const wrap = document.getElementById('viewer-settings-connections');
-    if (!wrap) return;
-
-    let auth = { auth_provider: 'twitch', kick_linked: !!(currentUser && currentUser.kick_linked), twitch: {}, kick: null };
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/auth/twitch-status`, { credentials: 'include' });
-        if (res.ok) auth = { ...auth, ...(await res.json()) };
-    } catch (e) { /* ignore */ }
-
-    const role = currentUser && currentUser.is_creator ? 'creator' : 'viewer';
-    const kickHref = `${BACKEND_URL}/auth/kick?mode=link&role=${role}`;
-    const twitchHref = `${BACKEND_URL}/auth/twitch?role=${role}&reauth=1`;
-
-    const isKickPrimary = auth.auth_provider === 'kick';
-    const twOk = !isKickPrimary && auth.twitch && auth.twitch.token_valid && !auth.twitch.needs_reauth;
-    const kickOk = auth.kick_linked && auth.kick && auth.kick.token_valid && !auth.kick.needs_reauth;
-
-    const chip = (label, ok, href, iconClass, accent) => {
-        const st = ok ? 'Connected' : 'Refresh';
-        return `
-            <a href="${href}" class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest hover:border-void-accent/30 transition-colors shadow-sm shadow-black/20">
-                <i class="${iconClass} ${accent} text-sm"></i>
-                <span>${label}</span>
-                <span class="text-[9px] font-black ${ok ? 'text-emerald-400/90' : 'text-amber-400/90'}">${st}</span>
-            </a>`;
-    };
-
-    wrap.innerHTML = `${chip('Twitch', twOk, twitchHref, 'fa-brands fa-twitch', 'text-[#9146FF]')}
-        ${chip('Kick', kickOk, kickHref, 'fa-solid fa-k', 'text-[#53FC18]')}`;
-}
-
-function renderViewerTeamList() {
-    const teamList = document.getElementById('viewer-settings-team-list');
-    const empty = document.getElementById('viewer-settings-team-empty');
-    const teams = (currentUser && Array.isArray(currentUser.team_memberships)) ? currentUser.team_memberships : [];
-    if (!teamList) return;
-    if (teams.length === 0) {
-        teamList.innerHTML = '';
-        if (empty) empty.classList.remove('hidden');
-        return;
-    }
-    if (empty) empty.classList.add('hidden');
-    teamList.innerHTML = teams
-        .map((m) => {
-            const s = m.streamer || m;
-            const name = s.brand_name || s.display_name || s.username || 'Channel';
-            const role = (m.role || m.team_role || 'team').toString();
-            const uname = s.username || '';
-            const avatar = s.avatar_url || s.brand_logo_url || '/assets/default-avatar.png';
-            return `
-                <div class="flex items-center justify-between gap-4 py-3 px-4 rounded-xl border border-white/5 bg-black/30 hover:border-white/10 transition-colors">
-                    <div class="flex items-center gap-3 min-w-0">
-                        <img src="${escapeHTML(avatar)}" alt="" class="w-11 h-11 rounded-xl object-cover border border-white/10 shrink-0 shadow-md shadow-black/30" />
-                        <div class="min-w-0">
-                            <div class="text-sm font-display font-black text-white uppercase italic tracking-tight truncate">${escapeHTML(name)}</div>
-                            <div class="text-[9px] font-black uppercase tracking-[0.2em] text-void-muted">${escapeHTML(role)}</div>
-                        </div>
-                    </div>
-                    ${uname ? `<a href="/binder/${encodeURIComponent(uname)}" class="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-void-accent border border-void-accent/25 bg-void-accent/5 hover:bg-void-accent/15 shrink-0 transition-colors">Open</a>` : ''}
-                </div>`;
-        })
-        .join('');
-}
-
-async function loadViewerBlockedStreamers() {
-    const listEl = document.getElementById('viewer-blocked-list');
-    if (!listEl) return;
-    listEl.innerHTML = '<p class="text-[10px] font-black uppercase tracking-widest text-void-muted py-2">Loading…</p>';
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/user/blocked-streamers`, { credentials: 'include' });
-        if (!res.ok) {
-            listEl.innerHTML = `<p class="text-xs text-red-400/90">Could not load blocks (${res.status})</p>`;
-            return;
-        }
-        const rows = await res.json();
-        if (!Array.isArray(rows) || rows.length === 0) {
-            listEl.innerHTML = '<p class="text-xs text-void-muted/80 italic py-2 border border-dashed border-white/10 rounded-xl px-4">No channels blocked.</p>';
-            return;
-        }
-        listEl.innerHTML = rows
-            .map((row) => {
-                const s = row.streamer || {};
-                const label = s.brand_name || s.display_name || s.username || row.streamer_id;
-                const sid = row.streamer_id;
-                return `
-                    <div class="flex items-center justify-between gap-3 py-3 px-4 rounded-xl border border-white/5 bg-black/30 hover:border-white/10 transition-colors">
-                        <span class="text-sm font-display font-black text-white uppercase italic tracking-tight truncate">${escapeHTML(String(label))}</span>
-                        <button type="button" class="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-red-400 border border-red-500/25 bg-red-500/5 hover:bg-red-500/15 viewer-unblock-btn transition-colors" data-streamer-id="${escapeHTML(String(sid))}">Remove</button>
-                    </div>`;
-            })
-            .join('');
-        listEl.querySelectorAll('.viewer-unblock-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const id = btn.getAttribute('data-streamer-id');
-                if (id) void removeViewerStreamerBlock(id);
-            });
-        });
-    } catch (e) {
-        listEl.innerHTML = '<p class="text-xs text-red-400/90">Could not load blocks.</p>';
-    }
-}
-
-async function addViewerStreamerBlock() {
-    const input = document.getElementById('viewer-block-streamer-input');
-    const raw = (input && input.value) ? input.value.trim() : '';
-    if (!raw) {
-        if (typeof showToast === 'function') showToast('Enter a creator username.', 'error');
-        return;
-    }
-    if (!csrfToken) await fetchCSRFToken();
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/user/blocked-streamers`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken || '' },
-            body: JSON.stringify({ username: raw })
-        });
-        const errData = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            const msg = errData && errData.error ? errData.error : 'Could not block channel';
-            if (typeof showToast === 'function') showToast(String(msg), 'error');
-            return;
-        }
-        if (input) input.value = '';
-        if (typeof showToast === 'function') showToast('Channel blocked', 'success');
-        await loadViewerBlockedStreamers();
-    } catch (e) {
-        if (typeof showToast === 'function') showToast('Network error', 'error');
-    }
-}
-
-async function removeViewerStreamerBlock(streamerId) {
-    if (!csrfToken) await fetchCSRFToken();
-    try {
-        const res = await fetch(
-            `${BACKEND_URL}/api/user/blocked-streamers?streamer_id=${encodeURIComponent(streamerId)}`,
-            {
-                method: 'DELETE',
-                credentials: 'include',
-                headers: { 'X-CSRF-Token': csrfToken || '' }
-            }
-        );
-        const errData = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            const msg = errData && errData.error ? errData.error : 'Could not remove block';
-            if (typeof showToast === 'function') showToast(String(msg), 'error');
-            return;
-        }
-        if (typeof showToast === 'function') showToast('Block removed', 'success');
-        await loadViewerBlockedStreamers();
-    } catch (e) {
-        if (typeof showToast === 'function') showToast('Network error', 'error');
-    }
-}
-
-async function submitViewerDeleteAccount() {
-    const input = document.getElementById('viewer-delete-confirm-input');
-    const phrase = (input && input.value) ? input.value.trim() : '';
-    if (phrase !== 'DELETE MY CASTLE ACCOUNT') {
-        if (typeof showToast === 'function') showToast('Type the confirmation phrase exactly.', 'error');
-        return;
-    }
-    if (!csrfToken) await fetchCSRFToken();
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/user/delete-account`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken || '' },
-            body: JSON.stringify({ confirmation: phrase })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            const msg = data && data.error ? data.error : 'Could not delete account';
-            if (typeof showToast === 'function') showToast(String(msg), 'error');
-            return;
-        }
-        try {
-            sessionStorage.clear();
-        } catch (_) { /* ignore */ }
-        window.location.href = '/login';
-    } catch (e) {
-        if (typeof showToast === 'function') showToast('Network error', 'error');
-    }
-}
-
-async function populateProfileView() {
-    if (!currentUser) return;
-    initViewerProfileSettingsOnce();
-    setViewerProfileTab('channels');
-
-    const av = document.getElementById('viewer-settings-avatar');
-    if (av) av.src = currentUser.avatar || '/assets/default-avatar.png';
-
-    const nameEl = document.getElementById('viewer-settings-display-name');
-    if (nameEl) nameEl.textContent = currentUser.display_name || currentUser.name || '—';
-
-    const roleBadge = document.getElementById('viewer-settings-role-badge');
-    if (roleBadge) {
-        if (currentUser.is_creator) {
-            roleBadge.textContent = 'CREATOR';
-            roleBadge.className =
-                'text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-void-accent/20 text-void-accent border border-void-accent/30';
-        } else if (currentUser.team_memberships && currentUser.team_memberships.length) {
-            roleBadge.textContent = 'TEAM';
-            roleBadge.className =
-                'text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25';
-        } else {
-            roleBadge.textContent = 'COLLECTOR';
-            roleBadge.className =
-                'text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-white/10 text-void-muted border border-white/10';
-        }
-    }
-
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/trade/code`, { credentials: 'include' });
-        if (res.ok) {
-            const d = await res.json();
-            const c = document.getElementById('viewer-settings-castle-code');
-            if (c) c.textContent = d.trade_code || '—';
-        }
-    } catch (e) { /* ignore */ }
-
-    const upgradeCard = document.getElementById('viewer-settings-upgrade-card');
-    if (upgradeCard) {
-        upgradeCard.classList.toggle('hidden', !!currentUser.is_creator);
-    }
-
-    const cpPanel = document.getElementById('viewer-settings-channel-points-panel');
-    if (cpPanel) {
-        cpPanel.classList.toggle('hidden', !currentUser.is_creator);
-    }
-
-    const kickLink = document.getElementById('viewer-settings-link-kick');
-    if (kickLink) {
-        const role = currentUser.is_creator ? 'creator' : 'viewer';
-        kickLink.href = `${BACKEND_URL}/auth/kick?mode=link&role=${role}`;
-    }
-
-    await renderViewerSettingsConnections();
-    renderViewerTeamList();
-    await loadViewerBlockedStreamers();
 }
 
 async function checkCreatorSetupStatus() {
@@ -3411,10 +3414,9 @@ function renderCreatorCardsGrid() {
                 ${isSelected ? '<i class="fa-solid fa-check text-white text-xs"></i>' : ''}
             </div>
         ` : ''}
-        <img src="${escapeHTML(card.image_url || '/pack.png')}" alt="${escapeHTML(card.name || 'Card')}" 
+        <img src="${escapeHTML(card.image_url || '')}" alt="${escapeHTML(card.name || 'Card')}" 
             class="w-full h-full object-cover ${isSelected ? 'opacity-75' : ''}" 
-            loading="lazy"
-            onerror="this.src='/pack.png'">
+            loading="lazy">
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
             <div class="absolute bottom-0 left-0 right-0 p-3">
                 <div class="text-xs font-black text-white uppercase truncate">${escapeHTML(card.name || 'Unnamed Card')}</div>
@@ -3727,7 +3729,7 @@ function renderEditorGrid(cards) {
         return `
         <div class="glass-panel rounded-2xl border border-white/5 overflow-hidden group hover:border-void-accent/40 transition-all flex flex-col">
             <div class="aspect-[5/7] relative overflow-hidden bg-black/40">
-                <img src="${escapeHTML(card.image_url || '/pack.png')}" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-700">
+                <img src="${escapeHTML(card.image_url || '')}" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-700">
                 <div class="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
                     <div class="flex items-center justify-between">
                         <span class="text-[8px] font-black uppercase tracking-widest text-void-accent">${escapeHTML(card.rarity)}</span>
@@ -3989,7 +3991,7 @@ async function saveCard() {
     showToast("Creating card...", "loading");
 
     try {
-        let imageUrl = '/pack.png';
+        let imageUrl = '';
 
 
         let blobToUpload = _cardCreatorProcessedBlob;
@@ -5232,7 +5234,7 @@ renderCreatorCardsGrid = function () {
                 ${isSelected ? '<i class="fa-solid fa-check text-white text-xs"></i>' : ''}
             </div>
         ` : ''}
-        <img src="${card.image_url || '/pack.png'}" alt="${card.name}" class="w-full h-full object-cover">
+        <img src="${card.image_url || ''}" alt="${card.name}" class="w-full h-full object-cover">
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
             <div class="absolute bottom-0 left-0 right-0 p-3">
                 <div class="text-xs font-black text-white uppercase">${card.name}</div>
@@ -5729,7 +5731,7 @@ function renderCardPerformance() {
         topCollected.innerHTML = data.most_collected.slice(0, 5).map((card, idx) => `
         <div class="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all">
             <div class="w-8 h-8 rounded bg-void-accent/20 flex items-center justify-center text-xs font-black">${idx + 1}</div>
-            <img src="${card.image_url || '/pack.png'}" alt="${card.name}" class="w-12 h-16 rounded object-cover">
+            <img src="${card.image_url || ''}" alt="${card.name}" class="w-12 h-16 rounded object-cover">
             <div class="flex-1">
                 <div class="text-sm font-black text-void-text">${card.name}</div>
                 <div class="text-[9px] text-void-muted">${card.collection_count || 0} collected</div>
@@ -5742,7 +5744,7 @@ function renderCardPerformance() {
         rarest.innerHTML = data.rarest.slice(0, 5).map((card, idx) => `
         <div class="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all">
             <div class="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center text-xs font-black">${idx + 1}</div>
-            <img src="${card.image_url || '/pack.png'}" alt="${card.name}" class="w-12 h-16 rounded object-cover">
+            <img src="${card.image_url || ''}" alt="${card.name}" class="w-12 h-16 rounded object-cover">
             <div class="flex-1">
                 <div class="text-sm font-black text-void-text">${card.name}</div>
                 <div class="text-[9px] text-void-muted">${card.collection_count || 0} collected</div>
@@ -6997,16 +6999,16 @@ async function setupWizardComplete() {
                 battleRewardId: setupWizardData.twitch.battleRewardId
             },
             genesis: [
-                { rarity: 'common', name: document.getElementById('setup-genesis-1-name')?.value || 'Starter Common', image_url: document.getElementById('setup-genesis-1-preview')?.src || '/pack.png' },
-                { rarity: 'rare', name: document.getElementById('setup-genesis-2-name')?.value || 'Starter Rare', image_url: document.getElementById('setup-genesis-2-preview')?.src || '/pack.png' },
-                { rarity: 'legendary', name: document.getElementById('setup-genesis-3-name')?.value || 'Starter Legendary', image_url: document.getElementById('setup-genesis-3-preview')?.src || '/pack.png' }
+                { rarity: 'common', name: document.getElementById('setup-genesis-1-name')?.value || 'Starter Common', image_url: document.getElementById('setup-genesis-1-preview')?.src || '' },
+                { rarity: 'rare', name: document.getElementById('setup-genesis-2-name')?.value || 'Starter Rare', image_url: document.getElementById('setup-genesis-2-preview')?.src || '' },
+                { rarity: 'legendary', name: document.getElementById('setup-genesis-3-name')?.value || 'Starter Legendary', image_url: document.getElementById('setup-genesis-3-preview')?.src || '' }
             ]
         };
 
 
         payload.genesis = payload.genesis.map(c => ({
             ...c,
-            image_url: c.image_url.startsWith('data:') ? '/pack.png' : c.image_url
+            image_url: c.image_url.startsWith('data:') ? '' : c.image_url
         }));
 
         const res = await fetch(`${BACKEND_URL}/api/creator/onboarding/complete`, {
@@ -7430,6 +7432,7 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
                 fetchUserCollection(bootstrapData.recent_drops);
                 fetchUserBinders();
             }
+            if (!isSnap) loadSavedDecks();
         }
     } else if (routeInfo.view === 'binder' && APP_STREAMER) {
         if (!isSnap) {
@@ -7437,6 +7440,9 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
             window.activeStreamerFilter = null;
             const pageInd = document.getElementById('page-indicator');
             if (pageInd) pageInd.innerText = `${APP_STREAMER.brand_name || APP_STREAMER.username} Binder`;
+            // Point battle widget link to this streamer's battle page
+            const battleLink = document.getElementById('battle-arena-link');
+            if (battleLink) battleLink.href = `/battle?streamer=${APP_STREAMER.username}`;
         }
         if (!bootstrapData) {
             fetchUserCollection();
@@ -7445,14 +7451,10 @@ async function showDashboard(initialView = null, bootstrapData = null, isSnap = 
             fetchUserCollection(bootstrapData.recent_drops);
             fetchUserBinders();
         }
+        if (!isSnap) loadSavedDecks();
     } else if (routeInfo.view === 'battle') {
         if (!isSnap) {
             switchView('battle');
-        }
-    } else if (routeInfo.view === 'profile' && currentUser) {
-        if (!isSnap) {
-            populateProfileView();
-            switchView('profile');
         }
     } else {
         if (isCreator) {
@@ -8548,7 +8550,13 @@ async function fetchUserCollection(initialData = null) {
                 instanceId: item.user_card_id,
                 name: item.name,
                 rarity: item.rarity,
-                image_url: item.image_url,
+                template_id: item.template_id || null,
+                trait_list: item.trait_list || [],
+                image_url: item.baked_image_url
+                    || (item.template_id
+                        ? `${BACKEND_URL}/api/cards/${item.user_card_id}/image.png`
+                        : (item.image_url || '')),
+                foil_mask_url: item.foil_mask_url || null,
                 type: item.type,
                 set_name: item.set_name || 'Ageless',
                 description: item.description,
@@ -9595,7 +9603,7 @@ async function shareBinderPage() {
                 inst &&
                 userCollection.find((c) => c.instanceId === inst);
             if (!card) return;
-            const rawUrl = (card.image_url && String(card.image_url).trim()) ? String(card.image_url) : '/pack.png';
+            const rawUrl = (card.image_url && String(card.image_url).trim()) ? String(card.image_url) : '';
             const imgSrc = rawUrl.replace(/"/g, '%22');
             const rLow = (card.rarity || '').toLowerCase();
             const holoClass = ['rare', 'epic', 'legendary'].includes(rLow) ? ` holo-${rLow}` : '';
@@ -9984,7 +9992,7 @@ function htmlCardDetailTraitVariant(sample, n) {
 /** Card back art for binder detail flip (streamer default or shipped asset). */
 function resolveCardBackUrl() {
     const s = typeof APP_STREAMER !== 'undefined' ? APP_STREAMER : null;
-    if (!s) return '/Castle_Default_Cardback.png';
+    if (!s) return 'https://cdn.codeoce.com/branding/default-card-back-light.png';
     const st = s.settings || {};
     const url = s.card_back_url || st.global_card_back_url || st.card_back_url;
     if (url && String(url).trim()) return String(url).trim();
@@ -10015,7 +10023,13 @@ function syncCollectionFromRows(rows) {
         instanceId: item.user_card_id,
         name: item.name,
         rarity: item.rarity,
-        image_url: item.image_url,
+        template_id: item.template_id || null,
+        trait_list: item.trait_list || [],
+        // Priority: baked CDN URL (stable, immutable) → dynamic worker endpoint (lazy bake) → static art
+        image_url: item.baked_image_url
+            || (item.template_id
+                ? `${BACKEND_URL}/api/cards/${item.user_card_id}/image.png`
+                : (item.image_url || '')),
         type: item.type,
         set_name: item.set_name || 'Ageless',
         description: item.description,
@@ -10258,7 +10272,7 @@ function renderCardInSlot(container, card, isCustomBinder = false) {
     const originBadge = isGlobalView ? `<div class="absolute top-3 left-1/2 -translate-x-1/2 bg-void-bg/95 backdrop-blur-md border border-white/10 rounded-full py-1 px-3 z-20 flex items-center justify-center gap-1.5 shadow-xl shrink-0 whitespace-nowrap"><i class="fa-solid fa-satellite-dish text-[7px] text-void-accent animate-pulse"></i><span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/90">${escapeHTML(creatorName)}</span></div>` : '';
 
 
-    const rawUrl = (card.image_url && card.image_url.trim()) ? String(card.image_url) : '/pack.png';
+    const rawUrl = (card.image_url && card.image_url.trim()) ? String(card.image_url) : '';
     const imgSrc = escapeHTML(rawUrl.replace(/"/g, '%22'));
     
 
@@ -10278,7 +10292,7 @@ function renderCardInSlot(container, card, isCustomBinder = false) {
                 onclick="if(!isEditingBinder) showCardDetail('${escapeHTML(card.instanceId)}')"
                 onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); if(!isEditingBinder) showCardDetail('${escapeHTML(card.instanceId)}'); }">
                 <div class="binder-card-face">
-                    <img src="${imgSrc}" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover z-0" onerror="this.onerror=null;this.src='/pack.png';">
+                    <img src="${imgSrc}" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover z-0" onerror="this.onerror=null;this.src='';">
                     ${holoClass ? `<div class="holo-layer" style="${maskStyle}"></div>` : ''}
                     ${hasShine   ? `<div class="holo-shine" style="${maskStyle}"></div>`  : ''}
                 </div>
@@ -10315,7 +10329,7 @@ function normalizeBinderRarity(card) {
     let r = raw.trim().toLowerCase();
     if (!r) return 'common';
     r = r.replace(/\s+/g, ' ');
-    if (r.includes('legend')) return 'legendary';
+    if (r.includes('legend') || r.includes('leged') || r === 'test') return 'legendary';
     if (r === 'epic' || r.startsWith('epic ')) return 'epic';
     if (r === 'rare' || r.startsWith('rare ')) return 'rare';
     if (r === 'common' || r.startsWith('common ')) return 'common';
@@ -10329,7 +10343,7 @@ function normalizeBinderRarity(card) {
  * Use JSON.stringify for url() — do NOT use escapeHTML() (it turns & into &amp; and breaks query strings).
  */
 function cardDetailHoloMaskStyleFromUrl(rawUrl) {
-    const u = rawUrl && String(rawUrl).trim() ? String(rawUrl) : '/pack.png';
+    const u = rawUrl && String(rawUrl).trim() ? String(rawUrl) : '';
     const urlToken = `url(${JSON.stringify(u)})`;
     return [
         `mask-image: ${urlToken}`,
@@ -10361,10 +10375,19 @@ function applyCardDetailHoloMaskFromUrl(rawUrl, includeShine) {
 
 /** Card detail: idle matches .card-detail-flip-scene.holo-* in CSS; max used while dragging. */
 const CARD_DETAIL_DRAG_FOIL = {
-    rare: { maxH: 0.12, maxS: 0.48, idleH: 0.07, idleS: 0.16, tilt: 15 },
-    epic: { maxH: 0.18, maxS: 0.48, idleH: 0.11, idleS: 0.24, tilt: 15 },
-    legendary: { maxH: 0.26, maxS: 0.48, idleH: 0.16, idleS: 0.36, tilt: 15 }
+    rare:      { maxH: 0.55, maxS: 0.65, idleH: 0.28, idleS: 0.38, tilt: 15, foilAmp: 0.65 },
+    epic:      { maxH: 0.70, maxS: 0.80, idleH: 0.38, idleS: 0.50, tilt: 16, foilAmp: 0.90 },
+    legendary: { maxH: 0.88, maxS: 0.95, idleH: 0.50, idleS: 0.65, tilt: 18, foilAmp: 1.20 }
 };
+
+/** JS mirror of the three CSS custom props written by applyTilt/resetTilt.
+ *  The Three.js animate loop reads from here instead of calling getPropertyValue 3× per frame. */
+const _cardDetailFoilState = { x: 0.5, y: 0.5, holoO: 0.0 };
+
+function prefersReducedMotion() {
+    return typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 
 function getCardDetailDragFoilProfile(scene) {
@@ -10375,19 +10398,33 @@ function getCardDetailDragFoilProfile(scene) {
     return null;
 }
 
+/** Returns a rarity-tinted color for the dynamic rim-light drop-shadow. */
+function getRimColorForScene(scene) {
+    if (!scene) return 'rgba(255,255,255,0.15)';
+    if (scene.classList.contains('holo-legendary')) return 'rgba(255,210,0,0.38)';
+    if (scene.classList.contains('holo-epic'))      return 'rgba(167,139,250,0.32)';
+    if (scene.classList.contains('holo-rare'))      return 'rgba(96,165,250,0.28)';
+    return 'rgba(255,255,255,0.15)';
+}
 
-/** Fixed portrait slot for all cards; art is object-contain inside (same on-screen size for every card). */
-function sizeCardDetailArtFromImage() {
+
+/**
+ * Resize the flip-scene to the card's actual aspect ratio so there is no
+ * letterbox band around the art. Pass the natural image dimensions when known;
+ * falls back to 5:7 if not provided.
+ */
+function sizeCardDetailArtFromImage(imgW, imgH) {
     const scene = document.getElementById('card-detail-flip-scene');
     if (!scene) return;
 
+    const aspect = (imgW && imgH && imgH > 0) ? imgW / imgH : 5 / 7;
     const maxH = Math.min(window.innerHeight * 0.7, 548);
-    const maxW = Math.min(window.innerWidth * 0.92, 358);
+    const maxW = Math.min(window.innerWidth * 0.92, 380);
     let h = maxH;
-    let w = (h * 5) / 7;
+    let w = h * aspect;
     if (w > maxW) {
         w = maxW;
-        h = (w * 7) / 5;
+        h = w / aspect;
     }
     scene.style.width = `${Math.round(w)}px`;
     scene.style.height = `${Math.round(h)}px`;
@@ -10398,9 +10435,17 @@ function sizeCardDetailArtFromImage() {
 function resetCardDetailTiltVisuals() {
     const scene = document.getElementById('card-detail-flip-scene');
     const tilt = scene?.querySelector('.card-detail-tilt-wrap');
+    
+    // Cleanup ThreeJS if active
+    const img = document.getElementById('card-detail-image');
+    if (img && img.parentElement && img.parentElement.__threeCleanup) {
+        img.parentElement.__threeCleanup();
+    }
+
     if (tilt) {
         tilt.style.transition = '';
         tilt.style.transform = '';
+        tilt.style.filter = '';
     }
     if (scene) {
         scene.style.removeProperty('--holo-o');
@@ -10413,14 +10458,12 @@ function resetCardDetailTiltVisuals() {
 }
 
 
-let __cardDetailPointerBound = false;
-
 function initCardDetailCardInteraction() {
     const scene = document.getElementById('card-detail-flip-scene');
-    if (!scene || __cardDetailPointerBound) return;
+    if (!scene || scene.__pointerBound) return;
     const tiltWrap = scene.querySelector('.card-detail-tilt-wrap');
     if (!tiltWrap) return;
-    __cardDetailPointerBound = true;
+    scene.__pointerBound = true;
 
     /** If pointer moves farther than this from the start point at any time, gesture = drag only (no flip on release). */
     const TAP_MOVE_LIMIT_PX = 5;
@@ -10433,9 +10476,16 @@ function initCardDetailCardInteraction() {
     let startX = 0;
     let startY = 0;
 
-    const prefersReduced = () =>
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let _rectCache = null;
+    let _rectCacheTime = 0;
+    function getCachedRect() {
+        const now = performance.now();
+        if (!_rectCache || now - _rectCacheTime > 200) {
+            _rectCache = scene.getBoundingClientRect();
+            _rectCacheTime = now;
+        }
+        return _rectCache;
+    }
 
     function readTiltHoloVars() {
         const p = getCardDetailDragFoilProfile(scene);
@@ -10462,51 +10512,79 @@ function initCardDetailCardInteraction() {
         return (
             scene.classList.contains('holo-rare') ||
             scene.classList.contains('holo-epic') ||
-            scene.classList.contains('holo-legendary')
+            scene.classList.contains('holo-legendary') ||
+            scene.classList.contains('holo-test')
         );
     }
 
-    function applyTilt(clientX, clientY) {
-        if (prefersReduced()) return;
-        const rect = scene.getBoundingClientRect();
+    /**
+     * @param {number}  clientX
+     * @param {number}  clientY
+     * @param {boolean} isHover  true = gentle hover tilt (no click required);
+     *                           false = full-strength drag tilt (default)
+     */
+    function applyTilt(clientX, clientY, isHover = false) {
+        if (prefersReducedMotion()) return;
+        const rect = getCachedRect();
         if (rect.width < 2 || rect.height < 2) return;
         const mx = (clientX - rect.left) / rect.width;
         const my = (clientY - rect.top) / rect.height;
-        const v = readTiltHoloVars();
-        const rx = (0.5 - my) * v.tiltRange;
-        const ry = (mx - 0.5) * v.tiltRange;
-        tiltWrap.style.transition = 'transform 0.05s linear';
-        tiltWrap.style.transform = `perspective(720px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(10px)`;
+        const v  = readTiltHoloVars();
+
+        // Hover tilts at 52 % of max range for a subtle "floating" feel
+        const tiltScale = isHover ? 0.52 : 1.0;
+        const rx = (0.5 - my) * v.tiltRange * tiltScale;
+        const ry = (mx - 0.5) * v.tiltRange * tiltScale;
 
         const foilAngle = (Math.atan2(my - 0.5, mx - 0.5) * 180) / Math.PI;
+
+        tiltWrap.style.transition = isHover
+            ? 'transform 0.22s cubic-bezier(0.23, 1, 0.32, 1)'
+            : 'transform 0.05s linear';
+        tiltWrap.style.transform =
+            `perspective(720px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(${isHover ? 6 : 10}px)`;
+
         scene.style.setProperty('--foil-x', mx.toFixed(5));
         scene.style.setProperty('--foil-y', my.toFixed(5));
         scene.style.setProperty('--foil-angle', foilAngle.toFixed(2));
 
-
         if (hasFoilLayers()) {
-            scene.style.setProperty('--holo-o', String(v.holoMax));
-            scene.style.setProperty('--shine-o', String(v.shineMax));
+            // Hover uses 65 % of max foil intensity — vivid but not blinding
+            const hScale = isHover ? 0.65 : 1.0;
+            const holoO = v.holoMax * hScale;
+            scene.style.setProperty('--holo-o',  holoO.toFixed(5));
+            scene.style.setProperty('--shine-o', (v.shineMax * hScale).toFixed(5));
+            _cardDetailFoilState.x = mx;
+            _cardDetailFoilState.y = my;
+            _cardDetailFoilState.holoO = holoO;
         } else {
-            scene.style.setProperty('--holo-o', '0');
+            scene.style.setProperty('--holo-o',  '0');
             scene.style.setProperty('--shine-o', '0');
+            _cardDetailFoilState.x = mx;
+            _cardDetailFoilState.y = my;
+            _cardDetailFoilState.holoO = 0;
         }
+
         scene.classList.add('is-card-tilting');
     }
 
-
-
     function resetTilt() {
         const v = readTiltHoloVars();
+
         tiltWrap.style.transition = 'transform 0.55s cubic-bezier(0.23, 1, 0.32, 1)';
-        tiltWrap.style.transform = '';
+        tiltWrap.style.transform  = '';
+
         if (hasFoilLayers()) {
-            scene.style.setProperty('--holo-o', String(v.holoIdle));
+            scene.style.setProperty('--holo-o',  String(v.holoIdle));
             scene.style.setProperty('--shine-o', String(v.shineIdle));
+            _cardDetailFoilState.holoO = v.holoIdle;
         } else {
-            scene.style.setProperty('--holo-o', '0');
+            scene.style.setProperty('--holo-o',  '0');
             scene.style.setProperty('--shine-o', '0');
+            _cardDetailFoilState.holoO = 0;
         }
+        _cardDetailFoilState.x = 0.5;
+        _cardDetailFoilState.y = 0.5;
         scene.classList.remove('is-card-tilting');
     }
 
@@ -10519,9 +10597,7 @@ function initCardDetailCardInteraction() {
         startY = e.clientY;
         try {
             scene.setPointerCapture(e.pointerId);
-        } catch (_) {
-            /* ignore */
-        }
+        } catch (_) {}
     });
 
     scene.addEventListener('pointermove', (e) => {
@@ -10530,7 +10606,7 @@ function initCardDetailCardInteraction() {
         maxDistFromStart = Math.max(maxDistFromStart, d);
         if (maxDistFromStart > TAP_MOVE_LIMIT_PX) {
             engagedDrag = true;
-            if (!prefersReduced()) applyTilt(e.clientX, e.clientY);
+            applyTilt(e.clientX, e.clientY);
         }
     });
 
@@ -10539,11 +10615,10 @@ function initCardDetailCardInteraction() {
         dragging = false;
         try {
             scene.releasePointerCapture(e.pointerId);
-        } catch (_) {
-            /* ignore */
-        }
+        } catch (_) {}
+        
         resetTilt();
-        /* Flip only on a true tap: movement never exceeded the limit (drag never engages). */
+        
         if (!engagedDrag) toggleCardDetailFlip();
         engagedDrag = false;
         maxDistFromStart = 0;
@@ -10551,6 +10626,16 @@ function initCardDetailCardInteraction() {
 
     scene.addEventListener('pointerup', endPointer);
     scene.addEventListener('pointercancel', endPointer);
+
+    // Hover tilt: gentle tilt on cursor movement (no click required, option C)
+    scene.addEventListener('mousemove', (e) => {
+        if (dragging) return; // drag handler takes precedence
+        applyTilt(e.clientX, e.clientY, true);
+    });
+
+    scene.addEventListener('mouseleave', () => {
+        if (!dragging) resetTilt();
+    });
 
     scene.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -10562,6 +10647,7 @@ function initCardDetailCardInteraction() {
 
 
 function showCardDetail(instanceId) {
+    ensureGsapLoaded().catch(e => console.error(e));
     console.log("Showing card detail for:", instanceId);
     const card = userCollection.find(c => c.instanceId === instanceId) || uniqueCards.find(c => c.instanceId === instanceId);
     if (!card) {
@@ -10586,8 +10672,8 @@ function showCardDetail(instanceId) {
     const holoShine = document.getElementById('card-detail-holo-shine');
 
     const rLow = normalizeBinderRarity(card);
-    const hasHolo = ['rare', 'epic', 'legendary'].includes(rLow);
-    const hasShine = ['rare', 'epic', 'legendary'].includes(rLow);
+    const hasHolo = ['rare', 'epic', 'legendary', 'test'].includes(rLow);
+    const hasShine = ['rare', 'epic', 'legendary', 'test'].includes(rLow);
 
 
     if (flipScene) {
@@ -10597,50 +10683,52 @@ function showCardDetail(instanceId) {
         if (hasHolo) flipScene.classList.add(`holo-${rLow}`);
     }
 
-    const artUrl = (card.image_url && String(card.image_url).trim()) ? String(card.image_url) : '/pack.png';
+    const artUrl = (card.image_url && String(card.image_url).trim()) ? String(card.image_url) : '';
 
-    if (holoLayer && holoShine) {
-        if (hasHolo) {
-            holoLayer.classList.remove('hidden');
-            if (hasShine) {
-                holoShine.classList.remove('hidden');
-            } else {
-                holoShine.classList.add('hidden');
-            }
-            applyCardDetailHoloMaskFromUrl(artUrl, hasShine);
-        } else {
-            holoLayer.classList.add('hidden');
-            holoLayer.removeAttribute('style');
-            holoShine.classList.add('hidden');
-            holoShine.removeAttribute('style');
+    if (holoLayer) {
+        holoLayer.classList.add('hidden');
+        holoLayer.removeAttribute('style');
+    }
+    if (holoShine) {
+        holoShine.classList.add('hidden');
+        holoShine.removeAttribute('style');
+    }
+
+    if (flipScene && hasHolo) {
+        const foil = CARD_DETAIL_DRAG_FOIL[rLow];
+        if (foil) {
+            flipScene.style.setProperty('--holo-o', String(foil.idleH));
+            flipScene.style.setProperty('--shine-o', String(foil.idleS));
         }
-        if (flipScene && hasHolo) {
-            const foil = CARD_DETAIL_DRAG_FOIL[rLow];
-            if (foil) {
-                flipScene.style.setProperty('--holo-o', String(foil.idleH));
-                flipScene.style.setProperty('--shine-o', String(foil.idleS));
-            }
-        } else if (flipScene) {
-            flipScene.style.setProperty('--holo-o', '0');
-            flipScene.style.setProperty('--shine-o', '0');
-        }
+    } else if (flipScene) {
+        flipScene.style.setProperty('--holo-o', '0');
+        flipScene.style.setProperty('--shine-o', '0');
     }
 
     if (img) {
-        img.src = artUrl;
         img.onload = function () {
-            if (!['rare', 'epic', 'legendary'].includes(normalizeBinderRarity(card))) return;
-            applyCardDetailHoloMaskFromUrl(this.currentSrc || this.src || artUrl, hasShine);
+            sizeCardDetailArtFromImage(this.naturalWidth, this.naturalHeight);
         };
-        img.onerror = function () {
-            this.onerror = null;
-            this.src = '/pack.png';
-            if (['rare', 'epic', 'legendary'].includes(normalizeBinderRarity(card))) {
-                applyCardDetailHoloMaskFromUrl('/pack.png', hasShine);
-            }
-        };
-        if (hasHolo && img.complete && img.naturalWidth) {
-            applyCardDetailHoloMaskFromUrl(img.currentSrc || img.src, hasShine);
+        img.src = artUrl;
+
+        // Always keep img visible while Three.js loads — render3DCard fades it out once canvas is ready
+        img.style.opacity = '1';
+        img.style.transition = 'opacity 0.4s ease';
+
+        if (hasHolo && artUrl) {
+            // Pre-init the foil state so Three.js renders the idle shimmer immediately
+            const profile = CARD_DETAIL_DRAG_FOIL[rLow] || CARD_DETAIL_DRAG_FOIL.legendary;
+            _cardDetailFoilState.holoO = profile.idleH || 0;
+            _cardDetailFoilState.x = 0.5;
+            _cardDetailFoilState.y = 0.5;
+
+            ensureThreeLoaded().then(() => {
+                render3DCard(img.parentElement, artUrl, rLow, card.foil_mask_url || null);
+            }).catch(() => {
+                // Three.js script failed to load — activate CSS holo layers as fallback
+                if (holoLayer) { holoLayer.classList.remove('hidden'); applyCardDetailHoloMaskFromUrl(artUrl, true); }
+                if (holoShine)   holoShine.classList.remove('hidden');
+            });
         }
     }
     if (backImg) {
@@ -11020,10 +11108,10 @@ function renderDustSellGrid() {
         return `
         <div class="dust-sell-card cursor-grab active:cursor-grabbing rounded-xl overflow-hidden border border-white/10 transition-all group" draggable="true" data-user-card-id="${card.instanceId}" title="Drag to disenchant">
             <div class="aspect-[2/3] relative">
-                <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-full object-cover pointer-events-none" onerror="this.src='/pack.png'">
+                <img src="${(card.image_url || '').replace(/"/g, '%22')}" class="w-full h-full object-cover pointer-events-none">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
                 <div class="absolute bottom-1 left-1 right-1 pointer-events-none">
-                    <div class="dust-sell-chip rounded-lg px-2 py-1 inline-flex items-center gap-1.5 text-[8px] font-black uppercase">
+                    <div class="dust-sell-chip rounded-lg px-2 py-1 inline-flex items-center gap-1.5 text-[8px] font-black uppercase bg-void-bg/90 backdrop-blur-md border border-white/5">
                         <span>${mechName}</span>
                     </div>
                     <div class="text-[7px] text-void-muted truncate mt-1">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
@@ -11124,7 +11212,7 @@ function renderDustBuyCards() {
         <div class="dust-buy-card rounded-xl overflow-hidden border border-white/10 transition-all"
             data-user-card-id="${card.instanceId}" data-rarity="${(card.rarity || 'common').toLowerCase()}">
             <div class="aspect-[2/3] relative">
-                <img src="${(card.image_url || '/pack.png').replace(/"/g, '%22')}" class="w-full h-full object-cover" onerror="this.src='/pack.png'">
+                <img src="${(card.image_url || '').replace(/"/g, '%22')}" class="w-full h-full object-cover" onerror="this.src=''">
             </div>
             <div class="text-[7px] text-void-muted truncate px-1 py-0.5">${(card.name || 'Card').replace(/</g, '&lt;')}</div>
         </div>
@@ -11329,7 +11417,7 @@ function renderTrades() {
                             </div>
                             <div class="flex flex-wrap gap-4">
                                 ${myItems.map(i => {
-                                    const cardImg = escapeHTML(i.card.image_url || i.card.card_data?.image_url || '/pack.png');
+                                    const cardImg = escapeHTML(i.card.image_url || i.card.card_data?.image_url || '');
                                     const cardName = escapeHTML(i.card.name || 'Card');
                                     return `
                                     <div class="relative group/card w-20 h-28">
@@ -11349,7 +11437,7 @@ function renderTrades() {
                             </div>
                             <div class="flex flex-wrap gap-4">
                                 ${theirItems.map(i => {
-                                    const cardImg = escapeHTML(i.card.image_url || i.card.card_data?.image_url || '/pack.png');
+                                    const cardImg = escapeHTML(i.card.image_url || i.card.card_data?.image_url || '');
                                     const cardName = escapeHTML(i.card.name || 'Card');
                                     return `
                                     <div class="relative group/card w-20 h-28">
@@ -11535,7 +11623,7 @@ function openTradeBuilder(targetCode, targetCards, isReply = false) {
         const escapedId = escapeHTML(card.instanceId);
         return `
         <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'my', '${escapedId}')">
-            <img src="${escapeHTML((card.image_url || '/pack.png')).replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
+            <img src="${escapeHTML((card.image_url || '')).replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src=''">
             <div class="text-[8px] text-gray-500 truncate mt-1">${escapeHTML(card.name || 'Card')}</div>
         </div>
     `;}).join('');
@@ -11546,7 +11634,7 @@ function openTradeBuilder(targetCode, targetCards, isReply = false) {
         const escapedId = escapeHTML(id);
         return `
         <div class="trade-slot cursor-pointer border border-white/5 rounded-lg p-1 transition-all hover:bg-white/5" onclick="toggleTradeSelection(this, 'their', '${escapedId}')">
-            <img src="${escapeHTML((card.image_url || '/pack.png')).replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src='/pack.png'">
+            <img src="${escapeHTML((card.image_url || '')).replace(/"/g, '%22')}" class="w-full h-24 object-cover rounded shadow-lg" onerror="this.src=''">
             <div class="text-[8px] text-gray-500 truncate mt-1">${escapeHTML(card.name || 'Card')}</div>
         </div>
     `;}).join('');
@@ -11995,6 +12083,60 @@ window.loadSavedDecks = async function () {
     }
 };
 
+/* ── Battle Decks sidebar widget ──────────────────────────────────────────── */
+// Call with no args to show empty placeholder slots immediately
+function renderBattleDecksWidget(decks) {
+    decks = decks || [];
+    const widget = document.getElementById('battle-decks-widget');
+    if (!widget) return;
+
+    // Always show 3 slots; fill with real decks or empty placeholders
+    const slots = [0, 1, 2].map(i => decks[i] || null);
+
+    widget.innerHTML = slots.map((d, i) => {
+        const label = d ? escapeHTML(d.name) : `Battle Deck ${i + 1}`;
+        const isActive = d?.is_active;
+        const deckId = d ? escapeHTML(d.id) : null;
+
+        const cardThumb = (slot) => {
+            const card = slot?.card;
+            if (card?.image_url) {
+                return `<img src="${escapeHTML(card.image_url)}" class="absolute inset-0 w-full h-full object-cover rounded">`;
+            }
+            return `<div class="absolute inset-0 flex items-center justify-center text-white/15"><i class="fa-solid fa-plus text-base"></i></div>`;
+        };
+
+        const s1 = d?.slot_1 ? cardThumb(d.slot_1) : cardThumb(null);
+        const s2 = d?.slot_2 ? cardThumb(d.slot_2) : cardThumb(null);
+        const s3 = d?.slot_3 ? cardThumb(d.slot_3) : cardThumb(null);
+
+        const clickHandler = deckId
+            ? `loadDeckIntoActive('${deckId}'); switchView('battle');`
+            : `switchView('battle');`;
+
+        return `
+        <div onclick="${clickHandler}"
+            class="group cursor-pointer rounded-xl border ${isActive ? 'border-void-accent/50 bg-void-accent/5' : 'border-white/8 bg-white/[0.02]'} p-3 hover:border-void-accent/40 hover:bg-white/[0.04] transition-all">
+            <div class="flex items-center justify-between mb-2.5">
+                <span class="text-[9px] font-black uppercase tracking-[0.18em] ${isActive ? 'text-void-accent' : 'text-void-muted'}">${label}</span>
+                ${isActive ? `<span class="text-[7px] px-1.5 py-0.5 rounded bg-void-accent/20 text-void-accent font-black uppercase tracking-widest border border-void-accent/30">Active</span>` : ''}
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+                <div class="aspect-[5/7] rounded bg-black/40 border border-white/5 relative overflow-hidden">${s1}</div>
+                <div class="aspect-[5/7] rounded bg-black/40 border border-white/5 relative overflow-hidden">${s2}</div>
+                <div class="aspect-[5/7] rounded bg-black/40 border border-white/5 relative overflow-hidden">${s3}</div>
+            </div>
+        </div>`;
+    }).join('');
+
+    // "Go to Arena" footer button
+    widget.innerHTML += `
+    <button onclick="switchView('battle')"
+        class="w-full mt-1 py-2.5 rounded-xl bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center justify-center gap-2">
+        <i class="fa-solid fa-swords text-[8px]"></i> Go to Battle Arena
+    </button>`;
+}
+
 window.showSaveDeckModal = function () {
     console.log('[Battle] showSaveDeckModal called. Slots:', battleDeckSlots);
     const slots = {
@@ -12245,6 +12387,42 @@ function closeCardLayerEditor() {
 }
 
 
+/**
+ * Fetch an image through the img-proxy (same origin) so the canvas
+ * never gets tainted, allowing toDataURL() to work on save.
+ */
+async function _leLoadSafeImage(url) {
+    if (!url || url.startsWith('data:') || url.startsWith('blob:')) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = url;
+        });
+    }
+    try {
+        const proxyUrl = `/api/img-proxy?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl, { credentials: 'include', cache: 'no-cache' });
+        if (!res.ok) throw new Error('proxy failed');
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => { URL.revokeObjectURL(objectUrl); resolve(img); };
+            img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(null); };
+            img.src = objectUrl;
+        });
+    } catch {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = url + (url.includes('?') ? '' : '?nocache=' + Date.now());
+        });
+    }
+}
+
 function _initLayerFabric(bgImageUrl) {
     if (_layerFabric) { _layerFabric.dispose(); _layerFabric = null; }
 
@@ -12258,7 +12436,6 @@ function _initLayerFabric(bgImageUrl) {
         preserveObjectStacking: true,
         selection: true,
     });
-
 
     const area = document.getElementById('layer-editor-canvas-area');
     if (area) {
@@ -12281,11 +12458,8 @@ function _initLayerFabric(bgImageUrl) {
     });
 
     if (bgImageUrl) {
-
-        const htmlImg = new Image();
-        htmlImg.crossOrigin = 'anonymous';
-        htmlImg.onload = () => {
-            if (!_layerFabric) return;
+        _leLoadSafeImage(bgImageUrl).then(htmlImg => {
+            if (!htmlImg || !_layerFabric) { _lePushHistory(); _renderLayerList(); return; }
             const fabricImg = new fabric.Image(htmlImg);
             const scale = Math.max(LAYER_EDITOR_W / htmlImg.naturalWidth, LAYER_EDITOR_H / htmlImg.naturalHeight);
             fabricImg.set({
@@ -12299,27 +12473,7 @@ function _initLayerFabric(bgImageUrl) {
             _layerFabric.renderAll();
             _lePushHistory();
             _renderLayerList();
-        };
-        htmlImg.onerror = () => {
-
-            const htmlImg2 = new Image();
-            htmlImg2.onload = () => {
-                if (!_layerFabric) return;
-                const fabricImg = new fabric.Image(htmlImg2);
-                const scale = Math.max(LAYER_EDITOR_W / htmlImg2.naturalWidth, LAYER_EDITOR_H / htmlImg2.naturalHeight);
-                fabricImg.set({ left: LAYER_EDITOR_W / 2, top: LAYER_EDITOR_H / 2, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale });
-                fabricImg.data = { layerName: 'Background', layerType: 'image' };
-                _layerFabric.add(fabricImg);
-                _layerFabric.sendToBack(fabricImg);
-                _layerFabric.renderAll();
-                _lePushHistory();
-                _renderLayerList();
-            };
-            htmlImg2.onerror = () => { _lePushHistory(); _renderLayerList(); };
-            htmlImg2.src = bgImageUrl;
-        };
-
-        htmlImg.src = bgImageUrl.includes('?') ? bgImageUrl : bgImageUrl + '?cb=' + Date.now();
+        });
     } else {
         _lePushHistory();
         _renderLayerList();
@@ -12552,10 +12706,12 @@ async function _renderLayerListAsync() {
         const type = obj.data?.layerType || obj.type || '';
         const isSelected = activeObjs.includes(obj);
         const isHidden = !obj.visible;
+        const isShiny = !!obj.data?.shiny;
         return `<div class="le-layer-row${isSelected ? ' le-selected' : ''}" onclick="_leSelectLayer(${fabricIdx})" data-le-idx="${fabricIdx}">
             <i class="fa-solid fa-grip-dots-vertical le-drag-handle"></i>
             <i class="fa-solid ${typeIcon(type)} text-[8px] opacity-50 shrink-0"></i>
             <span class="flex-1 truncate">${name}</span>
+            <button title="${isShiny ? 'Remove shine' : 'Add shine to this layer'}" class="le-vis-btn${isShiny ? ' text-yellow-300' : ' opacity-40'}" onclick="event.stopPropagation();_leToggleShiny(${fabricIdx})">✨</button>
             <button class="le-vis-btn" onclick="event.stopPropagation();_leToggleVis(${fabricIdx})">
                 <i class="fa-solid ${isHidden ? 'fa-eye-slash' : 'fa-eye'}"></i>
             </button>
@@ -12598,6 +12754,17 @@ window._leToggleVis = function (fabricIdx) {
     if (!_layerFabric) return;
     const obj = _layerFabric.getObjects()[fabricIdx];
     if (obj) { obj.visible = !obj.visible; _layerFabric.renderAll(); _renderLayerList(); }
+};
+
+/** Toggle whether this layer contributes to the foil/shine mask. */
+window._leToggleShiny = function (fabricIdx) {
+    if (!_layerFabric) return;
+    const obj = _layerFabric.getObjects()[fabricIdx];
+    if (!obj) return;
+    if (!obj.data) obj.data = {};
+    obj.data.shiny = !obj.data.shiny;
+    _lePushHistory();
+    _renderLayerList();
 };
 
 
@@ -12755,12 +12922,59 @@ function _leColorHex(color, fallback) {
 }
 
 
+/**
+ * Build a pixel-precise greyscale foil mask PNG from the current Fabric canvas.
+ * Hides every non-shiny layer, renders only shiny layers, then converts
+ * each pixel's alpha → brightness so the Three.js shader knows exactly
+ * which pixels receive shine. Must be called at 1:1 zoom (full res).
+ */
+function _buildFoilMaskBlob() {
+    if (!_layerFabric) return null;
+    const objects = _layerFabric.getObjects();
+    const shinyLayers = objects.filter(o => o.data?.shiny && o.visible !== false);
+    if (shinyLayers.length === 0) return null;
+
+    // Snapshot visibility, then hide every non-shiny layer
+    const saved = objects.map(o => o.visible);
+    objects.forEach(o => { o.visible = !!(o.data?.shiny && o.visible !== false); });
+    _layerFabric.renderAll();
+
+    // Export shiny-only render as PNG (preserves alpha)
+    const shinyDataUrl = _layerFabric.toDataURL({ format: 'png', multiplier: 1 });
+
+    // Restore original visibility
+    objects.forEach((o, i) => { o.visible = saved[i]; });
+    _layerFabric.renderAll();
+
+    // Convert: alpha channel of each pixel → greyscale brightness
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const offscreen = document.createElement('canvas');
+            offscreen.width  = LAYER_EDITOR_W;
+            offscreen.height = LAYER_EDITOR_H;
+            const ctx = offscreen.getContext('2d');
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, LAYER_EDITOR_W, LAYER_EDITOR_H);
+            ctx.drawImage(img, 0, 0, LAYER_EDITOR_W, LAYER_EDITOR_H);
+            const id = ctx.getImageData(0, 0, LAYER_EDITOR_W, LAYER_EDITOR_H);
+            const d = id.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const a = d[i + 3];
+                d[i] = a; d[i + 1] = a; d[i + 2] = a; d[i + 3] = 255;
+            }
+            ctx.putImageData(id, 0, 0);
+            offscreen.toBlob(resolve, 'image/png');
+        };
+        img.src = shinyDataUrl;
+    });
+}
+
 window.saveLayerEditor = async function () {
     if (!_layerFabric) return;
     const btn = document.getElementById('layer-editor-save-btn');
     if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
     try {
-
         const currentZoom = _layerFabric.getZoom();
         _layerFabric.setZoom(1);
         _layerFabric.setWidth(LAYER_EDITOR_W);
@@ -12769,6 +12983,9 @@ window.saveLayerEditor = async function () {
 
         const dataUrl = _layerFabric.toDataURL({ format: 'jpeg', quality: 0.95, multiplier: 1 });
 
+        // Build foil mask + export layer JSON for re-editing
+        const maskBlob = await _buildFoilMaskBlob();
+        const layerJson = (typeof _leExportLayerJson === 'function') ? _leExportLayerJson() : null;
 
         _layerFabric.setZoom(currentZoom);
         const area = document.getElementById('layer-editor-canvas-area');
@@ -12783,7 +13000,7 @@ window.saveLayerEditor = async function () {
         const fetchRes = await fetch(dataUrl);
         const blob = await fetchRes.blob();
 
-        if (_layerEditorOnSave) await _layerEditorOnSave(blob);
+        if (_layerEditorOnSave) await _layerEditorOnSave(blob, maskBlob, layerJson);
         closeCardLayerEditor();
     } catch (err) {
         console.error('[LayerEditor] Save failed:', err);
@@ -12793,8 +13010,10 @@ window.saveLayerEditor = async function () {
 };
 
 
-async function _leUploadAndPatchCard(cardId, blob) {
+async function _leUploadAndPatchCard(cardId, blob, maskBlob, layerJson) {
     showToast('Uploading art…', 'loading');
+
+    // Upload card art
     const formData = new FormData();
     formData.append('file', blob, 'card-art.jpg');
     const uploadRes = await fetch(`${BACKEND_URL}/api/creator/upload`, {
@@ -12804,12 +13023,33 @@ async function _leUploadAndPatchCard(cardId, blob) {
         credentials: 'include'
     });
     if (!uploadRes.ok) throw new Error('Upload failed');
-    const { url } = await uploadRes.json();
+    const { url: imageUrl } = await uploadRes.json();
+
+    // Upload foil mask if any layer was flagged shiny
+    let foilMaskUrl = null;
+    if (maskBlob) {
+        const maskForm = new FormData();
+        maskForm.append('file', maskBlob, 'foil-mask.png');
+        const maskRes = await fetch(`${BACKEND_URL}/api/creator/upload`, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrfToken },
+            body: maskForm,
+            credentials: 'include'
+        });
+        if (maskRes.ok) {
+            const { url } = await maskRes.json();
+            foilMaskUrl = url;
+        }
+    }
+
+    const patchBody = { id: cardId, image_url: imageUrl };
+    patchBody.foil_mask_url = foilMaskUrl;
+    if (layerJson) patchBody.layer_data = layerJson;
 
     const patchRes = await fetch(`${BACKEND_URL}/api/creator/cards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ id: cardId, image_url: url }),
+        body: JSON.stringify(patchBody),
         credentials: 'include'
     });
     if (!patchRes.ok) throw new Error('Patch failed');
@@ -12821,9 +13061,9 @@ async function _leUploadAndPatchCard(cardId, blob) {
 window.openLayerEditorForCard = async function (cardId) {
     const card = editorAllCards.find(c => c.id === cardId);
     if (!card) return;
-    await openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob) => {
-        await _leUploadAndPatchCard(cardId, blob);
-    });
+    await openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob, maskBlob, layerJson) => {
+        await _leUploadAndPatchCard(cardId, blob, maskBlob, layerJson);
+    }, card.layer_data || null);
 };
 
 window.buyPackCheckout = async function() {

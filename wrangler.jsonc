@@ -4,16 +4,17 @@
 	"compatibility_date": "2024-02-27",
 	"assets": {
 		"directory": "public",
-		"binding": "ASSETS"
+		"binding": "ASSETS",
+		"run_worker_first": true
 	},
 	"r2_buckets": [
 		{
-			"binding": "multistreamer_tcg_cards",
-			"bucket_name": "multistreamer-tcg-cards"
+			"binding": "CARD_IMAGES",
+			"bucket_name": "assets"
 		},
 		{
-			"binding": "CARD_IMAGES",
-			"bucket_name": "multistreamer-tcg-cards"
+			"binding": "IMAGE_ASSETS",
+			"bucket_name": "assets"
 		}
 	],
 	"observability": {

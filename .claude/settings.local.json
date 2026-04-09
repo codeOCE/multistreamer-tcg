@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"#card-detail-image\\\\|card-detail-image\" /c/Users/theco/OneDrive/Documents/Twitch/TCG/mulistreamer-tcg/public/*.html)"
+    ]
+  }
+}

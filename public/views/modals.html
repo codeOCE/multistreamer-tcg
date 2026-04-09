@@ -159,15 +159,16 @@
                 <div id="card-detail-flip-scene" class="card-detail-flip-scene card-detail-foil-drag-only outline-none select-none" tabindex="0" role="button" aria-label="Card — tap to flip; drag to tilt — dragging never flips" aria-pressed="false">
                     <div class="card-detail-tilt-wrap">
                         <div class="card-detail-flip-track">
-                            <div class="card-detail-face card-detail-face--front overflow-hidden bg-transparent rounded-2xl">
-                                <div class="card-detail-card-face absolute inset-0 rounded-2xl overflow-hidden">
-                                    <img id="card-detail-image" src="/pack.png" alt="" class="absolute inset-0 h-full w-full object-contain object-center block z-0 pointer-events-none rounded-2xl">
+                            <div class="card-detail-face card-detail-face--front">
+                                <div class="card-detail-card-face absolute inset-0">
+                                    <img id="card-detail-image" src="" alt="" class="absolute inset-0 h-full w-full object-cover block z-0 pointer-events-none">
                                     <div id="card-detail-holo-layer" class="holo-layer holo-layer--card-detail hidden" aria-hidden="true"></div>
                                     <div id="card-detail-holo-shine" class="holo-shine holo-shine--card-detail hidden" aria-hidden="true"></div>
+                                    <div class="card-detail-sparkle" aria-hidden="true"></div>
                                 </div>
                             </div>
-                            <div class="card-detail-face card-detail-face--back overflow-hidden bg-transparent rounded-2xl">
-                                <img id="card-detail-back-image" src="/Castle_Default_Cardback.png" alt="" class="h-full w-full object-contain object-center block pointer-events-none rounded-2xl" draggable="false">
+                            <div class="card-detail-face card-detail-face--back">
+                                <img id="card-detail-back-image" src="/Castle_Default_Cardback.png" alt="" class="h-full w-full object-contain object-center block pointer-events-none" draggable="false">
                             </div>
                         </div>
                     </div>
@@ -270,7 +271,7 @@
             <div class="w-full md:w-1/2 space-y-6">
                 <h3 id="card-form-title" class="text-3xl font-display font-black uppercase italic tracking-tighter text-white">New Asset</h3>
                 <div class="aspect-[2/3] w-full bg-black rounded-3xl border border-white/10 relative overflow-hidden group shadow-2xl flex items-center justify-center">
-                    <img id="card-image-preview" src="/pack.png" class="max-w-full max-h-full object-contain hidden z-10 relative">
+                    <img id="card-image-preview" src="" class="max-w-full max-h-full object-contain hidden z-10 relative">
                     <div id="card-image-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-void-muted space-y-4">
                         <i class="fa-solid fa-image text-4xl opacity-20"></i>
                         <span class="text-[10px] uppercase font-black tracking-widest opacity-50">Upload Matrix Frame</span>

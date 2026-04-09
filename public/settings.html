@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Account settings · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <style>
+        .hidden {
+            display: none !important;
+        }
+
+        /* Fixed nav is h-20 (5rem); pad below it + notch safe area */
+        #st-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 16px;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px) + 0.75rem);
+            box-sizing: border-box;
+        }
+
+        .st-spinner {
+            width: 32px;
+            height: 32px;
+            border: 2px solid rgba(var(--void-accent-rgb), 0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%;
+            animation: st-spin 0.7s linear infinite;
+        }
+
+        @keyframes st-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #st-signin {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 20px;
+            text-align: center;
+            padding: 40px;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px) + 2.5rem);
+            box-sizing: border-box;
+        }
+
+        #st-signin .big-icon {
+            font-size: 4rem;
+            opacity: 0.08;
+        }
+
+        /* Aligned with my-collection body width; slightly wider for settings forms */
+        #st-main {
+            width: 100%;
+            max-width: min(1040px, calc(100vw - 32px));
+            box-sizing: border-box;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px) + 1.25rem);
+        }
+    </style>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow"></div>
+    <div id="toast-container"></div>
+
+    <nav class="fixed top-0 left-0 right-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl pt-[env(safe-area-inset-top,0px)]"
+        aria-label="Main">
+        <div class="max-w-[1520px] mx-auto px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 group cursor-pointer">
+                <div
+                    class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt=""
+                        class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <span
+                    class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span
+                        class="text-void-accent">TCG</span></span>
+            </a>
+            <div class="flex items-center gap-3">
+                <div id="nav-user-preview" class="hidden items-center">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Collector</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt=""
+                                    class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
+                                <span
+                                    class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                            </span>
+                            <i
+                                class="fa-solid fa-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                        </button>
+                        <div id="nav-user-menu"
+                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                            role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt=""
+                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg"
+                                        width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name"
+                                            class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons"
+                                                class="flex items-center gap-1 shrink-0"></span>
+                                            <span id="nav-user-menu-role"
+                                                class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap"
+                                        class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron"
+                                            class="fa-solid fa-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel"
+                                    class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p
+                                        class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">
+                                        Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p
+                                            class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">
+                                            Castle code</p>
+                                        <p id="nav-user-menu-castle-code"
+                                            class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="fa-solid fa-gear text-void-muted w-4 text-center shrink-0"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span
+                                            class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle
+                                            code, blocks, security</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="fa-solid fa-right-from-bracket w-4 text-center"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <a href="/" class="saas-button rounded-xl px-5 py-2.5 text-[9px]">
+                    Enter App <i class="fa-solid fa-arrow-right ml-1 opacity-60"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div id="st-loading">
+        <div class="st-spinner"></div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading account…</p>
+    </div>
+
+    <div id="st-signin" class="hidden">
+        <div class="big-icon"><i class="fa-solid fa-gear"></i></div>
+        <h1 class="font-display font-black text-2xl uppercase tracking-tight">Account settings</h1>
+        <p class="text-sm text-void-muted max-w-md">Sign in to manage your Castle code, linked platforms, and security.
+        </p>
+        <a href="/auth/twitch?role=viewer" data-castle-oauth
+            class="saas-button rounded-xl px-8 py-3 text-[0.65rem] mt-2">
+            <i class="fa-brands fa-twitch mr-2"></i>Sign in
+        </a>
+        <a href="/" class="text-xs text-void-muted hover:text-void-accent mt-4">← Back to home</a>
+    </div>
+
+    <main id="st-main" class="hidden w-full mx-auto px-4 sm:px-6 lg:px-8 pb-24 sm:pb-32">
+        <div class="void-fade space-y-8 sm:space-y-10">
+            <header class="space-y-5 border-b border-white/5 pb-6">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-void-muted mb-1">Settings</p>
+                    <h1
+                        class="text-3xl sm:text-4xl md:text-5xl font-display font-black uppercase italic tracking-tighter leading-tight">
+                        Account</h1>
+                    <p class="text-void-muted text-sm mt-2 max-w-prose leading-relaxed">Castle code, team access, linked
+                        platforms, and account security.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3" role="tablist" aria-label="Account sections">
+                    <div
+                        class="inline-flex flex-wrap gap-0.5 p-1 rounded-xl bg-black/30 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] w-fit max-w-full">
+                        <button type="button" data-profile-tab="channels"
+                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-void-accent text-void-text bg-void-accent/10">Channels</button>
+                        <button type="button" data-profile-tab="connections"
+                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Connections</button>
+                        <button type="button" data-profile-tab="transactions"
+                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">History</button>
+                        <button type="button" data-profile-tab="security"
+                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Security</button>
+                        <button type="button" data-profile-tab="personalise"
+                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Personalise</button>
+                    </div>
+                </div>
+            </header>
+
+            <div id="profile-panel-channels" class="profile-settings-panel space-y-6 sm:space-y-8">
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3 mb-5">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Identity</div>
+                        <i class="fa-solid fa-id-card-clip text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+                    <div class="flex items-center gap-4 sm:gap-5">
+                        <div class="relative shrink-0">
+                            <img id="viewer-settings-avatar" src="" alt=""
+                                class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-white/10 bg-white/[0.03] shadow-lg shadow-black/40 ring-1 ring-white/[0.08]" />
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-wrap items-center gap-2 mb-1">
+                                <h2 id="viewer-settings-display-name"
+                                    class="text-xl sm:text-2xl font-display font-black text-white uppercase italic tracking-tight leading-none truncate">
+                                    —</h2>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="text-[9px] font-black uppercase tracking-[0.18em] text-void-muted mr-1">
+                                    Castle code</div>
+                                <span id="viewer-settings-castle-code"
+                                    class="font-mono text-sm font-bold tracking-[0.16em] text-void-accent">…</span>
+                                <button type="button" id="viewer-settings-copy-code"
+                                    class="ml-1 shrink-0 w-7 h-7 rounded-lg bg-white/[0.06] border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent hover:border-void-accent/35 transition-colors"
+                                    title="Copy code">
+                                    <i class="fa-solid fa-copy text-[10px]" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-4">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Channels you
+                            manage</div>
+                        <i class="fa-solid fa-users-gear text-[10px] text-void-accent opacity-50"
+                            aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Creator channels where you are mod or editor.</p>
+                    <div id="viewer-settings-team-list" class="space-y-2"></div>
+                    <p id="viewer-settings-team-empty" class="text-xs text-void-muted/80 italic py-2 hidden">You don’t
+                        manage any channels yet.</p>
+                </div>
+
+                <div id="viewer-settings-upgrade-card"
+                    class="glass-panel rounded-2xl border border-void-accent/20 bg-void-accent/[0.04] p-5 sm:p-7 space-y-4 shadow-[0_0_40px_-12px_rgba(var(--void-accent-rgb),0.35)]">
+                    <div class="flex justify-between items-end border-b border-void-accent/15 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-accent">Upgrade to
+                            creator</div>
+                        <i class="fa-solid fa-wand-magic-sparkles text-[10px] text-void-accent opacity-70"
+                            aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Run your own channel on Castle: mint cards,
+                        packs, and Channel Point drops. Pricing will apply later — for now you can try the full setup.
+                    </p>
+                    <a id="viewer-settings-upgrade-btn" href="/onboarding"
+                        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Start
+                        creator setup</a>
+                </div>
+
+            </div>
+
+            <div id="profile-panel-connections" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Linked platforms
+                        </div>
+                        <i class="fa-solid fa-plug text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed max-w-2xl">Each connection shows its status, what
+                        Castle uses it for, and connect or disconnect — similar to Twitch’s own settings.</p>
+                    <div id="viewer-settings-connections"></div>
+                </div>
+            </div>
+
+            <div id="profile-panel-transactions" class="profile-settings-panel hidden space-y-8">
+                <div
+                    class="p-16 sm:p-20 text-center flex flex-col items-center justify-center space-y-5 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
+                    <div
+                        class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
+                        <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="text-xl font-display font-black uppercase italic text-void-text tracking-tight">
+                        Transaction history</h3>
+                    <p class="text-void-muted text-xs max-w-md leading-relaxed">Pack purchases and payments will appear
+                        here in a future update.</p>
+                </div>
+            </div>
+
+            <div id="profile-panel-security" class="profile-settings-panel hidden space-y-8 lg:space-y-10">
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Block drops</div>
+                        <i class="fa-solid fa-ban text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">You won’t receive new card drops from blocked
+                        creator channels. Existing cards stay in your collection.</p>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="viewer-block-streamer-input"
+                            placeholder="Creator username (e.g. codeoce)" autocomplete="off"
+                            class="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-void-text placeholder:text-void-muted/50 focus:outline-none focus:border-void-accent/40 focus:ring-1 focus:ring-void-accent/20" />
+                        <button type="button" id="viewer-block-streamer-btn"
+                            class="px-6 py-3 rounded-xl bg-void-accent text-void-bg font-black text-[9px] uppercase tracking-widest shadow-lg shadow-void-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0">Block
+                            channel</button>
+                    </div>
+                    <div id="viewer-blocked-list" class="space-y-2 min-h-[2rem]"></div>
+                </div>
+
+                <div class="glass-panel rounded-2xl border border-red-500/20 bg-red-950/20 p-5 sm:p-7 space-y-4">
+                    <div class="flex justify-between items-end border-b border-red-500/20 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-red-400">Danger zone</div>
+                        <i class="fa-solid fa-triangle-exclamation text-[10px] text-red-400/80" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Deleting your account permanently removes your
+                        Castle profile, collection, and settings. <span class="text-red-300/90 font-semibold">There is
+                            no data recovery.</span> This does not delete content on Twitch or Kick.</p>
+                    <button type="button" id="viewer-open-delete-account-modal"
+                        class="px-6 py-3 rounded-xl border border-red-500/50 bg-red-600/15 text-red-300 text-[10px] font-black uppercase tracking-widest hover:bg-red-600/25 transition-colors">Delete
+                        my account</button>
+                </div>
+            </div>
+
+            <!-- ── PERSONALISATION PANEL ── -->
+            <div id="profile-panel-personalise" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+
+                <!-- Card Display -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Card display
+                        </div>
+                        <i class="fa-solid fa-layer-group text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Card size -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Default card size</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Controls how large cards appear in
+                                your collection grid.</p>
+                        </div>
+                        <div class="shrink-0 inline-flex rounded-xl bg-black/30 border border-white/10 p-1 gap-0.5"
+                            role="group" aria-label="Card size">
+                            <button type="button" data-pref-card-size="small"
+                                class="pref-card-size-btn px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-void-muted hover:text-void-text hover:bg-white/[0.04]">S</button>
+                            <button type="button" data-pref-card-size="medium"
+                                class="pref-card-size-btn px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-void-muted hover:text-void-text hover:bg-white/[0.04]">M</button>
+                            <button type="button" data-pref-card-size="large"
+                                class="pref-card-size-btn px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-void-muted hover:text-void-text hover:bg-white/[0.04]">L</button>
+                        </div>
+                    </div>
+
+                    <!-- Holographic foil -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Holographic foil effect</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Iridescent shader that reacts to
+                                mouse movement on rare cards.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-foil" role="switch" aria-checked="true"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_foil">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-black transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Card tilt -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">3D card tilt</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Tilts cards in 3D when you hover over
+                                them in the detail modal.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-tilt" role="switch" aria-checked="true"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_tilt">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-black transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Collection defaults -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Collection
+                            defaults</div>
+                        <i class="fa-solid fa-cards-blank text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Default sort -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Default sort order</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">How your collection is sorted when
+                                you first open it.</p>
+                        </div>
+                        <select id="pref-default-sort"
+                            class="shrink-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-[11px] font-bold text-void-text focus:outline-none focus:border-void-accent/40 cursor-pointer">
+                            <option value="newest">Newest first</option>
+                            <option value="oldest">Oldest first</option>
+                            <option value="rarity">Rarity</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </div>
+
+                    <!-- Show duplicates -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show duplicate count</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display a badge on cards you own
+                                multiple copies of.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-dupes" role="switch" aria-checked="true"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_dupes">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-black transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Accessibility -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Accessibility
+                        </div>
+                        <i class="fa-solid fa-universal-access text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Reduce motion -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Reduce motion</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Minimises animations and transitions
+                                across the platform.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-reduce-motion" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_reduce_motion">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Saved indicator -->
+                <p id="pref-saved-notice"
+                    class="hidden text-[10px] font-black uppercase tracking-widest text-void-accent text-center py-1">
+                    Preferences saved</p>
+            </div>
+
+            <div id="viewer-delete-account-modal"
+                class="fixed inset-0 z-[4000] hidden flex items-center justify-center p-6 bg-void-bg/90 backdrop-blur-md">
+                <div
+                    class="glass-panel max-w-lg w-full rounded-2xl border border-white/10 border-red-500/25 p-8 space-y-6 shadow-2xl shadow-black/50">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <h4 class="text-lg font-display font-black uppercase italic tracking-tight text-red-400">Delete
+                            forever</h4>
+                        <i class="fa-solid fa-skull-crossbones text-sm text-red-400/60" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-sm text-void-muted leading-relaxed">This cannot be undone. Type <span
+                            class="font-mono text-sm text-white bg-white/5 px-1.5 py-0.5 rounded border border-white/10">DELETE
+                            MY CASTLE ACCOUNT</span> below to confirm.</p>
+                    <input type="text" id="viewer-delete-confirm-input" autocomplete="off"
+                        placeholder="DELETE MY CASTLE ACCOUNT"
+                        class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-void-text focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20" />
+                    <div class="flex flex-col sm:flex-row gap-3 justify-end pt-2">
+                        <button type="button" id="viewer-delete-cancel-btn"
+                            class="saas-button-secondary px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest">Cancel</button>
+                        <button type="button" id="viewer-delete-submit-btn"
+                            class="px-6 py-3 rounded-xl bg-red-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-500 shadow-lg shadow-red-900/30 transition-colors">Delete
+                            forever</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/castle-auth-origin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var b = typeof window.__CASTLE_BACKEND__ === 'string' ? window.__CASTLE_BACKEND__ : '';
+            if (!b) return;
+            document.querySelectorAll('a[data-castle-oauth]').forEach(function (a) {
+                var h = a.getAttribute('href');
+                if (h && h.charAt(0) === '/') a.href = b + h;
+            });
+        });
+    </script>
+    <script src="/viewer-account-settings.js"></script>
+    <script src="/nav-user-menu.js"></script>
+    <script src="/settings.js"></script>
+</body>
+
+</html>
