@@ -12,7 +12,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/tailwind-built.css">
     <style>
@@ -107,7 +107,7 @@
                                     class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
                             </span>
                             <i
-                                class="fa-solid fa-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                                class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
                         </button>
                         <div id="nav-user-menu"
                             class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
@@ -132,7 +132,7 @@
                                     <span id="nav-user-team-chevron-wrap"
                                         class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
                                         <i id="nav-user-team-chevron"
-                                            class="fa-solid fa-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                            class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
                                     </span>
                                 </button>
                                 <div id="nav-user-team-panel"
@@ -159,7 +159,7 @@
                             <div class="p-1.5">
                                 <button type="button" id="nav-user-menu-settings" role="menuitem"
                                     class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
-                                    <i class="fa-solid fa-gear text-void-muted w-4 text-center shrink-0"></i>
+                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
                                     <span class="flex flex-col leading-tight normal-case">
                                         <span class="uppercase tracking-widest">Account settings</span>
                                         <span
@@ -169,15 +169,12 @@
                                 </button>
                                 <button type="button" id="nav-user-menu-logout" role="menuitem"
                                     class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
-                                    <i class="fa-solid fa-right-from-bracket w-4 text-center"></i> Log out
+                                    <i class="bx bx-log-out w-4 text-center"></i> Log out
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
-                <a href="/" class="saas-button rounded-xl px-5 py-2.5 text-[9px]">
-                    Enter App <i class="fa-solid fa-arrow-right ml-1 opacity-60"></i>
-                </a>
             </div>
         </div>
     </nav>
@@ -188,13 +185,13 @@
     </div>
 
     <div id="st-signin" class="hidden">
-        <div class="big-icon"><i class="fa-solid fa-gear"></i></div>
+        <div class="big-icon"><i class="bx bxs-cog"></i></div>
         <h1 class="font-display font-black text-2xl uppercase tracking-tight">Account settings</h1>
         <p class="text-sm text-void-muted max-w-md">Sign in to manage your Castle code, linked platforms, and security.
         </p>
         <a href="/auth/twitch?role=viewer" data-castle-oauth
             class="saas-button rounded-xl px-8 py-3 text-[0.65rem] mt-2">
-            <i class="fa-brands fa-twitch mr-2"></i>Sign in
+            <i class="bx bxl-twitch mr-2"></i>Sign in
         </a>
         <a href="/" class="text-xs text-void-muted hover:text-void-accent mt-4">← Back to home</a>
     </div>
@@ -231,7 +228,7 @@
                 <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6">
                     <div class="flex justify-between items-center border-b border-white/10 pb-3 mb-5">
                         <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Identity</div>
-                        <i class="fa-solid fa-id-card-clip text-xs text-void-accent/60" aria-hidden="true"></i>
+                        <i class="bx bxs-id-card text-xs text-void-accent/60" aria-hidden="true"></i>
                     </div>
                     <div class="flex items-center gap-4 sm:gap-5">
                         <div class="relative shrink-0">
@@ -252,7 +249,7 @@
                                 <button type="button" id="viewer-settings-copy-code"
                                     class="ml-1 shrink-0 w-7 h-7 rounded-lg bg-white/[0.06] border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent hover:border-void-accent/35 transition-colors"
                                     title="Copy code">
-                                    <i class="fa-solid fa-copy text-[10px]" aria-hidden="true"></i>
+                                    <i class="bx bxs-copy text-[10px]" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -263,7 +260,7 @@
                     <div class="flex justify-between items-end border-b border-white/10 pb-3">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Channels you
                             manage</div>
-                        <i class="fa-solid fa-users-gear text-[10px] text-void-accent opacity-50"
+                        <i class="bx bxs-group text-[10px] text-void-accent opacity-50"
                             aria-hidden="true"></i>
                     </div>
                     <p class="text-xs text-void-muted leading-relaxed">Creator channels where you are mod or editor.</p>
@@ -277,7 +274,7 @@
                     <div class="flex justify-between items-end border-b border-void-accent/15 pb-3">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-accent">Upgrade to
                             creator</div>
-                        <i class="fa-solid fa-wand-magic-sparkles text-[10px] text-void-accent opacity-70"
+                        <i class="bx bxs-magic-wand text-[10px] text-void-accent opacity-70"
                             aria-hidden="true"></i>
                     </div>
                     <p class="text-xs text-void-muted leading-relaxed">Run your own channel on Castle: mint cards,
@@ -295,7 +292,7 @@
                     <div class="flex justify-between items-end border-b border-white/10 pb-3">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Linked platforms
                         </div>
-                        <i class="fa-solid fa-plug text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                        <i class="bx bxs-plug text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
                     </div>
                     <p class="text-xs text-void-muted leading-relaxed max-w-2xl">Each connection shows its status, what
                         Castle uses it for, and connect or disconnect — similar to Twitch’s own settings.</p>
@@ -308,7 +305,7 @@
                     class="p-16 sm:p-20 text-center flex flex-col items-center justify-center space-y-5 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
                     <div
                         class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
-                        <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                        <i class="bx bxs-receipt" aria-hidden="true"></i>
                     </div>
                     <h3 class="text-xl font-display font-black uppercase italic text-void-text tracking-tight">
                         Transaction history</h3>
@@ -321,7 +318,7 @@
                 <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
                     <div class="flex justify-between items-end border-b border-white/10 pb-3">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Block drops</div>
-                        <i class="fa-solid fa-ban text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                        <i class="bx bxs-block text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
                     </div>
                     <p class="text-xs text-void-muted leading-relaxed">You won’t receive new card drops from blocked
                         creator channels. Existing cards stay in your collection.</p>
@@ -339,7 +336,7 @@
                 <div class="glass-panel rounded-2xl border border-red-500/20 bg-red-950/20 p-5 sm:p-7 space-y-4">
                     <div class="flex justify-between items-end border-b border-red-500/20 pb-3">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-red-400">Danger zone</div>
-                        <i class="fa-solid fa-triangle-exclamation text-[10px] text-red-400/80" aria-hidden="true"></i>
+                        <i class="bx bxs-error text-[10px] text-red-400/80" aria-hidden="true"></i>
                     </div>
                     <p class="text-xs text-void-muted leading-relaxed">Deleting your account permanently removes your
                         Castle profile, collection, and settings. <span class="text-red-300/90 font-semibold">There is
@@ -358,7 +355,7 @@
                     <div class="flex justify-between items-center border-b border-white/10 pb-3">
                         <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Card display
                         </div>
-                        <i class="fa-solid fa-layer-group text-xs text-void-accent/60" aria-hidden="true"></i>
+                        <i class="bx bxs-layer text-xs text-void-accent/60" aria-hidden="true"></i>
                     </div>
 
                     <!-- Card size -->
@@ -415,7 +412,7 @@
                     <div class="flex justify-between items-center border-b border-white/10 pb-3">
                         <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Collection
                             defaults</div>
-                        <i class="fa-solid fa-cards-blank text-xs text-void-accent/60" aria-hidden="true"></i>
+                        <i class="bx bxs-id-card text-xs text-void-accent/60" aria-hidden="true"></i>
                     </div>
 
                     <!-- Default sort -->
@@ -455,7 +452,7 @@
                     <div class="flex justify-between items-center border-b border-white/10 pb-3">
                         <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Accessibility
                         </div>
-                        <i class="fa-solid fa-universal-access text-xs text-void-accent/60" aria-hidden="true"></i>
+                        <i class="bx bx-accessibility text-xs text-void-accent/60" aria-hidden="true"></i>
                     </div>
 
                     <!-- Reduce motion -->
@@ -487,7 +484,7 @@
                     <div class="flex justify-between items-end border-b border-white/10 pb-3">
                         <h4 class="text-lg font-display font-black uppercase italic tracking-tight text-red-400">Delete
                             forever</h4>
-                        <i class="fa-solid fa-skull-crossbones text-sm text-red-400/60" aria-hidden="true"></i>
+                        <i class="bx bxs-skull text-sm text-red-400/60" aria-hidden="true"></i>
                     </div>
                     <p class="text-sm text-void-muted leading-relaxed">This cannot be undone. Type <span
                             class="font-mono text-sm text-white bg-white/5 px-1.5 py-0.5 rounded border border-white/10">DELETE
@@ -520,6 +517,7 @@
     </script>
     <script src="/viewer-account-settings.js"></script>
     <script src="/nav-user-menu.js"></script>
+    <script src="/castle-nav.js"></script>
     <script src="/settings.js"></script>
 </body>
 

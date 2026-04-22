@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Creator · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <style>
+        :root {
+            /* Midnight Precision Palette */
+            --bg: oklch(14% 0.01 256);
+            --surface: oklch(18% 0.02 256);
+            --surface-hover: oklch(22% 0.02 256);
+            --bdr: oklch(28% 0.02 256);
+            --bdr-hover: oklch(35% 0.03 256);
+            --a: oklch(65% 0.18 256); /* Crisp Designer Blue */
+            --ar: 104, 182, 255; /* RGB fallback for alpha use */
+            --text: oklch(98% 0.01 256);
+            --muted: oklch(62% 0.02 256);
+            --subtle: oklch(30% 0.02 256);
+            
+            --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+            --shadow-sm: 0 4px 12px rgba(0,0,0,0.4);
+            --shadow-lg: 0 12px 48px rgba(0,0,0,0.6);
+        }
+        .hidden { display: none !important; }
+        * { box-sizing: border-box; }
+        
+        html, body { 
+            height: 100%; overflow: hidden; margin: 0; 
+            background: var(--bg); 
+            color: var(--text);
+            font-family: 'Space Grotesk', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Transitions ── (.cs-lr: avoid transition:all — it breaks Sortable drag transforms) */
+        button, input, select, .cs-t { transition: all 0.2s var(--ease); }
+        .cs-lr {
+            transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease),
+                opacity 0.2s var(--ease), box-shadow 0.2s var(--ease);
+        }
+        .cs-layer-rows .cs-lr.sortable-chosen,
+        .cs-layer-rows .cs-lr.sortable-drag,
+        .cs-layer-rows .cs-lr.sortable-ghost { transition: none !important; }
+
+        #cs-layout { display: grid; grid-template-rows: 56px 1fr; height: 100vh; overflow: hidden; }
+
+        /* ── Top bar ── */
+        #cs-topbar {
+            display: flex; align-items: center; gap: 12px; padding: 0 20px;
+            border-bottom: 1px solid oklch(100% 0 0 / 0.1); 
+            background: oklch(from var(--surface) l c h / 0.8);
+            backdrop-filter: blur(16px);
+            z-index: 100; position: relative;
+        }
+
+        /* ── Body Layout ── */
+        #cs-body {
+            position: relative;
+            display: grid;
+            grid-template-columns: 280px 1fr 280px;
+            grid-template-rows: 1fr;
+            overflow: hidden; height: 100%;
+            padding: 24px; gap: 24px;
+            /* Mesh Gradient Background - Global */
+            background-color: var(--bg);
+            background-image: 
+                radial-gradient(at 0% 0%, oklch(25% 0.05 256) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, oklch(20% 0.1 280) 0, transparent 50%),
+                radial-gradient(at 100% 100%, oklch(18% 0.05 256) 0, transparent 50%),
+                radial-gradient(at 0% 100%, oklch(22% 0.04 220) 0, transparent 50%);
+        }
+
+        /* ── Glassmorphism ── */
+        .cs-glass {
+            background: oklch(from var(--surface) l c h / 0.7) !important;
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid oklch(100% 0 0 / 0.1) !important;
+            border-radius: 20px;
+            box-shadow: var(--shadow-lg), inset 0 0 0 1px oklch(100% 0 0 / 0.05);
+        }
+
+        /* ── Center column (toolstrip pill + artboard) ── */
+        #cs-center {
+            display: flex; gap: 16px; overflow: visible; min-width: 0;
+            position: relative;
+        }
+
+        /* ── Tool Dock (Floating Pill) ── */
+        #cs-toolstrip {
+            display: flex; flex-direction: column; align-items: center;
+            align-self: center; flex-shrink: 0;
+            padding: 8px 6px; gap: 3px;
+            z-index: 50;
+            border-radius: 20px !important;
+            /* JS sets --ts-scale to shrink the strip to fit the viewport */
+            transform: scale(var(--ts-scale, 1));
+            transform-origin: center center;
+        }
+        .cs-ts-sep { width: 30px; height: 1px; background: var(--subtle); margin: 2px 0; flex-shrink: 0; }
+        .cs-t {
+            width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+            border-radius: 10px; background: transparent; border: 1px solid transparent;
+            color: var(--muted); cursor: pointer; font-size: 15px; position: relative;
+            flex-shrink: 0;
+        }
+        .cs-tbtn i { font-size: 14px; }
+        .cs-tbtn.cs-ghost:hover { background: oklch(100% 0 0 / 0.05); }
+        .cs-tbtn:disabled { opacity: 0.28; cursor: not-allowed; pointer-events: none; }
+
+        #cs-context-bar {
+            position: absolute; display: flex; align-items: center; gap: 8px;
+            padding: 8px; border-radius: 16px; z-index: 1000;
+            background: oklch(22% 0.02 256);
+            border: 1px solid oklch(100% 0 0 / 0.1);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+            pointer-events: none; opacity: 0;
+            transition: opacity 0.2s var(--ease);
+            top: -18px; left: 50%; transform: translateX(-50%);
+            white-space: nowrap; color: rgba(255,255,255,0.85);
+        }
+        #cs-context-bar.active {
+            opacity: 1; pointer-events: all;
+        }
+        @keyframes cs-pop { from { transform: scale(0.95) translateY(10px); opacity: 0; } }
+        
+        .cs-c-btn {
+            width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+            border-radius: 10px; border: 1px solid transparent; background: transparent;
+            color: rgba(255,255,255,0.85); cursor: pointer; font-size: 14px;
+        }
+        .cs-c-btn:hover { background: oklch(100% 0 0 / 0.1); border-color: oklch(100% 0 0 / 0.1); }
+        .cs-c-btn.active { color: var(--a); background: oklch(from var(--a) l c h / 0.1); }
+        .cs-c-sep { width: 1px; height: 16px; background: oklch(100% 0 0 / 0.1); margin: 0 4px; }
+        
+        #cs-context-props { display: flex; align-items: center; gap: 6px; }
+        .cs-c-label { font-size: 10px; font-weight: 900; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.1em; margin: 0 4px; }
+        .cs-c-inp {
+            background: oklch(0% 0 0 / 0.2); border: 1px solid oklch(100% 0 0 / 0.1);
+            border-radius: 8px; color: rgba(255,255,255,0.85); padding: 4px 8px; font-size: 12px; font-weight: 700;
+            width: 50px; text-align: center;
+        }
+        select.cs-c-inp {
+            text-align: left;
+            padding-right: 1.8rem !important;
+            width: auto;
+        }
+
+        /* ── Design Aids Toggle ── */
+        .cs-aid-btn {
+            width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            background: transparent; border: 1px solid transparent; color: var(--muted); cursor: pointer;
+            transition: all 0.2s var(--ease);
+        }
+        .cs-aid-btn:hover { color: var(--text); background: oklch(100% 0 0 / 0.05); }
+        .cs-aid-btn.active { color: var(--a); background: oklch(from var(--a) l c h / 0.12); border-color: oklch(from var(--a) l c h / 0.2); }
+        #cs-topbar-name:hover { background: oklch(100% 0 0 / 0.07); }
+        .cs-t:hover { background: oklch(100% 0 0 / 0.05); color: var(--text); border-color: oklch(100% 0 0 / 0.1); }
+        .cs-t.active { 
+            background: var(--a); color: white; border-color: oklch(100% 0 0 / 0.2); 
+            box-shadow: 0 8px 16px oklch(from var(--a) l c h / 0.25);
+        }
+        .cs-t-kbd {
+            position: absolute; bottom: 2px; right: 3px; font-size: 7px; font-weight: 900;
+            opacity: 0.35; font-family: 'Space Grotesk', sans-serif;
+        }
+        .cs-shape-wrap { position: relative; }
+        #cs-shape-popout {
+            position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px;
+            background: oklch(from var(--surface) l c h / 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid oklch(100% 0 0 / 0.12);
+            border-radius: 16px; box-shadow: var(--shadow-lg);
+            z-index: 200;
+        }
+        #cs-shape-popout.hidden { display: none; }
+        .cs-shape-opt {
+            width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+            border-radius: 10px; border: 1px solid transparent; background: transparent;
+            color: var(--muted); cursor: pointer; transition: all 0.15s var(--ease);
+        }
+        .cs-shape-opt:hover { background: oklch(100% 0 0 / 0.1); color: var(--text); border-color: oklch(100% 0 0 / 0.1); }
+
+        /* ── Upgraded void color swatches (replace native inputs) ── */
+        .cs-void-clr-btn {
+            border-radius: 7px;
+            border: 1.5px solid rgba(255,255,255,0.15);
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+            display: inline-block;
+        }
+        .cs-void-clr-btn:hover {
+            transform: scale(1.08);
+            border-color: rgba(255,255,255,0.35);
+            box-shadow: 0 0 0 3px rgba(0,242,254,0.12);
+        }
+
+        /* ── Toolstrip color swapper ── */
+        #cs-colorswap {
+            position: relative; width: 34px; height: 52px; margin: 4px auto 2px;
+            flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+        }
+        .cs-clr-swatch {
+            width: 30px; height: 20px; border-radius: 8px;
+            cursor: pointer; border: 1.5px solid rgba(255,255,255,0.22);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+            transition: transform 0.12s var(--ease), border-color 0.12s var(--ease), box-shadow 0.12s var(--ease);
+            flex-shrink: 0;
+        }
+        .cs-clr-swatch:hover {
+            transform: scaleX(1.06);
+            border-color: rgba(255,255,255,0.5);
+            box-shadow: 0 3px 12px rgba(0,0,0,0.6);
+        }
+        #cs-clr-fill-sq   { background: #ffffff; }
+        #cs-clr-stroke-sq { background: #000000; }
+        #cs-clr-swap-btn {
+            width: 20px; height: 12px; border-radius: 4px;
+            background: var(--surface); border: 1px solid var(--bdr);
+            color: var(--muted); font-size: 8px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0; line-height: 1; transition: all 0.15s var(--ease);
+            margin-top: 1px;
+        }
+        #cs-clr-swap-btn:hover { color: var(--text); border-color: var(--bdr-hover); }
+
+        /* ── Left Panel ── */
+        #cs-left {
+            overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 24px;
+            z-index: 30;
+        }
+        #cs-left::-webkit-scrollbar { width: 4px; }
+        #cs-left::-webkit-scrollbar-thumb { background: oklch(100% 0 0 / 0.1); border-radius: 4px; }
+
+        /* ── Animations ── */
+        @keyframes cs-panel-in-left { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes cs-panel-in-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes cs-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+        #cs-left { animation: cs-panel-in-left 0.4s var(--ease) 0.1s both; }
+        #cs-right { animation: cs-panel-in-right 0.4s var(--ease) 0.1s both; }
+        #cs-toolstrip { animation: cs-panel-in-left 0.3s var(--ease) both; }
+        #cs-topbar { animation: cs-fade-in 0.5s var(--ease) both; }
+        
+        .cs-rtab-c { transition: opacity 0.3s var(--ease), transform 0.3s var(--ease); }
+        .cs-rtab-c.hidden { opacity: 0; transform: translateY(10px); pointer-events: none; }
+
+        /* ── Canvas Area ── */
+        #cs-canvas-area {
+            position: relative;
+            overflow: hidden;
+            background: transparent;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 5;
+            width: 100%; height: 100%;
+        }
+        #cs-card-frame {
+            position: absolute; pointer-events: none; z-index: 1;
+            box-shadow: var(--shadow-lg), 0 0 0 1px var(--bdr);
+            background: #000;
+        }
+        #cs-card-frame.cs-checker {
+            background-color: #000;
+            background-image: 
+                linear-gradient(45deg, #111 25%, transparent 25%),
+                linear-gradient(-45deg, #111 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #111 75%),
+                linear-gradient(-45deg, transparent 75%, #111 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        @media (max-width: 1400px) {
+            #cs-body { grid-template-columns: 240px 1fr 240px; padding: 12px; gap: 12px; }
+            #cs-left, #cs-right { font-size: 11px; }
+            #cs-right-content { padding: 12px; }
+        }
+        @media (max-width: 1200px) {
+            #cs-body { grid-template-columns: 210px 1fr 210px; padding: 8px; gap: 8px; }
+            #cs-topbar { padding: 0 12px; gap: 8px; }
+            .cs-topbar-mid { display: none; }
+            #cs-left { padding: 14px; gap: 14px; }
+        }
+        @media (max-width: 1024px) {
+            /* Collapse to single sidebar — left panel becomes a slide-out drawer */
+            #cs-body { grid-template-columns: 0 1fr 220px; }
+            #cs-left {
+                position: fixed; left: 0; top: 56px; bottom: 0; width: 240px; z-index: 200;
+                transform: translateX(-100%); transition: transform 0.25s var(--ease);
+                border-radius: 0 20px 20px 0 !important;
+            }
+            #cs-left.open { transform: translateX(0); }
+            #cs-left-toggle { display: flex !important; }
+        }
+
+        /* ── Overlays ── */
+        #cs-grid-overlay {
+            position: absolute; pointer-events: none; z-index: 2; inset: 0; display: none;
+            background-image:
+                linear-gradient(oklch(from var(--a) l c h / 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, oklch(from var(--a) l c h / 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        #cs-trait-overlay {
+            position: absolute; pointer-events: none; z-index: 2;
+            border: 1px dashed oklch(from var(--a) l c h / 0.5);
+            background: oklch(from var(--a) l c h / 0.04);
+            display: none;
+        }
+        #cs-trait-overlay-label {
+            position: absolute; top: -18px; left: 0;
+            font-size: 8px; font-weight: 900; text-transform: uppercase;
+            letter-spacing: 0.14em; color: var(--a); white-space: nowrap;
+        }
+        canvas#cs-canvas { position: absolute; top: 0; left: 0; }
+
+        /* ── Right Panel ── */
+        #cs-right { display: flex; flex-direction: column; overflow: hidden; z-index: 30; min-width: 0; }
+        #cs-right-tabs { 
+            display: flex; background: oklch(100% 0 0 / 0.03); 
+            border-bottom: 1px solid oklch(100% 0 0 / 0.1); 
+            padding: 8px 8px 0; gap: 6px; 
+        }
+        .cs-rtab { 
+            flex: 1; padding: 12px 4px 10px; text-align: center; 
+            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; 
+            color: var(--muted); cursor: pointer; border-radius: 8px 8px 0 0;
+            border: none; background: transparent; font-family: 'Outfit', sans-serif;
+        }
+        .cs-rtab:hover { color: var(--text); background: oklch(100% 0 0 / 0.05); }
+        .cs-rtab.active { 
+            color: var(--text); 
+            background: oklch(100% 0 0 / 0.08); 
+            box-shadow: 0 -2px 0 var(--a) inset; 
+        }
+        .cs-rtab i { display: block; font-size: 14px; margin-bottom: 4px; opacity: 0.6; }
+
+        #cs-right-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+        /* ── Premium Forms ── */
+        .cs-sec { 
+            font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 900; 
+            text-transform: uppercase; letter-spacing: 0.15em; color: var(--a); 
+            margin-bottom: 12px; display: flex; align-items: center; gap: 10px;
+        }
+        .cs-sec::after { content: ""; height: 1px; flex: 1; background: var(--subtle); }
+
+        .cs-lbl { font-size: 11px; font-weight: 600; color: var(--text); opacity: 0.7; display: block; margin-bottom: 6px; }
+        .cs-inp, .cs-sel, .cs-ta { 
+            width: 100%; background: oklch(0% 0 0 / 0.2); border: 1px solid oklch(100% 0 0 / 0.1); 
+            border-radius: 12px; padding: 10px 14px; font-size: 13px; color: var(--text); 
+            font-family: inherit; transition: all 0.2s var(--ease);
+        }
+        .cs-inp:focus, .cs-sel:focus, .cs-ta:focus { border-color: var(--a); background: oklch(0% 0 0 / 0.3); }
+        .cs-inp::placeholder { color: var(--subtle); }
+        .cs-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        /* ── Custom dropdown (replaces native selects) ── */
+        .cs-dd { position: relative; }
+        .cs-dd-native { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; overflow: hidden; }
+        .cs-dd-trigger {
+            width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+            padding: 9px 12px; background: oklch(0% 0 0 / 0.3);
+            border: 1.5px solid rgba(var(--ar), 0.3); border-radius: 9px;
+            color: var(--text); font-size: 12px; font-weight: 600; font-family: inherit;
+            cursor: pointer; outline: none;
+            transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+        }
+        .cs-dd-trigger:hover {
+            border-color: rgba(var(--ar), 0.55);
+            box-shadow: 0 0 0 2px rgba(var(--ar), 0.08);
+        }
+        .cs-dd.open .cs-dd-trigger {
+            border-color: rgba(var(--ar), 0.9);
+            box-shadow: 0 0 0 3px rgba(var(--ar), 0.18), 0 0 10px rgba(var(--ar), 0.1);
+        }
+        .cs-dd-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cs-dd-chevron { font-size: 8px; color: var(--a); flex-shrink: 0; transition: transform 0.2s var(--ease); }
+        .cs-dd.open .cs-dd-chevron { transform: rotate(180deg); }
+        .cs-dd-menu {
+            position: absolute; top: calc(100% + 4px); left: 0; width: 100%;
+            max-height: 200px; overflow-y: auto;
+            background: var(--surface); border: 1.5px solid rgba(var(--ar), 0.3);
+            border-radius: 9px; box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+            z-index: 1000; padding: 4px;
+        }
+        .cs-dd-menu::-webkit-scrollbar { width: 4px; }
+        .cs-dd-menu::-webkit-scrollbar-thumb { background: rgba(var(--ar), 0.2); border-radius: 4px; }
+        .cs-dd-opt {
+            padding: 8px 10px; font-size: 12px; font-weight: 600;
+            color: var(--text); cursor: pointer; border-radius: 6px;
+            transition: background 0.12s var(--ease), color 0.12s var(--ease);
+        }
+        .cs-dd-opt:hover { background: rgba(var(--ar), 0.12); color: var(--a); }
+        .cs-dd-opt[hidden] { display: none; }
+
+        /* ── Font context-bar dropdown — opens downward, wider than trigger ── */
+        #cs-font-ctx-dd .cs-dd-menu {
+            top: calc(100% + 6px); left: 0; width: auto; min-width: 100%;
+        }
+        #cs-font-ctx-dd .cs-dd-trigger { width: auto; min-width: 130px; }
+
+        /* ── Native selects — match site style ── */
+        select {
+            -webkit-appearance: none !important;
+            -moz-appearance: none !important;
+            appearance: none !important;
+            background-color: rgba(5, 7, 10, 0.75) !important;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2368b6ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+            background-repeat: no-repeat !important;
+            background-position: right 0.6rem center !important;
+            background-size: 0.85rem !important;
+            border: 1.5px solid rgba(var(--ar), 0.3) !important;
+            border-radius: 0.6rem !important;
+            color: var(--text) !important;
+            font-family: inherit !important;
+            font-weight: 600 !important;
+            padding-right: 2rem !important;
+            cursor: pointer !important;
+            outline: none !important;
+            transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease) !important;
+        }
+        select:hover {
+            border-color: rgba(var(--ar), 0.55) !important;
+            box-shadow: 0 0 0 2px rgba(var(--ar), 0.08) !important;
+        }
+        select:focus, select:focus-visible {
+            border-color: rgba(var(--ar), 0.85) !important;
+            box-shadow: 0 0 0 3px rgba(var(--ar), 0.18), 0 0 12px rgba(var(--ar), 0.1) !important;
+        }
+        select option { background: #0a0c10; color: var(--text); }
+
+        /* ── Buttons ── */
+        .cs-tbtn { 
+            display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; 
+            border-radius: 10px; font-family: 'Outfit', sans-serif; font-size: 11px; 
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; 
+            cursor: pointer; border: 1px solid transparent; white-space: nowrap;
+        }
+        .cs-ghost { background: transparent; border-color: var(--bdr); color: var(--muted); }
+        .cs-lr:hover, .cs-lr.hv { background: var(--surface-hover); border-color: var(--bdr-hover); }
+        .cs-lr.sel { background: oklch(from var(--a) l c h / 0.12); border-color: var(--a); }
+        
+        /* Focus Ring class for canvas elements */
+        .active-hover { box-shadow: 0 0 0 2px var(--a); }
+        .cs-primary { 
+            background: var(--a); color: white; border-color: var(--a); 
+            box-shadow: 0 4px 12px oklch(from var(--a) l c h / 0.2); 
+        }
+        .cs-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px oklch(from var(--a) l c h / 0.3); }
+
+        /* ── Layer rows ── */
+        .cs-layer-rows { display: flex; flex-direction: column; gap: 2px; }
+        .cs-lr {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 6px; border-radius: 8px;
+            border: 1px solid transparent; cursor: pointer; user-select: none;
+        }
+        .cs-lr + .cs-lr { margin-top: 2px; }
+        .cs-lr.drag-over { border-color: var(--a) !important; background: oklch(from var(--a) l c h / 0.06) !important; }
+        .cs-lr.locked { opacity: 0.6; }
+
+        /* Layer thumbnail */
+        .cs-lr-thumb {
+            width: 36px; height: 36px; border-radius: 6px;
+            border: 1px solid oklch(100% 0 0 / 0.08);
+            background: oklch(0% 0 0 / 0.35); flex-shrink: 0; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .cs-lr-thumb canvas { display: block; width: 36px; height: 36px; }
+
+        /* Layer name text / rename input */
+        .cs-lr-name {
+            flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+            font-size: 11px; font-weight: 500; color: var(--text); min-width: 0;
+        }
+        .cs-lr-name-input {
+            flex: 1; font-size: 11px; font-weight: 500; min-width: 0;
+            background: oklch(0% 0 0 / 0.4); border: 1px solid var(--a);
+            border-radius: 4px; color: var(--text); padding: 1px 5px; font-family: inherit;
+            outline: none;
+        }
+
+        /* Drag handle */
+        .cs-dh {
+            cursor: grab; color: var(--muted); font-size: 10px;
+            flex-shrink: 0; opacity: 0.35; padding: 2px; line-height: 1;
+        }
+        .cs-dh:active { cursor: grabbing; }
+        .cs-lr:hover .cs-dh { opacity: 0.7; }
+
+        /* Layer action buttons */
+        .cs-lr-actions { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
+        .cs-vb {
+            width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+            border-radius: 6px; border: none; background: transparent; color: var(--muted);
+            cursor: pointer; font-size: 9px; flex-shrink: 0; transition: all 0.15s;
+        }
+        .cs-vb:hover { background: oklch(100% 0 0 / 0.08); color: var(--text); }
+
+        /* Folder/group rows */
+        .cs-lr-group { border-left: 2px solid rgba(var(--ar), 0.2); }
+        .cs-lr-group.sel { border-left-color: rgba(var(--ar), 0.6); }
+        .cs-folder-toggle { margin-right: -2px; }
+
+        /* Child rows inside expanded groups */
+        .cs-lr-child {
+            display: flex; align-items: center; gap: 5px;
+            padding: 4px 6px 4px 30px;
+            border-bottom: 1px solid oklch(100% 0 0 / 0.03);
+            background: oklch(100% 0 0 / 0.025);
+            cursor: pointer; font-size: 9px; color: var(--muted);
+            transition: background 0.12s, color 0.12s;
+        }
+        .cs-lr-child:hover { background: rgba(var(--ar), 0.06); color: var(--text); }
+        .cs-lr-child:hover .cs-vb { opacity: 1; }
+        .cs-lr-child .cs-vb { opacity: 0; transition: opacity 0.15s; width: 18px; height: 18px; }
+        .cs-lr-child-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+            border: 1px solid oklch(100% 0 0 / 0.2);
+        }
+
+        /* Properties section (below layers) */
+        .cs-props-sep { height: 1px; background: oklch(100% 0 0 / 0.07); margin: 16px 0 14px; }
+        .cs-props-header {
+            font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.14em;
+            color: var(--a); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+        }
+        .cs-props-header::after { content: ""; height: 1px; flex: 1; background: var(--subtle); }
+
+        /* Properties panel internals */
+        .cs-pr { margin-bottom: 14px; }
+        .cs-pl { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 7px; }
+        .cs-coord-row { display: flex; gap: 4px; align-items: center; }
+        .cs-coord-row label { font-size: 9px; color: var(--muted); font-weight: 700; flex-shrink: 0; width: 12px; text-align: center; }
+        .cs-coord-row input, .cs-2g input {
+            flex: 1; background: oklch(0% 0 0 / 0.2); border: 1px solid oklch(100% 0 0 / 0.1);
+            border-radius: 6px; color: var(--text); padding: 4px 6px; font-size: 10px;
+            font-family: inherit; min-width: 0; width: 100%;
+        }
+        .cs-coord-row input:focus, .cs-2g input:focus { border-color: var(--a); outline: none; }
+        .cs-2g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .cs-pbtn {
+            padding: 5px 8px; border-radius: 6px; border: 1px solid oklch(100% 0 0 / 0.1);
+            background: oklch(0% 0 0 / 0.15); color: var(--text); cursor: pointer;
+            font-size: 11px; font-family: inherit; transition: all 0.15s;
+        }
+        .cs-pbtn:hover { background: oklch(100% 0 0 / 0.08); }
+        .cs-pbtn.on { background: oklch(from var(--a) l c h / 0.15); border-color: oklch(from var(--a) l c h / 0.3); color: var(--a); }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 3px;
+            background: oklch(100% 0 0 / 0.1);
+            border-radius: 999px;
+            outline: none;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        input[type="range"]:hover {
+            background: oklch(100% 0 0 / 0.14);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: var(--a);
+            cursor: pointer;
+            box-shadow: 0 0 0 3px rgba(var(--ar), 0.2);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 0 4px rgba(var(--ar), 0.35), 0 0 8px rgba(var(--ar), 0.4);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: var(--a);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 0 3px rgba(var(--ar), 0.2);
+        }
+        input[type="range"]::-moz-range-track {
+            height: 3px;
+            background: oklch(100% 0 0 / 0.1);
+            border-radius: 999px;
+        }
+        input[type="checkbox"] { accent-color: var(--a); cursor: pointer; width: 14px; height: 14px; }
+
+        /* ── Context Menu ── */
+        #cs-context-menu {
+            position: fixed; z-index: 10000; background: var(--surface);
+            border: 1px solid var(--bdr); border-radius: 12px; padding: 6px;
+            min-width: 200px; box-shadow: var(--shadow-lg); backdrop-filter: blur(20px);
+        }
+        .cs-cm-item {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+            font-size: 12px; font-weight: 500; color: var(--text); cursor: pointer;
+            border-radius: 8px; border: none; background: none; width: 100%; text-align: left;
+        }
+        .cs-cm-item:hover { background: var(--a); color: white; }
+        .cs-cm-hint { margin-left: auto; opacity: 0.4; font-size: 10px; }
+        .cs-cm-sep { height: 1px; background: oklch(100% 0 0 / 0.07); margin: 4px 8px; }
+
+        /* ── Custom scrollbars ── */
+        #cs-right-content::-webkit-scrollbar { width: 4px; }
+        #cs-right-content::-webkit-scrollbar-thumb { background: oklch(100% 0 0 / 0.1); border-radius: 4px; }
+        #cs-layer-list::-webkit-scrollbar { width: 4px; }
+        #cs-layer-list::-webkit-scrollbar-thumb { background: oklch(100% 0 0 / 0.1); border-radius: 4px; }
+
+        /* ── Spring animation on tool activation ── */
+        @keyframes cs-tool-pop {
+            from { transform: scale(0.82); }
+            to   { transform: scale(1); }
+        }
+        .cs-t.active { animation: cs-tool-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+        /* ── Export dropdown ── */
+        .cs-export-wrap { position: relative; display: inline-flex; }
+        #cs-export-menu {
+            position: absolute; top: calc(100% + 8px); right: 0;
+            background: var(--surface); border: 1px solid var(--bdr);
+            border-radius: 12px; padding: 6px; min-width: 200px;
+            box-shadow: var(--shadow-lg); backdrop-filter: blur(20px); z-index: 200;
+        }
+
+        /* ── Shortcuts modal ── */
+        #cs-shortcuts-modal {
+            position: fixed; inset: 0; z-index: 20000;
+            background: oklch(0% 0 0 / 0.6); backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+        }
+        #cs-shortcuts-box {
+            background: var(--surface); border: 1px solid var(--bdr);
+            border-radius: 20px; padding: 28px; width: 560px; max-height: 80vh;
+            overflow-y: auto; box-shadow: var(--shadow-lg);
+        }
+        .cs-kbd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-top: 12px; }
+        .cs-kbd-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid oklch(100% 0 0 / 0.05); }
+        .cs-kbd-action { font-size: 11px; color: var(--text); opacity: 0.8; }
+        .cs-kbd-key { font-size: 9px; font-weight: 900; font-family: 'Outfit', sans-serif; background: oklch(0% 0 0 / 0.3); border: 1px solid var(--bdr); border-radius: 5px; padding: 2px 7px; color: var(--a); white-space: nowrap; }
+    </style>
+</head>
+<body>
+<div id="toast-container"></div>
+
+<div id="cs-context-menu" class="hidden">
+    <div style="font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:rgba(var(--ar),0.3);padding:6px 10px 4px;user-select:none;">Edit</div>
+    <button class="cs-cm-item" onclick="csCopy();_csHideContextMenu()"><i class="bx bxs-copy" style="font-size:9px;opacity:0.6;"></i> Copy <span class="cs-cm-hint">Ctrl+C</span></button>
+    <button class="cs-cm-item" onclick="csCut();_csHideContextMenu()"><i class="bx bxs-scissors" style="font-size:9px;opacity:0.6;"></i> Cut <span class="cs-cm-hint">Ctrl+X</span></button>
+    <button class="cs-cm-item" onclick="csPaste();_csHideContextMenu()"><i class="bx bxs-paste" style="font-size:9px;opacity:0.6;"></i> Paste <span class="cs-cm-hint">Ctrl+V</span></button>
+    <button class="cs-cm-item" onclick="csDuplicate();_csHideContextMenu()"><i class="bx bxs-copy" style="font-size:9px;opacity:0.6;"></i> Duplicate <span class="cs-cm-hint">Ctrl+D</span></button>
+    <div class="cs-cm-sep"></div>
+    <div style="font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:rgba(var(--ar),0.3);padding:6px 10px 4px;user-select:none;">Layer Order</div>
+    <button class="cs-cm-item" onclick="csBringToFront()"><i class="bx bxs-layer" style="font-size:9px;opacity:0.6;"></i> Bring to Front <span class="cs-cm-hint">F</span></button>
+    <button class="cs-cm-item" onclick="csBringForward()"><i class="bx bxs-up-arrow-square" style="font-size:9px;opacity:0.6;"></i> Bring Forward</button>
+    <button class="cs-cm-item" onclick="csSendBackward()"><i class="bx bxs-down-arrow-square" style="font-size:9px;opacity:0.6;"></i> Send Backward</button>
+    <button class="cs-cm-item" onclick="csSendToBack()"><i class="bx bxs-layer" style="font-size:9px;opacity:0.6;transform:scaleY(-1);"></i> Send to Back</button>
+    <div class="cs-cm-sep"></div>
+    <button class="cs-cm-item" onclick="csAlign('hcenter');_csHideContextMenu()"><i class="bx bxs-objects-horizontal-center" style="font-size:9px;opacity:0.6;"></i> Center Horizontally</button>
+    <button class="cs-cm-item" onclick="csAlign('vcenter');_csHideContextMenu()"><i class="bx bxs-objects-vertical-center" style="font-size:9px;opacity:0.6;"></i> Center Vertically</button>
+    <div class="cs-cm-sep"></div>
+    <button class="cs-cm-item" onclick="csGroup();_csHideContextMenu()"><i class="bx bxs-select-multiple" style="font-size:9px;opacity:0.6;"></i> Group <span class="cs-cm-hint">Ctrl+G</span></button>
+    <button class="cs-cm-item" onclick="csUngroup();_csHideContextMenu()"><i class="bx bx-collapse-alt" style="font-size:9px;opacity:0.6;"></i> Ungroup</button>
+    <button class="cs-cm-item" onclick="csToggleAutoLayout();_csHideContextMenu()"><i class="bx bxs-layout" style="font-size:9px;opacity:0.6;"></i> Toggle Auto Layout</button>
+    <button class="cs-cm-item" style="color:#ef4444;" onclick="csDeleteSelected()"><i class="bx bxs-trash" style="font-size:9px;opacity:0.6;"></i> Delete <span class="cs-cm-hint">Del</span></button>
+    <div id="cs-cm-replace-sep" class="cs-cm-sep hidden"></div>
+    <button id="cs-cm-replace-btn" class="cs-cm-item hidden" onclick="csReplaceImage();_csHideContextMenu()"><i class="bx bx-image" style="font-size:9px;opacity:0.6;"></i> Replace Image</button>
+</div>
+
+<!-- Loading -->
+<div id="cs-loading">
+    <div class="cs-ring"></div>
+    <div style="font-size:7.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.3em;color:rgba(var(--ar),0.26);">Card Creator</div>
+</div>
+
+<!-- Open Studio Modal -->
+<div id="cs-open-modal" class="hidden" onclick="if(event.target===this)csHideOpenModal()" style="position:fixed;inset:0;z-index:20000;background:oklch(0% 0 0 / 0.6);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;">
+    <div style="background:#0a0e1c;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:24px;width:560px;max-height:70vh;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 80px rgba(0,0,0,0.8);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+                <div style="font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:white;">Open Studio</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:2px;">Select a previously saved card to continue editing</div>
+            </div>
+            <button onclick="csHideOpenModal()" class="cs-tbtn cs-ghost cs-icon-btn"><i class="bx bx-x"></i></button>
+        </div>
+        <input type="text" id="cs-open-search" class="cs-inp" placeholder="Search cards..." oninput="csFilterOpenCards(this.value)" style="margin:0;">
+        <div id="cs-open-list" style="overflow-y:auto;display:flex;flex-direction:column;gap:6px;max-height:380px;min-height:80px;">
+            <div style="color:var(--muted);font-size:12px;text-align:center;padding:24px;">Loading cards...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Modal -->
+<div id="cs-upload-modal" class="hidden">
+    <div id="cs-upload-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:17px;">
+            <div>
+                <div style="font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:white;">Upload Images</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:2px;">PNG · JPG · WebP · SVG · Max 10MB each</div>
+            </div>
+            <button onclick="csCloseUploadModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:17px;"><i class="bx bx-x"></i></button>
+        </div>
+        <div id="cs-dz" onclick="document.getElementById('cs-modal-file').click()">
+            <input type="file" id="cs-modal-file" accept="image/*,.svg,image/svg+xml" multiple class="hidden" onchange="csHandleModalFiles(this.files)">
+            <i class="bx bxs-cloud-upload" style="font-size:27px;color:rgba(var(--ar),0.26);margin-bottom:9px;display:block;"></i>
+            <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.42);">Drop files here or click to browse</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:5px;">Images go to your library and can be reused on any card</div>
+        </div>
+        <div id="cs-up-prog" style="display:none;">
+            <div style="display:flex;justify-content:space-between;margin-top:11px;">
+                <div id="cs-up-status" style="font-size:9px;font-weight:900;color:var(--a);text-transform:uppercase;letter-spacing:0.1em;"></div>
+                <div id="cs-up-count" style="font-size:9px;color:var(--muted);"></div>
+            </div>
+            <div id="cs-up-bar"><div id="cs-up-fill"></div></div>
+        </div>
+        <div id="cs-up-recent" style="display:none;margin-top:13px;">
+            <div class="cs-sec" style="margin-bottom:7px;">Just Uploaded — Click to Add to Canvas</div>
+            <div id="cs-up-recent-grid" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
+            <button onclick="csCloseUploadModal()" class="cs-tbtn cs-primary" style="width:100%;margin-top:13px;justify-content:center;">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- Studio Layout -->
+<div id="cs-layout" class="hidden">
+
+    <!-- Topbar -->
+    <div id="cs-topbar">
+        <div style="display:flex;align-items:center;gap:16px;">
+            <button onclick="csGoBack()" class="cs-tbtn cs-ghost" style="padding:6px 12px;gap:8px;"><i class="bx bx-left-arrow-alt" style="font-size:10px;"></i>Cards</button>
+            <button onclick="csShowOpenModal()" class="cs-tbtn cs-ghost" style="padding:6px 12px;gap:8px;" title="Open a saved studio"><i class="bx bx-folder-open" style="font-size:12px;"></i>Open</button>
+            <button id="cs-left-toggle" onclick="document.getElementById('cs-left').classList.toggle('open')" class="cs-tbtn cs-ghost cs-icon-btn" style="display:none;" title="Toggle panel"><i class="bx bxs-layout"></i></button>
+            <div class="cs-sep"></div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="Card Creator" style="width:20px;height:20px;opacity:0.4;">
+                <div style="display:flex;flex-direction:column;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:14px;font-weight:700;color:var(--text);cursor:pointer;border-radius:4px;padding:1px 4px;transition:background 0.15s;" id="cs-topbar-name" onclick="csStartTitleEdit()" title="Click to rename">New Card</span>
+                        <input id="cs-topbar-name-input" type="text" style="display:none;font-size:14px;font-weight:700;color:var(--text);background:oklch(100% 0 0 / 0.07);border:1px solid var(--accent);border-radius:4px;padding:1px 6px;outline:none;min-width:80px;max-width:200px;" onblur="csCommitTitleEdit()" onkeydown="if(event.key==='Enter')csCommitTitleEdit();if(event.key==='Escape')csCancelTitleEdit();">
+                        <span id="cs-draft-dot" title="Draft saved" style="display:none;width:6px;height:6px;border-radius:50%;background:oklch(65% 0.18 145);flex-shrink:0;"></span>
+                    </div>
+                    <span id="cs-draft-lbl" style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.2em;color:var(--muted);">Card Creator</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alignment Center Float -->
+        <div id="cs-align-group" class="hidden" style="position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:var(--bg);padding:6px;border-radius:14px;border:1px solid var(--bdr);box-shadow:var(--shadow-lg);">
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csAlign('left')" title="Align left"><i class="bx bxs-objects-horizontal-left"></i></button>
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csAlign('hcenter')" title="Center Horizontal"><i class="bx bxs-objects-horizontal-center"></i></button>
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csAlign('right')" title="Align right"><i class="bx bxs-objects-horizontal-right"></i></button>
+            <div class="cs-sep" style="height:12px;"></div>
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csAlign('top')" title="Align top"><i class="bx bxs-objects-vertical-top"></i></button>
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csAlign('vcenter')" title="Center Vertical"><i class="bx bxs-objects-vertical-center"></i></button>
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csAlign('bottom')" title="Align bottom"><i class="bx bxs-objects-vertical-bottom"></i></button>
+            <div class="cs-sep" style="height:12px;"></div>
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csDuplicate()" title="Duplicate (Ctrl+D)"><i class="bx bxs-copy"></i></button>
+        </div>
+
+        <div style="margin-left:auto;display:flex;align-items:center;gap:16px;">
+            
+            <div style="display:flex;align-items:center;background:var(--bg);border:1px solid var(--bdr);border-radius:12px;padding:3px;">
+                <button class="cs-tbtn cs-ghost cs-icon-btn" style="border:none;" onclick="csZoomStep(-0.2)" title="Zoom out (Ctrl+-)"><i class="bx bxs-minus"></i></button>
+                <button class="cs-tbtn cs-ghost" style="border:none;min-width:56px;font-size:11px;font-weight:700;" onclick="csFitCanvas()" id="cs-zoom-display" title="Fit canvas (0)">100%</button>
+                <button class="cs-tbtn cs-ghost cs-icon-btn" style="border:none;" onclick="csZoomStep(0.2)" title="Zoom in (Ctrl++)"><i class="bx bxs-plus"></i></button>
+            </div>
+            
+            <button class="cs-tbtn cs-ghost cs-icon-btn" id="cs-grid-btn" onclick="csToggleGrid()" title="Grid (G)"><i class="bx bx-grid-alt"></i></button>
+            <div class="cs-sep"></div>
+            
+            <div style="display:flex;align-items:center;gap:6px;position:relative;">
+                <div style="position:relative;">
+                    <button id="cs-undo-btn" onclick="csUndo()" class="cs-tbtn cs-ghost cs-icon-btn" title="Undo (Ctrl+Z)" style="border-radius:8px 0 0 8px;padding-right:4px;"><i class="bx bx-undo"></i></button><button id="cs-hist-arrow" onclick="csToggleHistory()" style="height:32px;padding:0 6px;background:transparent;border:1px solid transparent;border-left:1px solid rgba(255,255,255,0.08);border-radius:0 8px 8px 0;color:rgba(255,255,255,0.35);cursor:pointer;font-size:14px;line-height:1;transition:all 0.15s;display:flex;align-items:center;" title="History" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.35)'"><i class="bx bx-history"></i></button>
+                    <div id="cs-history-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:200px;background:#0a0e1c;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,0.7);z-index:1000;max-height:260px;overflow-y:auto;"></div>
+                </div>
+                <button onclick="csRedo()" class="cs-tbtn cs-ghost cs-icon-btn" title="Redo (Ctrl+Y)"><i class="bx bx-redo"></i></button>
+            </div>
+
+            <div class="cs-sep"></div>
+            <!-- Export dropdown -->
+            <div class="cs-export-wrap">
+                <button class="cs-tbtn cs-ghost" onclick="document.getElementById('cs-export-menu').classList.toggle('hidden')" title="Download card locally">
+                    <i class="bx bxs-download" style="font-size:11px;"></i> Export
+                </button>
+                <div id="cs-export-menu" class="hidden">
+                    <div style="font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:rgba(var(--ar),0.3);padding:6px 10px 4px;user-select:none;">Download</div>
+                    <button class="cs-cm-item" onclick="csExportLocal('png',2);document.getElementById('cs-export-menu').classList.add('hidden')"><i class="bx bxs-image" style="font-size:9px;opacity:0.6;"></i> PNG — 2× (1000×1400)</button>
+                    <button class="cs-cm-item" onclick="csExportLocal('png',3);document.getElementById('cs-export-menu').classList.add('hidden')"><i class="bx bxs-printer" style="font-size:9px;opacity:0.6;"></i> PNG — 3× Print (1500×2100)</button>
+                    <button class="cs-cm-item" onclick="csExportLocal('jpeg',2);document.getElementById('cs-export-menu').classList.add('hidden')"><i class="bx bxs-image" style="font-size:9px;opacity:0.6;"></i> JPG — 2× Web</button>
+                </div>
+            </div>
+            <div class="cs-sep"></div>
+            <button onclick="csSave()" id="cs-save-btn" class="cs-tbtn cs-primary"><i class="bx bxs-save"></i>Save Card</button>
+            <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csShowShortcutsModal()" title="Keyboard shortcuts (?)"><i class="bx bxs-keyboard"></i></button>
+        </div>
+    </div>
+
+    <!-- Body Layout -->
+    <div id="cs-body">
+
+        <!-- Left: metadata only -->
+        <div id="cs-left" class="cs-glass">
+            <input type="hidden" id="cs-card-id">
+            
+            <div class="cs-sec">Card Details</div>
+            <div style="display:flex;flex-direction:column;gap:16px;">
+                <div>
+                    <label class="cs-lbl">Card Name</label>
+                    <input type="text" id="cs-name" class="cs-inp" placeholder="Enter a name..." oninput="document.getElementById('cs-topbar-name').textContent = this.value || 'New Card'; _csUpdateNameOnCanvas();">
+                    <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+                        <select id="cs-name-font" class="cs-sel" style="font-size:10px;padding:4px 8px;flex:1;" onchange="_csUpdateNameOnCanvas()">
+                            <option value="Bebas Neue">Bebas Neue</option>
+                            <option value="Rajdhani">Rajdhani</option>
+                            <option value="Orbitron">Orbitron</option>
+                            <option value="Space Grotesk" selected>Space Grotesk</option>
+                            <option value="Anton">Anton</option>
+                            <option value="Cinzel">Cinzel</option>
+                            <option value="Press Start 2P">Press Start 2P</option>
+                        </select>
+                        <input type="number" id="cs-name-size" class="cs-inp" value="36" min="8" max="120" style="width:58px;padding:4px 8px;font-size:10px;" oninput="_csUpdateNameOnCanvas()">
+                        <input type="color" id="cs-name-color" value="#ffffff" style="width:32px;height:28px;border-radius:6px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:2px;" oninput="_csUpdateNameOnCanvas()">
+                    </div>
+                    <button class="cs-tbtn cs-ghost" style="width:100%;font-size:9px;margin-top:6px;" onclick="csAddNameComponent()"><i class="bx bx-text" style="opacity:0.6;"></i> Place Name on Canvas</button>
+                </div>
+                <div class="cs-row2">
+                    <div>
+                        <label class="cs-lbl">Rarity</label>
+                        <select id="cs-rarity" class="cs-sel">
+                            <option value="common">Common</option>
+                            <option value="rare">Rare</option>
+                            <option value="epic">Epic</option>
+                            <option value="legendary">Legendary</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="cs-lbl">Set</label>
+                        <select id="cs-set" class="cs-sel" onchange="csOnSetChange()">
+                            <option value="">No Set</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="cs-lbl">Card Number</label>
+                    <div style="display:flex;align-items:center;gap:6px;opacity:0.45;" id="cs-card-number-wrap">
+                        <input type="text" id="cs-card-num" class="cs-inp" placeholder="---" disabled maxlength="3" style="width:60px;text-align:center;cursor:not-allowed;" oninput="csClampCardNum(this)">
+                        <span style="font-size:16px;font-weight:700;color:var(--muted);user-select:none;">/</span>
+                        <input type="text" id="cs-card-total" class="cs-inp" value="032" disabled readonly style="width:60px;text-align:center;opacity:0.5;cursor:not-allowed;">
+                    </div>
+                    <input type="hidden" id="cs-card-number">
+                    <div id="cs-num-taken-warn" style="display:none;margin-top:5px;font-size:10px;font-weight:600;color:#ef4444;">That number is already taken in this set.</div>
+                </div>
+                <div>
+                    <label class="cs-lbl">Description</label>
+                    <textarea id="cs-description" class="cs-inp cs-ta" placeholder="Flavour text or lore..." style="min-height:80px;"></textarea>
+                </div>
+                <div class="cs-row2">
+                    <div>
+                        <label class="cs-lbl">Attack</label>
+                        <input type="text" inputmode="numeric" id="cs-attack" class="cs-inp" value="0" onblur="csCommitStat(this);_csUpdateStatOnCanvas('atk');" onkeydown="if(event.key==='Enter'){csCommitStat(this);_csUpdateStatOnCanvas('atk');this.blur();}">
+                    </div>
+                    <div>
+                        <label class="cs-lbl">Defense</label>
+                        <input type="text" inputmode="numeric" id="cs-defense" class="cs-inp" value="0" onblur="csCommitStat(this);_csUpdateStatOnCanvas('def');" onkeydown="if(event.key==='Enter'){csCommitStat(this);_csUpdateStatOnCanvas('def');this.blur();}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="cs-sec">Template</div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                    <label class="cs-lbl">Trait Template</label>
+                    <div style="display:flex;gap:6px;">
+                        <select id="cs-template" class="cs-sel" onchange="csOnTemplateChange()">
+                            <option value="">None</option>
+                        </select>
+                        <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csShowTemplateBrowser()" title="Browse Templates"><i class="bx bxs-grid"></i></button>
+                    </div>
+                </div>
+                <div id="cs-tmpl-badge" class="hidden" style="padding:14px;border-radius:14px;background:var(--bg);border:1px solid var(--bdr);box-shadow:inset 0 2px 8px rgba(0,0,0,0.2);">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <img id="cs-tmpl-badge-img" src="" alt="" style="width:36px;height:48px;border-radius:6px;object-fit:cover;border:1px solid var(--bdr);">
+                        <div>
+                            <div id="cs-tmpl-badge-name" style="font-size:12px;font-weight:900;text-transform:uppercase;color:var(--a);letter-spacing:0.05em;"></div>
+                            <div style="font-size:9px;color:var(--muted);margin-top:2px;">Traits will auto-roll on open</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cs-sec">Background</div>
+            <!-- BG mode tabs -->
+            <div style="display:flex;gap:4px;margin-bottom:10px;">
+                <button class="cs-tbtn cs-ghost" id="cs-bg-tab-solid" onclick="csBgTab('solid')" style="flex:1;padding:5px 0;font-size:9px;">Solid</button>
+                <button class="cs-tbtn cs-ghost" id="cs-bg-tab-gradient" onclick="csBgTab('gradient')" style="flex:1;padding:5px 0;font-size:9px;">Gradient</button>
+                <button class="cs-tbtn cs-ghost" id="cs-bg-tab-transparent" onclick="csBgTab('transparent')" style="flex:1;padding:5px 0;font-size:9px;">None</button>
+            </div>
+            <!-- Solid -->
+            <div id="cs-bg-solid-ui" style="display:flex;gap:10px;align-items:center;">
+                <input type="color" id="cs-bg-color" value="#1a1025" oninput="csSetCanvasBg(this.value)" style="width:48px;height:48px;border-radius:12px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:3px;">
+                <span style="font-size:10px;color:var(--muted);">Pick a solid colour</span>
+            </div>
+            <!-- Gradient -->
+            <div id="cs-bg-gradient-ui" style="display:none;flex-direction:column;gap:8px;">
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <label style="font-size:10px;color:var(--muted);width:40px;">From</label>
+                    <input type="color" id="cs-bg-grad-a" value="#1a1025" oninput="csApplyBgGradient()" style="flex:1;height:32px;border-radius:8px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:2px;">
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <label style="font-size:10px;color:var(--muted);width:40px;">To</label>
+                    <input type="color" id="cs-bg-grad-b" value="#0d0d2b" oninput="csApplyBgGradient()" style="flex:1;height:32px;border-radius:8px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:2px;">
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <label style="font-size:10px;color:var(--muted);width:40px;">Angle</label>
+                    <input type="range" id="cs-bg-grad-angle" min="0" max="360" value="135" oninput="csApplyBgGradient()" style="flex:1;">
+                    <span id="cs-bg-grad-angle-lbl" style="font-size:10px;color:var(--muted);min-width:28px;">135°</span>
+                </div>
+            </div>
+
+            <!-- ── Frame Swapper ── -->
+            <div class="cs-sec">Card Frame</div>
+            <div id="cs-frame-swapper" style="display:flex;flex-direction:column;gap:8px;">
+                <div id="cs-frame-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:180px;overflow-y:auto;"></div>
+                <button class="cs-tbtn cs-ghost" style="width:100%;font-size:9px;" onclick="csRemoveCardFrame()"><i class="bx bx-x" style="opacity:0.5;"></i> Remove Frame</button>
+            </div>
+
+            <!-- ── Stat Tool ── -->
+            <div class="cs-sec">Stat Components</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <div>
+                    <label class="cs-lbl">Position Template</label>
+                    <input type="hidden" id="cs-stat-pos-template" value="bottom-row">
+                    <div id="cs-stat-pos-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <button class="cs-tbtn cs-ghost" onclick="csAddStatComponent('atk')" style="font-size:10px;padding:8px 4px;font-weight:700;letter-spacing:0.05em;">+ ATK</button>
+                    <button class="cs-tbtn cs-ghost" onclick="csAddStatComponent('def')" style="font-size:10px;padding:8px 4px;font-weight:700;letter-spacing:0.05em;">+ DEF</button>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <label style="font-size:9px;color:var(--muted);flex-shrink:0;">Font</label>
+                    <select id="cs-stat-font" class="cs-sel" style="font-size:10px;padding:4px 8px;">
+                        <option value="Bebas Neue">Bebas Neue</option>
+                        <option value="Rajdhani">Rajdhani</option>
+                        <option value="Orbitron">Orbitron</option>
+                        <option value="Space Grotesk" selected>Space Grotesk</option>
+                        <option value="Anton">Anton</option>
+                    </select>
+                    <input type="color" id="cs-stat-color" value="#ffffff" style="width:32px;height:28px;border-radius:6px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:2px;">
+                </div>
+            </div>
+
+            <!-- ── Studio Layouts ── -->
+            <div class="cs-sec">Studio Layout</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <div id="cs-layout-grid" style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;">
+                    <div style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0;">No layouts saved yet</div>
+                </div>
+                <button class="cs-tbtn cs-ghost" style="width:100%;font-size:9px;" onclick="csSaveStudioLayout()"><i class="bx bx-save" style="opacity:0.6;"></i> Save as Layout Template</button>
+            </div>
+
+            <div class="cs-sec">Options</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <div class="cs-tog"><span>Battle Eligible</span> <input type="checkbox" id="cs-battleable" checked></div>
+                <div class="cs-tog"><span>Trade Eligible</span> <input type="checkbox" id="cs-tradable" checked></div>
+            </div>
+
+        </div>
+
+        <!-- Center: Tool Dock + Canvas viewport -->
+        <div id="cs-center">
+
+        <!-- Contextual Bar — centred above the artboard -->
+        <div id="cs-context-bar">
+            <div id="cs-context-props"></div>
+            <div id="cs-ctx-obj-actions" style="display:contents;">
+                <div class="cs-c-sep"></div>
+                <button class="cs-c-btn" onclick="csMoveSelected('forward')" title="Bring Forward"><i class="bx bxs-layer" style="transform:scaleY(-1);"></i></button>
+                <button class="cs-c-btn" onclick="csMoveSelected('backward')" title="Send Backward"><i class="bx bxs-layer"></i></button>
+                <div class="cs-c-sep"></div>
+                <button class="cs-c-btn" id="cs-ctx-mask-btn" onclick="csApplyMask()" title="Use as Mask — clips object below"><i class="bx bxs-face"></i></button>
+                <div class="cs-c-sep"></div>
+                <button class="cs-c-btn" onclick="csDuplicate()" title="Duplicate"><i class="bx bxs-copy"></i></button>
+                <button class="cs-c-btn" onclick="csDeleteSelected()" title="Delete" style="color:oklch(60% 0.2 20);"><i class="bx bxs-trash"></i></button>
+            </div>
+        </div>
+
+        <!-- Tool strip (Pill Dock) -->
+        <div id="cs-toolstrip" class="cs-glass">
+            <button class="cs-t active" id="cst-select" onclick="csTool('select')" title="Select (V)"><i class="bx bx-move"></i><span class="cs-t-kbd">V</span></button>
+            <button class="cs-t" id="cst-text" onclick="csTool('text')" title="Text (T)"><i class="bx bx-text"></i><span class="cs-t-kbd">T</span></button>
+            <div class="cs-ts-sep"></div>
+            <button class="cs-t" id="cst-draw" onclick="csTool('draw')" title="Brush (B)"><i class="bx bxs-paint"></i><span class="cs-t-kbd">B</span></button>
+            <button class="cs-t" id="cst-eraser" onclick="csTool('eraser')" title="Eraser (E)"><i class="bx bxs-eraser"></i><span class="cs-t-kbd">E</span></button>
+            <button class="cs-t" id="cst-fill" onclick="csTool('fill')" title="Fill (F)"><i class="bx bxs-color-fill"></i></button>
+            <button class="cs-t" id="cst-eyedropper" onclick="csTool('eyedropper')" title="Eyedropper (K)"><i class="bx bxs-eyedropper"></i></button>
+            <div class="cs-ts-sep"></div>
+            <div class="cs-shape-wrap">
+                <button class="cs-t" id="cst-shape" onclick="csShapePopout()" title="Shapes">
+                    <span id="cst-shape-icon" style="display:flex;align-items:center;justify-content:center;"></span>
+                    <span style="position:absolute;bottom:2px;right:2px;width:0;height:0;border-left:4px solid transparent;border-top:4px solid currentColor;opacity:0.4;"></span>
+                </button>
+                <div id="cs-shape-popout" class="hidden"></div>
+            </div>
+            <div class="cs-ts-sep"></div>
+            <button class="cs-t" onclick="csAddImage()" title="Add Image (I)"><i class="bx bxs-image"></i><span class="cs-t-kbd">I</span></button>
+            <button class="cs-t" id="cst-crop" onclick="csTool('crop')" title="Crop Image (C)"><i class="bx bxs-crop"></i></button>
+            <div class="cs-ts-sep"></div>
+            <button class="cs-t" id="cst-zoom" onclick="csTool('zoom')" title="Zoom (Z) · Alt+click to zoom out"><i class="bx bxs-search"></i></button>
+            <button class="cs-t" id="cst-hand" onclick="csTool('hand')" title="Hand / Pan (H)"><i class="bx bxs-hand-right"></i><span class="cs-t-kbd">H</span></button>
+            <div class="cs-ts-sep"></div>
+            <!-- Phase 1: Precision & Selection -->
+            <button class="cs-t" id="cst-lasso" onclick="csTool('lasso')" title="Lasso Select (A)"><i class="bx bxs-polygon"></i><span class="cs-t-kbd">A</span></button>
+            <button class="cs-t" id="cst-magic" onclick="csTool('magic')" title="Magic Select — click colour to isolate (Q)"><i class="bx bxs-magic-wand"></i><span class="cs-t-kbd">Q</span></button>
+            <button class="cs-t" id="cst-measure" onclick="csTool('measure')" title="Measure (M)"><i class="bx bxs-ruler"></i><span class="cs-t-kbd">M</span></button>
+            <div class="cs-ts-sep"></div>
+            <!-- Phase 2: Structure -->
+            <button class="cs-t" id="cst-frame" onclick="csTool('frame')" title="Frame / Clip Container (N)"><i class="bx bxs-square"></i><span class="cs-t-kbd">N</span></button>
+            <div class="cs-ts-sep"></div>
+            <!-- Phase 4: Artistic Brushes -->
+            <button class="cs-t" id="cst-blur" onclick="csTool('blur')" title="Blur Brush"><i class="bx bxs-droplet"></i></button>
+            <div class="cs-ts-sep"></div>
+            <!-- Fill / Stroke color swapper -->
+            <div id="cs-colorswap" title="Fill &amp; Stroke colors">
+                <div id="cs-clr-fill-sq"   class="cs-clr-swatch" onclick="csOpenColorFor('fill')"   title="Fill color"></div>
+                <div id="cs-clr-stroke-sq" class="cs-clr-swatch" onclick="csOpenColorFor('stroke')" title="Stroke color"></div>
+                <button id="cs-clr-swap-btn" onclick="csSwapFillStroke()" title="Swap fill ↔ stroke">⇄</button>
+            </div>
+        </div>
+
+        <!-- ── Void Color Picker (shared) ────────────────────────────────────── -->
+        <div id="cs-void-picker" style="position:fixed;z-index:10001;display:none;width:256px;background:#0a0e1c;border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:0;box-shadow:0 20px 60px rgba(0,0,0,0.85);backdrop-filter:blur(24px);flex-direction:column;overflow:hidden;">
+            <!-- Tabs -->
+            <div style="display:flex;border-bottom:1px solid rgba(255,255,255,0.07);">
+                <button id="cvp-tab-color" onclick="_csVoidTab('color')" style="flex:1;padding:10px 0;background:transparent;border:none;color:#fff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;cursor:pointer;border-bottom:2px solid #00f2fe;transition:all 0.15s;">Color</button>
+                <button id="cvp-tab-gradient" onclick="_csVoidTab('gradient')" style="flex:1;padding:10px 0;background:transparent;border:none;color:rgba(255,255,255,0.35);font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;">Gradient</button>
+            </div>
+
+            <!-- ── Color panel ── -->
+            <div id="cvp-panel-color" style="display:flex;flex-direction:column;gap:12px;padding:16px;">
+                <div id="cvp-sv" style="width:100%;aspect-ratio:1;border-radius:10px;position:relative;cursor:crosshair;overflow:hidden;border:1px solid rgba(255,255,255,0.06);background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent),#00f2fe;">
+                    <div id="cvp-sv-ptr" style="width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6);position:absolute;transform:translate(-50%,-50%);pointer-events:none;left:100%;top:0%;"></div>
+                </div>
+                <div id="cvp-hue" style="width:100%;height:12px;border-radius:999px;position:relative;cursor:pointer;border:1px solid rgba(255,255,255,0.06);background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%);">
+                    <div id="cvp-hue-ptr" style="width:6px;height:100%;border-radius:999px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.5);position:absolute;transform:translateX(-50%);pointer-events:none;left:50%;top:0;"></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div id="cvp-swatch" style="width:36px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);flex-shrink:0;background:#00f2fe;"></div>
+                    <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.3);font-family:monospace;">#</span>
+                    <input id="cvp-hex" maxlength="6" style="flex:1;background:transparent;border:none;outline:none;color:#fff;font-family:monospace;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;padding:0;" placeholder="000000">
+                    <button id="cvp-apply" style="padding:5px 12px;background:rgba(0,242,254,0.12);border:1px solid rgba(0,242,254,0.25);border-radius:8px;color:#00f2fe;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;cursor:pointer;">APPLY</button>
+                </div>
+                <button id="cvp-transparent" style="width:100%;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;cursor:pointer;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                    <div style="width:28px;height:18px;border-radius:4px;border:1px solid rgba(255,255,255,0.15);flex-shrink:0;background:repeating-conic-gradient(rgba(255,255,255,0.12) 0% 25%,transparent 0% 50%) 0 0/8px 8px;"></div>
+                    <span style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.45);">Transparent</span>
+                </button>
+            </div>
+
+            <!-- ── Gradient panel ── -->
+            <div id="cvp-panel-gradient" style="display:none;flex-direction:column;gap:10px;padding:16px;">
+                <!-- Gradient bar with stop handles -->
+                <div style="position:relative;height:36px;">
+                    <div id="cvp-grad-bar" style="width:100%;height:20px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:crosshair;background:linear-gradient(to right,#000,#fff);position:relative;overflow:visible;"></div>
+                    <div id="cvp-grad-stops" style="position:absolute;top:0;left:0;width:100%;height:20px;pointer-events:none;"></div>
+                </div>
+                <!-- Type -->
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.4);width:52px;flex-shrink:0;">Type</span>
+                    <select id="cvp-grad-type" style="flex:1;font-size:10px;padding:4px 8px;">
+                        <option value="linear">Linear</option>
+                        <option value="radial">Radial</option>
+                    </select>
+                </div>
+                <!-- Selected stop: color + position -->
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.4);width:52px;flex-shrink:0;">Color</span>
+                    <div id="cvp-stop-clr" style="width:32px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;flex-shrink:0;" onclick="_csGradStopPickColor()"></div>
+                    <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.4);margin-left:4px;">Pos</span>
+                    <input id="cvp-stop-pos" type="number" min="0" max="100" style="width:52px;background:#111827;border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:#fff;font-size:10px;padding:4px 6px;" oninput="_csGradStopSetPos(this.value)">
+                    <span style="font-size:9px;color:rgba(255,255,255,0.3);">%</span>
+                </div>
+                <!-- Opacity -->
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.4);width:52px;flex-shrink:0;">Opacity</span>
+                    <input id="cvp-stop-opacity" type="range" min="0" max="100" value="100" style="flex:1;" oninput="_csGradStopSetOpacity(this.value)">
+                    <span id="cvp-stop-opacity-lbl" style="font-size:9px;color:#fff;font-weight:700;min-width:28px;text-align:right;">100%</span>
+                </div>
+                <!-- Actions -->
+                <div style="display:flex;gap:6px;">
+                    <button onclick="_csGradStopInsert()" style="flex:1;padding:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:#fff;font-size:9px;font-weight:700;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">Insert</button>
+                    <button onclick="_csGradStopDelete()" style="flex:1;padding:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:#fff;font-size:9px;font-weight:700;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">Delete</button>
+                    <button onclick="_csGradReverse()" style="flex:1;padding:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:#fff;font-size:9px;font-weight:700;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">Reverse</button>
+                </div>
+                <!-- Apply gradient -->
+                <button onclick="_csGradApply()" style="width:100%;padding:7px;background:rgba(0,242,254,0.12);border:1px solid rgba(0,242,254,0.25);border-radius:8px;color:#00f2fe;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;cursor:pointer;">Apply Gradient</button>
+            </div>
+        </div>
+
+        <div id="cs-canvas-area" style="flex:1;min-width:0;">
+            <div id="cs-card-frame"></div>
+            <div id="cs-trait-overlay"><div id="cs-trait-overlay-label">Trait Zone</div></div>
+            <div id="cs-grid-overlay"></div>
+            <!-- Lasso polygon overlay -->
+            <svg id="cs-lasso-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;display:none;">
+                <polygon id="cs-lasso-poly" fill="rgba(0,242,254,0.1)" stroke="#00f2fe" stroke-width="1.5" stroke-dasharray="5,3" points=""/>
+            </svg>
+            <!-- Measure tooltip -->
+            <div id="cs-measure-tip" style="position:absolute;pointer-events:none;z-index:20;display:none;background:oklch(18% 0.02 256 / 0.92);border:1px solid rgba(0,242,254,0.4);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;backdrop-filter:blur(8px);"></div>
+            <!-- Measure line SVG -->
+            <svg id="cs-measure-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9;display:none;">
+                <line id="cs-measure-line" stroke="#00f2fe" stroke-width="1.5" stroke-dasharray="4,3" x1="0" y1="0" x2="0" y2="0"/>
+                <circle id="cs-measure-dot1" r="3" fill="#00f2fe"/>
+                <circle id="cs-measure-dot2" r="3" fill="#00f2fe"/>
+            </svg>
+            <!-- Eyedropper magnifier (acts as cursor) -->
+            <div id="cs-eyedrop-mag" style="position:fixed;pointer-events:none;z-index:9999;display:none;transform:translate(-50%,-50%);flex-direction:column;align-items:center;gap:6px;">
+                <div id="cs-eyedrop-circle" style="width:96px;height:96px;border-radius:50%;border:2.5px solid rgba(0,242,254,0.9);overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.7),inset 0 0 0 1px rgba(0,0,0,0.4);flex-shrink:0;"></div>
+                <div id="cs-eyedrop-info" style="background:rgba(10,14,28,0.92);border:1px solid rgba(0,242,254,0.25);border-radius:8px;padding:5px 10px;text-align:center;backdrop-filter:blur(8px);min-width:110px;">
+                    <div id="cs-eyedrop-swatch" style="width:100%;height:14px;border-radius:4px;margin-bottom:4px;border:1px solid rgba(255,255,255,0.1);"></div>
+                    <div id="cs-eyedrop-hex" style="font-size:10px;font-weight:700;color:#fff;font-family:monospace;letter-spacing:0.05em;"></div>
+                    <div id="cs-eyedrop-rgb" style="font-size:9px;color:rgba(255,255,255,0.5);font-family:monospace;margin-top:1px;"></div>
+                </div>
+            </div>
+            <!-- Interactive gradient handles -->
+            <svg id="cs-grad-handles" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:12;display:none;">
+                <line id="cs-grad-line" stroke="rgba(0,242,254,0.5)" stroke-width="1.5" stroke-dasharray="4,3" x1="0" y1="0" x2="0" y2="0"/>
+                <circle id="cs-grad-h1" r="7" fill="#00f2fe" stroke="white" stroke-width="1.5" style="cursor:move;pointer-events:all;"/>
+                <circle id="cs-grad-h2" r="7" fill="white" stroke="#00f2fe" stroke-width="1.5" style="cursor:move;pointer-events:all;"/>
+            </svg>
+            <canvas id="cs-canvas"></canvas>
+            <input type="file" id="cs-image-input" accept="image/*,.svg,image/svg+xml" class="hidden" onchange="_csHandleImageFile(event)">
+        </div><!-- /cs-canvas-area -->
+
+        </div><!-- /cs-center -->
+
+        <!-- Right: Layers, Props & Libs -->
+        <div id="cs-right" class="cs-glass">
+            <div id="cs-right-tabs">
+                <button class="cs-rtab active" onclick="csRTab('layers')" id="rtt-layers"><i class="bx bxs-layer"></i>Layers</button>
+                <button class="cs-rtab" onclick="csRTab('fonts')" id="rtt-fonts"><i class="bx bxs-font"></i>Fonts</button>
+                <button class="cs-rtab" onclick="csRTab('traits')" id="rtt-traits"><i class="bx bxs-magic-wand"></i>Traits</button>
+                <button class="cs-rtab" onclick="csRTab('library')" id="rtt-library"><i class="bx bxs-image-alt"></i>Library</button>
+            </div>
+            <div id="cs-right-content">
+                <div id="rtc-layers">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                        <span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);">Layers</span>
+                        <div style="display:flex;gap:4px;">
+                            <button class="cs-vb" onclick="csNewLayer()" title="Add Layer"><i class="bx bxs-plus"></i></button>
+                            <button onclick="csDuplicate()" class="cs-vb" title="Duplicate Layer"><i class="bx bxs-copy"></i></button>
+                            <button onclick="csDeleteSelected()" class="cs-vb" title="Delete" style="color:oklch(60% 0.25 20);"><i class="bx bxs-trash"></i></button>
+                        </div>
+                    </div>
+                    <div id="cs-layer-list"></div>
+                    <!-- Properties live below the layer list — always visible -->
+                    <div class="cs-props-sep"></div>
+                    <div class="cs-props-header">Properties</div>
+                    <div id="cs-left-props-content" style="color:var(--muted);font-size:11px;">Select an element on the canvas</div>
+                </div>
+                <div id="rtc-fonts" class="hidden">
+                    <input type="text" id="cs-font-search" class="cs-inp" placeholder="Search fonts..." oninput="csFilterFonts(this.value)" style="margin-bottom:10px;">
+                    <div style="display:flex;gap:6px;margin-bottom:14px;">
+                        <input type="text" id="cs-custom-font-inp" class="cs-inp" placeholder="Google Font name…" style="flex:1;font-size:11px;padding:7px 10px;" onkeydown="if(event.key==='Enter')csLoadCustomFont()">
+                        <button class="cs-pbtn" onclick="csLoadCustomFont()" title="Load custom Google Font" style="flex-shrink:0;padding:7px 10px;font-size:10px;white-space:nowrap;"><i class="bx bx-plus" style="font-size:13px;"></i> Add</button>
+                    </div>
+                    <div id="cs-font-list"></div>
+                </div>
+                <div id="rtc-traits" class="hidden">
+
+                    <div class="cs-props-header">Automated Traits</div>
+                    <div class="cs-pr" style="margin-top:-4px;">
+                        <p style="font-size:9px;color:var(--muted);line-height:1.6;margin:0;">Place a Trait Zone on the canvas to define where traits, icons, and descriptions are rendered on every card pull.</p>
+                    </div>
+
+                    <div class="cs-pr">
+                        <button class="cs-pbtn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:oklch(from var(--a) l c h / 0.08);border-color:oklch(from var(--a) l c h / 0.25);color:var(--a);" onclick="csAddTraitZone()">
+                            <i class="bx bxs-plus"></i> Place Trait Zone
+                        </button>
+                    </div>
+
+                    <div class="cs-props-header">Zone Position</div>
+                    <div class="cs-pr" style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                        <div id="cs-trait-zone-diagram" style="position:relative;width:90px;height:126px;background:oklch(0% 0 0 / 0.35);border:1px solid var(--bdr);border-radius:8px;overflow:hidden;">
+                            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+                                <i class="bx bxs-image" style="color:var(--subtle);font-size:22px;"></i>
+                            </div>
+                        </div>
+                        <div id="cs-trait-zone-label" class="cs-pl" style="margin:0;text-align:center;text-transform:none;letter-spacing:0;font-weight:500;">Select a template to see zone</div>
+                    </div>
+
+                    <!-- Shown when a zone rect is on the canvas -->
+                    <div id="cs-tz-panel" style="display:none;">
+
+                        <div class="cs-props-header">Display</div>
+                        <div class="cs-pr">
+                            <div class="cs-pl">Mode</div>
+                            <select id="cs-tz-displaymode" onchange="csUpdateTraitZonePreview()" style="width:100%;font-size:10px;padding:4px 6px;">
+                                <option value="full">Icon + Name + Description</option>
+                                <option value="icon_name">Icon + Name</option>
+                                <option value="icon_only">Icon Only</option>
+                                <option value="name_desc">Name + Description</option>
+                                <option value="name_only">Name Only</option>
+                            </select>
+                        </div>
+                        <div class="cs-pr">
+                            <div class="cs-pl">Alignment</div>
+                            <select id="cs-tz-align" onchange="csUpdateTraitZonePreview()" style="width:100%;font-size:10px;padding:4px 6px;">
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
+                        <div class="cs-pr">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" id="cs-tz-genesis" onchange="csUpdateTraitZonePreview()">
+                                <span class="cs-pl" style="margin:0;">Genesis Style</span>
+                            </label>
+                        </div>
+
+                        <div class="cs-props-header">Typography</div>
+                        <div class="cs-pr">
+                            <div class="cs-pl">Icon Size</div>
+                            <div class="cs-coord-row">
+                                <label>px</label>
+                                <input type="number" id="cs-tz-iconsize" value="28" min="12" max="64" oninput="csUpdateTraitZonePreview()">
+                            </div>
+                        </div>
+                        <div class="cs-pr">
+                            <div class="cs-pl">Name</div>
+                            <div style="display:flex;gap:5px;">
+                                <select id="cs-tz-namefont" onchange="csUpdateTraitZonePreview()" style="flex:1;min-width:0;font-size:10px;padding:4px 5px;"></select>
+                                <input type="number" id="cs-tz-namesize" value="20" min="8" max="48" oninput="csUpdateTraitZonePreview()" style="width:44px;flex-shrink:0;background:oklch(0% 0 0 / 0.2);border:1px solid oklch(100% 0 0 / 0.1);border-radius:6px;color:var(--text);padding:4px 5px;font-size:10px;font-family:inherit;">
+                            </div>
+                        </div>
+                        <div class="cs-pr">
+                            <div class="cs-pl">Description</div>
+                            <div style="display:flex;gap:5px;">
+                                <select id="cs-tz-descfont" onchange="csUpdateTraitZonePreview()" style="flex:1;min-width:0;font-size:10px;padding:4px 5px;"></select>
+                                <input type="number" id="cs-tz-descsize" value="11" min="7" max="24" oninput="csUpdateTraitZonePreview()" style="width:44px;flex-shrink:0;background:oklch(0% 0 0 / 0.2);border:1px solid oklch(100% 0 0 / 0.1);border-radius:6px;color:var(--text);padding:4px 5px;font-size:10px;font-family:inherit;">
+                            </div>
+                        </div>
+                        <div class="cs-pr">
+                            <div class="cs-pl">Text Color</div>
+                            <input type="color" id="cs-tz-color" value="#ffffff" oninput="csUpdateTraitZonePreview()" style="width:36px;height:26px;border:1px solid oklch(100% 0 0 / 0.1);border-radius:6px;background:none;cursor:pointer;padding:2px;">
+                        </div>
+
+                        <div class="cs-props-header">Zone Templates</div>
+                        <div class="cs-pr">
+                            <div class="cs-pl">Load Template</div>
+                            <div style="display:flex;gap:5px;">
+                                <select id="cs-tz-tmpl-sel" style="flex:1;min-width:0;background:oklch(0% 0 0 / 0.2);border:1px solid oklch(100% 0 0 / 0.1);border-radius:6px;color:var(--text);padding:4px 6px;font-size:10px;font-family:inherit;">
+                                    <option value="">— select template —</option>
+                                </select>
+                                <button class="cs-pbtn" onclick="csLoadZoneTemplate()">Load</button>
+                            </div>
+                        </div>
+                        <div class="cs-pr">
+                            <button class="cs-pbtn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:oklch(from var(--a) l c h / 0.08);border-color:oklch(from var(--a) l c h / 0.25);color:var(--a);" onclick="csSaveZoneTemplate()">
+                                <i class="bx bxs-save"></i> Save as Zone Template
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+                <div id="rtc-library" class="hidden"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const BACKEND_URL = (document.querySelector('meta[name="castle-public-url"]')?.content || window.location.origin).replace(/\/$/, '');
+function escapeHTML(str) { if (!str) return ''; const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+let _activeToast = null;
+function showToast(msg, type = 'info') {
+    // Silence non-critical toasts
+    if (type === 'success' || type === 'loading') {
+        console.log(`[Studio] ${type}: ${msg}`);
+        if (type === 'loading') {
+            const btn = document.getElementById('cs-save-btn');
+            if (btn) btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i>';
+        }
+        return null;
+    }
+    
+    if (_activeToast) { _activeToast.remove(); _activeToast = null; }
+    const c = document.getElementById('toast-container'); if (!c) return null;
+    const t = document.createElement('div'); t.className = `toast-void toast-${type}`;
+    const icons = { success:'bxs-check-circle', error:'bxs-x-circle', info:'bxs-info-circle', loading:'bx-loader-alt bx-spin' };
+    t.innerHTML = `<i class="bx ${icons[type]||icons.info} toast-icon"></i><div class="toast-message">${escapeHTML(msg)}</div>`;
+    c.appendChild(t);
+    _activeToast = t;
+    setTimeout(() => { if (t && t.parentNode) { t.classList.add('fade-out'); setTimeout(() => t.remove(), 300); } }, 3200);
+    return t;
+}
+function clearLoadingToast() { if (_activeToast) { _activeToast.remove(); _activeToast = null; } }
+function loadScriptOnce(src) {
+    return new Promise((resolve, reject) => {
+        const ex = document.querySelector(`script[data-src="${src}"]`);
+        if (ex) { ex.getAttribute('data-loaded')==='1' ? resolve() : ex.addEventListener('load', resolve, {once:true}); return; }
+        const el = document.createElement('script'); el.src = src; el.async = true; el.setAttribute('data-src', src);
+        el.onload = () => { el.setAttribute('data-loaded','1'); resolve(); };
+        el.onerror = () => reject(new Error('Failed: ' + src));
+        document.head.appendChild(el);
+    });
+}
+async function ensureSortableLoaded() {
+    if (typeof Sortable !== 'undefined') return;
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js');
+}
+</script>
+<!-- Keyboard Shortcuts Modal -->
+<div id="cs-shortcuts-modal" class="hidden" onclick="if(event.target===this)csHideShortcutsModal()">
+    <div id="cs-shortcuts-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:white;">Keyboard Shortcuts</div>
+            <button onclick="csHideShortcutsModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;"><i class="bx bx-x"></i></button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:16px;">Press <kbd style="background:oklch(0% 0 0 / 0.3);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;color:var(--a);">?</kbd> to toggle this panel</div>
+        <div class="cs-kbd-grid">
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Select tool</span><span class="cs-kbd-key">V</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Text tool</span><span class="cs-kbd-key">T</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Brush tool</span><span class="cs-kbd-key">B</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Eraser tool</span><span class="cs-kbd-key">E</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Fill tool</span><span class="cs-kbd-key">F</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Eyedropper</span><span class="cs-kbd-key">K</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Zoom tool</span><span class="cs-kbd-key">Z</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Crop tool</span><span class="cs-kbd-key">C</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Hand / Pan</span><span class="cs-kbd-key">H · Space</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Add Rectangle</span><span class="cs-kbd-key">R</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Add Circle</span><span class="cs-kbd-key">O</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Add Line</span><span class="cs-kbd-key">L</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Add Image</span><span class="cs-kbd-key">I</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Upload Library</span><span class="cs-kbd-key">U</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Deselect / Cancel</span><span class="cs-kbd-key">Esc</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Select All</span><span class="cs-kbd-key">Ctrl+A</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Copy</span><span class="cs-kbd-key">Ctrl+C</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Cut</span><span class="cs-kbd-key">Ctrl+X</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Paste</span><span class="cs-kbd-key">Ctrl+V</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Duplicate</span><span class="cs-kbd-key">Ctrl+D</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Undo</span><span class="cs-kbd-key">Ctrl+Z</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Redo</span><span class="cs-kbd-key">Ctrl+Y</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Save</span><span class="cs-kbd-key">Ctrl+S</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Zoom In</span><span class="cs-kbd-key">Ctrl++</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Zoom Out</span><span class="cs-kbd-key">Ctrl+-</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Fit Canvas</span><span class="cs-kbd-key">0</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Toggle Grid</span><span class="cs-kbd-key">G</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Nudge (1px)</span><span class="cs-kbd-key">← ↑ → ↓</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Nudge (10px)</span><span class="cs-kbd-key">Shift+Arrow</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Bring to Front</span><span class="cs-kbd-key">F</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Group Selection</span><span class="cs-kbd-key">Ctrl+G</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Ungroup</span><span class="cs-kbd-key">Ctrl+Shift+G</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Delete Layer</span><span class="cs-kbd-key">Del · Backspace</span></div>
+            <div class="cs-kbd-row"><span class="cs-kbd-action">Shortcuts</span><span class="cs-kbd-key">?</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Close export menu when clicking outside
+document.addEventListener('click', e => {
+    const menu = document.getElementById('cs-export-menu');
+    if (menu && !e.target.closest('.cs-export-wrap')) menu.classList.add('hidden');
+    const popout = document.getElementById('cs-shape-popout');
+    if (popout && !e.target.closest('.cs-shape-wrap')) popout.classList.add('hidden');
+});
+
+</script>
+<!-- Template Browser Modal -->
+<div id="cs-template-modal" class="hidden" onclick="if(event.target===this)csHideTemplateBrowser()">
+    <div id="cs-template-box" class="cs-glass" style="max-width:800px;width:90%;padding:24px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <div style="font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:white;">Browse Templates</div>
+            <button onclick="csHideTemplateBrowser()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;"><i class="bx bx-x"></i></button>
+        </div>
+        <div id="cs-template-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:16px;max-height:60vh;overflow-y:auto;padding:4px;">
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Add extra styles for template modal */
+    .cs-tm-card {
+        background: oklch(0% 0 0 / 0.2); border: 1px solid oklch(100% 0 0 / 0.1);
+        border-radius: 14px; padding: 12px; cursor: pointer; transition: all 0.2s;
+        display: flex; flex-direction: column; gap: 8px;
+    }
+    .cs-tm-card:hover { border-color: var(--a); transform: translateY(-3px); background: oklch(0% 0 0 / 0.3); }
+    .cs-tm-card img { width: 100%; aspect-ratio: 5/7; object-fit: cover; border-radius: 8px; border: 1px solid var(--bdr); }
+    .cs-tm-empty { width: 100%; aspect-ratio: 5/7; background: var(--bg); border: 1px dashed var(--bdr); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--muted); }
+    .cs-tm-name { font-size: 11px; font-weight: 700; color: var(--text); text-align: center; }
+    
+    #cs-template-box { position: relative; margin: auto; }
+</style>
+
+<script>
+/* ── Custom dropdown enhancement for all selects ────────────────────── */
+(function() {
+    function csEnhanceSelect(sel) {
+        if (sel.dataset.csdd) return;
+        sel.dataset.csdd = '1';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'cs-dd';
+        sel.parentNode.insertBefore(wrap, sel);
+        wrap.appendChild(sel);
+        sel.className = 'cs-dd-native';
+        sel.style.cssText = 'position:absolute;opacity:0;pointer-events:none;width:0;height:0;overflow:hidden;';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'cs-dd-trigger';
+        const label = document.createElement('span');
+        label.className = 'cs-dd-label';
+        const chev = document.createElement('i');
+        chev.className = 'bx bx-chevron-down cs-dd-chevron';
+        trigger.append(label, chev);
+        wrap.appendChild(trigger);
+
+        const menu = document.createElement('div');
+        menu.className = 'cs-dd-menu';
+        menu.hidden = true;
+        wrap.appendChild(menu);
+
+        function sync() {
+            label.textContent = sel.options[sel.selectedIndex]?.text || '';
+            menu.innerHTML = Array.from(sel.options).map(o =>
+                '<div class="cs-dd-opt" data-v="' + o.value + '">' + o.text + '</div>'
+            ).join('');
+            menu.querySelectorAll('.cs-dd-opt').forEach(opt => {
+                opt.onclick = e => {
+                    e.stopPropagation();
+                    sel.value = opt.dataset.v;
+                    label.textContent = opt.textContent;
+                    close();
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                };
+            });
+        }
+
+        function open() { sync(); menu.hidden = false; wrap.classList.add('open'); }
+        function close() { menu.hidden = true; wrap.classList.remove('open'); }
+
+        trigger.onclick = e => {
+            e.stopPropagation();
+            // Close any other open dropdowns
+            document.querySelectorAll('.cs-dd.open').forEach(d => {
+                if (d !== wrap) { d.classList.remove('open'); d.querySelector('.cs-dd-menu').hidden = true; }
+            });
+            if (menu.hidden) {
+                open();
+                const handler = e2 => {
+                    if (!wrap.contains(e2.target)) { close(); document.removeEventListener('click', handler); }
+                };
+                document.addEventListener('click', handler);
+            } else {
+                close();
+            }
+        };
+
+        sel.addEventListener('change', () => { label.textContent = sel.options[sel.selectedIndex]?.text || ''; });
+
+        // Watch for dynamically added options (set/template dropdowns)
+        new MutationObserver(() => { label.textContent = sel.options[sel.selectedIndex]?.text || ''; })
+            .observe(sel, { childList: true });
+
+        sync();
+    }
+
+    // Enhance selects in the left panel (Rarity, Set, Template, Font)
+    window._csEnhanceSelects = function() {
+        document.querySelectorAll('#cs-left select').forEach(csEnhanceSelect);
+    };
+    // Also expose for dynamically created selects
+    window._csEnhanceSelect = csEnhanceSelect;
+
+    // Run on load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', window._csEnhanceSelects);
+    } else {
+        window._csEnhanceSelects();
+    }
+})();
+</script>
+<script src="/card-creator.js"></script>
+<script>
+// Auto-scale toolstrip so it always fits within the viewport height
+function _fitToolstrip() {
+    const strip = document.getElementById('cs-toolstrip');
+    if (!strip) return;
+    // Reset scale so we can measure natural height
+    strip.style.setProperty('--ts-scale', '1');
+    const available = window.innerHeight - 80; // subtract topbar
+    const natural   = strip.scrollHeight;
+    const scale     = natural > available ? Math.max(0.6, available / natural) : 1;
+    strip.style.setProperty('--ts-scale', scale);
+}
+window.addEventListener('load',   _fitToolstrip);
+window.addEventListener('resize', _fitToolstrip);
+</script>
+</body>
+</html>

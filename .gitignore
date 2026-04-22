@@ -25,3 +25,5 @@ Thumbs.db
 
 # MRQ Local Config
 .mrq.json
+# Added by code-review-graph
+.code-review-graph/

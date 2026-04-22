@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Studio | Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/dashboard.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+</head>
+
+<body class="bg-void-bg text-void-text antialiased selection:bg-void-accent/30">
+    <div class="saas-bg-glow"></div>
+    <div id="toast-container"></div>
+
+    <nav id="app-navbar" class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
+        <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-2 group cursor-pointer" onclick="window.location.href='/'">
+                <div
+                    class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <div class="flex flex-col">
+                    <span
+                        class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span
+                            class="text-void-accent">TCG</span></span>
+                </div>
+            </div>
+
+            <div class="hidden md:flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md">
+                <a href="/dashboard"
+                    class="flex items-center gap-1.5 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap text-void-muted hover:text-void-text hover:bg-white/[0.04]">
+                    <i class="bx bxs-dashboard text-xs"></i>Creator Dashboard
+                </a>
+                <a href="/dashboard?section=card-studio"
+                    class="flex items-center gap-1.5 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap text-void-accent bg-void-accent/10">
+                    <i class="bx bxs-palette text-xs"></i>Card Studio
+                </a>
+                <a href="/dashboard?section=stream-features"
+                    class="flex items-center gap-1.5 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap text-void-muted hover:text-void-text hover:bg-white/[0.04]">
+                    <i class="bx bxs-cog text-xs"></i>Stream Features
+                </a>
+            </div>
+
+            <div class="flex items-center gap-6">
+                <div id="nav-user-preview" class="flex items-center gap-4" role="status" aria-label="User Profile">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Creator</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-void-accent/50"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt=""
+                                    class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
+                                <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"
+                                    aria-hidden="true"></span>
+                            </span>
+                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden md:inline"
+                                aria-hidden="true"></i>
+                        </button>
+                        <div id="nav-user-menu"
+                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                            role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:bg-white/[0.04]"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt=""
+                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"
+                                                aria-hidden="true"></span>
+                                            <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap"
+                                        class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron"
+                                            class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"
+                                            aria-hidden="true"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                        <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0" aria-hidden="true"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Opens viewer settings</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="bx bx-log-out w-4 text-center" aria-hidden="true"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard-container relative z-10">
+        <div class="dashboard-grid">
+
+            <aside class="dashboard-sidebar">
+                <button onclick="switchTab('cards')" id="tab-cards" class="dashboard-tab-btn active">
+                    <i class="bx bxs-id-card w-5"></i> Cards
+                </button>
+                <button onclick="switchTab('sets')" id="tab-sets" class="dashboard-tab-btn">
+                    <i class="bx bxs-layer w-5"></i> Sets
+                </button>
+                <button onclick="window.location.href='/card-creator'" class="dashboard-tab-btn text-void-accent/80 hover:text-void-accent">
+                    <i class="bx bxs-magic-wand w-5"></i> Card Creator
+                </button>
+                <button onclick="switchTab('promo')" id="tab-promo" class="dashboard-tab-btn">
+                    <i class="bx bxs-gift w-5"></i> Promo
+                </button>
+                <button onclick="switchTab('granting')" id="tab-granting" class="dashboard-tab-btn">
+                    <i class="bx bxs-hand w-5"></i> Granting
+                </button>
+            </aside>
+
+            <div class="dashboard-content-area space-y-8">
+
+                <header class="mb-8 pb-8 border-b border-white/5">
+                    <h1 class="text-4xl font-display font-black uppercase italic tracking-tight text-white">
+                        Card Studio</h1>
+                </header>
+
+                <!-- Cards tab -->
+                <section id="content-cards" class="tab-content active">
+                    <div id="studio-cards-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[120px]">
+                        <div class="col-span-full py-12 text-center text-void-muted text-[10px] uppercase tracking-widest">
+                            <i class="bx bx-loader-alt animate-spin mr-2"></i>Loading cards…
+                        </div>
+                    </div>
+
+                    <div id="card-studio-details-modal"
+                        class="fixed inset-0 bg-void-bg/95 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6"
+                        role="dialog" aria-modal="true" aria-labelledby="card-studio-details-title"
+                        onclick="if (event.target === this) closeCardStudioDetailsModal()">
+                        <div class="glass-card w-full max-w-[min(100%,19rem)] rounded-2xl p-0 relative border border-white/[0.08] shadow-2xl shadow-black/40 overflow-hidden"
+                            onclick="event.stopPropagation()">
+                            <div class="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-white/[0.03]">
+                                <h2 id="card-studio-details-title" class="text-[10px] font-black uppercase tracking-[0.2em] text-void-muted">Card</h2>
+                                <button type="button" onclick="closeCardStudioDetailsModal()" aria-label="Close"
+                                    class="text-void-muted hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 -mr-1">
+                                    <i class="bx bx-x text-lg"></i>
+                                </button>
+                            </div>
+                            <div id="card-studio-details-modal-body" class="p-4"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Sets tab -->
+                <section id="content-sets" class="tab-content">
+                    <div class="glass-card flex flex-col items-center justify-center py-20 text-center space-y-6">
+                        <i class="bx bxs-layer text-5xl text-void-accent/20"></i>
+                        <div>
+                            <h3 class="text-xl font-black uppercase italic tracking-tight">Sets</h3>
+                            <p class="text-xs text-void-muted mt-2 max-w-sm mx-auto">Create and manage card sets. Group your cards into themed collections.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="content-promo" class="tab-content">
+                    <div class="glass-card rounded-2xl border border-white/[0.06] overflow-hidden divide-y divide-white/[0.06]">
+                        <div class="px-5 py-5 sm:px-6">
+                            <h3 class="text-lg font-display font-black uppercase italic tracking-tight text-white">Packs &amp; promotions</h3>
+                            <p class="text-[11px] text-void-muted mt-2 leading-relaxed max-w-xl">Control rarity odds for openings and run timed or limited drops—when these tools go live, they’ll live here.</p>
+                        </div>
+                        <div class="px-2 py-1">
+                            <div class="flex items-center gap-3 px-3 py-3.5 rounded-xl text-left opacity-75">
+                                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.04] text-void-accent">
+                                    <i class="bx bxs-dice-5 text-lg"></i>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-[11px] font-bold text-white tracking-tight">Rarity drop rates</p>
+                                    <p class="text-[10px] text-void-muted mt-0.5">Per-rarity weights for packs and rewards</p>
+                                </div>
+                                <span class="shrink-0 text-[9px] font-black uppercase tracking-widest text-void-muted/80">Soon</span>
+                            </div>
+                            <div class="flex items-center gap-3 px-3 py-3.5 rounded-xl text-left opacity-75">
+                                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.04] text-void-accent">
+                                    <i class="bx bxs-gift text-lg"></i>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-[11px] font-bold text-white tracking-tight">Promotional drops</p>
+                                    <p class="text-[10px] text-void-muted mt-0.5">Limited runs, codes, and timed promos</p>
+                                </div>
+                                <span class="shrink-0 text-[9px] font-black uppercase tracking-widest text-void-muted/80">Soon</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Granting tab -->
+                <section id="content-granting" class="tab-content">
+                    <div class="glass-card flex flex-col items-center justify-center py-20 text-center space-y-6">
+                        <i class="bx bxs-hand text-5xl text-void-accent/20"></i>
+                        <div>
+                            <h3 class="text-xl font-black uppercase italic tracking-tight">Granting</h3>
+                            <p class="text-xs text-void-muted mt-2 max-w-sm mx-auto">Grant cards directly to viewers. Search for users and assign specific cards.</p>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </main>
+
+    <script src="/castle-auth-origin.js"></script>
+    <script src="/nav-user-menu.js"></script>
+    <script>
+        // ── Bootstrap ──
+        const BACKEND_URL =
+            typeof getCastleBackendOrigin === 'function'
+                ? getCastleBackendOrigin()
+                : (window.__CASTLE_BACKEND__ || '');
+
+        function showToast(msg, type) {
+            const c = document.getElementById('toast-container');
+            if (!c) return;
+            const t = document.createElement('div');
+            t.className = `toast toast-${type || 'info'}`;
+            t.textContent = msg;
+            c.appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 3500);
+        }
+
+        // ── Tab switching ──
+        function switchTab(name) {
+            document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.dashboard-tab-btn').forEach(b => b.classList.remove('active'));
+            const content = document.getElementById('content-' + name);
+            const btn = document.getElementById('tab-' + name);
+            if (content) content.classList.add('active');
+            if (btn) btn.classList.add('active');
+        }
+        window.switchTab = switchTab;
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape') return;
+            var modal = document.getElementById('card-studio-details-modal');
+            if (modal && !modal.classList.contains('hidden')) closeCardStudioDetailsModal();
+        });
+
+        let studioCardsCache = [];
+        let studioModalCardId = null;
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function openCardInCreator(cardId) {
+            if (!cardId) return;
+            window.location.href = '/card-creator?id=' + encodeURIComponent(cardId);
+        }
+
+        function studioSetLabel(card) {
+            var sets = window.__studioSets || [];
+            if (!card.set_id) return 'No set';
+            var sn = sets.find(function (s) { return s.id === card.set_id; });
+            return (sn && sn.name) ? String(sn.name) : 'Set';
+        }
+
+        function renderCardStudioModalContent(card, mode) {
+            var body = document.getElementById('card-studio-details-modal-body');
+            if (!body || !card) return;
+            var sets = window.__studioSets || [];
+            if (mode === 'view') {
+                var sl = studioSetLabel(card);
+                body.innerHTML =
+                    '<div class="flex flex-col gap-4">' +
+                    '<div class="mx-auto w-[5.75rem] aspect-[2/3] rounded-xl overflow-hidden ring-1 ring-white/10 bg-zinc-900/80 shadow-inner">' +
+                    '<img src="' + escapeHTML(card.image_url || '') + '" alt="" class="w-full h-full object-cover"></div>' +
+                    '<div class="text-center space-y-1.5">' +
+                    '<p class="text-[15px] font-black uppercase italic text-white leading-tight tracking-tight px-1">' + escapeHTML(card.name || 'Untitled') + '</p>' +
+                    '<span class="inline-flex items-center justify-center rounded-md bg-void-accent/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-void-accent">' + escapeHTML(card.rarity || '') + '</span></div>' +
+                    '<div class="flex gap-2 justify-center">' +
+                    '<div class="flex min-w-[4.5rem] flex-col items-center rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/5">' +
+                    '<span class="text-[8px] font-black uppercase tracking-widest text-void-muted">Atk</span>' +
+                    '<span class="text-lg font-mono font-bold tabular-nums text-white leading-none">' + parseInt(card.attack || 0, 10) + '</span></div>' +
+                    '<div class="flex min-w-[4.5rem] flex-col items-center rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/5">' +
+                    '<span class="text-[8px] font-black uppercase tracking-widest text-void-muted">Def</span>' +
+                    '<span class="text-lg font-mono font-bold tabular-nums text-white leading-none">' + parseInt(card.defense || 0, 10) + '</span></div></div>' +
+                    '<p class="text-center text-[10px] text-void-muted"><span class="text-void-muted/80">Set</span> <span class="text-white/90">' + escapeHTML(sl) + '</span></p>' +
+                    '<div class="flex flex-col gap-2 pt-1">' +
+                    '<button type="button" onclick="openCardInCreator(\'' + escapeHTML(card.id) + '\')" class="w-full py-2.5 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/20 hover:brightness-110 transition-all">Open in Card Creator</button>' +
+                    '<button type="button" onclick="cardStudioDetailsEnterEdit()" class="w-full py-2 rounded-xl border border-white/10 bg-transparent text-[10px] font-bold uppercase tracking-widest text-void-muted hover:text-white hover:bg-white/[0.04] transition-colors">Quick edit</button>' +
+                    '</div></div>';
+                return;
+            }
+            var opts = ['<option value="">No set</option>'].concat(sets.map(function (s) {
+                return '<option value="' + escapeHTML(s.id) + '"' + (card.set_id === s.id ? ' selected' : '') + '>' + escapeHTML(s.name || 'Untitled') + '</option>';
+            })).join('');
+            body.innerHTML =
+                '<div class="space-y-3">' +
+                '<p class="text-[10px] text-center text-void-muted">Rarity is edited in Card Creator <span class="text-white/70">(' + escapeHTML(card.rarity || '') + ')</span></p>' +
+                '<div><label for="cs-modal-name" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Name</label>' +
+                '<input type="text" id="cs-modal-name" value="' + escapeHTML(card.name || '') + '" class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[12px] font-bold text-white focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none"></div>' +
+                '<div class="grid grid-cols-2 gap-2">' +
+                '<div><label for="cs-modal-attack" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Attack</label>' +
+                '<input type="number" id="cs-modal-attack" min="0" max="9999" value="' + parseInt(card.attack || 0, 10) + '" class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[12px] font-mono font-bold text-white focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none"></div>' +
+                '<div><label for="cs-modal-defense" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Defense</label>' +
+                '<input type="number" id="cs-modal-defense" min="0" max="9999" value="' + parseInt(card.defense || 0, 10) + '" class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[12px] font-mono font-bold text-white focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none"></div></div>' +
+                '<div><label for="cs-modal-set" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Set</label>' +
+                '<select id="cs-modal-set" class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[11px] font-semibold text-white focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none">' + opts + '</select></div>' +
+                '<div class="grid grid-cols-2 gap-2 pt-1">' +
+                '<button type="button" onclick="cardStudioDetailsCancelEdit()" class="py-2.5 rounded-xl border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest text-void-muted hover:text-white hover:bg-white/[0.06] transition-colors">Cancel</button>' +
+                '<button type="button" onclick="cardStudioDetailsSaveEdit()" class="py-2.5 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-md shadow-void-accent/20 hover:brightness-110 transition-all">Save</button>' +
+                '</div></div>';
+        }
+
+        function closeCardStudioDetailsModal() {
+            studioModalCardId = null;
+            var modal = document.getElementById('card-studio-details-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+        window.closeCardStudioDetailsModal = closeCardStudioDetailsModal;
+
+        function openCardStudioDetailsModal(card) {
+            if (!card) return;
+            studioModalCardId = card.id;
+            renderCardStudioModalContent(card, 'view');
+            var modal = document.getElementById('card-studio-details-modal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function cardStudioDetailsEnterEdit() {
+            var card = studioCardsCache.find(function (c) { return c.id === studioModalCardId; });
+            if (card) renderCardStudioModalContent(card, 'edit');
+        }
+        window.cardStudioDetailsEnterEdit = cardStudioDetailsEnterEdit;
+
+        function cardStudioDetailsCancelEdit() {
+            var card = studioCardsCache.find(function (c) { return c.id === studioModalCardId; });
+            if (card) renderCardStudioModalContent(card, 'view');
+        }
+        window.cardStudioDetailsCancelEdit = cardStudioDetailsCancelEdit;
+
+        async function cardStudioDetailsSaveEdit() {
+            var cardId = studioModalCardId;
+            var card = studioCardsCache.find(function (c) { return c.id === cardId; });
+            if (!card) return;
+            var nameEl = document.getElementById('cs-modal-name');
+            var atkEl = document.getElementById('cs-modal-attack');
+            var defEl = document.getElementById('cs-modal-defense');
+            var setEl = document.getElementById('cs-modal-set');
+            if (!nameEl || !atkEl || !defEl || !setEl) return;
+            var name = nameEl.value.trim();
+            if (!name) { showToast('Name is required', 'error'); return; }
+            var attack = Math.max(0, Math.min(9999, parseInt(atkEl.value, 10) || 0));
+            var defense = Math.max(0, Math.min(9999, parseInt(defEl.value, 10) || 0));
+            var set_id = setEl.value.trim() || null;
+            showToast('Saving…', 'info');
+            try {
+                var res = await fetch(BACKEND_URL + '/api/creator/cards/' + encodeURIComponent(cardId), {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': window.__studioCsrf || ''
+                    },
+                    body: JSON.stringify({ name: name, attack: attack, defense: defense, set_id: set_id })
+                });
+                var data = await res.json().catch(function () { return {}; });
+                if (!res.ok) throw new Error(data.error || 'Save failed');
+                var idx = studioCardsCache.findIndex(function (c) { return c.id === cardId; });
+                if (idx >= 0) studioCardsCache[idx] = Object.assign({}, studioCardsCache[idx], data);
+                showToast('Card updated', 'success');
+                renderStudioCardsGrid(studioCardsCache);
+                renderCardStudioModalContent(studioCardsCache[idx], 'view');
+            } catch (e) {
+                showToast(e.message || 'Save failed', 'error');
+            }
+        }
+        window.cardStudioDetailsSaveEdit = cardStudioDetailsSaveEdit;
+
+        function selectCardStudioDetails(cardId) {
+            var card = studioCardsCache.find(function (c) { return c.id === cardId; });
+            if (card) openCardStudioDetailsModal(card);
+        }
+
+        function renderStudioCardsGrid(cards) {
+            var grid = document.getElementById('studio-cards-grid');
+            if (!grid) return;
+            if (!cards || !cards.length) {
+                grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase tracking-widest text-[10px]">No cards yet</div>';
+                return;
+            }
+            grid.innerHTML = cards.map(function (card) {
+                return '<button type="button" class="card-select-item text-left w-full" onclick="selectCardStudioDetails(\'' + escapeHTML(card.id) + '\')">' +
+                    '<div class="aspect-[2/3] w-full rounded-xl overflow-hidden shadow-2xl border border-white/5">' +
+                    '<img src="' + escapeHTML(card.image_url || '') + '" alt="" class="w-full h-full object-cover"></div>' +
+                    '<div class="p-3 bg-white/5 mt-0 rounded-b-xl">' +
+                    '<div class="text-[10px] font-black text-white uppercase truncate">' + escapeHTML(card.name) + '</div>' +
+                    '<div class="text-[8px] font-bold text-void-accent/70 uppercase tracking-widest">' + escapeHTML(card.rarity) + '</div></div></button>';
+            }).join('');
+        }
+
+        async function loadStudioCardsTab() {
+            var grid = document.getElementById('studio-cards-grid');
+            if (!grid) return;
+            try {
+                var res = await fetch(BACKEND_URL + '/api/creator/cards', { credentials: 'include', cache: 'no-store' });
+                if (!res.ok) throw new Error('cards');
+                studioCardsCache = await res.json();
+                var setsRes = await fetch(BACKEND_URL + '/api/creator/sets', { credentials: 'include', cache: 'no-store' });
+                var sets = setsRes.ok ? await setsRes.json() : [];
+                window.__studioSets = sets;
+                renderStudioCardsGrid(studioCardsCache);
+            } catch (e) {
+                grid.innerHTML = '<div class="col-span-full py-12 text-center text-red-400 text-[10px] uppercase tracking-widest">Could not load cards</div>';
+            }
+        }
+
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            const n = parseInt(hex, 16);
+            return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+        }
+
+        function applyAccent(color) {
+            if (!color) return;
+            document.documentElement.style.setProperty('--void-accent', color);
+            document.documentElement.style.setProperty('--void-accent-rgb', hexToRgb(color));
+        }
+
+        // ── Auth bootstrap ──
+        async function bootstrap() {
+            try {
+                const res = await fetch(BACKEND_URL + '/api/me', { credentials: 'include', cache: 'no-store' });
+                if (!res.ok) { window.location.href = '/login?next=' + encodeURIComponent('/dashboard?section=card-studio'); return; }
+                const u = await res.json();
+                if (!u || !u.username) { window.location.href = '/login?next=' + encodeURIComponent('/dashboard?section=card-studio'); return; }
+
+                window.currentUser = u;
+
+                try {
+                    var br = await fetch(BACKEND_URL + '/api/v2/bootstrap?lite=1', { credentials: 'include', cache: 'no-store' });
+                    if (br.ok) {
+                        var bd = await br.json();
+                        window.__studioCsrf = bd.csrf_token || '';
+                    }
+                } catch (_) { window.__studioCsrf = ''; }
+
+                // Check creator access
+                if (!u.is_creator) {
+                    window.location.href = '/my-collection';
+                    return;
+                }
+
+                // Fetch streamer profile for branding
+                try {
+                    const pRes = await fetch(BACKEND_URL + '/api/creator/profile', { credentials: 'include' });
+                    if (pRes.ok) {
+                        const profile = await pRes.json();
+                        if (profile && profile.id) {
+                            u.streamer = profile;
+                            const color = profile.binder_color || profile.brand_color_primary;
+                            applyAccent(color);
+                            const displayName = (profile.display_name && String(profile.display_name).trim()) || profile.username || u.display_name;
+                            if (displayName) u.display_name = displayName;
+                        }
+                    }
+                } catch (_) { /* ignore */ }
+
+                // Populate nav
+                const navUsername = document.getElementById('nav-username');
+                const navAvatar = document.getElementById('nav-avatar');
+                const navMenuName = document.getElementById('nav-user-menu-name');
+                const navMenuAvatar = document.getElementById('nav-user-menu-avatar');
+                const navMenuRole = document.getElementById('nav-user-menu-role');
+                const navCastleCode = document.getElementById('nav-user-menu-castle-code');
+
+                if (navUsername) navUsername.textContent = u.display_name || u.username || '---';
+                if (navAvatar) navAvatar.src = u.avatar_url || '';
+                if (navMenuName) navMenuName.textContent = u.display_name || u.username || '—';
+                if (navMenuAvatar) navMenuAvatar.src = u.avatar_url || '';
+                if (navMenuRole) navMenuRole.textContent = 'Creator';
+                if (navCastleCode) navCastleCode.textContent = u.castle_code || '—';
+
+                // Init nav menu
+                if (typeof initNavUserMenu === 'function') initNavUserMenu();
+
+                loadStudioCardsTab();
+            } catch (err) {
+                console.error('[CardStudio] Bootstrap failed:', err);
+                window.location.href = '/login?next=' + encodeURIComponent('/dashboard?section=card-studio');
+            }
+        }
+
+        bootstrap();
+    </script>
+</body>
+
+</html>

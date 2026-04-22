@@ -264,6 +264,8 @@ function getActAsHeaders() {
 }
 
 let currentUser = null;
+/** Card id when Card Studio details modal is open — used to close on delete. */
+let cardStudioDetailsModalCardId = null;
 let creatorCards = [];
 let creatorTemplates = [];
 let creatorStats = {};
@@ -349,12 +351,19 @@ async function syncPlatformAuthStateFromServer() {
 
 let collectorGrowthChartInstance = null;
 let packActivityChartInstance = null;
+let battlesChartInstance = null;
+let revenueChartInstance = null;
 let analyticsData = {
     overview: null,
     cards: null,
     collectors: null,
-    packs: null
+    packs: null,
+    battles: null,
+    revenue: null,
 };
+/** Last period loaded for analytics (native select value). Used to clear stale in-memory data when the range changes. */
+let lastAnalyticsTimeRangeLoaded = null;
+let analyticsOffset = 0; // 0 = current period, 1 = one period back, etc.
 
 let creatorSets = [];
 let selectedCardIds = new Set();
@@ -448,11 +457,19 @@ async function initDashboard() {
     // Await remaining parallel tasks
     await Promise.allSettled([profilePromise, analyticsPromise]);
 
-    // Final UI sync after profile and analytics are in
-    const activeBtn = document.querySelector('.dashboard-tab-btn.active');
-    if (!activeBtn || activeBtn.id === 'tab-analytics') {
-        switchTab('analytics');
+    // Final UI sync — section from ?section=, or legacy /card-studio /stream-features paths
+    const params = new URLSearchParams(window.location.search);
+    const qsSection = params.get('section');
+    const initPath = window.location.pathname.replace(/\/+$/, '') || '/dashboard';
+    let initialSection = 'dashboard';
+    if (qsSection && SECTIONS[qsSection]) {
+        initialSection = qsSection;
+    } else if (initPath === '/card-studio') {
+        initialSection = 'card-studio';
+    } else if (initPath === '/stream-features') {
+        initialSection = 'stream-features';
     }
+    switchSection(initialSection);
 }
 
 /** Onboarding-style HSV void picker for Settings binder color (matches onboarding.html). */
@@ -856,6 +873,55 @@ function setupStreamingPlatformDisconnects() {
     });
 }
 
+/** Section config: which tabs belong to each top-nav section, the default tab, and the header title. */
+const SECTIONS = {
+    'dashboard':        { tabs: ['analytics', 'monetization', 'admin', 'activity-log', 'achievements', 'platforms', 'settings'], default: 'analytics', title: 'Dashboard' },
+    'card-studio':      { tabs: ['cards', 'sets', 'promo', 'granting'], default: 'cards', title: 'Card Studio' },
+    'stream-features':  { tabs: ['overlay', 'queue', 'battle-settings', 'channel-points'], default: 'overlay', title: 'Stream Features' }
+};
+let currentSection = 'dashboard';
+
+function switchSection(sectionId) {
+    const section = SECTIONS[sectionId];
+    if (!section) return;
+    currentSection = sectionId;
+
+    // Update top nav buttons
+    document.querySelectorAll('.section-nav-btn').forEach(btn => {
+        btn.classList.remove('text-void-accent', 'bg-void-accent/10');
+        btn.classList.add('text-void-muted', 'hover:text-void-text', 'hover:bg-white/[0.04]');
+    });
+    const activeBtn = document.getElementById(`section-btn-${sectionId}`);
+    if (activeBtn) {
+        activeBtn.classList.remove('text-void-muted', 'hover:text-void-text', 'hover:bg-white/[0.04]');
+        activeBtn.classList.add('text-void-accent', 'bg-void-accent/10');
+    }
+
+    // Show/hide sidebar groups
+    document.querySelectorAll('.sidebar-group').forEach(g => g.classList.add('hidden'));
+    const sidebarGroup = document.getElementById(`sidebar-${sectionId}`);
+    if (sidebarGroup) sidebarGroup.classList.remove('hidden');
+
+    // Switch to default tab for this section
+    switchTab(section.default);
+
+    // Stay on /dashboard; encode section in ?section= (legacy /card-studio URLs normalized on load)
+    try {
+        const u = new URL(window.location.href);
+        u.pathname = '/dashboard';
+        if (sectionId === 'dashboard') {
+            u.searchParams.delete('section');
+        } else {
+            u.searchParams.set('section', sectionId);
+        }
+        history.replaceState({ section: sectionId }, '', u.pathname + u.search);
+    } catch (_) {
+        const q = sectionId === 'dashboard' ? '' : `?section=${encodeURIComponent(sectionId)}`;
+        history.replaceState({ section: sectionId }, '', `/dashboard${q}`);
+    }
+}
+window.switchSection = switchSection;
+
 function switchTab(tabId) {
     document.querySelectorAll('.dashboard-tab-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -908,6 +974,9 @@ function loadTabData(tabId) {
             document.querySelectorAll('#content-activity-log .void-dropdown').forEach((w) => {
                 if (!w.dataset.voidDropdownInit) initVoidDropdown(w);
             });
+            break;
+        case 'achievements':
+            loadCreatorProgress();
             break;
         case 'events':
             checkActiveEvent();
@@ -1071,7 +1140,6 @@ function applyBootstrapData(data) {
     try {
         window.currentUser = currentUser;
     } catch (_) { /* ignore */ }
-
     if (isTeamHelperOnly) {
         const ids = new Set(currentUser.team_memberships.map((m) => String(m.streamer_id)));
         let saved = '';
@@ -1390,8 +1458,8 @@ function renderAdminUserList() {
         .map((u) => {
             const tid = String(u.twitch_id);
             const avatarHtml = u.avatar_url
-                ? `<img src="${escapeHTML(u.avatar_url)}" class="w-10 h-10 rounded-xl border border-white/10 object-cover" onerror="this.outerHTML='<div class=\\'w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20\\'><i class=\\'fa-solid fa-user text-xs\\'></i></div>'">`
-                : `<div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20"><i class="fa-solid fa-user text-xs"></i></div>`;
+                ? `<img src="${escapeHTML(u.avatar_url)}" class="w-10 h-10 rounded-xl border border-white/10 object-cover" onerror="this.outerHTML='<div class=\\'w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20\\'><i class=\\'bx bxs-user text-xs\\'></i></div>'">`
+                : `<div class="w-10 h-10 rounded-xl bg-void-accent/10 flex items-center justify-center text-void-accent border border-void-accent/20"><i class="bx bxs-user text-xs"></i></div>`;
             const teamRole = channelTeamRoleByTwitchId.get(tid);
             const teamBadge = teamRole
                 ? `<span class="admin-badge admin-badge--team">${teamRole === 'editor' ? 'Editor' : 'Mod'}</span>`
@@ -2089,7 +2157,7 @@ async function fetchCardsForGrid(gridId = 'cards-grid') {
     const grid = document.getElementById(gridId);
     if (!grid) return;
 
-    grid.innerHTML = `<div class="col-span-full py-12 text-center text-void-muted uppercase tracking-widest text-[10px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading Cards...</div>`;
+    grid.innerHTML = `<div class="col-span-full py-12 text-center text-void-muted uppercase tracking-widest text-[10px]"><i class="bx bx-loader-alt animate-spin mr-2"></i>Loading Cards...</div>`;
 
     try {
         // Load templates in parallel so the template dropdown is populated when editing a card
@@ -2119,7 +2187,7 @@ function renderCardGrid(gridId, cards) {
         grid.innerHTML = cards.map(card => {
             const isSelected = selectedCardIds.has(card.id);
             return `
-                <div class="card-select-item ${isSelected ? 'selected' : ''}" onclick="${bulkSelectMode ? `toggleCardSelection('${escapeHTML(card.id)}')` : `editCard('${escapeHTML(card.id)}')`}">
+                <div class="card-select-item ${isSelected ? 'selected' : ''}" onclick="${bulkSelectMode ? `toggleCardSelection('${escapeHTML(card.id)}')` : `selectCardStudioDetails('${escapeHTML(card.id)}')`}">
                     ${bulkSelectMode ? `<div class="card-select-check"></div>` : ''}
                     <div class="aspect-[2/3] w-full rounded-xl overflow-hidden shadow-2xl">
                         <img src="${escapeHTML(card.image_url || '')}" class="w-full h-full object-cover transition-all duration-500 hover:scale-105">
@@ -2132,7 +2200,7 @@ function renderCardGrid(gridId, cards) {
                             </div>
                             ${!bulkSelectMode ? `
                                 <button onclick="event.stopPropagation(); deleteCard('${escapeHTML(card.id)}')" class="text-red-500/30 hover:text-red-500 transition-colors">
-                                    <i class="fa-solid fa-trash-can text-[10px]"></i>
+                                    <i class="bx bxs-trash text-[10px]"></i>
                                 </button>
                             ` : ''}
                         </div>
@@ -2199,16 +2267,57 @@ async function toggleCardEligibility(cardId, field, element) {
 
 
 
-const ANALYTICS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const ANALYTICS_CACHE_TTL = 60 * 1000; // 1 minute — sessionStorage primer only; combined API is uncached server-side
+
+function updateAnalyticsPeriodDisplay() {
+    const timeRange = document.getElementById('analytics-time-range')?.value || '7';
+    const isAll = timeRange === 'all';
+    const days = isAll ? 365 : Math.max(1, parseInt(timeRange, 10) || 7);
+
+    const windowEnd   = new Date(Date.now() - analyticsOffset * days * 24 * 60 * 60 * 1000);
+    const windowStart = new Date(windowEnd.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+
+    const fmt = { month: 'short', day: 'numeric', year: 'numeric' };
+    const rangeEl  = document.getElementById('analytics-period-range');
+    const daysEl   = document.getElementById('analytics-period-days');
+    const nextBtn  = document.getElementById('analytics-period-next');
+
+    if (rangeEl) rangeEl.textContent = `${windowStart.toLocaleDateString(undefined, fmt)} – ${windowEnd.toLocaleDateString(undefined, fmt)}`;
+    if (daysEl)  daysEl.textContent  = isAll ? 'All Time' : `${days} day${days === 1 ? '' : 's'}`;
+    if (nextBtn) nextBtn.disabled    = analyticsOffset === 0;
+}
+
+function shiftAnalyticsPeriod(direction) {
+    // direction: -1 = go back (left arrow), +1 = go forward (right arrow)
+    if (direction === 1 && analyticsOffset === 0) return;
+    analyticsOffset = Math.max(0, analyticsOffset + (direction === -1 ? 1 : -1));
+    analyticsData = { overview: null, cards: null, collectors: null, packs: null, battles: null, revenue: null };
+    void loadAnalytics();
+}
+window.shiftAnalyticsPeriod = shiftAnalyticsPeriod;
 
 async function loadAnalytics(isBackground = false) {
-    const timeRange = document.getElementById('analytics-time-range')?.value || '30';
-    const cacheKey = `castle_analytics_cache_${timeRange}`;
-    
+    await ensureChartJsLoaded();
+
+    const timeRange = document.getElementById('analytics-time-range')?.value || '7';
+    const cacheKey = `castle_analytics_cache_${timeRange}_${analyticsOffset}`;
+
+    if (
+        !isBackground &&
+        lastAnalyticsTimeRangeLoaded !== null &&
+        lastAnalyticsTimeRangeLoaded !== timeRange
+    ) {
+        analyticsOffset = 0;
+        analyticsData = { overview: null, cards: null, collectors: null, packs: null, battles: null, revenue: null };
+    }
+    if (!isBackground) {
+        lastAnalyticsTimeRangeLoaded = timeRange;
+        updateAnalyticsPeriodDisplay();
+    }
+
     // 1. Try Memory Cache first (already populated)
     if (analyticsData.overview && !isBackground) {
         await renderAnalytics();
-        // If it's very recent, we can skip the fetch entirely or just refresh in background
     }
 
     // 2. Try SessionStorage if memory is empty
@@ -2219,34 +2328,39 @@ async function loadAnalytics(isBackground = false) {
                 const { data, ts } = JSON.parse(cached);
                 if (Date.now() - ts < ANALYTICS_CACHE_TTL) {
                     Object.assign(analyticsData, data);
-                    if (!isBackground) await renderAnalytics();
-                    // We still proceed to fetch to keep it fresh, but UI is now populated
+                    await renderAnalytics();
                 }
             }
         } catch (_) {}
     }
 
     // 3. Fetch from API
-    await ensureChartJsLoaded();
-    
+
     const container = document.getElementById('content-analytics');
     const showLoading = !analyticsData.overview && !isBackground;
-    
+
     if (showLoading && container) {
         container.classList.add('analytics-loading');
     }
 
     try {
-        const res = await apiFetch(`${BACKEND_URL}/api/creator/analytics/combined?days=${timeRange}`, { credentials: 'include' });
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/analytics/combined?days=${timeRange}&offset=${analyticsOffset}`, { credentials: 'include' });
         if (!res.ok) throw new Error('Failed to load combined analytics');
         
         const data = await res.json();
-        
+
+        if (isBackground) {
+            const selNow = document.getElementById('analytics-time-range')?.value || '7';
+            if (selNow !== timeRange) return;
+        }
+
         // Update global state
         analyticsData.overview = data.overview;
         analyticsData.cards = data.cards;
         analyticsData.packs = data.packs;
         analyticsData.collectors = data.collectors;
+        analyticsData.battles = data.battles;
+        analyticsData.revenue = data.revenue;
 
         // Update SessionStorage
         sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
@@ -2255,17 +2369,93 @@ async function loadAnalytics(isBackground = false) {
         await renderAnalytics();
     } catch (err) {
         if (!isBackground) console.error('Analytics loading error:', err);
+        if (analyticsData.overview || analyticsData.cards || analyticsData.packs || analyticsData.collectors) {
+            try {
+                await renderAnalytics();
+            } catch (_) {
+                /* ignore */
+            }
+        }
     } finally {
         if (container) container.classList.remove('analytics-loading');
     }
 }
 
-async function renderAnalytics() {
-    if (analyticsData.overview && analyticsData.overview.growth_data) {
-        await renderCollectorGrowthChart(analyticsData.overview.growth_data);
+function analyticsMetricPanelIsVisible(panelId) {
+    const el = document.getElementById(panelId);
+    return !!(el && !el.classList.contains('hidden'));
+}
+
+function applyTrend(elId, current, previous) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const diff = current - previous;
+    if (diff > 0) {
+        el.textContent = '↑';
+        el.classList.remove('down');
+        el.style.display = '';
+    } else if (diff < 0) {
+        el.textContent = '↓';
+        el.classList.add('down');
+        el.style.display = '';
+    } else {
+        el.style.display = 'none';
     }
-    if (analyticsData.packs && analyticsData.packs.activity_data) {
-        await renderPackActivityChart(analyticsData.packs.activity_data);
+}
+
+function renderAnalyticsStatTiles() {
+    const packOpenings  = analyticsData.packs?.total_openings ?? null;
+    const packPrev      = analyticsData.packs?.prev_total ?? null;
+    const collectors    = analyticsData.overview?.total_collectors ?? null;
+    const colChange     = analyticsData.overview?.collectors_change ?? 0;
+    const totalBattles  = analyticsData.battles?.total_battles ?? null;
+    const battlesPrev   = analyticsData.battles?.prev_total ?? null;
+    const revenueCents  = analyticsData.revenue?.total_cents ?? null;
+    const revenuePrev   = analyticsData.revenue?.prev_cents ?? null;
+
+    const packVal     = document.getElementById('stat-tile-packs-value');
+    const colVal      = document.getElementById('stat-tile-collectors-value');
+    const battlesVal  = document.getElementById('stat-tile-battles-value');
+    const revenueVal  = document.getElementById('stat-tile-revenue-value');
+
+    if (packVal)    packVal.textContent    = packOpenings !== null ? packOpenings.toLocaleString()  : '—';
+    if (colVal)     colVal.textContent     = collectors   !== null ? collectors.toLocaleString()    : '—';
+    if (battlesVal) battlesVal.textContent = totalBattles !== null ? totalBattles.toLocaleString()  : '—';
+    if (revenueVal) revenueVal.textContent = revenueCents !== null
+        ? (revenueCents === 0 ? '$0.00' : `$${(revenueCents / 100).toFixed(2)}`)
+        : '—';
+
+    // Trend arrows — compare current period vs previous period of same length
+    if (packOpenings !== null && packPrev !== null) applyTrend('stat-tile-packs-trend', packOpenings, packPrev);
+    applyTrend('stat-tile-collectors-trend', colChange, 0); // colChange is already a diff
+    if (totalBattles !== null && battlesPrev !== null) applyTrend('stat-tile-battles-trend', totalBattles, battlesPrev);
+    if (revenueCents !== null && revenuePrev !== null) applyTrend('stat-tile-revenue-trend', revenueCents, revenuePrev);
+}
+
+async function renderAnalytics() {
+    renderAnalyticsStatTiles();
+    const growthSeries =
+        analyticsData.overview && Array.isArray(analyticsData.overview.growth_data)
+            ? analyticsData.overview.growth_data
+            : null;
+    /** Chart.js needs a visible panel — only create/update the chart whose tab is shown (default: pack activity). */
+    if (
+        growthSeries &&
+        (collectorGrowthChartInstance || analyticsMetricPanelIsVisible('analytics-chart-panel-collectors'))
+    ) {
+        await renderCollectorGrowthChart(growthSeries);
+    }
+    const packSeries = Array.isArray(analyticsData.packs?.activity_data) ? analyticsData.packs.activity_data : [];
+    if (packActivityChartInstance || analyticsMetricPanelIsVisible('analytics-chart-panel-packs')) {
+        await renderPackActivityChart(packSeries);
+    }
+    const battleSeries = Array.isArray(analyticsData.battles?.activity_data) ? analyticsData.battles.activity_data : [];
+    if (battlesChartInstance || analyticsMetricPanelIsVisible('analytics-chart-panel-battles')) {
+        await renderBattlesChart(battleSeries);
+    }
+    const revenueSeries = Array.isArray(analyticsData.revenue?.activity_data) ? analyticsData.revenue.activity_data : [];
+    if (revenueChartInstance || analyticsMetricPanelIsVisible('analytics-chart-panel-revenue')) {
+        await renderRevenueChart(revenueSeries);
     }
     if (analyticsData.cards) {
         renderCardPerformance();
@@ -2274,7 +2464,71 @@ async function renderAnalytics() {
         }
     }
     renderCollectorLeaderboard();
+    requestAnimationFrame(() => {
+        try {
+            collectorGrowthChartInstance?.resize();
+            packActivityChartInstance?.resize();
+        } catch (_) { /* ignore */ }
+    });
 }
+
+/** Twitch-style metric tabs: swap collector growth vs pack activity chart (single chart area). */
+function switchAnalyticsMetricTab(which) {
+    const panels = {
+        collectors: 'analytics-chart-panel-collectors',
+        packs:      'analytics-chart-panel-packs',
+        battles:    'analytics-chart-panel-battles',
+        revenue:    'analytics-chart-panel-revenue',
+    };
+    const tabs = {
+        collectors: 'analytics-tab-collectors',
+        packs:      'analytics-tab-packs',
+        battles:    'analytics-tab-battles',
+        revenue:    'analytics-tab-revenue',
+    };
+    const gran   = document.getElementById('pack-granularity')?.parentElement;
+    const legend = document.getElementById('pack-activity-legend');
+
+    // Show/hide panels and set tile active state
+    for (const [key, panelId] of Object.entries(panels)) {
+        const panel = document.getElementById(panelId);
+        const tab   = document.getElementById(tabs[key]);
+        const active = key === which;
+        if (panel) { panel.classList.toggle('hidden', !active); panel.setAttribute('aria-hidden', String(!active)); }
+        if (tab)   { tab.classList.toggle('analytics-stat-tile--active', active); tab.setAttribute('aria-selected', String(active)); }
+    }
+
+    // Pack-only controls
+    if (gran)   gran.style.display   = which === 'packs' ? '' : 'none';
+    if (legend) legend.style.display = which === 'packs' ? '' : 'none';
+    const packSeries = Array.isArray(analyticsData.packs?.activity_data) ? analyticsData.packs.activity_data : [];
+    const growthSeries =
+        analyticsData.overview && Array.isArray(analyticsData.overview.growth_data)
+            ? analyticsData.overview.growth_data
+            : null;
+    if (which === 'packs') {
+        void renderPackActivityChart(packSeries);
+    } else if (which === 'collectors' && growthSeries) {
+        void renderCollectorGrowthChart(growthSeries);
+    } else if (which === 'battles') {
+        const battleSeries = Array.isArray(analyticsData.battles?.activity_data) ? analyticsData.battles.activity_data : [];
+        void renderBattlesChart(battleSeries);
+    } else if (which === 'revenue') {
+        const revenueSeries = Array.isArray(analyticsData.revenue?.activity_data) ? analyticsData.revenue.activity_data : [];
+        void renderRevenueChart(revenueSeries);
+    }
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            try {
+                collectorGrowthChartInstance?.resize();
+                packActivityChartInstance?.resize();
+                battlesChartInstance?.resize();
+                revenueChartInstance?.resize();
+            } catch (_) { /* ignore */ }
+        });
+    });
+}
+window.switchAnalyticsMetricTab = switchAnalyticsMetricTab;
 
 function renderCardPerformance() {
     const data = analyticsData.cards;
@@ -2360,87 +2614,377 @@ function renderCollectorLeaderboard() {
     `).join('');
 }
 
+/** Shared: build Twitch-style tooltip HTML — bold date header, then swatch+label rows. */
+function buildAnalyticsTooltip(dateRaw, rows) {
+    const d = new Date((String(dateRaw).length === 10 ? dateRaw + 'T12:00:00' : dateRaw));
+    const header = isNaN(d) ? String(dateRaw) : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const rowHtml = rows.map(({ color, label }) => `
+<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+<span style="flex-shrink:0;width:8px;height:8px;border-radius:2px;background:${color}"></span>
+<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85)">${escapeHTML(label)}</span>
+</div>`).join('');
+    return `<div style="display:flex;flex-direction:column;align-items:center;">
+<div style="width:0;height:0;margin-bottom:-1px;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:6px solid #18181b;"></div>
+<div style="background:#18181b;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px 12px 9px;min-width:130px;box-shadow:0 4px 20px rgba(0,0,0,0.6);">
+<div style="font-size:11px;font-weight:800;color:#fff;letter-spacing:0.01em">${escapeHTML(header)}</div>
+${rowHtml}
+</div></div>`;
+}
+
+/** Shared: manage tooltip element lifecycle and position for all analytics charts.
+ *  Appended directly to body so no overflow:hidden ancestor can clip it. */
+function analyticsExternalTooltip(context, attrSelector, buildFn) {
+    const { chart, tooltip } = context;
+    const attrName = attrSelector.replace(/[\[\]]/g, '');
+    // Only look among direct children of body to avoid finding stale elements inside the chart panel
+    let el = null;
+    for (const child of document.body.children) {
+        if (child.hasAttribute(attrName)) { el = child; break; }
+    }
+    if (!el) {
+        el = document.createElement('div');
+        el.setAttribute(attrName, '1');
+        el.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;opacity:0;transition:opacity .1s ease';
+        document.body.appendChild(el);
+    }
+    if (tooltip.opacity === 0) { el.style.opacity = '0'; return; }
+    const idx = tooltip.dataPoints?.[0]?.dataIndex;
+    if (idx == null) { el.style.opacity = '0'; return; }
+    el.innerHTML = buildFn(chart, tooltip, idx);
+    const rect = chart.canvas.getBoundingClientRect();
+    const x = rect.left + (tooltip.caretX ?? 0);
+    const y = rect.top  + (tooltip.caretY ?? 0);
+    el.style.opacity = '1';
+    el.style.left = `${x}px`;
+    el.style.top  = `${y}px`;
+    // Always anchor above the caret — caretY is the bar top, so there's always room above
+    el.style.transform = 'translate(-50%, calc(-100% - 10px))';
+}
+
 async function renderCollectorGrowthChart(data) {
-    if (!data) return;
+    if (!Array.isArray(data)) return;
     const canvas = document.getElementById('collector-growth-chart');
     if (!canvas) return;
 
-    const labels = data.map(d => new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+    const rawDates = data.map(d => d.date);
+    const labels = data.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
     const values = data.map(d => d.count);
 
+    const maxVal = Math.max(...values, 0);
     if (collectorGrowthChartInstance) {
+        collectorGrowthChartInstance._rawDates = rawDates;
         collectorGrowthChartInstance.data.labels = labels;
         collectorGrowthChartInstance.data.datasets[0].data = values;
-        collectorGrowthChartInstance.update('none'); // Smooth update
+        collectorGrowthChartInstance.options.scales.y.suggestedMax = maxVal > 0 ? undefined : 5;
+        collectorGrowthChartInstance.update('none');
         return;
     }
-
     collectorGrowthChartInstance = new Chart(canvas.getContext('2d'), {
-        type: 'line',
+        type: 'bar',
         data: {
-            labels: labels,
+            labels,
             datasets: [{
                 label: 'Collectors',
                 data: values,
-                borderColor: '#00f2fe',
-                backgroundColor: 'rgba(0, 242, 254, 0.05)',
-                borderWidth: 2,
-                pointBackgroundColor: '#00f2fe',
-                fill: true,
-                tension: 0.4
+                backgroundColor: 'rgba(0,242,254,0.7)',
+                hoverBackgroundColor: '#00f2fe',
+                borderSkipped: false,
+                minBarLength: 4,
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: 400 },
-            plugins: { legend: { display: false } },
+            plugins: { legend: { display: false }, tooltip: { enabled: false, external: collectorsExternalTooltip } },
             scales: {
-                y: { display: false, beginAtZero: true },
-                x: { grid: { display: false }, ticks: { font: { size: 8 }, color: 'rgba(255,255,255,0.3)' } }
+                x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 9 }, maxTicksLimit: 7 } },
+                y: {
+                    display: true,
+                    beginAtZero: true,
+                    suggestedMax: maxVal > 0 ? undefined : 5,
+                    grid: { color: ctx => ctx.tick.value === 0 ? 'transparent' : 'rgba(255,255,255,0.07)', borderDash: [4,4], drawBorder: false },
+                    border: { display: false },
+                    ticks: { color: 'rgba(255,255,255,0.25)', font: { size: 9 }, maxTicksLimit: 4, precision: 0 }
+                }
             }
         }
     });
+    collectorGrowthChartInstance._rawDates = rawDates;
+}
+
+function collectorsExternalTooltip(context) {
+    analyticsExternalTooltip(context, '[data-collectors-tooltip]', (chart, tooltip, idx) => {
+        const raw = tooltip.dataPoints?.[0]?.raw ?? 0;
+        return buildAnalyticsTooltip(chart._rawDates?.[idx] ?? chart.data.labels?.[idx], [
+            { color: '#00f2fe', label: `${raw} Collector${raw === 1 ? '' : 's'}` }
+        ]);
+    });
+}
+
+const PACK_ACTIVITY_SOURCE_ORDER = [
+    ['granted', 'Granted cards'],
+    ['twitch_subs', 'Twitch subs'],
+    ['kick_subs', 'Kick subs'],
+    ['castle_site', 'Direct purchases'],
+    ['codes', 'Codes'],
+    ['twitch_bits', 'Twitch bits'],
+    ['twitch_channel_points', 'Twitch channel points'],
+    ['kick_channel_points', 'Kick channel points'],
+];
+
+/** Swatch colors for pack activity bars and tooltip (hex only — canvas can't resolve CSS vars). */
+const PACK_SOURCE_SWATCH_COLORS = {
+    granted: '#a78bfa',
+    kick_subs: '#53fc18',
+    twitch_subs: '#9146ff',
+    twitch_bits: '#facc15',
+    castle_site: '#00f2fe',
+    codes: '#94a3b8',
+    kick_channel_points: '#2dd4bf',
+    twitch_channel_points: '#38bdf8',
+};
+
+function packActivityExternalTooltip(context) {
+    analyticsExternalTooltip(context, '[data-pack-activity-tooltip]', (chart, _tooltip, idx) => {
+        const rows = chart._packActivityRows;
+        if (!rows) return '';
+        const row = rows[idx];
+        const bs = row?.by_source;
+        const total = row?.count ?? 0;
+        const sourceRows = PACK_ACTIVITY_SOURCE_ORDER.map(([key, label]) => ({
+            color: (bs && (bs[key] ?? 0) > 0) ? PACK_SOURCE_SWATCH_COLORS[key] || '#94a3b8' : 'rgba(255,255,255,0.15)',
+            label: `${(bs && bs[key]) ? bs[key] : 0} ${label}`,
+        }));
+        const swatches = [
+            { color: '#ffffff', label: `${total} Pack Opening${total === 1 ? '' : 's'}` },
+            ...sourceRows,
+        ];
+        return buildAnalyticsTooltip(row?.date ?? chart.data.labels?.[idx], swatches);
+    });
+}
+
+async function renderBattlesChart(data) {
+    if (!Array.isArray(data)) return;
+    const canvas = document.getElementById('battles-chart');
+    if (!canvas) return;
+
+    const rawDates = data.map(d => d.date);
+    const labels = data.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+    const values = data.map(d => d.count);
+    const maxVal = Math.max(...values, 0);
+
+    if (battlesChartInstance) {
+        battlesChartInstance._rawDates = rawDates;
+        battlesChartInstance.data.labels = labels;
+        battlesChartInstance.data.datasets[0].data = values;
+        battlesChartInstance.options.scales.y.suggestedMax = maxVal > 0 ? undefined : 5;
+        battlesChartInstance.update('none');
+        return;
+    }
+
+    battlesChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Battles',
+                data: values,
+                backgroundColor: 'rgba(161,139,250,0.7)',
+                hoverBackgroundColor: '#a78bfa',
+                borderSkipped: false,
+                minBarLength: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            plugins: { legend: { display: false }, tooltip: { enabled: false, external: battlesExternalTooltip } },
+            scales: {
+                x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 9 }, maxTicksLimit: 7 } },
+                y: {
+                    display: true,
+                    beginAtZero: true,
+                    suggestedMax: maxVal > 0 ? undefined : 5,
+                    grid: { color: ctx => ctx.tick.value === 0 ? 'transparent' : 'rgba(255,255,255,0.07)', borderDash: [4,4], drawBorder: false },
+                    border: { display: false },
+                    ticks: { color: 'rgba(255,255,255,0.25)', font: { size: 9 }, maxTicksLimit: 4, precision: 0 }
+                }
+            }
+        }
+    });
+    battlesChartInstance._rawDates = rawDates;
+}
+
+function battlesExternalTooltip(context) {
+    analyticsExternalTooltip(context, '[data-battles-tooltip]', (chart, tooltip, idx) => {
+        const raw = tooltip.dataPoints?.[0]?.raw ?? 0;
+        return buildAnalyticsTooltip(chart._rawDates?.[idx] ?? chart.data.labels?.[idx], [
+            { color: '#a78bfa', label: `${raw} Battle${raw === 1 ? '' : 's'}` }
+        ]);
+    });
+}
+
+async function renderRevenueChart(data) {
+    if (!Array.isArray(data)) return;
+    const canvas = document.getElementById('revenue-chart');
+    if (!canvas) return;
+
+    const rawDates = data.map(d => d.date);
+    const labels = data.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+    const values = data.map(d => d.amount_cents / 100);
+    const maxVal = Math.max(...values, 0);
+
+    if (revenueChartInstance) {
+        revenueChartInstance._rawDates = rawDates;
+        revenueChartInstance.data.labels = labels;
+        revenueChartInstance.data.datasets[0].data = values;
+        revenueChartInstance.options.scales.y.suggestedMax = maxVal > 0 ? undefined : 10;
+        revenueChartInstance.update('none');
+        return;
+    }
+
+    revenueChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Revenue',
+                data: values,
+                backgroundColor: 'rgba(52,211,153,0.7)',
+                hoverBackgroundColor: '#34d399',
+                borderSkipped: false,
+                minBarLength: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            plugins: { legend: { display: false }, tooltip: { enabled: false, external: revenueExternalTooltip } },
+            scales: {
+                x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 9 }, maxTicksLimit: 7 } },
+                y: {
+                    display: true,
+                    beginAtZero: true,
+                    suggestedMax: maxVal > 0 ? undefined : 10,
+                    grid: { color: ctx => ctx.tick.value === 0 ? 'transparent' : 'rgba(255,255,255,0.07)', borderDash: [4,4], drawBorder: false },
+                    border: { display: false },
+                    ticks: {
+                        color: 'rgba(255,255,255,0.25)', font: { size: 9 }, maxTicksLimit: 4,
+                        callback: v => `$${v % 1 === 0 ? v : v.toFixed(2)}`
+                    }
+                }
+            }
+        }
+    });
+    revenueChartInstance._rawDates = rawDates;
+}
+
+function revenueExternalTooltip(context) {
+    analyticsExternalTooltip(context, '[data-revenue-tooltip]', (chart, tooltip, idx) => {
+        const dollars = tooltip.dataPoints?.[0]?.raw ?? 0;
+        return buildAnalyticsTooltip(chart._rawDates?.[idx] ?? chart.data.labels?.[idx], [
+            { color: '#34d399', label: `$${dollars.toFixed(2)} Revenue` }
+        ]);
+    });
+}
+
+function renderPackActivityLegend(activeSources) {
+    const el = document.getElementById('pack-activity-legend');
+    if (!el) return;
+    if (activeSources.length === 0) { el.innerHTML = ''; return; }
+    el.innerHTML = activeSources.map(([key, label]) => `
+        <span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;">
+            <span style="width:8px;height:8px;border-radius:1px;background:${PACK_SOURCE_SWATCH_COLORS[key] || '#94a3b8'};flex-shrink:0;display:inline-block"></span>
+            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:rgba(255,255,255,0.35)">${escapeHTML(label)}</span>
+        </span>
+    `).join('');
 }
 
 async function renderPackActivityChart(data) {
-    if (!data) return;
+    if (!Array.isArray(data)) return;
     const canvas = document.getElementById('pack-activity-chart');
     if (!canvas) return;
 
-    const labels = data.map(d => new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
-    const values = data.map(d => d.count);
+    const labels = data.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+
+    // Only include sources with at least one non-zero value across the window
+    const activeSources = PACK_ACTIVITY_SOURCE_ORDER.filter(([key]) =>
+        data.some(d => (d.by_source?.[key] ?? 0) > 0)
+    );
+
+    const datasets = activeSources.length > 0
+        ? activeSources.map(([key, label]) => ({
+            label,
+            data: data.map(d => d.by_source?.[key] ?? 0),
+            backgroundColor: PACK_SOURCE_SWATCH_COLORS[key] || '#94a3b8',
+            hoverBackgroundColor: PACK_SOURCE_SWATCH_COLORS[key] || '#94a3b8',
+            borderSkipped: false,
+            minBarLength: 4,
+        }))
+        : [{
+            label: 'Cards Granted',
+            data: data.map(d => d.count),
+            backgroundColor: '#00f2fe',
+            hoverBackgroundColor: '#00f2fe',
+            borderSkipped: false,
+            minBarLength: 4,
+        }];
+
+    const maxVal = Math.max(...data.map(d => d.count), 0);
+
+    renderPackActivityLegend(activeSources);
 
     if (packActivityChartInstance) {
         packActivityChartInstance.data.labels = labels;
-        packActivityChartInstance.data.datasets[0].data = values;
-        packActivityChartInstance.update('none'); // Smooth update
+        packActivityChartInstance.data.datasets = datasets;
+        packActivityChartInstance._packActivityRows = data;
+        packActivityChartInstance.update('none');
         return;
     }
 
     packActivityChartInstance = new Chart(canvas.getContext('2d'), {
         type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Packs',
-                data: values,
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                hoverBackgroundColor: '#00f2fe',
-                borderRadius: 4
-            }]
-        },
+        data: { labels, datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: 400 },
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false, external: packActivityExternalTooltip },
+            },
             scales: {
-                y: { display: false, beginAtZero: true },
-                x: { grid: { display: false }, ticks: { font: { size: 8 }, color: 'rgba(255,255,255,0.3)' } }
+                x: {
+                    stacked: true,
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 9 }, maxTicksLimit: 7 }
+                },
+                y: {
+                    stacked: true,
+                    display: true,
+                    beginAtZero: true,
+                    suggestedMax: maxVal > 0 ? undefined : 5,
+                    grid: {
+                        color: ctx => ctx.tick.value === 0 ? 'transparent' : 'rgba(255,255,255,0.07)',
+                        borderDash: [4, 4],
+                        drawBorder: false,
+                    },
+                    border: { display: false },
+                    ticks: {
+                        color: 'rgba(255,255,255,0.25)',
+                        font: { size: 9 },
+                        maxTicksLimit: 4,
+                        precision: 0,
+                    }
+                }
             }
         }
     });
+    packActivityChartInstance._packActivityRows = data;
 }
 
 
@@ -2459,9 +3003,10 @@ function showToast(msg, type = "info") {
     if (!container) return;
 
     if (window.lastLoadingToast && type !== 'loading') {
-        window.lastLoadingToast.classList.add('translate-y-[-20px]', 'opacity-0');
-        setTimeout(() => window.lastLoadingToast.remove(), 500);
+        const prevLoading = window.lastLoadingToast;
         window.lastLoadingToast = null;
+        prevLoading.classList.add('translate-y-[-20px]', 'opacity-0');
+        setTimeout(() => prevLoading.remove(), 500);
     }
 
     const toast = document.createElement('div');
@@ -2473,7 +3018,7 @@ function showToast(msg, type = "info") {
     else toast.className += " bg-white/5 border-white/10 text-white";
 
     toast.innerHTML = `
-        ${type === 'loading' ? '<i class="fa-solid fa-spinner animate-spin text-xs"></i>' : ''}
+        ${type === 'loading' ? '<i class="bx bx-loader-alt animate-spin text-xs"></i>' : ''}
         <span class="text-[10px] font-black uppercase tracking-widest">${msg}</span>
     `;
 
@@ -2612,7 +3157,7 @@ async function openUserGrant(username = null, twitchId = null) {
                         <div class="text-[9px] font-bold text-void-accent tracking-[.3em] uppercase opacity-60">Admin Action</div>
                     </div>
                     <button onclick="closeGrantModal()" class="w-10 h-10 rounded-full flex items-center justify-center bg-white/5 hover:bg-void-accent hover:text-void-bg transition-all duration-300">
-                        <i class="fa-solid fa-times text-lg"></i>
+                        <i class="bx bx-x text-lg"></i>
                     </button>
                 </div>
 
@@ -2630,7 +3175,7 @@ async function openUserGrant(username = null, twitchId = null) {
                         ` : `
                             <div class="flex items-center gap-4">
                                 <div class="w-14 h-14 rounded-2xl bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent shadow-inner">
-                                    <i class="fa-solid fa-user-shield text-xl"></i>
+                                    <i class="bx bxs-shield text-xl"></i>
                                 </div>
                                 <div>
                                     <div class="font-black text-white text-lg tracking-tight uppercase">${username}</div>
@@ -2646,7 +3191,7 @@ async function openUserGrant(username = null, twitchId = null) {
                             <span class="opacity-50 text-[8px]">Specific or random</span>
                         </div>
                         <div class="relative group mb-3">
-                            <i class="fa-solid fa-filter absolute left-5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-void-accent transition-colors"></i>
+                            <i class="bx bxs-filter-alt absolute left-5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-void-accent transition-colors"></i>
                             <input type="text" id="card-search" placeholder="Card Name or Rarity..." 
                                 class="w-full bg-void-bg/50 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold focus:border-void-accent focus:ring-1 focus:ring-void-accent outline-none transition-all">
                         </div>
@@ -2995,7 +3540,7 @@ function renderSetsList() {
         list.innerHTML = `
             <div class="col-span-full border-2 border-dashed border-white/5 rounded-3xl p-12 text-center">
                 <div class="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4 text-void-muted">
-                    <i class="fa-solid fa-folder-open text-2xl"></i>
+                    <i class="bx bxs-folder-open text-2xl"></i>
                 </div>
                 <h3 class="text-white font-black uppercase text-sm italic tracking-widest">No Card Sets Yet</h3>
                 <p class="text-void-muted text-[10px] uppercase mt-2">Create a set to organize your cards into groups</p>
@@ -3011,7 +3556,7 @@ function renderSetsList() {
         <div class="glass-card group p-6 cursor-pointer" onclick="editSet('${set.id}')">
             <div class="flex items-center gap-4">
                 <div class="w-12 h-12 rounded-xl bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-xl">
-                    <i class="fa-solid fa-layer-group"></i>
+                    <i class="bx bxs-layer"></i>
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="text-[11px] font-black text-white uppercase truncate">${set.name}</div>
@@ -3021,7 +3566,7 @@ function renderSetsList() {
                     </div>
                 </div>
                 <button onclick="event.stopPropagation(); deleteSet('${set.id}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-400 p-2">
-                    <i class="fa-solid fa-trash-can"></i>
+                    <i class="bx bxs-trash"></i>
                 </button>
             </div>
         </div>
@@ -3338,7 +3883,8 @@ window.addEventListener('keydown', (e) => {
             'set-manager-modal',
             'grant-card-modal',
             'confirm-action-modal',
-            'pack-editor-modal'
+            'pack-editor-modal',
+            'card-studio-details-modal'
         ];
         modals.forEach(id => {
             const modal = document.getElementById(id);
@@ -3349,6 +3895,7 @@ window.addEventListener('keydown', (e) => {
                 else if (id === 'grant-card-modal') closeGrantModal();
                 else if (id === 'confirm-action-modal') closeConfirmModal();
                 else if (id === 'pack-editor-modal') closePackEditor();
+                else if (id === 'card-studio-details-modal') closeCardStudioDetailsModal();
             }
         });
     }
@@ -3409,7 +3956,7 @@ function getHandleAt(mx, my) {
 async function loadTemplates() {
     const grid = document.getElementById('templates-list');
     if (grid) {
-        grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading templates...</div>';
+        grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="bx bx-loader-alt animate-spin mr-2"></i>Loading templates...</div>';
     }
 
     try {
@@ -3437,12 +3984,12 @@ function renderTemplateList() {
         grid.innerHTML = `
             <div class="col-span-full py-20 text-center glass-card">
                 <div class="w-20 h-20 rounded-3xl bg-void-accent/5 border border-void-accent/10 flex items-center justify-center text-void-accent/30 text-3xl mx-auto mb-6">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <i class="bx bxs-magic-wand"></i>
                 </div>
                 <h3 class="text-xl font-black uppercase italic tracking-tight text-white mb-2">No templates yet</h3>
                 <p class="text-[10px] text-void-muted uppercase font-bold tracking-[0.2em] mb-8">Create a template to start making dynamic cards</p>
                 <button onclick="openTemplateEditor()" class="saas-button mx-auto">
-                    <i class="fa-solid fa-plus mr-2"></i>Create First Template
+                    <i class="bx bxs-plus mr-2"></i>Create First Template
                 </button>
             </div>
         `;
@@ -3455,10 +4002,10 @@ function renderTemplateList() {
                 <img src="${t.image_url}" class="w-full h-full object-contain">
                 <div class="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-4 backdrop-blur-sm">
                     <button onclick="editTemplate('${t.id}')" class="saas-button py-3 px-6 text-[10px] w-32">
-                        <i class="fa-solid fa-pen mr-2"></i>Edit
+                        <i class="bx bxs-pen mr-2"></i>Edit
                     </button>
                     <button onclick="deleteTemplate('${t.id}')" class="saas-button saas-button-secondary py-3 px-6 text-[10px] w-32 border-red-500/30 text-red-400 hover:bg-red-500/10">
-                        <i class="fa-solid fa-trash mr-2"></i>Delete
+                        <i class="bx bxs-trash mr-2"></i>Delete
                     </button>
                 </div>
             </div>
@@ -3908,40 +4455,9 @@ function onTemplateDropdownChange() {
 }
 
 function openCardCreator() {
-    const modal = document.getElementById('card-creator-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        document.getElementById('card-form-title').textContent = 'New Card';
-        document.getElementById('card-edit-id').value = '';
-        document.getElementById('card-creator-name').value = '';
-        document.getElementById('card-creator-rarity').value = 'common';
-        document.getElementById('card-creator-description').value = '';
-        document.getElementById('card-creator-attack').value = '0';
-        document.getElementById('card-creator-defense').value = '0';
-        document.getElementById('card-creator-set').value = '';
-        
-        // Reset Template & Traits
-        const templateSel = document.getElementById('card-creator-template');
-        if (templateSel) {
-            templateSel.value = '';
-            onTemplateDropdownChange();
-        }
-        document.getElementById('card-creator-template').value = '';
-        onTemplateDropdownChange();
-
-        document.getElementById('card-image-preview').classList.add('hidden');
-        document.getElementById('card-image-placeholder').classList.remove('hidden');
-
-        syncCardCreatorVoidDropdowns();
-
-        // Focus management
-        setTimeout(() => {
-            const firstInput = document.getElementById('card-creator-name');
-            if (firstInput) firstInput.focus();
-        }, 100);
-    }
+    window.location.href = '/card-creator';
 }
-window.closeCardCreator = () => document.getElementById('card-creator-modal')?.classList.add('hidden');
+window.closeCardCreator = () => {};
 
 window.switchSubTab = switchSubTab;
 window.saveSet = saveSet;
@@ -4063,6 +4579,7 @@ async function deleteCard(cardId) {
 
         if (res.ok) {
             showToast("Card deleted", "success");
+            if (cardStudioDetailsModalCardId === cardId) closeCardStudioDetailsModal();
             fetchCardsForGrid('creator-cards-grid');
         } else {
             showToast("Failed to delete card", "error");
@@ -4072,41 +4589,182 @@ async function deleteCard(cardId) {
     }
 }
 
-function editCard(cardId) {
+function openCardInCreator(cardId) {
+    if (!cardId) return;
+    window.location.href = `/card-creator?id=${encodeURIComponent(cardId)}`;
+}
+window.openCardInCreator = openCardInCreator;
+
+function closeCardStudioDetailsModal() {
+    cardStudioDetailsModalCardId = null;
+    const modal = document.getElementById('card-studio-details-modal');
+    if (modal) modal.classList.add('hidden');
+}
+window.closeCardStudioDetailsModal = closeCardStudioDetailsModal;
+
+function _cardStudioModalSetLabel(card) {
+    if (!card.set_id) return 'No set';
+    const sn = (creatorSets || []).find(s => s.id === card.set_id)?.name;
+    return sn ? String(sn) : 'Set';
+}
+
+function renderCardStudioModalContent(card, mode) {
+    const body = document.getElementById('card-studio-details-modal-body');
+    if (!body || !card) return;
+
+    if (mode === 'view') {
+        const setLabel = _cardStudioModalSetLabel(card);
+        body.innerHTML = `
+            <div class="flex flex-col gap-4">
+                <div class="mx-auto w-[5.75rem] aspect-[2/3] rounded-xl overflow-hidden ring-1 ring-white/10 bg-zinc-900/80 shadow-inner">
+                    <img src="${escapeHTML(card.image_url || '')}" alt="" class="w-full h-full object-cover">
+                </div>
+                <div class="text-center space-y-1.5">
+                    <p class="text-[15px] font-black uppercase italic text-white leading-tight tracking-tight px-1">${escapeHTML(card.name || 'Untitled')}</p>
+                    <span class="inline-flex items-center justify-center rounded-md bg-void-accent/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-void-accent">${escapeHTML(card.rarity || '')}</span>
+                </div>
+                <div class="flex gap-2 justify-center">
+                    <div class="flex min-w-[4.5rem] flex-col items-center rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/5">
+                        <span class="text-[8px] font-black uppercase tracking-widest text-void-muted">Atk</span>
+                        <span class="text-lg font-mono font-bold tabular-nums text-white leading-none">${parseInt(card.attack || 0, 10)}</span>
+                    </div>
+                    <div class="flex min-w-[4.5rem] flex-col items-center rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/5">
+                        <span class="text-[8px] font-black uppercase tracking-widest text-void-muted">Def</span>
+                        <span class="text-lg font-mono font-bold tabular-nums text-white leading-none">${parseInt(card.defense || 0, 10)}</span>
+                    </div>
+                </div>
+                <p class="text-center text-[10px] text-void-muted"><span class="text-void-muted/80">Set</span> <span class="text-white/90">${escapeHTML(setLabel)}</span></p>
+                <div class="flex flex-col gap-2 pt-1">
+                    <button type="button" onclick="openCardInCreator('${escapeHTML(card.id)}')"
+                        class="w-full py-2.5 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/20 hover:brightness-110 transition-all">
+                        Open in Card Creator
+                    </button>
+                    <button type="button" onclick="cardStudioDetailsEnterEdit()"
+                        class="w-full py-2 rounded-xl border border-white/10 bg-transparent text-[10px] font-bold uppercase tracking-widest text-void-muted hover:text-white hover:bg-white/[0.04] transition-colors">
+                        Quick edit
+                    </button>
+                </div>
+            </div>`;
+        return;
+    }
+
+    const setOptions = ['<option value="">No set</option>'].concat(
+        (creatorSets || []).map(s =>
+            `<option value="${escapeHTML(s.id)}" ${card.set_id === s.id ? 'selected' : ''}>${escapeHTML(s.name || 'Untitled')}</option>`
+        )
+    ).join('');
+
+    body.innerHTML = `
+        <div class="space-y-3">
+            <p class="text-[10px] text-center text-void-muted">Rarity is edited in Card Creator <span class="text-white/70">(${escapeHTML(card.rarity || '')})</span></p>
+            <div>
+                <label for="cs-modal-name" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Name</label>
+                <input type="text" id="cs-modal-name" value="${escapeHTML(card.name || '')}"
+                    class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[12px] font-bold text-white placeholder:text-void-muted/50 focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label for="cs-modal-attack" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Attack</label>
+                    <input type="number" id="cs-modal-attack" min="0" max="9999" value="${parseInt(card.attack || 0, 10)}"
+                        class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[12px] font-mono font-bold text-white focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none">
+                </div>
+                <div>
+                    <label for="cs-modal-defense" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Defense</label>
+                    <input type="number" id="cs-modal-defense" min="0" max="9999" value="${parseInt(card.defense || 0, 10)}"
+                        class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[12px] font-mono font-bold text-white focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none">
+                </div>
+            </div>
+            <div>
+                <label for="cs-modal-set" class="block text-[9px] font-black uppercase tracking-widest text-void-muted mb-1.5">Set</label>
+                <select id="cs-modal-set"
+                    class="w-full bg-zinc-950/80 border border-white/10 rounded-xl px-3 py-2 text-[11px] font-semibold text-white focus:border-void-accent/50 focus:ring-1 focus:ring-void-accent/30 focus:outline-none">
+                    ${setOptions}
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-1">
+                <button type="button" onclick="cardStudioDetailsCancelEdit()"
+                    class="py-2.5 rounded-xl border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest text-void-muted hover:text-white hover:bg-white/[0.06] transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onclick="cardStudioDetailsSaveEdit()"
+                    class="py-2.5 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-md shadow-void-accent/20 hover:brightness-110 transition-all">
+                    Save
+                </button>
+            </div>
+        </div>`;
+}
+
+function openCardStudioDetailsModal(card) {
+    if (!card) return;
+    cardStudioDetailsModalCardId = card.id;
+    renderCardStudioModalContent(card, 'view');
+    const modal = document.getElementById('card-studio-details-modal');
+    if (modal) modal.classList.remove('hidden');
+}
+window.openCardStudioDetailsModal = openCardStudioDetailsModal;
+
+function cardStudioDetailsEnterEdit() {
+    const card = creatorCards.find(c => c.id === cardStudioDetailsModalCardId);
+    if (card) renderCardStudioModalContent(card, 'edit');
+}
+window.cardStudioDetailsEnterEdit = cardStudioDetailsEnterEdit;
+
+function cardStudioDetailsCancelEdit() {
+    const card = creatorCards.find(c => c.id === cardStudioDetailsModalCardId);
+    if (card) renderCardStudioModalContent(card, 'view');
+}
+window.cardStudioDetailsCancelEdit = cardStudioDetailsCancelEdit;
+
+async function cardStudioDetailsSaveEdit() {
+    const cardId = cardStudioDetailsModalCardId;
     const card = creatorCards.find(c => c.id === cardId);
     if (!card) return;
-
-    openCardCreator();
-    document.getElementById('card-edit-id').value = card.id;
-    document.getElementById('card-creator-name').value = card.name;
-    document.getElementById('card-creator-rarity').value = card.rarity;
-    document.getElementById('card-creator-description').value = card.description || '';
-    document.getElementById('card-creator-attack').value = card.attack || 0;
-    document.getElementById('card-creator-defense').value = card.defense || 0;
-    document.getElementById('card-creator-set').value = card.set_id || '';
-    const battleToggle = document.getElementById('card-creator-battleable');
-    if (battleToggle) battleToggle.checked = card.is_battle_eligible !== false;
-    const tradeToggle = document.getElementById('card-creator-tradable');
-    if (tradeToggle) tradeToggle.checked = card.is_trading_eligible !== false;
-
-    // Populate Template & Traits
-    const templateSel = document.getElementById('card-creator-template');
-    if (templateSel) {
-        templateSel.value = card.template_id || '';
-        onTemplateDropdownChange();
+    const nameEl = document.getElementById('cs-modal-name');
+    const atkEl = document.getElementById('cs-modal-attack');
+    const defEl = document.getElementById('cs-modal-defense');
+    const setEl = document.getElementById('cs-modal-set');
+    if (!nameEl || !atkEl || !defEl || !setEl) return;
+    const name = nameEl.value.trim();
+    if (!name) {
+        showToast('Name is required', 'error');
+        return;
     }
+    const attack = Math.max(0, Math.min(9999, parseInt(atkEl.value, 10) || 0));
+    const defense = Math.max(0, Math.min(9999, parseInt(defEl.value, 10) || 0));
+    const set_id = setEl.value.trim() || null;
 
-    const preview = document.getElementById('card-image-preview');
-    const placeholder = document.getElementById('card-image-placeholder');
-    if (card.image_url) {
-        preview.src = card.image_url;
-        preview.classList.remove('hidden');
-        placeholder.classList.add('hidden');
+    showToast('Saving…', 'loading');
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/cards/${cardId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            credentials: 'include',
+            body: JSON.stringify({ name, attack, defense, set_id })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Save failed');
+        }
+        const data = await res.json();
+        const idx = creatorCards.findIndex(c => c.id === cardId);
+        if (idx >= 0) creatorCards[idx] = { ...creatorCards[idx], ...data };
+        showToast('Card updated', 'success');
+        renderCardGrid('creator-cards-grid', filterCards());
+        renderCardStudioModalContent(creatorCards[idx], 'view');
+    } catch (e) {
+        showToast(e.message || 'Save failed', 'error');
     }
+}
+window.cardStudioDetailsSaveEdit = cardStudioDetailsSaveEdit;
 
-    document.getElementById('card-form-title').textContent = 'Edit Card';
+function selectCardStudioDetails(cardId) {
+    const card = creatorCards.find(c => c.id === cardId);
+    if (card) openCardStudioDetailsModal(card);
+}
+window.selectCardStudioDetails = selectCardStudioDetails;
 
-    syncCardCreatorVoidDropdowns();
+function editCard(cardId) {
+    openCardInCreator(cardId);
 }
 
 
@@ -4114,7 +4772,7 @@ async function fetchCardBacks() {
     const grid = document.getElementById('card-backs-grid');
     if (!grid) return;
 
-    grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading card backs...</div>';
+    grid.innerHTML = '<div class="col-span-full py-12 text-center text-void-muted uppercase text-[9px]"><i class="bx bx-loader-alt animate-spin mr-2"></i>Loading card backs...</div>';
 
     try {
         const res = await apiFetch(`${BACKEND_URL}/api/creator/card-backs`, { credentials: 'include' });
@@ -4345,12 +5003,12 @@ function buildQueueRow(item, isPending, isFirst) {
     const meta  = rarityMeta(card.rarity);
     const thumb = card.image_url
         ? `<img src="${escapeHTML(card.image_url)}" class="queue-thumb" onerror="this.src=''">`
-        : `<div class="queue-thumb flex items-center justify-center bg-white/5 text-void-muted text-xs"><i class="fa-solid fa-cards-blank"></i></div>`;
+        : `<div class="queue-thumb flex items-center justify-center bg-white/5 text-void-muted text-xs"><i class="bx bxs-id-card"></i></div>`;
 
     const actions = isPending
-        ? `<button class="queue-btn play-now" onclick="replayQueueItem('${escapeHTML(item.id)}', true)" title="Move to front"><i class="fa-solid fa-forward-fast"></i> Now</button>
-           <button class="queue-btn skip" onclick="skipQueueItem('${escapeHTML(item.id)}')"><i class="fa-solid fa-forward"></i> Skip</button>`
-        : `<button class="queue-btn replay" onclick="replayQueueItem('${escapeHTML(item.id)}', false)"><i class="fa-solid fa-rotate-left"></i> Replay</button>`;
+        ? `<button class="queue-btn play-now" onclick="replayQueueItem('${escapeHTML(item.id)}', true)" title="Move to front"><i class="bx bx-fast-forward"></i> Now</button>
+           <button class="queue-btn skip" onclick="skipQueueItem('${escapeHTML(item.id)}')"><i class="bx bx-fast-forward"></i> Skip</button>`
+        : `<button class="queue-btn replay" onclick="replayQueueItem('${escapeHTML(item.id)}', false)"><i class="bx bx-undo"></i> Replay</button>`;
 
     return `
         <div class="queue-card-row${isFirst ? ' is-first' : ''}" data-id="${escapeHTML(item.id)}">
@@ -4362,7 +5020,7 @@ function buildQueueRow(item, isPending, isFirst) {
             <div class="min-w-0 flex-1">
                 <div class="text-[11px] font-black text-white truncate">${escapeHTML(card.name || 'Unknown Card')}</div>
                 <div class="text-[9px] font-bold text-void-muted truncate">
-                    ${user.username ? `<i class="fa-brands fa-twitch text-purple-400"></i> ${escapeHTML(user.username)} · ` : ''}${timeAgo(item.created_at)}
+                    ${user.username ? `<i class="bx bxl-twitch text-purple-400"></i> ${escapeHTML(user.username)} · ` : ''}${timeAgo(item.created_at)}
                 </div>
             </div>
             <div class="queue-actions">${actions}</div>
@@ -4378,7 +5036,7 @@ async function loadObsQueue(silent) {
     if (!pendingList || !consumedList) return;
 
     if (!silent) {
-        const loadingHtml = `<div class="text-center py-6 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading…</div>`;
+        const loadingHtml = `<div class="text-center py-6 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="bx bx-loader-alt bx-spin mr-2"></i>Loading…</div>`;
         pendingList.innerHTML  = loadingHtml;
         consumedList.innerHTML = loadingHtml;
     }
@@ -4400,7 +5058,7 @@ async function loadObsQueue(silent) {
 
         // Populate pending
         if (pending.length === 0) {
-            pendingList.innerHTML = `<div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="fa-solid fa-check-circle mr-2 text-green-400 opacity-60"></i>Queue is empty</div>`;
+            pendingList.innerHTML = `<div class="text-center py-8 text-void-muted text-[11px] font-bold uppercase tracking-widest opacity-40"><i class="bx bxs-check-circle mr-2 text-green-400 opacity-60"></i>Queue is empty</div>`;
         } else {
             pendingList.innerHTML = pending.map((item, i) => buildQueueRow(item, true, i === 0)).join('');
         }
@@ -4569,11 +5227,11 @@ function syncDashboardPauseBtn(paused) {
     if (!btn || !label) return;
     if (paused) {
         label.textContent = 'Resume';
-        btn.querySelector('i').className = 'fa-solid fa-play';
+        btn.querySelector('i').className = 'bx bxs-play';
         btn.classList.add('bg-amber-500/25', 'border-amber-400/40');
     } else {
         label.textContent = 'Pause';
-        btn.querySelector('i').className = 'fa-solid fa-pause';
+        btn.querySelector('i').className = 'bx bxs-pause';
         btn.classList.remove('bg-amber-500/25', 'border-amber-400/40');
     }
 }
@@ -4698,6 +5356,163 @@ async function loadStripeStatus() {
     }
 }
 
+async function loadCreatorProgress() {
+    const loading = document.getElementById('creator-progress-loading');
+    const content = document.getElementById('creator-progress-content');
+    const badge = document.getElementById('creator-tier-badge');
+    if (!loading || !content) return;
+
+    loading.classList.remove('hidden');
+    content.classList.add('hidden');
+
+    try {
+        const res = await apiFetch(`${BACKEND_URL}/api/creator/progress`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Failed to load progress');
+        const data = await res.json();
+
+        loading.classList.add('hidden');
+        content.classList.remove('hidden');
+
+        const tierLabels = { base: 'Creator', affiliate: 'Affiliate', partner: 'Partner' };
+        const tierColors = { base: 'border-white/20 text-void-muted', affiliate: 'border-purple-400/50 text-purple-300 bg-purple-400/10', partner: 'border-yellow-400/50 text-yellow-300 bg-yellow-400/10' };
+        if (badge) {
+            badge.classList.remove('hidden');
+            badge.className = `px-4 py-2 rounded-xl border text-xs font-black uppercase tracking-widest ${tierColors[data.current_tier] || tierColors.base}`;
+            badge.textContent = tierLabels[data.current_tier] || 'Base Creator';
+        }
+
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+        function reqRow(label, current, required, met, suffix = '') {
+            const pct = Math.min(100, Math.round((current / required) * 100));
+            return `<div class="flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
+                <div class="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${met ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-void-muted'}">
+                    <i class="bx ${met ? 'bx-check' : 'bx-minus'} text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-semibold text-white/80">${label}</span>
+                        <span class="text-xs font-black ${met ? 'text-green-400' : 'text-void-muted'}">${current}${suffix} / ${required}${suffix}</span>
+                    </div>
+                    <div class="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-700 ${met ? 'bg-green-500' : 'bg-void-accent'}" style="width:${pct}%"></div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function monthBar(stat) {
+            const threshold = stat._threshold || 0;
+            const pct = threshold ? Math.min(100, Math.round((stat.cards_purchased / threshold) * 100)) : 0;
+            const met = stat.cards_purchased >= threshold;
+            return `<div class="flex flex-col items-center gap-1">
+                <div class="w-8 bg-white/5 rounded-sm overflow-hidden relative" style="height:40px">
+                    <div class="absolute bottom-0 w-full rounded-sm transition-all ${met ? 'bg-green-500/70' : 'bg-void-accent/50'}" style="height:${pct}%"></div>
+                </div>
+                <span class="text-[9px] text-void-muted">${MONTHS[stat.month - 1]}</span>
+            </div>`;
+        }
+
+        function perksBlock(perks) {
+            return `<div class="mt-3 pt-3 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                ${perks.map(p => `<div class="flex items-center gap-2 text-xs text-void-muted">
+                    <i class="bx bx-check-circle text-void-accent text-sm flex-shrink-0"></i>${p}
+                </div>`).join('')}
+            </div>`;
+        }
+
+        function tierCard({ id, icon, name, split, status, statusColor, reqsHtml, perks, monthStatsHtml, locked }) {
+            const statusBadge = status ? `<span class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${statusColor}">${status}</span>` : '';
+            return `<div class="glass-card overflow-hidden ${locked ? 'opacity-70' : ''}">
+                <div class="flex items-center gap-4 p-5 cursor-pointer" onclick="toggleTierSection('${id}')">
+                    <div class="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-2xl ${id === 'partner' ? 'bg-yellow-400/10 border border-yellow-400/20' : id === 'affiliate' ? 'bg-purple-400/10 border border-purple-400/20' : 'bg-void-accent/10 border border-void-accent/20'}">${icon}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-base font-black uppercase italic tracking-tight text-white">${name}</span>
+                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest bg-void-accent/10 border border-void-accent/20 text-void-accent">${split} split</span>
+                            ${locked ? '<span class="flex items-center gap-1 text-[9px] text-void-muted"><i class="bx bx-lock-alt"></i> Complete Affiliate first</span>' : ''}
+                        </div>
+                        ${perks.length ? `<p class="text-[10px] text-void-muted mt-0.5 truncate">${perks[0]}${perks.length > 1 ? ` + ${perks.length - 1} more` : ''}</p>` : ''}
+                    </div>
+                    <div class="flex items-center gap-3 flex-shrink-0">
+                        ${statusBadge}
+                        <i class="bx bx-chevron-down text-void-muted transition-transform tier-chevron-${id} text-xl"></i>
+                    </div>
+                </div>
+                <div id="tier-body-${id}" class="hidden border-t border-white/5 px-5 pb-5 pt-4 space-y-4">
+                    ${reqsHtml ? `<div><p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2">Requirements</p>${reqsHtml}</div>` : ''}
+                    ${monthStatsHtml ? `<div><p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2">Monthly Activity (last 6 months)</p><div class="flex items-end gap-2 h-12">${monthStatsHtml}</div></div>` : ''}
+                    ${perksBlock(perks)}
+                </div>
+            </div>`;
+        }
+
+        const affiliateMonths = data.monthly_stats.map(m => ({ ...m, _threshold: 150 }));
+        const partnerMonths   = data.monthly_stats.map(m => ({ ...m, _threshold: 500 }));
+
+        const baseStatus      = data.current_tier !== 'base' ? { label: 'ACHIEVED', color: 'border-green-500/40 text-green-400 bg-green-500/10' } : { label: 'ACTIVE', color: 'border-void-accent/40 text-void-accent bg-void-accent/10' };
+        const affiliateStatus = data.affiliate.unlocked ? { label: 'ACHIEVED', color: 'border-green-500/40 text-green-400 bg-green-500/10' } : data.affiliate.eligible ? { label: 'ELIGIBLE', color: 'border-purple-400/40 text-purple-300 bg-purple-400/10' } : { label: 'IN PROGRESS', color: 'border-white/20 text-void-muted' };
+        const partnerStatus   = data.partner.unlocked ? { label: 'ACHIEVED', color: 'border-green-500/40 text-green-400 bg-green-500/10' } : data.partner.eligible ? { label: 'ELIGIBLE', color: 'border-yellow-400/40 text-yellow-300 bg-yellow-400/10' } : { label: 'IN PROGRESS', color: 'border-white/20 text-void-muted' };
+
+        const aReqs = data.affiliate.requirements;
+        const pReqs = data.partner.requirements;
+
+        const basePerks      = ['Access to the platform', '70/30 revenue split', 'Viewer achievement system', 'Custom card & pack design'];
+        const affiliatePerks = ['80/20 revenue split', 'Listed in the marketplace', 'Affiliate referral code', 'Priority support'];
+        const partnerPerks   = ['90/10 revenue split', 'Promoted in marketplace', 'Add custom trinkets to the site', 'Exclusive partner badge', 'Referral revenue share'];
+
+        content.innerHTML = [
+            tierCard({
+                id: 'base', icon: '🎴', name: 'Base Creator', split: '70/30',
+                status: baseStatus.label, statusColor: baseStatus.color,
+                reqsHtml: '', monthStatsHtml: '',
+                perks: basePerks, locked: false,
+            }),
+            tierCard({
+                id: 'affiliate', icon: '⚡', name: 'Affiliate', split: '80/20',
+                status: affiliateStatus.label, statusColor: affiliateStatus.color,
+                reqsHtml: [
+                    reqRow('Upload 25 unique cards', aReqs.cards_uploaded.current, aReqs.cards_uploaded.required, aReqs.cards_uploaded.met),
+                    reqRow('5 different collectors', aReqs.unique_collectors.current, aReqs.unique_collectors.required, aReqs.unique_collectors.met),
+                    reqRow('150+ cards purchased for 2 consecutive months', aReqs.qualifying_months.current, aReqs.qualifying_months.required, aReqs.qualifying_months.met, ' mo'),
+                ].join(''),
+                monthStatsHtml: affiliateMonths.map(monthBar).join(''),
+                perks: affiliatePerks, locked: false,
+            }),
+            tierCard({
+                id: 'partner', icon: '👑', name: 'Partner', split: '90/10',
+                status: data.partner.locked ? '' : partnerStatus.label, statusColor: partnerStatus.color,
+                reqsHtml: [
+                    reqRow('Upload 75 unique cards', pReqs.cards_uploaded.current, pReqs.cards_uploaded.required, pReqs.cards_uploaded.met),
+                    reqRow('20 different collectors', pReqs.unique_collectors.current, pReqs.unique_collectors.required, pReqs.unique_collectors.met),
+                    reqRow('500+ cards purchased for 3 consecutive months', pReqs.qualifying_months.current, pReqs.qualifying_months.required, pReqs.qualifying_months.met, ' mo'),
+                ].join(''),
+                monthStatsHtml: partnerMonths.map(monthBar).join(''),
+                perks: partnerPerks, locked: !!data.partner.locked,
+            }),
+        ].join('');
+
+        if (data.current_tier !== 'base') toggleTierSection(data.current_tier);
+
+    } catch (e) {
+        console.error('[CreatorProgress]', e);
+        if (loading) loading.classList.add('hidden');
+        if (content) {
+            content.classList.remove('hidden');
+            content.innerHTML = '<div class="glass-card py-10 text-center text-void-muted text-xs">Failed to load creator progress.</div>';
+        }
+    }
+}
+
+function toggleTierSection(id) {
+    const body = document.getElementById(`tier-body-${id}`);
+    const chevron = document.querySelector(`.tier-chevron-${id}`);
+    if (!body) return;
+    const open = !body.classList.contains('hidden');
+    body.classList.toggle('hidden', open);
+    if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
+}
+
 async function openStripeOnboardingLink() {
     try {
         showToast('Opening Stripe…', 'info');
@@ -4749,7 +5564,7 @@ async function startStripeOnboarding() {
         const btn = event?.currentTarget;
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generating Link...';
+            btn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Generating Link...';
         }
 
         showToast('Connecting Stripe…', 'info');
@@ -4774,7 +5589,7 @@ async function startStripeOnboarding() {
             await loadStripeStatus();
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fa-brands fa-stripe text-2xl"></i> Connect with Stripe';
+                btn.innerHTML = '<i class="bx bxl-stripe text-2xl"></i> Connect with Stripe';
             }
             return;
         }
@@ -4785,7 +5600,7 @@ async function startStripeOnboarding() {
         const btn = document.querySelector('#stripe-onboarding-section button');
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fa-brands fa-stripe text-2xl"></i> Connect with Stripe';
+            btn.innerHTML = '<i class="bx bxl-stripe text-2xl"></i> Connect with Stripe';
         }
     }
 }
@@ -5490,3 +6305,185 @@ async function addCpCustomFixed() {
         showToast(e.message || 'Failed', 'error');
     }
 }
+
+// ── Dashboard Search ────────────────────────────────────────────────────────
+
+const DASH_SEARCH_INDEX = [
+    // Creator Dashboard
+    { section: 'dashboard', tab: 'analytics',     label: 'Analytics',       desc: 'Pack openings, collectors, battles & revenue', icon: 'bx-line-chart',   keywords: ['analytics','stats','packs','revenue','collectors','chart','battles'] },
+    { section: 'dashboard', tab: 'monetization',  label: 'Monetization',    desc: 'Earnings and revenue management',               icon: 'bx-dollar',       keywords: ['monetization','earnings','revenue','money'] },
+    { section: 'dashboard', tab: 'admin',          label: 'Admin Panel',     desc: 'User management and moderation',                icon: 'bxs-shield',      keywords: ['admin','moderation','users','ban','manage'] },
+    { section: 'dashboard', tab: 'activity-log',  label: 'Activity Log',    desc: 'Recent events and channel activity',            icon: 'bxs-bolt',        keywords: ['activity','log','events','history','recent'] },
+    { section: 'dashboard', tab: 'achievements',  label: 'Achievements',    desc: 'Channel achievements and milestones',            icon: 'bxs-trophy',      keywords: ['achievements','trophies','badges','milestones'] },
+    { section: 'dashboard', tab: 'platforms',     label: 'Link Platforms',  desc: 'Connect Twitch, Kick and other platforms',      icon: 'bx-link-alt',     keywords: ['platforms','twitch','kick','link','connect','accounts'] },
+    { section: 'dashboard', tab: 'settings',      label: 'Settings',        desc: 'Channel settings and preferences',              icon: 'bxs-cog',         keywords: ['settings','preferences','config','channel'] },
+    // Card Studio
+    { section: 'card-studio', tab: 'cards',       label: 'Cards',           desc: 'Upload and manage your cards',                  icon: 'bxs-id-card',     keywords: ['cards','collection','upload','manage'] },
+    { section: 'card-studio', tab: 'sets',        label: 'Sets',            desc: 'Manage card sets and series',                   icon: 'bxs-layer',       keywords: ['sets','series','packs','collection'] },
+    { section: 'card-studio', tab: 'promo',       label: 'Promo Codes',     desc: 'Promotional codes and campaigns',               icon: 'bxs-gift',        keywords: ['promo','codes','promotional','gift','campaign'] },
+    { section: 'card-studio', tab: 'granting',    label: 'Granting',        desc: 'Grant cards to your viewers',                   icon: 'bxs-hand',        keywords: ['granting','give','grant','viewers','gift'] },
+    // Stream Features
+    { section: 'stream-features', tab: 'overlay',         label: 'Overlays',        desc: 'OBS overlays and stream widgets',           icon: 'bxs-layer',   keywords: ['overlay','obs','stream','widget','browser source'] },
+    { section: 'stream-features', tab: 'queue',           label: 'Queue System',    desc: 'Battle queue and queue management',         icon: 'bxs-detail',  keywords: ['queue','battle','system','manage'] },
+    { section: 'stream-features', tab: 'battle-settings', label: 'Battle Settings', desc: 'Configure battle rules and game settings',  icon: 'bx-joystick', keywords: ['battle','settings','rules','game','pvp'] },
+    { section: 'stream-features', tab: 'channel-points',  label: 'Channel Points',  desc: 'Twitch & Kick channel point rewards',       icon: 'bxs-coin',    keywords: ['channel points','rewards','twitch','kick','points'] },
+];
+
+const DASH_SEARCH_SECTION_LABELS = {
+    'dashboard':       'Creator Dashboard',
+    'card-studio':     'Card Studio',
+    'stream-features': 'Stream Features',
+};
+
+let dashSearchActiveIdx = -1;
+let dashSearchVisible = [];
+
+function initDashSearch() {
+    const input   = document.getElementById('dash-search-input');
+    const results = document.getElementById('dash-search-results');
+    const kbd     = document.getElementById('dash-search-kbd');
+    if (!input || !results) return;
+
+    // ⌘K / Ctrl+K global shortcut
+    document.addEventListener('keydown', e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault();
+            input.focus();
+            input.select();
+        }
+        if (e.key === 'Escape' && document.activeElement === input) {
+            closeDashSearch();
+            input.blur();
+        }
+    });
+
+    input.addEventListener('focus', () => {
+        if (kbd) kbd.style.display = 'none';
+        renderDashSearch(input.value);
+    });
+
+    input.addEventListener('blur', () => {
+        // Delay so click on result fires first
+        setTimeout(() => {
+            closeDashSearch();
+            if (kbd && !input.value) kbd.style.display = '';
+        }, 150);
+    });
+
+    input.addEventListener('input', () => {
+        dashSearchActiveIdx = -1;
+        renderDashSearch(input.value);
+    });
+
+    input.addEventListener('keydown', e => {
+        if (results.style.display !== 'none') {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                dashSearchActiveIdx = Math.min(dashSearchActiveIdx + 1, dashSearchVisible.length - 1);
+                updateDashSearchActive(results);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                dashSearchActiveIdx = Math.max(dashSearchActiveIdx - 1, 0);
+                updateDashSearchActive(results);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const item = dashSearchVisible[dashSearchActiveIdx] ?? dashSearchVisible[0];
+                if (item) navigateDashSearch(item, input);
+            }
+        }
+    });
+}
+
+function renderDashSearch(query) {
+    const input   = document.getElementById('dash-search-input');
+    const results = document.getElementById('dash-search-results');
+    if (!results) return;
+
+    const q = query.trim().toLowerCase();
+    const matches = q
+        ? DASH_SEARCH_INDEX.filter(item =>
+            item.label.toLowerCase().includes(q) ||
+            item.desc.toLowerCase().includes(q) ||
+            item.keywords.some(k => k.includes(q))
+          )
+        : DASH_SEARCH_INDEX;
+
+    dashSearchVisible = matches;
+    dashSearchActiveIdx = matches.length > 0 ? 0 : -1;
+
+    if (matches.length === 0) {
+        results.innerHTML = `<div class="dash-search-empty">No results for "<strong>${escapeHTML(query)}</strong>"</div>`;
+        results.style.display = '';
+        input?.setAttribute('aria-expanded', 'true');
+        return;
+    }
+
+    // Group by section
+    const grouped = {};
+    for (const item of matches) {
+        (grouped[item.section] = grouped[item.section] || []).push(item);
+    }
+
+    let html = '';
+    let flatIdx = 0;
+    for (const [section, items] of Object.entries(grouped)) {
+        html += `<div class="dash-search-section-header">${escapeHTML(DASH_SEARCH_SECTION_LABELS[section] || section)}</div>`;
+        for (const item of items) {
+            const isActive = flatIdx === dashSearchActiveIdx;
+            html += `<div class="dash-search-result${isActive ? ' dash-search-result--active' : ''}" data-idx="${flatIdx}" role="option" aria-selected="${isActive}">
+                <div class="dash-search-result-icon"><i class="bx ${escapeHTML(item.icon)}"></i></div>
+                <div class="dash-search-result-text">
+                    <div class="dash-search-result-name">${escapeHTML(item.label)}</div>
+                    <div class="dash-search-result-desc">${escapeHTML(item.desc)}</div>
+                </div>
+            </div>`;
+            flatIdx++;
+        }
+    }
+
+    results.innerHTML = html;
+    results.style.display = '';
+    input?.setAttribute('aria-expanded', 'true');
+
+    results.querySelectorAll('.dash-search-result').forEach(el => {
+        el.addEventListener('mousedown', e => {
+            e.preventDefault();
+            const idx = parseInt(el.dataset.idx, 10);
+            const item = dashSearchVisible[idx];
+            if (item) navigateDashSearch(item, document.getElementById('dash-search-input'));
+        });
+        el.addEventListener('mouseover', () => {
+            dashSearchActiveIdx = parseInt(el.dataset.idx, 10);
+            updateDashSearchActive(results);
+        });
+    });
+}
+
+function updateDashSearchActive(results) {
+    results.querySelectorAll('.dash-search-result').forEach((el, i) => {
+        const active = i === dashSearchActiveIdx;
+        el.classList.toggle('dash-search-result--active', active);
+        el.setAttribute('aria-selected', String(active));
+        if (active) el.scrollIntoView({ block: 'nearest' });
+    });
+}
+
+function navigateDashSearch(item, input) {
+    closeDashSearch();
+    if (input) { input.value = ''; input.blur(); }
+    switchSection(item.section);
+    if (item.tab !== SECTIONS[item.section]?.default) {
+        switchTab(item.tab);
+    }
+}
+
+function closeDashSearch() {
+    const results = document.getElementById('dash-search-results');
+    const input   = document.getElementById('dash-search-input');
+    if (results) results.style.display = 'none';
+    if (input) input.setAttribute('aria-expanded', 'false');
+    dashSearchActiveIdx = -1;
+    dashSearchVisible = [];
+}
+
+document.addEventListener('DOMContentLoaded', initDashSearch);

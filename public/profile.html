@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/tailwind-built.css">
     <style>
@@ -129,6 +129,85 @@
             border-color: rgba(var(--void-accent-rgb),0.4);
             color: var(--void-accent);
         }
+        #pf-sections-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #pf-sections-btn:hover { background: rgba(255,255,255,0.08); color: var(--void-text); border-color: rgba(255,255,255,0.2); }
+        #pf-sections-btn.active {
+            background: rgba(var(--void-accent-rgb),0.12);
+            border-color: rgba(var(--void-accent-rgb),0.4);
+            color: var(--void-accent);
+        }
+        #pf-sections-panel {
+            margin-top: 12px;
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+        }
+        .pf-sections-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .pf-sections-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            font-weight: 700;
+        }
+        .pf-sections-item input { accent-color: rgba(var(--void-accent-rgb),1); }
+        #pf-wishlist-editor {
+            width: 100%;
+            min-height: 86px;
+            resize: vertical;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.2);
+            color: var(--void-text);
+            font-size: 0.7rem;
+            line-height: 1.4;
+            padding: 10px;
+            outline: none;
+        }
+        #pf-wishlist-editor:focus {
+            border-color: rgba(var(--void-accent-rgb),0.55);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.2);
+        }
+        #pf-save-sections {
+            margin-top: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.35);
+            background: rgba(var(--void-accent-rgb),0.12);
+            color: var(--void-accent);
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
 
         /* ── Widget grid ── */
         #pf-widgets {
@@ -207,31 +286,31 @@
         #pf-showcase-inner {
             padding: 0 0 24px;
             position: relative;
-            height: 420px;
+            height: 480px;
             perspective: 1400px;
         }
         .pf-showcase-slot {
             position: absolute;
-            width: 220px;
-            height: 308px;
-            border-radius: 16px;
+            width: 230px;
+            height: 322px;
+            border-radius: 14px;
             overflow: hidden;
             top: 50%;
-            transition: all 0.7s var(--ease-premium, cubic-bezier(0.16, 1, 0.3, 1));
+            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
             cursor: pointer;
             background: #0d0f14;
             box-shadow: 0 12px 48px rgba(0,0,0,0.6);
         }
         .pf-showcase-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .pf-showcase-slot[data-pos="center"] {
-            left: 50%; transform: translateX(-50%) translateY(-50%) scale(1.12);
+            left: 50%; transform: translateX(-50%) translateY(-50%) scale(1.1);
             z-index: 10; box-shadow: 0 0 50px 6px rgba(var(--void-accent-rgb),0.22), 0 25px 60px rgba(0,0,0,0.7);
         }
-        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 260px); transform: translateX(-50%) translateY(-54%) rotateY(-22deg) scale(0.85); z-index: 7; opacity: 0.75; }
-        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 480px); transform: translateX(-50%) translateY(-58%) rotateY(-38deg) scale(0.65); z-index: 4; opacity: 0.4; }
-        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 260px); transform: translateX(-50%) translateY(-54%) rotateY(22deg) scale(0.85);  z-index: 7; opacity: 0.75; }
-        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 480px); transform: translateX(-50%) translateY(-58%) rotateY(38deg) scale(0.65);   z-index: 4; opacity: 0.4; }
-        .pf-showcase-slot[data-pos="hidden"] { left: 50%; transform: translateX(-50%) translateY(-62%) scale(0.4); z-index: 1; opacity: 0; pointer-events: none; }
+        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 255px); transform: translateX(-50%) translateY(-53%) rotateY(-22deg) scale(0.82); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 460px); transform: translateX(-50%) translateY(-57%) rotateY(-38deg) scale(0.62); z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 255px); transform: translateX(-50%) translateY(-53%) rotateY(22deg) scale(0.82);  z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 460px); transform: translateX(-50%) translateY(-57%) rotateY(38deg) scale(0.62);   z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="hidden"] { left: 50%; transform: translateX(-50%) translateY(-60%) scale(0.4); z-index: 1; opacity: 0; pointer-events: none; }
         /* Rarity accent on center slot */
         .pf-showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 48px 8px rgba(251,191,36,0.3), 0 20px 48px rgba(0,0,0,0.6); }
         .pf-showcase-slot[data-pos="center"][data-rarity="Epic"]      { box-shadow: 0 0 48px 8px rgba(168,85,247,0.28), 0 20px 48px rgba(0,0,0,0.6); }
@@ -352,6 +431,38 @@
             width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
         }
 
+        /* ── Wishlist widget ── */
+        #widget-wishlist .pf-widget-title { color: rgba(var(--void-accent-rgb),0.9); }
+        #pf-wishlist-list {
+            padding: 0 18px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .pf-wishlist-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 10px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            font-size: 0.68rem;
+            color: var(--void-text);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .pf-wishlist-item i { color: rgba(var(--void-accent-rgb),0.85); font-size: 0.85rem; }
+        .pf-wishlist-empty {
+            padding: 2px 18px 18px;
+            color: var(--void-muted);
+            font-size: 0.68rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            font-style: italic;
+        }
+
         /* ── Card modal (lightweight) ── */
         #pf-card-modal {
             position: fixed; inset: 0; z-index: 9000;
@@ -423,9 +534,6 @@
                 </div>
                 <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
             </a>
-            <a href="/" class="saas-button rounded-xl px-5 py-2.5 text-[9px]">
-                Enter App <i class="fa-solid fa-arrow-right ml-1 opacity-60"></i>
-            </a>
         </div>
     </nav>
 
@@ -437,7 +545,7 @@
 
     <!-- NOT FOUND -->
     <div id="pf-not-found" class="hidden">
-        <div class="text-6xl opacity-10"><i class="fa-solid fa-ghost"></i></div>
+        <div class="text-6xl opacity-10"><i class="bx bxs-ghost"></i></div>
         <h1 class="font-display font-black text-2xl uppercase italic tracking-tight">Profile not found</h1>
         <p class="text-sm text-void-muted max-w-sm">This Castle profile doesn't exist yet, or the username may have changed.</p>
         <a href="/" class="text-xs text-void-accent hover:underline mt-2">← Back to home</a>
@@ -452,22 +560,42 @@
             <div>
                 <div class="flex items-center gap-3 flex-wrap mb-1">
                     <h1 id="pf-name">—</h1>
-                    <span id="pf-role-badge"><i class="fa-solid fa-user text-[8px]"></i> <span id="pf-role-text">Collector</span></span>
+                    <span id="pf-role-badge"><i class="bx bxs-user text-[8px]"></i> <span id="pf-role-text">Collector</span></span>
                 </div>
                 <div class="pf-code-row">
                     <span class="pf-code-label">Castle code</span>
                     <span id="pf-code" class="pf-code-value">—</span>
                     <button id="pf-copy-code" class="w-5 h-5 rounded-md bg-white/[0.06] border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent transition-colors" title="Copy code">
-                        <i class="fa-solid fa-copy text-[9px]"></i>
+                        <i class="bx bxs-copy text-[9px]"></i>
                     </button>
                 </div>
             </div>
             <div id="pf-hero-actions">
                 <button id="pf-edit-btn">
-                    <i class="fa-solid fa-grip-dots-vertical text-[10px]"></i>
+                    <i class="bx bxs-dots-vertical text-[10px]"></i>
                     <span id="pf-edit-label">Edit layout</span>
                 </button>
+                <button id="pf-sections-btn" class="hidden">
+                    <i class="bx bxs-cog text-[10px]"></i>
+                    <span>Sections</span>
+                </button>
             </div>
+        </div>
+        <div id="pf-sections-panel" class="hidden pf-rise pf-rise-2">
+            <div class="pf-widget-title" style="padding:0;margin-bottom:10px;">Profile Sections</div>
+            <div class="pf-sections-grid">
+                <label class="pf-sections-item"><input type="checkbox" value="widget-showcase" checked> Showcase</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-stats" checked> Stats</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-trophy" checked> Trophy Cabinet</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-latest" checked> Latest Pulls</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-wishlist" checked> Wishlist</label>
+            </div>
+            <label for="pf-wishlist-editor" class="pf-sections-item" style="margin-bottom:6px;">Wishlist (one item per line)</label>
+            <textarea id="pf-wishlist-editor" placeholder="Example: Golden Dragon&#10;Any Genesis Mint&#10;Legendary cards from your favorite creator"></textarea>
+            <button id="pf-save-sections">
+                <i class="bx bxs-save text-[10px]"></i>
+                Save profile sections
+            </button>
         </div>
 
         <!-- WIDGETS -->
@@ -475,7 +603,7 @@
 
             <!-- SHOWCASE -->
             <div class="pf-widget" id="widget-showcase" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
                 <div class="pf-widget-title" id="pf-showcase-title">—'s Collection</div>
                 <div id="pf-showcase-inner"></div>
                 <div id="pf-dots"></div>
@@ -483,7 +611,7 @@
 
             <!-- STATS -->
             <div class="pf-widget" id="widget-stats" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
                 <div class="pf-widget-title" id="pf-stats-title">—'s Castle Stats</div>
                 <div id="pf-stats-rows"></div>
                 <div id="pf-stats-footer"></div>
@@ -491,16 +619,23 @@
 
             <!-- TROPHY CABINET -->
             <div class="pf-widget" id="widget-trophy" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
                 <div class="pf-widget-title">Trophy Cabinet</div>
                 <div id="pf-trophy-grid"></div>
             </div>
 
             <!-- LATEST PACK PULL -->
             <div class="pf-widget" id="widget-latest" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="fa-solid fa-grip-dots-vertical"></i></span>
+                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
                 <div class="pf-widget-title">Latest Pack Pull</div>
                 <div id="pf-latest-inner"></div>
+            </div>
+
+            <!-- WISHLIST -->
+            <div class="pf-widget" id="widget-wishlist" draggable="false">
+                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                <div class="pf-widget-title">Wishlist</div>
+                <div id="pf-wishlist-list"></div>
             </div>
 
         </div><!-- /pf-widgets -->
@@ -509,14 +644,14 @@
     <!-- CARD MODAL -->
     <div id="pf-card-modal" role="dialog" aria-modal="true">
         <div id="pf-modal-inner">
-            <button id="pf-modal-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+            <button id="pf-modal-close" aria-label="Close"><i class="bx bx-x"></i></button>
             <img id="pf-modal-img" src="" alt="">
             <div id="pf-modal-body">
                 <div id="pf-modal-name">—</div>
                 <div class="pf-modal-meta" id="pf-modal-meta">—</div>
                 
                 <button id="pf-pin-btn" class="hidden w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all font-black uppercase tracking-widest text-[9px]">
-                    <i class="fa-solid fa-thumbtack"></i>
+                    <i class="bx bxs-pin"></i>
                     <span id="pf-pin-label">Pin to Showcase</span>
                 </button>
             </div>

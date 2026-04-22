@@ -11,12 +11,11 @@
 		{
 			"binding": "CARD_IMAGES",
 			"bucket_name": "assets"
-		},
-		{
-			"binding": "IMAGE_ASSETS",
-			"bucket_name": "assets"
 		}
 	],
+	"ai": {
+		"binding": "AI"
+	},
 	"observability": {
 		"enabled": true
 	},
@@ -37,6 +36,10 @@
 			{
 				"name": "PACK_OPENING_SESSIONS",
 				"class_name": "PackOpeningSession"
+			},
+			{
+				"name": "OBS_QUEUE_SESSIONS",
+				"class_name": "OBSQueueSession"
 			}
 		]
 	},
@@ -45,6 +48,12 @@
 			"tag": "v1",
 			"new_sqlite_classes": [
 				"PackOpeningSession"
+			]
+		},
+		{
+			"tag": "v2",
+			"new_sqlite_classes": [
+				"OBSQueueSession"
 			]
 		}
 	]

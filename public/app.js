@@ -648,7 +648,7 @@ function initCreatorDashboardEvents() {
             reader.readAsDataURL(file);
             try {
                 const button = e.target.nextElementSibling;
-                if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>...'; }
+                if (button) { button.disabled = true; button.innerHTML = '<i class="bx bx-loader-alt bx-spin mr-2"></i>...'; }
                 const formData = new FormData();
                 formData.append('file', file);
                 const res = await fetch(`${BACKEND_URL}/api/admin/upload`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: formData, credentials: 'include' });
@@ -656,7 +656,7 @@ function initCreatorDashboardEvents() {
                 if (data.success) {
                     const acImage = document.getElementById('ac-image');
                     if (acImage) acImage.value = data.url;
-                    if (button) { button.innerHTML = '<i class="fa-solid fa-check mr-2"></i>DONE'; }
+                    if (button) { button.innerHTML = '<i class="bx bxs-check mr-2"></i>DONE'; }
                 }
                 if (button) button.disabled = false;
             } catch (err) { if (button) button.disabled = false; }
@@ -1071,9 +1071,9 @@ const LANDING_COPY = {
         'step-2-desc': 'Support your favorite streamers and earn rare cards through drops and rewards.',
         'step-3-title': '03. Trade & Battle',
         'step-3-desc': 'Trade with friends to complete your sets and battle others to show off your best cards.',
-        'step-1-icon': 'fa-solid fa-link text-xl',
-        'step-2-icon': 'fa-solid fa-layer-group text-xl',
-        'step-3-icon': 'fa-solid fa-repeat text-xl'
+        'step-1-icon': 'bx bxs-link text-xl',
+        'step-2-icon': 'bx bxs-layer text-xl',
+        'step-3-icon': 'bx bx-repeat text-xl'
     },
     streamer: {
         'hero-title': 'CREATE.<br>REWARD.<br><span class="text-void-accent">GROW.</span>',
@@ -1089,9 +1089,9 @@ const LANDING_COPY = {
         'step-2-desc': 'Design and create your own digital cards.',
         'step-3-title': '03. Automate Drops',
         'step-3-desc': "Set up automated card drops for subs, bits, and channel points.",
-        'step-1-icon': 'fa-solid fa-plug text-xl',
-        'step-2-icon': 'fa-solid fa-wand-magic-sparkles text-xl',
-        'step-3-icon': 'fa-solid fa-robot text-xl'
+        'step-1-icon': 'bx bxs-plug text-xl',
+        'step-2-icon': 'bx bxs-magic-wand text-xl',
+        'step-3-icon': 'bx bxs-bot text-xl'
     }
 };
 
@@ -1844,11 +1844,15 @@ function parseRoute() {
             routeInfo.view = 'home';
         }
     } else if (parts.length === 1) {
-        // Account settings are a dedicated page (settings.html); avoid loading the SPA shell on /settings or /profile.
-        if (parts[0] === 'settings' || parts[0] === 'profile') {
-            window.location.replace('/settings');
-            return;
-        }
+        // Standalone pages served by the Worker — redirect out of the SPA shell
+        if (parts[0] === 'settings') { window.location.replace('/settings'); return; }
+        if (parts[0] === 'profile')  { window.location.replace('/profile');  return; }
+        if (parts[0] === 'trading')  { window.location.replace('/trading');  return; }
+        if (parts[0] === 'my-collection') { window.location.replace('/my-collection'); return; }
+        if (parts[0] === 'battle')   { window.location.replace('/battle');   return; }
+        if (parts[0] === 'card-studio') { window.location.replace('/dashboard?section=card-studio'); return; }
+        if (parts[0] === 'card-creator') { window.location.replace('/card-creator'); return; }
+        if (parts[0] === 'stream-features') { window.location.replace('/dashboard?section=stream-features'); return; }
         const reserved = ['onboarding', 'login', 'logout', 'dashboard', 'hub', 'privacy', 'terms', 'cookies', '404', 'auth', 'api', 'obs-overlay'];
         if (reserved.includes(parts[0])) {
             routeInfo.view = parts[0];
@@ -1893,7 +1897,7 @@ function showCustomConfirm(options) {
 
     if (iconWrap) {
         iconWrap.className = `w-16 h-16 ${options.iconBg || 'bg-red-500/10'} rounded-2xl flex items-center justify-center text-2xl mx-auto border ${options.iconBorder || 'border-red-500/20'}`;
-        iconWrap.innerHTML = `<i class="fa-solid ${options.icon || 'fa-triangle-exclamation'} ${options.iconColor || 'text-red-500'}"></i>`;
+        iconWrap.innerHTML = `<i class="bx ${options.icon || 'bxs-error'} ${options.iconColor || 'text-red-500'}"></i>`;
     }
 
 
@@ -1975,13 +1979,13 @@ function showToast(message, type = 'info') {
     toast.className = `toast-void toast-${type}`;
 
     const icons = {
-        success: 'fa-circle-check',
-        error: 'fa-circle-xmark',
-        info: 'fa-circle-info'
+        success: 'bxs-check-circle',
+        error: 'bxs-x-circle',
+        info: 'bxs-info-circle'
     };
 
     toast.innerHTML = `
-            <i class="fa-solid ${icons[type]} toast-icon"></i>
+            <i class="bx ${icons[type]} toast-icon"></i>
             <div class="toast-message">${escapeHTML(message)}</div>
         `;
 
@@ -2635,7 +2639,7 @@ async function initializeApp() {
                 sections.innerHTML = `
                     <div class="col-span-full py-32 flex flex-col items-center text-center space-y-6">
                         <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
-                            <i class="fa-solid fa-lock"></i>
+                            <i class="bx bxs-lock"></i>
                         </div>
                         <div class="space-y-2">
                             <h3 class="text-3xl font-black uppercase italic tracking-tight">Access Restricted</h3>
@@ -2712,12 +2716,12 @@ async function renderViewerHub(sections, favoriteIds = []) {
                     <div class="relative">
                         <img src="${escapeHTML(s.brand_logo_url || s.pack_image_url || s.avatar_url)}" class="w-12 h-12 rounded-xl object-cover border border-void-accent/20">
                         <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-void-accent flex items-center justify-center rounded-full border-2 border-void-bg text-[8px] text-void-bg font-black">
-                            <i class="fa-solid fa-star"></i>
+                            <i class="bx bxs-star"></i>
                         </div>
                     </div>
                     <div class="text-left">
                         <div class="text-[10px] font-black uppercase tracking-widest text-void-accent/80 leading-none mb-1">Authenticated Creator</div>
-                        <div class="text-lg font-display font-black text-void-text uppercase italic tracking-tight leading-none">Your Hub <i class="fa-solid fa-arrow-right ml-1 text-xs opacity-40 group-hover:translate-x-1 transition-all"></i></div>
+                        <div class="text-lg font-display font-black text-void-text uppercase italic tracking-tight leading-none">Your Hub <i class="bx bx-right-arrow-alt ml-1 text-xs opacity-40 group-hover:translate-x-1 transition-all"></i></div>
                     </div>
                 </div>
             `;
@@ -2769,7 +2773,7 @@ function renderStreamerCard(s, isFavorited) {
             <!-- Favorite Toggle -->
             <button type="button" onclick="event.stopPropagation(); event.preventDefault(); toggleFavorite('${escapeHTML(s.id)}')" 
                     class="group/star absolute top-4 right-4 z-30 w-10 h-10 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center transition-all hover:scale-110 active:scale-95">
-                <i class="fa-solid fa-star ${starClass} transition-colors"></i>
+                <i class="bx bxs-star ${starClass} transition-colors"></i>
             </button>
 
             <!-- Click area for navigation -->
@@ -2790,13 +2794,132 @@ function renderStreamerCard(s, isFavorited) {
                             </div>
                         </div>
                         <div class="w-10 h-10 shrink-0 rounded-xl bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent group-hover:translate-x-1 transition-all">
-                            <i class="fa-solid fa-arrow-right"></i>
+                            <i class="bx bx-right-arrow-alt"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     `;
+}
+
+function openDiscoverCreators() {
+    const modal = document.getElementById('discover-creators-modal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    const loading = document.getElementById('discover-loading');
+    const err = document.getElementById('discover-error');
+    const followedGrid = document.getElementById('discover-followed-grid');
+    const recommendedGrid = document.getElementById('discover-recommended-grid');
+    const followedEmpty = document.getElementById('discover-followed-empty');
+    const recommendedEmpty = document.getElementById('discover-recommended-empty');
+    const followedCount = document.getElementById('discover-followed-count');
+    const recommendedCount = document.getElementById('discover-recommended-count');
+
+    if (err) err.classList.add('hidden');
+    if (followedGrid) followedGrid.innerHTML = '';
+    if (recommendedGrid) recommendedGrid.innerHTML = '';
+    if (followedEmpty) followedEmpty.classList.add('hidden');
+    if (recommendedEmpty) recommendedEmpty.classList.add('hidden');
+    if (followedCount) followedCount.textContent = '';
+    if (recommendedCount) recommendedCount.textContent = '';
+
+    const tabFollowed = document.getElementById('discover-tab-followed');
+    const tabRecommended = document.getElementById('discover-tab-recommended');
+    const panelFollowed = document.getElementById('discover-followed-panel');
+    const panelRecommended = document.getElementById('discover-recommended-panel');
+
+    if (tabFollowed && tabRecommended && panelFollowed && panelRecommended) {
+        tabFollowed.classList.add('bg-void-accent', 'text-void-bg');
+        tabFollowed.classList.remove('text-void-muted');
+        tabRecommended.classList.remove('bg-void-accent', 'text-void-bg');
+        panelFollowed.classList.remove('hidden');
+        panelRecommended.classList.add('hidden');
+
+        tabFollowed.onclick = () => {
+            tabFollowed.classList.add('bg-void-accent', 'text-void-bg');
+            tabFollowed.classList.remove('text-void-muted');
+            tabRecommended.classList.remove('bg-void-accent', 'text-void-bg');
+            panelFollowed.classList.remove('hidden');
+            panelRecommended.classList.add('hidden');
+        };
+        tabRecommended.onclick = () => {
+            tabRecommended.classList.add('bg-void-accent', 'text-void-bg');
+            tabRecommended.classList.remove('text-void-muted');
+            tabFollowed.classList.remove('bg-void-accent', 'text-void-bg');
+            panelRecommended.classList.remove('hidden');
+            panelFollowed.classList.add('hidden');
+        };
+    }
+
+    if (loading) loading.classList.remove('hidden');
+
+    (async () => {
+        try {
+            const [hubRes, mutualsRes] = await Promise.all([
+                fetch(`${BACKEND_URL}/api/v2/bootstrap?streamer=all&lite=1`, { credentials: 'include' }),
+                fetch(`${BACKEND_URL}/api/my-collections/mutuals`, { credentials: 'include' }),
+            ]);
+
+            const hubJson = hubRes.ok ? await hubRes.json().catch(() => ({})) : {};
+            const mutualsJson = mutualsRes.ok ? await mutualsRes.json().catch(() => []) : [];
+
+            const followed = Array.isArray(hubJson.sections?.followed) ? hubJson.sections.followed : [];
+            const recommended = Array.isArray(mutualsJson) ? mutualsJson : [];
+
+            if (followedGrid) {
+                if (followed.length === 0 && followedEmpty) {
+                    followedEmpty.classList.remove('hidden');
+                } else {
+                    followedGrid.innerHTML = followed.map(s => renderStreamerCard(s, !!s.is_favorited)).join('');
+                }
+            }
+
+            if (recommendedGrid) {
+                if (recommended.length === 0 && recommendedEmpty) {
+                    recommendedEmpty.classList.remove('hidden');
+                } else {
+                    recommendedGrid.innerHTML = recommended.map((row) => {
+                        const s = {
+                            id: row.streamer_id,
+                            username: row.streamer_username,
+                            display_name: row.brand_name,
+                            brand_name: row.brand_name,
+                            avatar_url: row.avatar_url,
+                            pack_image_url: row.pack_image_url,
+                        };
+                        return renderStreamerCard(s, !!row.is_favorited);
+                    }).join('');
+                }
+            }
+
+            if (followedCount) {
+                followedCount.textContent = followed.length
+                    ? `${followed.length} followed`
+                    : '0 followed';
+            }
+            if (recommendedCount) {
+                recommendedCount.textContent = recommended.length
+                    ? `${recommended.length} recommended`
+                    : '0 recommended';
+            }
+        } catch (e) {
+            console.error('[DiscoverCreators] Failed to load', e);
+            if (err) err.classList.remove('hidden');
+        } finally {
+            if (loading) loading.classList.add('hidden');
+        }
+    })();
+}
+
+function closeDiscoverCreators() {
+    const modal = document.getElementById('discover-creators-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
 }
 
 async function toggleFavorite(streamerId) {
@@ -2896,13 +3019,13 @@ async function renderStreamerProfile(bootstrap) {
     const linksEl = document.getElementById('sp-social-links');
     if (linksEl) {
         const links = APP_STREAMER.social_links || {};
-        const icons = { kick: 'fa-solid fa-k', youtube: 'fa-brands fa-youtube', twitter: 'fa-brands fa-x-twitter', discord: 'fa-brands fa-discord', tiktok: 'fa-brands fa-tiktok' };
+        const icons = { kick: 'bx bxs-k', youtube: 'bx bxl-youtube', twitter: 'bx bxl-twitter', discord: 'bx bxl-discord', tiktok: 'bx bxl-tiktok' };
         const labels = { kick: 'Kick', youtube: 'YouTube', twitter: 'X', discord: 'Discord', tiktok: 'TikTok' };
         const entries = Object.entries(links).filter(([, url]) => url);
         linksEl.innerHTML = entries.length ? entries.map(([key, url]) => {
             const iconHtml = key === 'kick'
                 ? '<img src="/kick-mark.svg" alt="" width="18" height="18" class="inline-block w-[18px] h-[18px] opacity-95" />'
-                : `<i class="${icons[key] || 'fa-solid fa-link'}"></i>`;
+                : `<i class="${icons[key] || 'bx bxs-link'}"></i>`;
             return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:border-void-accent/50 hover:bg-void-accent/10 text-void-muted hover:text-void-accent transition-all text-sm font-bold">
                 ${iconHtml} ${labels[key] || key}
             </a>`;
@@ -3143,7 +3266,7 @@ function updateRecentActivity(activity) {
     if (!activity || !activity.recent_events || activity.recent_events.length === 0) {
         activityEl.innerHTML = `
         <div class="text-center py-8 text-void-muted">
-            <i class="fa-solid fa-inbox text-2xl mb-2"></i>
+            <i class="bx bxs-inbox text-2xl mb-2"></i>
             <p class="text-xs">No recent activity</p>
         </div>
     `;
@@ -3153,7 +3276,7 @@ function updateRecentActivity(activity) {
     activityEl.innerHTML = activity.recent_events.slice(0, 5).map(event => `
     <div class="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-all">
         <div class="w-10 h-10 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
-            <i class="fa-solid ${getActivityIcon(event.type)}"></i>
+            <i class="bx ${getActivityIcon(event.type)}"></i>
         </div>
         <div class="flex-1 min-w-0">
             <div class="text-sm font-bold text-void-text truncate">${escapeHTML(event.message || 'Activity')}</div>
@@ -3165,11 +3288,11 @@ function updateRecentActivity(activity) {
 
 function getActivityIcon(type) {
     const icons = {
-        'pack_opened': 'fa-box-open',
-        'card_collected': 'fa-cards-blank',
-        'new_collector': 'fa-user-plus',
-        'milestone': 'fa-trophy',
-        'default': 'fa-circle-info'
+        'pack_opened': 'bxs-archive-out',
+        'card_collected': 'bxs-id-card',
+        'new_collector': 'bxs-user-plus',
+        'milestone': 'bxs-trophy',
+        'default': 'bxs-info-circle'
     };
     return icons[type] || icons.default;
 }
@@ -3360,11 +3483,11 @@ async function fetchCreatorCards() {
         if (grid && creatorCards.length === 0) {
             grid.innerHTML = `
             <div class="col-span-full text-center py-12">
-                <i class="fa-solid fa-triangle-exclamation text-4xl text-red-500 mb-4"></i>
+                <i class="bx bxs-error text-4xl text-red-500 mb-4"></i>
                 <p class="text-sm font-bold text-void-text mb-2">Failed to load cards</p>
                 <p class="text-xs text-void-muted mb-4">${err.message || 'An error occurred'}</p>
                 <button onclick="fetchCreatorCards()" class="px-6 py-3 bg-void-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-void-accent-glow transition-all">
-                    <i class="fa-solid fa-rotate-right mr-2"></i>Retry
+                    <i class="bx bx-redo mr-2"></i>Retry
                 </button>
             </div>
         `;
@@ -3394,7 +3517,7 @@ function renderCreatorCardsGrid() {
     if (filteredCards.length === 0) {
         grid.innerHTML = `
         <div class="col-span-full text-center py-12 text-void-muted">
-            <i class="fa-solid fa-inbox text-4xl mb-4"></i>
+            <i class="bx bxs-inbox text-4xl mb-4"></i>
             <p class="text-sm font-bold">${creatorCards.length === 0 ? 'No cards yet' : 'No cards match your filters'}</p>
             <p class="text-xs">${creatorCards.length === 0 ? 'Upload your first card to get started' : 'Try adjusting your search or filters'}</p>
         </div>
@@ -3411,7 +3534,7 @@ function renderCreatorCardsGrid() {
          onclick="${bulkSelectMode ? `toggleCardSelection('${escapedId}')` : `editCard('${escapedId}')`}">
         ${bulkSelectMode ? `
             <div class="absolute top-2 left-2 z-10 w-6 h-6 rounded-lg ${isSelected ? 'bg-void-accent' : 'bg-white/20'} flex items-center justify-center border-2 ${isSelected ? 'border-void-accent' : 'border-white/30'}">
-                ${isSelected ? '<i class="fa-solid fa-check text-white text-xs"></i>' : ''}
+                ${isSelected ? '<i class="bx bxs-check text-white text-xs"></i>' : ''}
             </div>
         ` : ''}
         <img src="${escapeHTML(card.image_url || '')}" alt="${escapeHTML(card.name || 'Card')}" 
@@ -3426,7 +3549,7 @@ function renderCreatorCardsGrid() {
         ${!bulkSelectMode ? `
             <button onclick="event.stopPropagation(); deleteCard('${escapedId}')" 
                 class="absolute top-2 right-2 w-8 h-8 bg-red-500/80 hover:bg-red-500 rounded-lg flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                <i class="fa-solid fa-trash text-xs"></i>
+                <i class="bx bxs-trash text-xs"></i>
             </button>
         ` : ''}
         ${card.set_id ? `
@@ -3606,7 +3729,7 @@ async function renderEditorView() {
     const setList = document.getElementById('editor-set-list');
     if (!setList) return;
 
-    setList.innerHTML = `<div class="text-center py-4 text-void-muted text-xs"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading...</div>`;
+    setList.innerHTML = `<div class="text-center py-4 text-void-muted text-xs"><i class="bx bx-loader-alt animate-spin mr-2"></i>Loading...</div>`;
 
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/sets`, { credentials: 'include' });
@@ -3623,13 +3746,13 @@ async function renderEditorView() {
             return `
             <button onclick="selectEditorSet('${escapedId}')" id="editor-set-item-${escapedId}" class="w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group ${editorCurrentSetId === s.id ? 'bg-void-accent/20 border-void-accent/40 text-void-accent' : 'bg-white/5 border-white/5 text-void-muted hover:bg-white/10 hover:border-white/10'}">
                 <div class="flex items-center gap-3">
-                    <i class="fa-solid ${s.is_active ? 'fa-box-open' : 'fa-box'} ${s.is_active ? 'text-void-accent' : 'text-void-muted'}"></i>
+                    <i class="bx ${s.is_active ? 'bxs-archive-out' : 'bxs-box'} ${s.is_active ? 'text-void-accent' : 'text-void-muted'}"></i>
                     <div>
                         <div class="text-[11px] font-black uppercase tracking-tight ${editorCurrentSetId === s.id ? 'text-white' : 'group-hover:text-void-text'}">${escapeHTML(s.name || 'Untitled Set')}</div>
                         <div class="text-[9px] font-bold opacity-60">${escapeHTML(s.code || 'NO-CODE')}</div>
                     </div>
                 </div>
-                ${editorCurrentSetId === s.id ? '<i class="fa-solid fa-chevron-right text-xs"></i>' : ''}
+                ${editorCurrentSetId === s.id ? '<i class="bx bx-chevron-right text-xs"></i>' : ''}
             </button>
         `;
         }).join('');
@@ -3668,7 +3791,7 @@ async function selectEditorSet(setId) {
     if (activeEl) {
         activeEl.classList.add('bg-void-accent/20', 'border-void-accent/40', 'text-void-accent');
         activeEl.classList.remove('bg-white/5', 'border-white/5', 'text-void-muted');
-        activeEl.insertAdjacentHTML('beforeend', '<i class="fa-solid fa-chevron-right text-xs"></i>');
+        activeEl.insertAdjacentHTML('beforeend', '<i class="bx bx-chevron-right text-xs"></i>');
         const title = activeEl.querySelector('.font-black');
         if (title) title.classList.add('text-white');
     }
@@ -3689,7 +3812,7 @@ async function loadEditorCards() {
     if (!grid) return;
 
     grid.innerHTML = `<div class="col-span-full py-12 flex flex-col items-center justify-center text-void-muted gap-4">
-        <i class="fa-solid fa-spinner animate-spin text-2xl text-void-accent"></i>
+        <i class="bx bx-loader-alt animate-spin text-2xl text-void-accent"></i>
         <div class="text-[10px] font-black uppercase tracking-[0.3em]">Accessing Matrix Data...</div>
     </div>`;
 
@@ -3716,7 +3839,7 @@ function renderEditorGrid(cards) {
 
     if (cards.length === 0) {
         grid.innerHTML = `<div class="col-span-full py-20 text-center space-y-4">
-            <i class="fa-solid fa-cards-blank text-4xl text-white/5"></i>
+            <i class="bx bxs-id-card text-4xl text-white/5"></i>
             <div class="text-xs text-void-muted">This set is currently empty.</div>
             <button onclick="openQuickAddCard()" class="text-void-accent font-black text-[10px] uppercase hover:underline">Add Your First Card</button>
         </div>`;
@@ -3734,8 +3857,8 @@ function renderEditorGrid(cards) {
                     <div class="flex items-center justify-between">
                         <span class="text-[8px] font-black uppercase tracking-widest text-void-accent">${escapeHTML(card.rarity)}</span>
                         <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-sword mr-1 opacity-60"></i>${parseInt(card.attack || 0)}</span>
-                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-shield mr-1 opacity-60"></i>${parseInt(card.defense || 0)}</span>
+                            <span class="text-[10px] font-black text-white"><i class="bx bxs-bolt mr-1 opacity-60"></i>${parseInt(card.attack || 0)}</span>
+                            <span class="text-[10px] font-black text-white"><i class="bx bxs-shield mr-1 opacity-60"></i>${parseInt(card.defense || 0)}</span>
                         </div>
                     </div>
                 </div>
@@ -3748,10 +3871,10 @@ function renderEditorGrid(cards) {
                 <div class="flex items-center gap-1">
                     <button onclick="editCard('${escapedId}')" class="flex-1 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[8px] font-black uppercase transition-all">Edit</button>
                     <button onclick="openLayerEditorForCard('${escapedId}')" title="Edit Art (Layer Editor)" class="w-8 h-8 bg-void-accent/10 text-void-accent hover:bg-void-accent hover:text-void-bg rounded-lg flex items-center justify-center transition-all text-[10px]">
-                        <i class="fa-solid fa-pen-ruler"></i>
+                        <i class="bx bxs-pencil"></i>
                     </button>
                     <button onclick="deleteCard('${escapedId}')" class="w-8 h-8 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center transition-all text-[10px]">
-                        <i class="fa-solid fa-trash-can"></i>
+                        <i class="bx bxs-trash"></i>
                     </button>
                 </div>
             </div>
@@ -3837,16 +3960,8 @@ window.selectEditorSet = selectEditorSet;
 window.updateCardInline = updateCardInline;
 
 
-
-
-
-
 function openCardCreator() {
-    const modal = document.getElementById('card-creator-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        resetCardCreatorForm();
-    }
+    window.location.href = '/card-creator';
 }
 
 function closeCardCreator() {
@@ -4439,7 +4554,7 @@ function renderPacksList(packs) {
         <div class="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl group hover:border-void-accent/30 transition-all">
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent">
-                    <i class="fa-solid fa-box-open text-xs"></i>
+                    <i class="bx bxs-archive-out text-xs"></i>
                 </div>
                 <div>
                     <div class="text-[11px] font-black uppercase text-white">${escapeHTML(pack.name)}</div>
@@ -4447,7 +4562,7 @@ function renderPacksList(packs) {
                 </div>
             </div>
             <button onclick="editPack('${escapedId}')" class="opacity-0 group-hover:opacity-100 p-2 text-void-accent hover:text-white transition-all">
-                <i class="fa-solid fa-pen-to-square text-xs"></i>
+                <i class="bx bxs-edit text-xs"></i>
             </button>
         </div>
     `;
@@ -4835,7 +4950,7 @@ function renderSetsList() {
         if (creatorSets.length === 0) {
             list.innerHTML = `
             <div class="col-span-full text-center py-12 text-void-muted">
-                <i class="fa-solid fa-folder-open text-4xl mb-4"></i>
+                <i class="bx bxs-folder-open text-4xl mb-4"></i>
                 <p class="text-sm font-bold">No sets yet</p>
                 <p class="text-xs">Create your first set to organize your cards</p>
             </div>
@@ -4849,7 +4964,7 @@ function renderSetsList() {
                 return `
             <div class="glass-panel rounded-2xl border border-white/5 p-6 hover:border-void-accent/30 transition-all cursor-pointer group" onclick="editSet('${escapedId}')">
                 <div class="flex items-center gap-4 mb-3">
-                    ${escapedIcon ? `<img src="${escapedIcon}" alt="${escapedName}" class="w-12 h-12 rounded-lg object-cover">` : '<div class="w-12 h-12 rounded-lg bg-void-accent/20 flex items-center justify-center text-xl"><i class="fa-solid fa-folder"></i></div>'}
+                    ${escapedIcon ? `<img src="${escapedIcon}" alt="${escapedName}" class="w-12 h-12 rounded-lg object-cover">` : '<div class="w-12 h-12 rounded-lg bg-void-accent/20 flex items-center justify-center text-xl"><i class="bx bxs-folder"></i></div>'}
                     <div class="flex-1 min-w-0">
                         <h4 class="text-sm font-black text-void-text uppercase truncate">${escapedName}</h4>
                         <p class="text-[9px] text-void-muted">${escapedCode}</p>
@@ -4859,7 +4974,7 @@ function renderSetsList() {
                     <span class="text-xs text-void-muted">${parseInt(set.total_cards || 0)} cards</span>
                     <button onclick="event.stopPropagation(); deleteSet('${escapedId}')" 
                         class="opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center text-red-500">
-                        <i class="fa-solid fa-trash text-xs"></i>
+                        <i class="bx bxs-trash text-xs"></i>
                     </button>
                 </div>
             </div>
@@ -4885,10 +5000,10 @@ function renderSetsList() {
                 </div>
                 <div class="flex gap-2">
                     <button onclick="editSet('${escapedId}')" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
-                        <i class="fa-solid fa-edit text-xs"></i>
+                        <i class="bx bxs-edit text-xs"></i>
                     </button>
                     <button onclick="deleteSet('${escapedId}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-all">
-                        <i class="fa-solid fa-trash text-xs text-red-500"></i>
+                        <i class="bx bxs-trash text-xs text-red-500"></i>
                     </button>
                 </div>
             </div>
@@ -4942,7 +5057,7 @@ function resetSetForm() {
     document.getElementById('set-code').value = '';
     document.getElementById('set-description').value = '';
     document.getElementById('set-form-title').textContent = 'Create New Set';
-    document.getElementById('save-set-btn').innerHTML = '<i class="fa-solid fa-check mr-2"></i>Save Set';
+    document.getElementById('save-set-btn').innerHTML = '<i class="bx bxs-check mr-2"></i>Save Set';
     document.getElementById('cancel-set-btn').classList.add('hidden');
     document.getElementById('set-icon-preview').classList.add('hidden');
     document.getElementById('set-icon-upload').value = '';
@@ -4957,7 +5072,7 @@ function editSet(setId) {
     document.getElementById('set-code').value = set.code;
     document.getElementById('set-description').value = set.description || '';
     document.getElementById('set-form-title').textContent = 'Edit Set';
-    document.getElementById('save-set-btn').innerHTML = '<i class="fa-solid fa-save mr-2"></i>Update Set';
+    document.getElementById('save-set-btn').innerHTML = '<i class="bx bxs-save mr-2"></i>Update Set';
     document.getElementById('cancel-set-btn').classList.remove('hidden');
 
     if (set.icon_url) {
@@ -5217,7 +5332,7 @@ renderCreatorCardsGrid = function () {
     if (filteredCards.length === 0) {
         grid.innerHTML = `
         <div class="col-span-full text-center py-12 text-void-muted">
-            <i class="fa-solid fa-inbox text-4xl mb-4"></i>
+            <i class="bx bxs-inbox text-4xl mb-4"></i>
             <p class="text-sm font-bold">No cards found</p>
             <p class="text-xs">Try adjusting your filters</p>
         </div>
@@ -5231,7 +5346,7 @@ renderCreatorCardsGrid = function () {
     <div class="group relative aspect-[5/7] rounded-xl overflow-hidden border-2 ${isSelected ? 'border-void-accent' : 'border-white/5'} hover:border-void-accent/50 transition-all cursor-pointer" onclick="${bulkSelectMode ? `toggleCardSelection('${card.id}')` : `editCard('${card.id}')`}">
         ${bulkSelectMode ? `
             <div class="absolute top-2 left-2 z-10 w-6 h-6 rounded bg-void-bg border-2 ${isSelected ? 'border-void-accent bg-void-accent' : 'border-white/20'} flex items-center justify-center">
-                ${isSelected ? '<i class="fa-solid fa-check text-white text-xs"></i>' : ''}
+                ${isSelected ? '<i class="bx bxs-check text-white text-xs"></i>' : ''}
             </div>
         ` : ''}
         <img src="${card.image_url || ''}" alt="${card.name}" class="w-full h-full object-cover">
@@ -5245,7 +5360,7 @@ renderCreatorCardsGrid = function () {
         ${!bulkSelectMode ? `
             <button onclick="event.stopPropagation(); deleteCard('${card.id}')" 
                 class="absolute top-2 right-2 w-8 h-8 bg-red-500/80 hover:bg-red-500 rounded-lg flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                <i class="fa-solid fa-trash text-xs"></i>
+                <i class="bx bxs-trash text-xs"></i>
             </button>
         ` : ''}
     </div>
@@ -5488,7 +5603,7 @@ function renderCardBacks() {
                     ` : ''}
                     <button onclick="deleteCardBack('${back.id}')"
                         class="px-3 py-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg text-[9px] font-black uppercase transition-all">
-                        <i class="fa-solid fa-trash"></i>
+                        <i class="bx bxs-trash"></i>
                     </button>
                 </div>
             </div>
@@ -5655,7 +5770,7 @@ let analyticsData = {
 async function loadAnalytics() {
     await ensureChartJsLoaded();
 
-    const timeRange = document.getElementById('analytics-time-range')?.value || '30';
+    const timeRange = document.getElementById('analytics-time-range')?.value || '7';
 
     showToast("Loading analytics...", "loading");
 
@@ -6039,7 +6154,7 @@ async function refreshWebhookLogs() {
             if (events.length === 0) {
                 logContainer.innerHTML = `
                 <div class="text-center py-8 text-void-muted">
-                    <i class="fa-solid fa-inbox text-2xl mb-2"></i>
+                    <i class="bx bxs-inbox text-2xl mb-2"></i>
                     <p class="text-xs">No events yet</p>
                 </div>
             `;
@@ -6347,7 +6462,7 @@ function renderScheduledDrops(drops) {
             </div>
             <button onclick="deleteScheduledDrop(${idx})"
                 class="px-3 py-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg text-[9px] font-black uppercase transition-all">
-                <i class="fa-solid fa-trash"></i>
+                <i class="bx bxs-trash"></i>
             </button>
         </div>
     `).join('');
@@ -6752,7 +6867,7 @@ function updateSetupCardsList() {
                     <span class="text-[9px] font-black text-void-muted uppercase">${card.rarity}</span>
                 </div>
                 <button onclick="removeSetupCard(${idx})" class="text-red-500 hover:text-red-400">
-                    <i class="fa-solid fa-trash text-xs"></i>
+                    <i class="bx bxs-trash text-xs"></i>
                 </button>
             </div>
         `).join('');
@@ -6816,7 +6931,7 @@ async function populateReviewChecklist() {
     checklist.innerHTML = items.map(item => `
     <div class="flex items-center gap-4 p-4 bg-void-bg rounded-xl border ${item.complete ? 'border-void-accent/20' : 'border-amber-500/20'}">
         <div class="w-8 h-8 rounded-lg ${item.complete ? 'bg-void-accent/20' : 'bg-amber-500/20'} flex items-center justify-center">
-            <i class="fa-solid ${item.complete ? 'fa-check' : 'fa-exclamation-triangle'} text-${item.complete ? 'void-accent' : 'amber'}-500"></i>
+            <i class="bx ${item.complete ? 'bxs-check' : 'bxs-error'} text-${item.complete ? 'void-accent' : 'amber'}-500"></i>
         </div>
         <div class="flex-1">
             <div class="text-sm font-black text-void-text uppercase">${item.label}</div>
@@ -7228,7 +7343,7 @@ window.renderCreatorHub = function (streamers) {
                         <span class="w-1 h-1 rounded-full bg-void-accent animate-pulse"></span>LIVE
                     </div>
                 </div>
-                ${isActive ? '<i class="fa-solid fa-chevron-right text-[8px] text-void-accent opacity-60"></i>' : ''}
+                ${isActive ? '<i class="bx bx-chevron-right text-[8px] text-void-accent opacity-60"></i>' : ''}
             </div>
         `;
     }).join('');
@@ -7700,7 +7815,7 @@ async function loadSystemLogs() {
     const categoryFilter = document.getElementById('log-category-filter');
     const category = categoryFilter ? categoryFilter.value : '';
 
-    if (body) body.innerHTML = '<tr><td colspan="4" class="text-center py-20 text-gray-500"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading logs...</td></tr>';
+    if (body) body.innerHTML = '<tr><td colspan="4" class="text-center py-20 text-gray-500"><i class="bx bx-loader-alt bx-spin mr-2"></i>Loading logs...</td></tr>';
     if (empty) empty.classList.add('hidden');
 
     try {
@@ -7808,7 +7923,7 @@ function renderSetsList() {
         : allSets.map(set => `
             <div class="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10 hover:border-void-accent/30 transition-all group">
                 <div class="flex items-center gap-4">
-                    ${set.icon_url ? `<img src="${set.icon_url}" class="w-12 h-12 rounded-lg object-cover">` : '<div class="w-12 h-12 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent"><i class="fa-solid fa-layer-group"></i></div>'}
+                    ${set.icon_url ? `<img src="${set.icon_url}" class="w-12 h-12 rounded-lg object-cover">` : '<div class="w-12 h-12 rounded-lg bg-void-accent/10 flex items-center justify-center text-void-accent"><i class="bx bxs-layer"></i></div>'}
                     <div>
                         <div class="font-black text-void-text uppercase tracking-tight">${set.name}</div>
                         <div class="text-[10px] text-void-muted font-bold">${set.code || 'NO CODE'} • ${set.release_date || 'No date'}</div>
@@ -7817,10 +7932,10 @@ function renderSetsList() {
                 </div>
                 <div class="flex gap-2">
                     <button onclick="editSet('${set.id}')" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-void-accent/20 hover:text-void-accent flex items-center justify-center transition-all">
-                        <i class="fa-solid fa-pen text-xs"></i>
+                        <i class="bx bxs-pen text-xs"></i>
                     </button>
                     <button onclick="deleteSet('${set.id}')" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-red-500/20 hover:text-red-500 flex items-center justify-center transition-all">
-                        <i class="fa-solid fa-trash text-xs"></i>
+                        <i class="bx bxs-trash text-xs"></i>
                     </button>
                 </div>
             </div>
@@ -7882,9 +7997,9 @@ function updateOnboardingUI() {
     const nextBtn = document.getElementById('onboarding-next');
     if (nextBtn) {
         if (currentOnboardingSlide === totalOnboardingSlides - 1) {
-            nextBtn.innerHTML = 'Got it! <i class="fa-solid fa-check ml-2"></i>';
+            nextBtn.innerHTML = 'Got it! <i class="bx bxs-check ml-2"></i>';
         } else {
-            nextBtn.innerHTML = 'Next Step <i class="fa-solid fa-chevron-right ml-2"></i>';
+            nextBtn.innerHTML = 'Next Step <i class="bx bx-chevron-right ml-2"></i>';
         }
         nextBtn.classList.add('bg-void-accent');
         nextBtn.classList.remove('bg-emerald-600');
@@ -7905,7 +8020,7 @@ window.resetSetForm = () => {
     const setFormTitle = document.getElementById('set-form-title');
     if (setFormTitle) setFormTitle.innerText = "Create New Set";
     const setSubmitBtn = document.getElementById('set-submit-btn');
-    if (setSubmitBtn) setSubmitBtn.innerHTML = '<i class="fa-solid fa-plus mr-2"></i>Create Set';
+    if (setSubmitBtn) setSubmitBtn.innerHTML = '<i class="bx bxs-plus mr-2"></i>Create Set';
     const cancelSetEditBtn = document.getElementById('cancel-set-edit');
     if (cancelSetEditBtn) cancelSetEditBtn.classList.add('hidden');
 };
@@ -7937,7 +8052,7 @@ window.editSet = (id) => {
     const setFormTitle = document.getElementById('set-form-title');
     if (setFormTitle) setFormTitle.innerText = `Editing Set: ${set.name}`;
     const setSubmitBtn = document.getElementById('set-submit-btn');
-    if (setSubmitBtn) setSubmitBtn.innerHTML = '<i class="fa-solid fa-save mr-2"></i>Save Changes';
+    if (setSubmitBtn) setSubmitBtn.innerHTML = '<i class="bx bxs-save mr-2"></i>Save Changes';
     const cancelSetEditBtn = document.getElementById('cancel-set-edit');
     if (cancelSetEditBtn) cancelSetEditBtn.classList.remove('hidden');
 
@@ -8235,7 +8350,7 @@ function renderAchievements() {
             <div class="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center text-lg ${ach.unlocked
                 ? 'bg-[rgba(var(--void-accent-rgb),0.12)] text-void-accent/90'
                 : 'bg-white/5 text-void-muted'}">
-                ${ach.unlocked ? `<span class="achievement-icon">${escapeHTML(ach.icon || '🏆')}</span>` : '<i class="fa-solid fa-lock text-[12px]"></i>'}
+                ${ach.unlocked ? `<span class="achievement-icon">${escapeHTML(ach.icon || '🏆')}</span>` : '<i class="bx bxs-lock text-[12px]"></i>'}
             </div>
             <div class="flex-1 min-w-0">
                 <div class="text-[11px] font-black uppercase tracking-widest ${ach.unlocked ? 'text-void-text' : 'text-void-muted'} truncate">${escapeHTML(ach.name)}</div>
@@ -8670,22 +8785,26 @@ function startPolling() {
                     if (currentUser?.role === 'admin') console.log('New notifications:', newNotifications.length);
 
 
-                    newNotifications.forEach(n => {
+                    const cardDrops = newNotifications.filter(n => n.type === 'card_drop' && n.data);
+                    const nonCardDrops = newNotifications.filter(n => n.type !== 'card_drop');
+
+                    if (cardDrops.length === 1) {
+                        showToast(cardDrops[0].message, 'info');
+                    } else if (cardDrops.length > 1) {
+                        showToast(`You got ${cardDrops.length} new cards!`, 'info');
+                    }
+
+                    cardDrops.forEach(n => shownNotificationIds.add(n.id));
+
+                    nonCardDrops.forEach(n => {
                         const type = n.type === 'achievement_unlock' ? 'success' : 'info';
                         showToast(n.message, type);
 
-
-                        if (n.type === 'card_drop' && n.data) {
-                            showCardToast(n.data);
-                        }
-
                         shownNotificationIds.add(n.id);
-
 
                         if (n.type === 'achievement_unlock') {
                             showAchievementCelebration();
                         }
-
 
                         if (n.type.startsWith('trade_')) {
                             fetchTrades();
@@ -8868,7 +8987,7 @@ function renderLeaderboard() {
                     <div class="relative flex-shrink-0">
                         <img src="${avatarUrl}" 
                              class="w-16 h-16 rounded-[1.5rem] border-2 border-void-bg void-shadow">
-                        ${isCurrentUser ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-void-accent rounded-full border-2 border-void-bg flex items-center justify-center"><i class="fa-solid fa-user text-[8px] text-void-bg"></i></div>' : ''}
+                        ${isCurrentUser ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-void-accent rounded-full border-2 border-void-bg flex items-center justify-center"><i class="bx bxs-user text-[8px] text-void-bg"></i></div>' : ''}
                     </div>
  
                     <div class="flex-1 min-w-0 pr-6 border-r border-white/5">
@@ -8901,7 +9020,7 @@ function renderBattlesLeaderboard() {
         list.innerHTML = `
                 <div class="p-12 text-center flex flex-col items-center justify-center space-y-4 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
                     <div class="w-16 h-16 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2">
-                        <i class="fa-solid fa-khanda"></i>
+                        <i class="bx bxs-shield"></i>
                     </div>
                     <h3 class="text-xl font-black uppercase text-void-text tracking-widest italic">No Battles Fought</h3>
                     <p class="text-void-muted text-xs">Be the first to challenge a rival and climb the ranks!</p>
@@ -8928,7 +9047,7 @@ function renderBattlesLeaderboard() {
                     <div class="relative flex-shrink-0">
                         <img src="${avatarUrl}" 
                              class="w-16 h-16 rounded-[1.5rem] border-2 border-void-bg void-shadow">
-                        ${isCurrentUser ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-void-accent rounded-full border-2 border-void-bg flex items-center justify-center"><i class="fa-solid fa-user text-[8px] text-void-bg"></i></div>' : ''}
+                        ${isCurrentUser ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-void-accent rounded-full border-2 border-void-bg flex items-center justify-center"><i class="bx bxs-user text-[8px] text-void-bg"></i></div>' : ''}
                     </div>
 
                     <div class="flex-1 min-w-0 pr-6 border-r border-white/5">
@@ -9185,7 +9304,7 @@ async function renderBinderList() {
                     style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:transparent;border:1px solid transparent;color:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;transition:all 0.2s;cursor:pointer"
                     onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.borderColor='rgba(239,68,68,0.3)';this.style.color='rgba(239,68,68,0.8)'"
                     onmouseout="this.style.background='transparent';this.style.borderColor='transparent';this.style.color='rgba(255,255,255,0.2)'">
-                    <i class="fa-solid fa-trash-can" style="font-size:10px"></i>
+                    <i class="bx bxs-trash" style="font-size:10px"></i>
                 </button>
             </div>
         `;
@@ -9232,13 +9351,13 @@ function toggleBinderEdit() {
     if (isEditingBinder) {
         btn.classList.add('bg-void-accent', 'text-white');
         btn.classList.remove('bg-void-accent/10', 'text-void-accent/40');
-        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> DONE';
+        btn.innerHTML = '<i class="bx bxs-check mr-2"></i> DONE';
         grid.classList.add('rearrange-active');
         if (editActions) editActions.classList.remove('hidden');
     } else {
         btn.classList.remove('bg-void-accent', 'text-white');
         btn.classList.add('bg-void-accent/10', 'text-void-accent/40');
-        btn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i> EDIT BINDER';
+        btn.innerHTML = '<i class="bx bxs-edit mr-2"></i> EDIT BINDER';
         grid.classList.remove('rearrange-active');
         if (editActions) editActions.classList.add('hidden');
     }
@@ -9821,7 +9940,7 @@ function renderModalCardGrid() {
         return `
                 <div onclick="toggleModalCardSelection('${card.instanceId}')" class="relative group cursor-pointer aspect-[5/7] rounded-xl overflow-hidden border-2 transition-all ${isSelected ? 'border-void-accent ring-2 ring-void-accent/50' : 'border-white/5 hover:border-white/20'}">
                     <img src="${card.image_url}" class="w-full h-full object-cover ${isSelected ? '' : 'opacity-80 group-hover:opacity-100'}">
-                    ${isSelected ? '<div class="absolute inset-0 bg-void-accent/20 flex items-center justify-center"><i class="fa-solid fa-circle-check text-white text-2xl drop-shadow-lg"></i></div>' : ''}
+                    ${isSelected ? '<div class="absolute inset-0 bg-void-accent/20 flex items-center justify-center"><i class="bx bxs-check-circle text-white text-2xl drop-shadow-lg"></i></div>' : ''}
                     <div class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
                         <div class="text-[8px] font-bold text-white truncate">${card.name}</div>
                     </div>
@@ -9939,6 +10058,9 @@ function htmlCardDetailTraitVariant(sample, n) {
     const genDesc = (sample.genesis_mechanic_description || '').trim();
     const mechDesc = (sample.mechanic_description || '').trim();
     const countStr = `×${parseInt(n, 10)}`;
+    const iid = escapeHTML(sample.instanceId || '');
+    const imgUrl = escapeHTML(sample.image_url || '');
+    const clickAttr = iid ? ` role="button" tabindex="0" style="cursor:pointer;" onclick="switchCardDetailVariant('${iid}','${imgUrl}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();switchCardDetailVariant('${iid}','${imgUrl}')}"` : '';
 
     if (genName) {
         const genIcon = sample.genesis_mechanic_icon || '✨';
@@ -9954,7 +10076,7 @@ function htmlCardDetailTraitVariant(sample, n) {
         }
         stackInner += '</div>';
         return `
-        <div class="card-detail-variant-group">
+        <div class="card-detail-variant-group"${clickAttr} data-variant-iid="${iid}">
             <div class="card-detail-variant-boxes">
                 <div class="card-detail-trait-box card-detail-trait-box--genesis-combo">${stackInner}</div>
             </div>
@@ -9966,7 +10088,7 @@ function htmlCardDetailTraitVariant(sample, n) {
         const icon = sample.mechanic_icon || '⚙️';
         const inner = htmlCardDetailTraitRow(icon, mechName, mechDesc);
         return `
-        <div class="card-detail-variant-group">
+        <div class="card-detail-variant-group"${clickAttr} data-variant-iid="${iid}">
             <div class="card-detail-variant-boxes">
                 <div class="card-detail-trait-box card-detail-trait-box--mech">
                     <div class="card-detail-trait-box-inner card-detail-trait-box-inner--stack">${inner}</div>
@@ -9977,7 +10099,7 @@ function htmlCardDetailTraitVariant(sample, n) {
     }
 
     return `
-        <div class="card-detail-variant-group">
+        <div class="card-detail-variant-group"${clickAttr} data-variant-iid="${iid}">
             <div class="card-detail-variant-boxes">
                 <div class="card-detail-trait-box card-detail-trait-box--base">
                     <div class="card-detail-trait-box-inner">
@@ -9987,6 +10109,18 @@ function htmlCardDetailTraitVariant(sample, n) {
             </div>
             <span class="card-detail-variant-count">${countStr}</span>
         </div>`;
+}
+
+function switchCardDetailVariant(instanceId, imageUrl) {
+    const img = document.getElementById('card-detail-image');
+    if (img && imageUrl) {
+        img.src = imageUrl;
+        img.onload = function () { sizeCardDetailArtFromImage(this.naturalWidth, this.naturalHeight); };
+    }
+    // Highlight active variant row
+    document.querySelectorAll('#card-detail-traits-breakdown-list .card-detail-variant-group').forEach(el => {
+        el.classList.toggle('card-detail-variant-group--active', el.dataset.variantIid === instanceId);
+    });
 }
 
 /** Card back art for binder detail flip (streamer default or shipped asset). */
@@ -10162,7 +10296,7 @@ async function renderBinder() {
                             onmouseover="this.style.background='rgba(var(--void-accent-rgb),0.06)';this.style.borderColor='rgba(var(--void-accent-rgb),0.35)'"
                             onmouseout="this.style.background='transparent';this.style.borderColor='rgba(255,255,255,0.1)'">
                             <div style="width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center">
-                                <i class="fa-solid fa-plus" style="color:rgba(255,255,255,0.3);font-size:14px"></i>
+                                <i class="bx bxs-plus" style="color:rgba(255,255,255,0.3);font-size:14px"></i>
                             </div>
                             <span style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.12em;color:rgba(255,255,255,0.2)">Add Card</span>
                         </button>
@@ -10219,7 +10353,7 @@ async function renderBinder() {
             grid.innerHTML = `
                     <div class="col-span-full py-20 text-center flex flex-col items-center justify-center space-y-4">
                         <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2">
-                            <i class="fa-solid fa-ghost"></i>
+                            <i class="bx bxs-ghost"></i>
                         </div>
                         <h3 class="text-xl font-black uppercase text-void-text tracking-widest">No Cards Found</h3>
                         <p class="text-void-muted text-xs">There are no cards matching your current filters in this binder.</p>
@@ -10237,7 +10371,7 @@ async function renderBinder() {
                 if (card) {
                     renderCardInSlot(div, card, false);
                 } else {
-                    div.innerHTML = `<div class="absolute inset-0 flex items-center justify-center bg-void-bg/20 rounded-md border border-white/5 border-dashed"><i class="fa-solid fa-layer-group text-3xl text-white/5 select-none"></i></div>`;
+                    div.innerHTML = `<div class="absolute inset-0 flex items-center justify-center bg-void-bg/20 rounded-md border border-white/5 border-dashed"><i class="bx bxs-layer text-3xl text-white/5 select-none"></i></div>`;
                 }
                 grid.appendChild(div);
             }
@@ -10265,11 +10399,11 @@ function renderCardInSlot(container, card, isCustomBinder = false) {
     const holoClass = ['rare', 'epic', 'legendary'].includes(rLow) ? ` holo-${rLow}` : '';
     const hasShine  = ['epic', 'legendary'].includes(rLow);
 
-    const removeBtn = (isEditingBinder && activeBinderId !== 'all') ? `<button onclick="removeCardFromBinder('${escapeHTML(card.instanceId)}')" class="delete-btn absolute top-3 left-3 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center z-30 transition-all shadow-lg hover:bg-black group-hover:scale-110"><i class="fa-solid fa-xmark text-[12px]"></i></button>` : '';
+    const removeBtn = (isEditingBinder && activeBinderId !== 'all') ? `<button onclick="removeCardFromBinder('${escapeHTML(card.instanceId)}')" class="delete-btn absolute top-3 left-3 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center z-30 transition-all shadow-lg hover:bg-black group-hover:scale-110"><i class="bx bx-x text-[12px]"></i></button>` : '';
 
     const isGlobalView = window.activeStreamerFilter === 'all';
     const creatorName = card.brand_name || card.streamer_username || 'Unknown';
-    const originBadge = isGlobalView ? `<div class="absolute top-3 left-1/2 -translate-x-1/2 bg-void-bg/95 backdrop-blur-md border border-white/10 rounded-full py-1 px-3 z-20 flex items-center justify-center gap-1.5 shadow-xl shrink-0 whitespace-nowrap"><i class="fa-solid fa-satellite-dish text-[7px] text-void-accent animate-pulse"></i><span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/90">${escapeHTML(creatorName)}</span></div>` : '';
+    const originBadge = isGlobalView ? `<div class="absolute top-3 left-1/2 -translate-x-1/2 bg-void-bg/95 backdrop-blur-md border border-white/10 rounded-full py-1 px-3 z-20 flex items-center justify-center gap-1.5 shadow-xl shrink-0 whitespace-nowrap"><i class="bx bxs-podcast text-[7px] text-void-accent animate-pulse"></i><span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/90">${escapeHTML(creatorName)}</span></div>` : '';
 
 
     const rawUrl = (card.image_url && card.image_url.trim()) ? String(card.image_url) : '';
@@ -10281,7 +10415,7 @@ function renderCardInSlot(container, card, isCustomBinder = false) {
         : '';
 
     const dragHandle = isCustomBinder
-        ? `<div class="binder-drag-handle" onclick="event.stopPropagation()" title="Drag to reorder"><i class="fa-solid fa-grip-vertical"></i></div>`
+        ? `<div class="binder-drag-handle" onclick="event.stopPropagation()" title="Drag to reorder"><i class="bx bxs-dots-vertical-rounded"></i></div>`
         : '';
 
     container.innerHTML = `
@@ -10771,6 +10905,9 @@ function showCardDetail(instanceId) {
         );
         traitsList.innerHTML = entries.map(([, { sample, n }]) => htmlCardDetailTraitVariant(sample, n)).join('');
         traitsBreakdown.classList.remove('hidden');
+        // Mark the currently displayed card's variant as active
+        const activeEl = traitsList.querySelector(`[data-variant-iid="${card.instanceId}"]`);
+        if (activeEl) activeEl.classList.add('card-detail-variant-group--active');
     }
 
     const numEl = document.getElementById('card-detail-number');
@@ -11356,7 +11493,7 @@ function renderTrades() {
         list.innerHTML = `
             <div class="p-16 text-center flex flex-col items-center justify-center space-y-4 bg-white/[0.02] border border-white/5 border-dashed rounded-[3rem]">
                 <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl mb-2 hover:rotate-12 transition-transform">
-                    <i class="fa-solid fa-handshake-angle"></i>
+                    <i class="bx bxs-hand-right"></i>
                 </div>
                 <h3 class="text-xl font-black uppercase text-void-text tracking-widest italic">No Active Trades</h3>
                 <p class="text-void-muted text-xs">Initiate a trade from the 'All Cards' binder view, or check back later for offers.</p>
@@ -11778,7 +11915,7 @@ function renderDeckSlot(slot) {
 
     if (!data) {
         el.innerHTML = `
-            <i class="fa-solid fa-plus text-white/20 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
+            <i class="bx bxs-plus text-white/20 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
             <span class="text-[9px] font-bold text-white/20 group-hover:text-void-accent/50 mt-2 transition-colors">Pick Card</span>
         `;
         el.className = 'battle-deck-card-slot aspect-[5/7] rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-void-accent/40 hover:bg-void-accent/5 transition-all group relative';
@@ -11801,16 +11938,16 @@ function renderDeckSlot(slot) {
             <div class="text-[10px] font-black text-void-text uppercase italic tracking-tighter truncate">${escapeHTML(card.name)}</div>
             <div class="flex gap-2">
                 <div class="flex items-center gap-1.5 bg-blue-500/90 px-2 py-0.5 rounded-md text-[9px] font-black text-white shadow-lg border border-white/10">
-                    <i class="fa-solid fa-bolt-lightning text-[7px]"></i> ${parseInt(card.attack)}
+                    <i class="bx bxs-bolt text-[7px]"></i> ${parseInt(card.attack)}
                 </div>
                 <div class="flex items-center gap-1.5 bg-red-500/90 px-2 py-0.5 rounded-md text-[9px] font-black text-white shadow-lg border border-white/10">
-                    <i class="fa-solid fa-shield-halved text-[7px]"></i> ${card.defense}
+                    <i class="bx bxs-shield-x text-[7px]"></i> ${card.defense}
                 </div>
             </div>
         </div>
         <button onclick="event.stopPropagation(); clearDeckSlot(${slot})"
             class="absolute top-2 left-2 w-7 h-7 rounded-lg bg-black/60 hover:bg-red-500 flex items-center justify-center text-white text-[10px] transition-all border border-white/10 backdrop-blur-md group-hover:scale-110">
-            <i class="fa-solid fa-xmark"></i>
+            <i class="bx bx-x"></i>
         </button>
     `;
     el.onclick = () => openCardPicker(slot);
@@ -11849,7 +11986,7 @@ window.closeCardPicker = function () {
 async function loadPickerCards() {
     const grid = document.getElementById('card-picker-grid');
     if (!grid) return;
-    grid.innerHTML = `<div class="col-span-full text-center py-8 text-void-muted text-sm"><i class="fa-solid fa-spinner animate-spin text-2xl mb-3 block"></i>Loading...</div>`;
+    grid.innerHTML = `<div class="col-span-full text-center py-8 text-void-muted text-sm"><i class="bx bx-loader-alt animate-spin text-2xl mb-3 block"></i>Loading...</div>`;
 
     try {
         const streamerParam = APP_STREAMER ? `?streamer=${APP_STREAMER.username}` : '';
@@ -11939,10 +12076,10 @@ function renderPickerGrid(cards) {
                     <div class="text-[9px] font-black text-white uppercase italic tracking-tight truncate">${name}</div>
                     <div class="flex gap-1.5">
                         <div class="flex items-center gap-1 bg-blue-500/80 px-1.5 py-0.5 rounded text-[8px] font-black text-white shadow-sm">
-                            <i class="fa-solid fa-bolt-lightning text-[6px]"></i> ${attack}
+                            <i class="bx bxs-bolt text-[6px]"></i> ${attack}
                         </div>
                         <div class="flex items-center gap-1 bg-red-500/80 px-1.5 py-0.5 rounded text-[8px] font-black text-white shadow-sm">
-                            <i class="fa-solid fa-shield-halved text-[6px]"></i> ${defense}
+                            <i class="bx bxs-shield-x text-[6px]"></i> ${defense}
                         </div>
                     </div>
                 </div>
@@ -12014,7 +12151,7 @@ window.saveBattleDeck = async function () {
 window.loadSavedDecks = async function () {
     const list = document.getElementById('saved-decks-list');
     if (!list) return;
-    list.innerHTML = `<div class="text-center py-4 text-void-muted text-xs"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading...</div>`;
+    list.innerHTML = `<div class="text-center py-4 text-void-muted text-xs"><i class="bx bx-loader-alt animate-spin mr-2"></i>Loading...</div>`;
 
     try {
         const streamerParam = APP_STREAMER ? `?streamer=${APP_STREAMER.username}` : '';
@@ -12024,7 +12161,7 @@ window.loadSavedDecks = async function () {
 
         if (!decks || decks.length === 0) {
             list.innerHTML = `<div class="text-center text-xs text-void-muted py-8 flex flex-col items-center my-auto">
-                <i class="fa-solid fa-layer-group text-3xl text-white/10 mb-4"></i>
+                <i class="bx bxs-layer text-3xl text-white/10 mb-4"></i>
                 <span>No saved decks yet.</span>
                 <span class="mt-1">Build one and click + to save it!</span>
             </div>`;
@@ -12050,13 +12187,13 @@ window.loadSavedDecks = async function () {
                         </div>
                         <div class="flex gap-2">
                             ${!isActive ? `<button onclick="activateSavedDeck('${escapedId}')" title="Set as Active" class="w-8 h-8 rounded-lg bg-void-accent/20 text-void-accent/60 hover:bg-void-accent hover:text-white transition-colors flex items-center justify-center text-xs">
-                                <i class="fa-solid fa-play"></i>
+                                <i class="bx bxs-play"></i>
                             </button>` : ''}
                             <button onclick="loadDeckIntoActive('${escapedId}')" title="Preview / Edit" class="w-8 h-8 rounded-lg bg-white/10 text-white/40 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center text-xs">
-                                <i class="fa-solid fa-eye"></i>
+                                <i class="bx bxs-show"></i>
                             </button>
                             <button onclick="deleteSavedDeck('${escapedId}', '${escapedName.replace(/'/g, "\\'")}')" title="Delete Deck" class="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center text-xs">
-                                <i class="fa-solid fa-trash-can"></i>
+                                <i class="bx bxs-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -12103,7 +12240,7 @@ function renderBattleDecksWidget(decks) {
             if (card?.image_url) {
                 return `<img src="${escapeHTML(card.image_url)}" class="absolute inset-0 w-full h-full object-cover rounded">`;
             }
-            return `<div class="absolute inset-0 flex items-center justify-center text-white/15"><i class="fa-solid fa-plus text-base"></i></div>`;
+            return `<div class="absolute inset-0 flex items-center justify-center text-white/15"><i class="bx bxs-plus text-base"></i></div>`;
         };
 
         const s1 = d?.slot_1 ? cardThumb(d.slot_1) : cardThumb(null);
@@ -12133,7 +12270,7 @@ function renderBattleDecksWidget(decks) {
     widget.innerHTML += `
     <button onclick="switchView('battle')"
         class="w-full mt-1 py-2.5 rounded-xl bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center justify-center gap-2">
-        <i class="fa-solid fa-swords text-[8px]"></i> Go to Battle Arena
+        <i class="bx bxs-game text-[8px]"></i> Go to Battle Arena
     </button>`;
 }
 
@@ -12698,7 +12835,7 @@ async function _renderLayerListAsync() {
         return;
     }
     const activeObjs = _layerFabric.getActiveObjects();
-    const typeIcon = (t) => ({ text: 'fa-t', sticker: 'fa-face-smile', rect: 'fa-square', circle: 'fa-circle', path: 'fa-pen-nib', image: 'fa-image' })[t] || 'fa-layer-group';
+    const typeIcon = (t) => ({ text: 'bxs-font', sticker: 'bxs-smile', rect: 'bxs-square', circle: 'bxs-circle', path: 'bxs-pen', image: 'bxs-image' })[t] || 'bxs-layer';
 
     list.innerHTML = objects.map((obj, i) => {
         const fabricIdx = objects.length - 1 - i;
@@ -12708,12 +12845,12 @@ async function _renderLayerListAsync() {
         const isHidden = !obj.visible;
         const isShiny = !!obj.data?.shiny;
         return `<div class="le-layer-row${isSelected ? ' le-selected' : ''}" onclick="_leSelectLayer(${fabricIdx})" data-le-idx="${fabricIdx}">
-            <i class="fa-solid fa-grip-dots-vertical le-drag-handle"></i>
-            <i class="fa-solid ${typeIcon(type)} text-[8px] opacity-50 shrink-0"></i>
+            <i class="bx bxs-dots-vertical le-drag-handle"></i>
+            <i class="bx ${typeIcon(type)} text-[8px] opacity-50 shrink-0"></i>
             <span class="flex-1 truncate">${name}</span>
             <button title="${isShiny ? 'Remove shine' : 'Add shine to this layer'}" class="le-vis-btn${isShiny ? ' text-yellow-300' : ' opacity-40'}" onclick="event.stopPropagation();_leToggleShiny(${fabricIdx})">✨</button>
             <button class="le-vis-btn" onclick="event.stopPropagation();_leToggleVis(${fabricIdx})">
-                <i class="fa-solid ${isHidden ? 'fa-eye-slash' : 'fa-eye'}"></i>
+                <i class="bx ${isHidden ? 'bxs-hide' : 'bxs-show'}"></i>
             </button>
         </div>`;
     }).join('');
@@ -13058,12 +13195,8 @@ async function _leUploadAndPatchCard(cardId, blob, maskBlob, layerJson) {
 }
 
 
-window.openLayerEditorForCard = async function (cardId) {
-    const card = editorAllCards.find(c => c.id === cardId);
-    if (!card) return;
-    await openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob, maskBlob, layerJson) => {
-        await _leUploadAndPatchCard(cardId, blob, maskBlob, layerJson);
-    }, card.layer_data || null);
+window.openLayerEditorForCard = function (cardId) {
+    window.location.href = `/card-creator?id=${encodeURIComponent(cardId)}`;
 };
 
 window.buyPackCheckout = async function() {
@@ -13085,7 +13218,7 @@ window.buyPackCheckout = async function() {
     try {
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Preparing Checkout...';
+            btn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Preparing Checkout...';
         }
 
         showToast("Opening secure checkout...", "info");

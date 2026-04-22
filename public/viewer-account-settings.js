@@ -211,7 +211,7 @@
                 <div class="min-w-0 space-y-2">
                     <h3 class="text-base font-bold text-white tracking-tight">${escapeHTML(title)}</h3>
                     <div class="text-sm ${statusOk ? 'text-emerald-400/95' : 'text-void-muted'} flex items-start gap-2 leading-snug">
-                        ${statusOk ? '<i class="fa-solid fa-check mt-0.5 text-emerald-400 shrink-0" aria-hidden="true"></i>' : ''}
+                        ${statusOk ? '<i class="bx bxs-check mt-0.5 text-emerald-400 shrink-0" aria-hidden="true"></i>' : ''}
                         <span>${statusHtml}</span>
                     </div>
                     <p class="text-xs text-void-muted/90 leading-relaxed max-w-xl">${finePrint}</p>
@@ -251,7 +251,7 @@
 
         const twitchBlock = card(
             `${leftCol(
-                '<i class="fa-brands fa-twitch text-2xl text-[#9146FF]" aria-hidden="true"></i>',
+                '<i class="bx bxl-twitch text-2xl text-[#9146FF]" aria-hidden="true"></i>',
                 'Twitch',
                 twitchStatus,
                 twitchOkFlag,
@@ -299,7 +299,7 @@
 
         const youtubeBlock = card(
             `${leftCol(
-                '<i class="fa-brands fa-youtube text-2xl text-red-500" aria-hidden="true"></i>',
+                '<i class="bx bxl-youtube text-2xl text-red-500" aria-hidden="true"></i>',
                 'YouTube',
                 'YouTube linking is not available yet.',
                 false,

@@ -24,9 +24,9 @@
         if (!container) return;
         const toast = document.createElement('div');
         toast.className = `toast-void toast-${type}`;
-        const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info' };
+        const icons = { success: 'bxs-check-circle', error: 'bxs-x-circle', info: 'bxs-info-circle' };
         toast.innerHTML = `
-            <i class="fa-solid ${icons[type] || icons.info} toast-icon"></i>
+            <i class="bx ${icons[type] || icons.info} toast-icon"></i>
             <div class="toast-message">${esc(message)}</div>`;
         container.appendChild(toast);
         setTimeout(() => {
@@ -104,6 +104,7 @@
             };
 
             applyNavChrome();
+            if (window.castleNav) castleNav.autoInit();
 
             if (typeof window.populateProfileView === 'function') {
                 await window.populateProfileView();

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Queue Control · Castle TCG</title>
     <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
     <style>
         /* ── Reset & Base ───────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -507,7 +507,7 @@
 
     
     <div id="error-screen">
-        <i class="fa-solid fa-triangle-exclamation"></i>
+        <i class="bx bxs-error"></i>
         <h2 id="error-title">Access Denied</h2>
         <p id="error-msg">Missing or invalid token. Open this page from your Creator Dashboard → Queue tab → Pop Out.</p>
     </div>
@@ -515,32 +515,32 @@
     
     <div id="tab-bar">
         <button class="tab-btn active" onclick="switchTab('queue')">
-            <i class="fa-solid fa-list-check"></i> Queue
+            <i class="bx bx-list-check"></i> Queue
         </button>
         <button class="tab-btn" onclick="switchTab('history')">
-            <i class="fa-solid fa-clock-rotate-left"></i> History
+            <i class="bx bx-history"></i> History
         </button>
         <button class="tab-btn" onclick="switchTab('filter')">
-            <i class="fa-solid fa-sliders"></i> Filter
+            <i class="bx bxs-slider"></i> Filter
         </button>
     </div>
 
     
-    <div id="paused-banner"><i class="fa-solid fa-pause"></i> &nbsp;QUEUE PAUSED</div>
+    <div id="paused-banner"><i class="bx bxs-pause"></i> &nbsp;QUEUE PAUSED</div>
 
     
     <div id="controls-bar">
         <button id="btn-pause" class="ctrl-btn pause-btn" onclick="togglePause()">
-            <i class="fa-solid fa-pause"></i> Pause
+            <i class="bx bxs-pause"></i> Pause
         </button>
         <button class="ctrl-btn skip-btn" onclick="skipNow()">
-            <i class="fa-solid fa-forward-step"></i> Skip
+            <i class="bx bxs-skip-next"></i> Skip
         </button>
         <button class="ctrl-btn" onclick="refreshQueue()">
-            <i class="fa-solid fa-rotate-right"></i> Refresh
+            <i class="bx bx-redo"></i> Refresh
         </button>
         <button class="ctrl-btn danger" onclick="clearQueue()">
-            <i class="fa-solid fa-trash-can"></i> Clear
+            <i class="bx bxs-trash"></i> Clear
         </button>
     </div>
 
@@ -549,7 +549,7 @@
         <div class="panel-scroll">
             <div class="section-label">Up Next</div>
             <div id="queue-list">
-                <div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i>Loading…</div>
+                <div class="empty-state"><i class="bx bx-loader-alt bx-spin"></i>Loading…</div>
             </div>
         </div>
     </div>
@@ -559,7 +559,7 @@
         <div class="panel-scroll">
             <div class="section-label">Recently Played</div>
             <div id="history-list">
-                <div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i>Loading…</div>
+                <div class="empty-state"><i class="bx bx-loader-alt bx-spin"></i>Loading…</div>
             </div>
         </div>
     </div>
@@ -600,7 +600,7 @@
             </div>
 
             <button class="save-filter-btn" onclick="saveFilter()">
-                <i class="fa-solid fa-floppy-disk"></i> Save Filter
+                <i class="bx bxs-save"></i> Save Filter
             </button>
         </div>
     </div>
@@ -706,11 +706,11 @@
 
         const thumb = card.image_url
             ? `<img src="${card.image_url}" class="q-thumb" onerror="this.src=''" alt="">`
-            : `<div class="q-thumb-placeholder"><i class="fa-solid fa-image"></i></div>`;
+            : `<div class="q-thumb-placeholder"><i class="bx bxs-image"></i></div>`;
 
         const actions = isPending
-            ? `<button class="q-btn skip"   onclick="skipItem('${item.id}')"><i class="fa-solid fa-forward"></i> Skip</button>`
-            : `<button class="q-btn replay" onclick="replayItem('${item.id}')"><i class="fa-solid fa-rotate-left"></i></button>`;
+            ? `<button class="q-btn skip"   onclick="skipItem('${item.id}')"><i class="bx bx-fast-forward"></i> Skip</button>`
+            : `<button class="q-btn replay" onclick="replayItem('${item.id}')"><i class="bx bx-undo"></i></button>`;
 
         el.innerHTML = `
             ${thumb}
@@ -718,7 +718,7 @@
             <div class="q-info">
                 <div class="q-name">${card.name || 'Unknown Card'}</div>
                 <div class="q-meta">
-                    ${user.username ? `<i class="fa-brands fa-twitch" style="color:#9146ff;font-size:8px"></i> ${user.username} · ` : ''}
+                    ${user.username ? `<i class="bx bxl-twitch" style="color:#9146ff;font-size:8px"></i> ${user.username} · ` : ''}
                     <span style="color:${color}">${label}</span> · ${timeAgo(item.created_at)}
                 </div>
             </div>
@@ -767,7 +767,7 @@
         if (!hasRows && !emptyEl) {
             emptyEl = document.createElement('div');
             emptyEl.className = 'empty-state';
-            emptyEl.innerHTML = `<i class="fa-solid fa-check-circle" style="color:var(--green);opacity:0.5"></i>Queue is empty`;
+            emptyEl.innerHTML = `<i class="bx bxs-check-circle" style="color:var(--green);opacity:0.5"></i>Queue is empty`;
             container.appendChild(emptyEl);
         } else if (hasRows && emptyEl) {
             emptyEl.remove();
@@ -808,7 +808,7 @@
         if (!hasRows && !emptyEl) {
             emptyEl = document.createElement('div');
             emptyEl.className = 'empty-state';
-            emptyEl.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i>No history yet`;
+            emptyEl.innerHTML = `<i class="bx bx-history"></i>No history yet`;
             container.appendChild(emptyEl);
         } else if (hasRows && emptyEl) {
             emptyEl.remove();
@@ -890,11 +890,11 @@
         const btn    = document.getElementById('btn-pause');
         const banner = document.getElementById('paused-banner');
         if (paused) {
-            btn.innerHTML = '<i class="fa-solid fa-play"></i> Resume';
+            btn.innerHTML = '<i class="bx bxs-play"></i> Resume';
             btn.classList.add('paused');
             banner.classList.add('visible');
         } else {
-            btn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+            btn.innerHTML = '<i class="bx bxs-pause"></i> Pause';
             btn.classList.remove('paused');
             banner.classList.remove('visible');
         }

@@ -139,8 +139,9 @@
             const brandColor = streamerData?.binder_color || streamerData?.brand_color_primary;
             if (brandColor) applyBrandColor(brandColor);
 
-            // Nav profile dropdown
+            // Nav profile dropdown + shared nav links
             setupNavUser(currentUser);
+            if (window.castleNav) castleNav.autoInit();
 
             const backLink = qs('bt-back-link');
             if (backLink && STREAMER) {
@@ -242,7 +243,7 @@
                     traitPipsHTML(slot.mechanic, slot.genesis_mechanic);
                 frame.classList.add('filled');
             } else {
-                frame.innerHTML = `<div class="bt-card-empty-icon"><i class="fa-solid fa-plus"></i></div>`;
+                frame.innerHTML = `<div class="bt-card-empty-icon"><i class="bx bxs-plus"></i></div>`;
                 frame.classList.remove('filled');
             }
         });

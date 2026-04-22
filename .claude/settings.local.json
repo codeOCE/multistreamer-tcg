@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -n \"#card-detail-image\\\\|card-detail-image\" /c/Users/theco/OneDrive/Documents/Twitch/TCG/mulistreamer-tcg/public/*.html)"
+      "Bash(grep -n \"#card-detail-image\\\\|card-detail-image\" /c/Users/theco/OneDrive/Documents/Twitch/TCG/mulistreamer-tcg/public/*.html)",
+      "Bash(wc -l /c/Users/theco/OneDrive/Documents/Twitch/TCG/mulistreamer-tcg/public/*.js /c/Users/theco/OneDrive/Documents/Twitch/TCG/mulistreamer-tcg/public/*.html)",
+      "WebSearch",
+      "Bash(npm run:*)",
+      "Bash(npx wrangler:*)",
+      "Bash(wrangler deploy:*)",
+      "Bash(grep -v 'fa-solid\\\\|fa-regular\\\\|fa-brands\\\\|fa-light\\\\|fa-thin\\\\|fa-duotone\\\\|fa-spin\\\\|fa-bounce\\\\|fa-beat\\\\|fa-fade\\\\|fa-shake\\\\|fa-flip\\\\|fa-beat-fade\\\\|^fa-$')",
+      "WebFetch(domain:boxicons.com)",
+      "WebFetch(domain:unpkg.com)",
+      "Bash(node --check \"c:/Users/theco/OneDrive/Documents/Twitch/TCG/mulistreamer-tcg/public/card-studio.js\")",
+      "Bash(npx tsc *)",
+      "Bash(cp card-studio.html card-creator.html)",
+      "Bash(cp card-studio.js card-creator.js)",
+      "Bash(grep -E \"\\\\.\\(html|js\\)$\")",
+      "WebFetch(domain:cdn.codeoce.com)",
+      "mcp__code-review-graph__semantic_search_nodes_tool"
     ]
   }
 }

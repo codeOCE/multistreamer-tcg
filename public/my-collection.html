@@ -262,6 +262,123 @@
             gap: 10px;
             cursor: pointer;
             text-decoration: none;
+            position: relative;
+        }
+
+        .binder-fav-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 8;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(7, 8, 13, 0.65);
+            color: rgba(255, 255, 255, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .binder-fav-btn:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+            color: #fff;
+        }
+
+        .binder-fav-btn.is-favorited {
+            color: #facc15;
+            border-color: rgba(250, 204, 21, 0.45);
+            background: rgba(250, 204, 21, 0.12);
+        }
+
+        #mc-action-row {
+            margin: 18px auto 0;
+            max-width: 620px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .mc-action-btn {
+            padding: 8px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--void-text);
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        .mc-action-btn:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.12);
+            color: var(--void-accent);
+        }
+
+        .mc-action-btn:disabled {
+            opacity: 0.55;
+            cursor: wait;
+        }
+
+        .mc-rec-section {
+            margin-top: 18px;
+            padding: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .mc-rec-title {
+            font-size: 0.55rem;
+            font-weight: 900;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-bottom: 10px;
+        }
+
+        .mc-rec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 10px;
+        }
+
+        .mc-rec-card {
+            border-radius: 10px;
+            border: 1px solid rgba(var(--binder-accent-rgb), 0.25);
+            background: rgba(var(--binder-accent-rgb), 0.08);
+            padding: 10px;
+            text-decoration: none;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .mc-rec-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(var(--binder-accent-rgb), 0.45);
+        }
+
+        .mc-rec-name {
+            font-size: 0.66rem;
+            font-weight: 800;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mc-rec-meta,
+        .mc-rec-reason,
+        .mc-rec-empty {
+            font-size: 0.52rem;
+            color: var(--void-muted);
+            margin-top: 4px;
         }
 
         .binder-book {
@@ -867,9 +984,6 @@
                         </div>
                     </div>
                 </div>
-                <a href="/" class="saas-button rounded-xl px-5 py-2.5 text-[9px]">
-                    Enter App <i class="fa-solid fa-arrow-right ml-1 opacity-60"></i>
-                </a>
             </div>
         </div>
     </nav>
@@ -915,6 +1029,9 @@
                         <input id="mc-search" type="text" placeholder="Search binders…"
                             oninput="window._mcSearch(this.value)">
                     </div>
+                    <div id="mc-action-row">
+                        <button id="mc-discover-btn" class="mc-action-btn" type="button" onclick="window.openDiscoverCreators && window.openDiscoverCreators()">Discover Creators</button>
+                    </div>
                 </div>
 
                 <!-- Empty -->
@@ -926,6 +1043,7 @@
 
                 <!-- Binder grid — injected by JS -->
                 <div id="mc-binders"></div>
+
             </div>
 
             <!-- ── RIGHT: Unopened Packs ── -->
@@ -970,7 +1088,66 @@
         </div>
     </div>
 
+    <div id="discover-creators-modal"
+        class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1100] hidden items-center justify-center p-6"
+        role="dialog" aria-modal="true" aria-labelledby="discover-creators-title"
+        onclick="if(event.target===this&&window.closeDiscoverCreators) window.closeDiscoverCreators()">
+        <div class="glass-panel w-full max-w-5xl max-h-[85vh] flex flex-col rounded-3xl border border-white/10 overflow-hidden"
+            onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between px-6 py-5 border-b border-white/10 bg-white/[0.02]">
+                <div>
+                    <h3 id="discover-creators-title" class="text-xl sm:text-2xl font-display font-black uppercase italic tracking-tight text-white">Discover Creators</h3>
+                    <p class="text-[10px] sm:text-xs font-black uppercase tracking-widest text-void-muted mt-1">Your followed channels and mutual recommendations in one view.</p>
+                </div>
+                <button type="button" onclick="window.closeDiscoverCreators && window.closeDiscoverCreators()"
+                    class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-all"
+                    aria-label="Close">
+                    <i class="bx bx-x text-lg"></i>
+                </button>
+            </div>
+            <div class="px-6 pt-4 pb-2 border-b border-white/5 flex items-center gap-3 flex-wrap">
+                <div class="inline-flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full p-1">
+                    <button type="button" id="discover-tab-followed"
+                        class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.22em] bg-void-accent text-void-bg">
+                        Followed
+                    </button>
+                    <button type="button" id="discover-tab-recommended"
+                        class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.22em] text-void-muted hover:text-white hover:bg-white/5 transition-all">
+                        Recommended
+                    </button>
+                </div>
+                <div class="flex-1 min-w-[180px] flex justify-end gap-3 text-[10px] text-void-muted uppercase tracking-widest">
+                    <span id="discover-followed-count" class="opacity-70"></span>
+                    <span class="opacity-30">·</span>
+                    <span id="discover-recommended-count" class="opacity-70"></span>
+                </div>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 py-4 space-y-4">
+                <div id="discover-followed-panel" class="space-y-4">
+                    <div id="discover-followed-empty" class="hidden py-12 px-8 border border-dashed border-white/5 rounded-3xl text-center bg-white/[0.01]">
+                        <p class="text-void-muted/70 text-xs font-black uppercase tracking-widest">You’re not following any Castle creators yet.</p>
+                    </div>
+                    <div id="discover-followed-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+                <div id="discover-recommended-panel" class="space-y-4 hidden">
+                    <div id="discover-recommended-empty" class="hidden py-12 px-8 border border-dashed border-white/5 rounded-3xl text-center bg-white/[0.01]">
+                        <p class="text-void-muted/70 text-xs font-black uppercase tracking-widest">No mutual recommendations yet.</p>
+                    </div>
+                    <div id="discover-recommended-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+                <div id="discover-loading" class="py-12 flex flex-col items-center justify-center space-y-4 hidden">
+                    <div class="w-10 h-10 rounded-full border-4 border-void-accent/15 border-t-void-accent animate-spin"></div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Mapping your networks…</p>
+                </div>
+                <div id="discover-error" class="hidden py-4 px-4 border border-red-500/30 rounded-2xl bg-red-500/10 text-[11px] text-red-200">
+                    Something went wrong loading discovery data. Please try again.
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/nav-user-menu.js"></script>
+    <script src="/castle-nav.js"></script>
     <script src="/my-collection.js"></script>
 </body>
 

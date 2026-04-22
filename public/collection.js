@@ -104,9 +104,6 @@ console.log('[Collection] Script loaded. CP_SLUG:', CP_SLUG, '| CP_BACKEND:', CP
                 const user = bs?.user;
                 if (user?.twitch_id) {
                     setupNavUser(user);
-                    // Hide "Enter App" button when logged in — dropdown replaces it
-                    const enterBtn = document.getElementById('cp-enter-app-btn');
-                    if (enterBtn) enterBtn.classList.add('hidden');
                 }
             }
         } catch { /* not critical */ }
@@ -176,22 +173,22 @@ function renderHero(streamer, user) {
             : (streamer.kick_username ? `https://kick.com/${streamer.kick_username}` : '#');
 
         const socials = [];
-        if (streamer.username)      socials.push({ href: `https://twitch.tv/${streamer.username}`, icon: 'fa-brands fa-twitch', label: 'Twitch' });
-        if (streamer.kick_username) socials.push({ href: `https://kick.com/${streamer.kick_username}`, icon: 'fa-brands fa-kickstarter', label: 'Kick' });
-        if (streamer.twitter)       socials.push({ href: streamer.twitter, icon: 'fa-brands fa-x-twitter', label: 'X' });
-        if (streamer.youtube)       socials.push({ href: streamer.youtube, icon: 'fa-brands fa-youtube', label: 'YouTube' });
-        if (streamer.discord)       socials.push({ href: streamer.discord, icon: 'fa-brands fa-discord', label: 'Discord' });
+        if (streamer.username)      socials.push({ href: `https://twitch.tv/${streamer.username}`, icon: 'bx bxl-twitch', label: 'Twitch' });
+        if (streamer.kick_username) socials.push({ href: `https://kick.com/${streamer.kick_username}`, icon: 'bx bxl-kickstarter', label: 'Kick' });
+        if (streamer.twitter)       socials.push({ href: streamer.twitter, icon: 'bx bxl-twitter', label: 'X' });
+        if (streamer.youtube)       socials.push({ href: streamer.youtube, icon: 'bx bxl-youtube', label: 'YouTube' });
+        if (streamer.discord)       socials.push({ href: streamer.discord, icon: 'bx bxl-discord', label: 'Discord' });
 
         const pill = (extra = '') => `cp-stat gap-2 hover:border-white/20 hover:text-void-text transition-all cursor-pointer no-underline ${extra}`.trim();
 
         actionsEl.innerHTML =
             // Get Packs CTA
             `<a href="${escapeHTML(watchUrl)}" target="_blank" rel="noopener" class="${pill()}" style="border-color:rgba(var(--page-accent-rgb),0.3);color:rgba(var(--page-accent-rgb),0.9)">` +
-                `<i class="fa-solid fa-box-open text-[0.8rem]"></i>Get Packs` +
+                `<i class="bx bxs-archive-out text-[0.8rem]"></i>Get Packs` +
             `</a>` +
             // My Binder (hidden until collection loads)
             `<button id="cp-binder-btn" class="${pill('hidden')}" onclick="window._cpOpenBinder()" style="background:none;border:1px solid rgba(255,255,255,0.06)">` +
-                `<i class="fa-solid fa-book-open text-[0.8rem]"></i><span id="cp-binder-count">My Binder</span>` +
+                `<i class="bx bxs-book-open text-[0.8rem]"></i><span id="cp-binder-count">My Binder</span>` +
             `</button>` +
             // Social links
             socials.map(l =>
@@ -381,7 +378,7 @@ function renderCatalog() {
         const locked = ownedCardIds.size > 0 && !owned;
         return `<div class="cp-card rarity-${card.rarity}${locked?' locked':''}" onclick="window._cpOpenModal(${JSON.stringify(card.id)})" title="${escapeHTML(card.name)}">
             ${card.image_url ? `<img src="${card.image_url}" alt="${escapeHTML(card.name)}" loading="lazy" decoding="async">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,#0d0f14,#161820)"></div>`}
-            <div class="lock-icon"><i class="fa-solid fa-lock"></i></div>
+            <div class="lock-icon"><i class="bx bxs-lock"></i></div>
             <div class="rarity-pip rarity-pip-${card.rarity}"></div>
             ${card.card_number != null ? `<div class="card-num">#${card.card_number}</div>` : ''}
         </div>`;

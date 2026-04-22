@@ -159,6 +159,13 @@
     }
 }
 
+.sidebar-group {
+    display: contents;
+}
+.sidebar-group.hidden {
+    display: none;
+}
+
 .dashboard-tab-btn {
     display: flex;
     align-items: center;
@@ -191,8 +198,239 @@
     box-shadow: 0 0 20px rgba(var(--void-accent-rgb), 0.1);
 }
 
+/* Analytics: Twitch-style metric tabs (underline active, shared chart area) */
+/* Legacy text tabs (kept for other uses) */
+.analytics-metric-tab {
+    position: relative;
+    padding: 0.65rem 0.85rem 0.75rem;
+    margin: 0 0.15rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(148, 163, 184, 0.92);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.analytics-metric-tab:hover { color: rgba(255,255,255,0.88); }
+.analytics-metric-tab--active { color: #fff; border-bottom-color: var(--void-accent); }
+
+/* Twitch-style stat tile tabs */
+.analytics-stat-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 9px 14px 7px;
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.analytics-stat-tile:not(.analytics-stat-tile--passive):hover {
+    background: rgba(255,255,255,0.03);
+}
+.analytics-stat-tile--active {
+    border-bottom-color: var(--void-accent);
+}
+.analytics-stat-tile--passive {
+    cursor: default;
+}
+.analytics-stat-tile:focus-visible {
+    outline: 2px solid var(--void-accent);
+    outline-offset: -2px;
+}
+.ast-val {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-size: clamp(0.95rem, 1.8vw, 1.25rem);
+    font-weight: 900;
+    color: #fff;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ast-trend {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--void-accent);
+    line-height: 1;
+}
+.ast-trend.down { color: #f87171; }
+.ast-lbl {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+}
+.ast-divider {
+    width: 1px;
+    background: rgba(255,255,255,0.07);
+    align-self: stretch;
+    margin: 8px 0;
+    flex-shrink: 0;
+}
+
+/* Sidebar tab icons: ~25% larger than previous w-5 (1.25rem) → 1.5625rem */
+.dashboard-sidebar .dashboard-tab-btn > i.bx {
+    font-size: 1.5625rem;
+    width: 1.5625rem;
+    height: 1.5625rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dashboard-sidebar .dashboard-tab-btn > svg.bx3-icon {
+    width: 1.5625rem;
+    height: 1.5625rem;
+    flex-shrink: 0;
+    fill: currentColor;
+    display: block;
+}
+
 .dashboard-content-area {
     min-height: calc(100vh - 9rem);
+}
+
+/* Dashboard search — bar + dropdown */
+.dash-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 140px;
+    height: 30px;
+    padding: 0 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    transition: width 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.dash-search-bar:focus-within {
+    width: 220px;
+    border-color: rgba(var(--void-accent-rgb), 0.35);
+    background: rgba(255,255,255,0.05);
+}
+.dash-search-icon {
+    font-size: 14px;
+    color: rgba(255,255,255,0.3);
+    flex-shrink: 0;
+}
+.dash-search-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--void-text);
+    font-family: inherit;
+}
+.dash-search-input::placeholder { color: rgba(255,255,255,0.25); }
+.dash-search-kbd {
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    padding: 2px 5px;
+    flex-shrink: 0;
+    user-select: none;
+    letter-spacing: 0;
+}
+.dash-search-results {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 320px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(8,8,14,0.97);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+    z-index: 700;
+    overflow: hidden;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+/* Dashboard search */
+.dash-search-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: background 0.1s ease;
+    border-left: 2px solid transparent;
+}
+.dash-search-result:hover,
+.dash-search-result.dash-search-result--active {
+    background: rgba(255,255,255,0.05);
+    border-left-color: var(--void-accent);
+}
+.dash-search-result-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: rgba(var(--void-accent-rgb), 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: var(--void-accent);
+}
+.dash-search-result-text {
+    flex: 1;
+    min-width: 0;
+}
+.dash-search-result-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    line-height: 1.2;
+}
+.dash-search-result-desc {
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 0.02em;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dash-search-section-header {
+    padding: 8px 14px 4px;
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.2);
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+.dash-search-section-header:first-child {
+    border-top: none;
+}
+.dash-search-empty {
+    padding: 20px 14px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.25);
 }
 
 .glass-card {

@@ -472,7 +472,7 @@ function showStep(step, prefix) {
     function setComplete(el) {
         if (!el) return;
         el.classList.add('complete', 'active');
-        el.innerHTML = '<i class="fa-solid fa-check text-xs"></i>';
+        el.innerHTML = '<i class="bx bxs-check text-xs"></i>';
     }
     function setActive(el, val) {
         if (!el) return;
@@ -637,7 +637,7 @@ function copyToClipboard(id) {
     document.execCommand('copy');
     const btn = el.nextElementSibling;
     const originalIcon = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    btn.innerHTML = '<i class="bx bxs-check"></i>';
     setTimeout(() => {
         btn.innerHTML = originalIcon;
     }, 2000);
@@ -684,7 +684,7 @@ async function loadFollows() {
                     <p class="text-[10px] text-void-muted truncate">${s.brand_tagline || `@${s.username}`}</p>
                 </div>
                 <button onclick="toggleFavorite('${s.id}', this)" class="p-2 rounded-lg bg-white/5 hover:bg-void-accent/20 ${fav ? 'bg-void-accent/20 text-void-accent' : 'text-void-muted'} hover:text-void-accent transition-all">
-                    <i class="${fav ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+                    <i class="bx ${fav ? 'bxs-star' : 'bx-star'}"></i>
                 </button>
             </div>
         `;
@@ -704,12 +704,12 @@ async function toggleFavorite(streamerId, btn) {
 
     const icon = btn.querySelector('i');
     if (favorited) {
-        icon.classList.remove('fa-regular');
-        icon.classList.add('fa-solid', 'text-void-accent');
+        icon.classList.replace('bx-star', 'bxs-star');
+        icon.classList.add('text-void-accent');
         btn.classList.add('bg-void-accent/20', 'text-void-accent');
     } else {
-        icon.classList.remove('fa-solid', 'text-void-accent');
-        icon.classList.add('fa-regular');
+        icon.classList.replace('bxs-star', 'bx-star');
+        icon.classList.remove('text-void-accent');
         btn.classList.remove('bg-void-accent/20', 'text-void-accent');
     }
 }
@@ -722,11 +722,11 @@ async function completeCollectorOnboarding() {
     console.log('[TEST MODE] Collector complete not persisted (flow test only)');
     const btn = document.getElementById('btn-col-complete');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Simulating...';
+    btn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Simulating...';
 
     await new Promise(r => setTimeout(r, 500));
     btn.disabled = false;
-    btn.innerHTML = 'Get Started <i class="fa-solid fa-circle-play"></i>';
+    btn.innerHTML = 'Get Started <i class="bx bxs-play-circle"></i>';
 
     let note = document.getElementById('test-flow-collector-complete-note');
     if (!note) {
@@ -742,11 +742,11 @@ async function activateCollection() {
     console.log('[TEST MODE] Launch collection not persisted (flow test only)');
     const btn = document.getElementById('btn-activate');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Simulating...';
+    btn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Simulating...';
 
     await new Promise(r => setTimeout(r, 600));
     btn.disabled = false;
-    btn.innerHTML = 'Launch Collection <i class="fa-solid fa-bolt"></i>';
+    btn.innerHTML = 'Launch Collection <i class="bx bxs-bolt"></i>';
 
     let note = document.getElementById('test-flow-activate-note');
     if (!note) {

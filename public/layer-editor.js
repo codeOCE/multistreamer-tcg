@@ -55,7 +55,7 @@ let editorAllCards = [];
 async function renderEditorView() {
     const setList = document.getElementById('editor-set-list');
     if (!setList) return;
-    setList.innerHTML = `<div class="text-center py-4 text-void-muted text-xs"><i class="fa-solid fa-spinner animate-spin mr-2"></i>Loading...</div>`;
+    setList.innerHTML = `<div class="text-center py-4 text-void-muted text-xs"><i class="bx bx-loader-alt animate-spin mr-2"></i>Loading...</div>`;
 
     try {
         const res = await fetch(`${BACKEND_URL}/api/creator/sets`, { credentials: 'include' });
@@ -70,13 +70,13 @@ async function renderEditorView() {
             return `<button onclick="selectEditorSet('${eid}')" id="editor-set-item-${eid}"
                 class="w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group ${editorCurrentSetId === s.id ? 'bg-void-accent/20 border-void-accent/40 text-void-accent' : 'bg-white/5 border-white/5 text-void-muted hover:bg-white/10 hover:border-white/10'}">
                 <div class="flex items-center gap-3">
-                    <i class="fa-solid ${s.is_active ? 'fa-box-open' : 'fa-box'} ${s.is_active ? 'text-void-accent' : 'text-void-muted'}"></i>
+                    <i class="bx ${s.is_active ? 'bxs-archive-out' : 'bxs-box'} ${s.is_active ? 'text-void-accent' : 'text-void-muted'}"></i>
                     <div>
                         <div class="text-[11px] font-black uppercase tracking-tight ${editorCurrentSetId === s.id ? 'text-white' : 'group-hover:text-void-text'}">${escapeHTML(s.name || 'Untitled Set')}</div>
                         <div class="text-[9px] font-bold opacity-60">${escapeHTML(s.code || 'NO-CODE')}</div>
                     </div>
                 </div>
-                ${editorCurrentSetId === s.id ? '<i class="fa-solid fa-chevron-right text-xs"></i>' : ''}
+                ${editorCurrentSetId === s.id ? '<i class="bx bx-chevron-right text-xs"></i>' : ''}
             </button>`;
         }).join('');
 
@@ -106,7 +106,7 @@ function selectEditorSet(setId) {
     if (activeEl) {
         activeEl.classList.add('bg-void-accent/20', 'border-void-accent/40', 'text-void-accent');
         activeEl.classList.remove('bg-white/5', 'border-white/5', 'text-void-muted');
-        activeEl.insertAdjacentHTML('beforeend', '<i class="fa-solid fa-chevron-right text-xs"></i>');
+        activeEl.insertAdjacentHTML('beforeend', '<i class="bx bx-chevron-right text-xs"></i>');
         const title = activeEl.querySelector('.font-black');
         if (title) title.classList.add('text-white');
     }
@@ -124,7 +124,7 @@ async function loadEditorCards() {
     const grid = document.getElementById('editor-card-grid');
     if (!grid) return;
     grid.innerHTML = `<div class="col-span-full py-12 flex flex-col items-center justify-center text-void-muted gap-4">
-        <i class="fa-solid fa-spinner animate-spin text-2xl text-void-accent"></i>
+        <i class="bx bx-loader-alt animate-spin text-2xl text-void-accent"></i>
         <div class="text-[10px] font-black uppercase tracking-[0.3em]">Loading Cards...</div>
     </div>`;
     try {
@@ -146,7 +146,7 @@ function renderEditorGrid(cards) {
     if (!grid) return;
     if (cards.length === 0) {
         grid.innerHTML = `<div class="col-span-full py-20 text-center space-y-4">
-            <i class="fa-solid fa-inbox text-4xl text-white/5"></i>
+            <i class="bx bxs-inbox text-4xl text-white/5"></i>
             <div class="text-xs text-void-muted">This set is empty.</div>
         </div>`;
         return;
@@ -161,8 +161,8 @@ function renderEditorGrid(cards) {
                     <div class="flex items-center justify-between">
                         <span class="text-[8px] font-black uppercase tracking-widest text-void-accent">${escapeHTML(card.rarity)}</span>
                         <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-sword mr-1 opacity-60"></i>${parseInt(card.attack || 0)}</span>
-                            <span class="text-[10px] font-black text-white"><i class="fa-solid fa-shield mr-1 opacity-60"></i>${parseInt(card.defense || 0)}</span>
+                            <span class="text-[10px] font-black text-white"><i class="bx bxs-bolt mr-1 opacity-60"></i>${parseInt(card.attack || 0)}</span>
+                            <span class="text-[10px] font-black text-white"><i class="bx bxs-shield mr-1 opacity-60"></i>${parseInt(card.defense || 0)}</span>
                         </div>
                     </div>
                 </div>
@@ -175,7 +175,7 @@ function renderEditorGrid(cards) {
                 <div class="flex items-center gap-1">
                     <button onclick="openLayerEditorForCard('${eid}')" title="Edit Art (Layer Editor)"
                         class="flex-1 py-2 bg-void-accent/10 text-void-accent hover:bg-void-accent hover:text-void-bg rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-pen-ruler"></i> Edit Art
+                        <i class="bx bxs-pencil"></i> Edit Art
                     </button>
                     ${card.foil_mask_url ? '<span title="Has foil mask" class="text-yellow-300 text-xs">✨</span>' : ''}
                 </div>
@@ -601,7 +601,7 @@ async function _renderLayerListAsync() {
     const objects = [..._layerFabric.getObjects()].reverse();
     if (objects.length === 0) { list.innerHTML = '<div class="text-white/20 text-[10px] px-2 py-1">No layers yet</div>'; return; }
     const activeObjs = _layerFabric.getActiveObjects();
-    const typeIcon = (t) => ({ text: 'fa-t', sticker: 'fa-face-smile', rect: 'fa-square', circle: 'fa-circle', path: 'fa-pen-nib', image: 'fa-image' })[t] || 'fa-layer-group';
+    const typeIcon = (t) => ({ text: 'bxs-font', sticker: 'bxs-smile', rect: 'bxs-square', circle: 'bxs-circle', path: 'bxs-pen', image: 'bxs-image' })[t] || 'bxs-layer';
     list.innerHTML = objects.map((obj, i) => {
         const fabricIdx = objects.length - 1 - i;
         const name = obj.data?.layerName || `Layer ${i + 1}`;
@@ -610,11 +610,11 @@ async function _renderLayerListAsync() {
         const isHidden = !obj.visible;
         const isShiny = !!obj.data?.shiny;
         return `<div class="le-layer-row${isSelected ? ' le-selected' : ''}" onclick="_leSelectLayer(${fabricIdx})" data-le-idx="${fabricIdx}">
-            <i class="fa-solid fa-grip-dots-vertical le-drag-handle"></i>
-            <i class="fa-solid ${typeIcon(type)} text-[8px] opacity-50 shrink-0"></i>
+            <i class="bx bxs-dots-vertical le-drag-handle"></i>
+            <i class="bx ${typeIcon(type)} text-[8px] opacity-50 shrink-0"></i>
             <span class="flex-1 truncate">${name}</span>
             <button title="${isShiny ? 'Remove shine' : 'Add shine to this layer'}" class="le-vis-btn${isShiny ? ' text-yellow-300' : ' opacity-40'}" onclick="event.stopPropagation();_leToggleShiny(${fabricIdx})">✨</button>
-            <button class="le-vis-btn" onclick="event.stopPropagation();_leToggleVis(${fabricIdx})"><i class="fa-solid ${isHidden ? 'fa-eye-slash' : 'fa-eye'}"></i></button>
+            <button class="le-vis-btn" onclick="event.stopPropagation();_leToggleVis(${fabricIdx})"><i class="bx ${isHidden ? 'bxs-hide' : 'bxs-show'}"></i></button>
         </div>`;
     }).join('');
     if (_layerSortable) _layerSortable.destroy();
@@ -927,13 +927,8 @@ async function _leUploadAndPatchCard(cardId, blob, maskBlob, layerJson) {
     if (editorCurrentSetId) loadEditorCards();
 }
 
-window.openLayerEditorForCard = async function (cardId) {
-    const card = editorAllCards.find(c => c.id === cardId);
-    if (!card) return;
-    // Pass existing layer_data so the editor can restore layers for further editing
-    await openCardLayerEditor(cardId, card.name, card.image_url || null, async (blob, maskBlob, layerJson) => {
-        await _leUploadAndPatchCard(cardId, blob, maskBlob, layerJson);
-    }, card.layer_data || null);
+window.openLayerEditorForCard = function (cardId) {
+    window.location.href = `/card-creator?id=${encodeURIComponent(cardId)}`;
 };
 
 /* ─── Export catalog functions for dashboard use ─────────────────────────── */

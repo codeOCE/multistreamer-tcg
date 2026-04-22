@@ -22,13 +22,30 @@
     }
 
     // ── Parse username from URL ─────────────────────────────────────────────
-    // Expects /profile/:username
+    // Expects /profile/:username — if bare /profile, redirect to own profile
     const pathParts = window.location.pathname.split('/').filter(Boolean);
-    const profileUsername = pathParts[1] || '';
+    let profileUsername = pathParts[1] || '';
 
     if (!profileUsername) {
-        document.getElementById('pf-loading')?.classList.add('hidden');
-        document.getElementById('pf-not-found')?.classList.remove('hidden');
+        // No username in URL — try to resolve via session then redirect
+        (async () => {
+            try {
+                const base = backendBase();
+                const res = await fetch(`${base}/api/v2/bootstrap`, { credentials: 'include' });
+                if (res.ok) {
+                    const data = await res.json();
+                    const uname = data?.user?.username;
+                    if (uname) {
+                        window.location.replace(`/profile/${encodeURIComponent(uname)}`);
+                        return;
+                    }
+                }
+            } catch (_) {}
+            // Not logged in or no username
+            window.location.replace('/login?next=/profile');
+        })();
+        // Stop further execution — redirect is in progress
+        return;
     }
 
     // ── Rarity helpers ──────────────────────────────────────────────────────
@@ -66,7 +83,7 @@
             pinBtn.classList.remove('hidden');
             const isPinned = featuredCardIds.includes(card.user_card_id);
             pinLabel.textContent = isPinned ? 'Unpin from Showcase' : 'Pin to Showcase';
-            pinBtn.querySelector('i').className = isPinned ? 'fa-solid fa-thumbtack-slash' : 'fa-solid fa-thumbtack';
+            pinBtn.querySelector('i').className = isPinned ? 'bx bxs-pin' : 'bx bxs-pin';
         } else {
             pinBtn?.classList.add('hidden');
         }
@@ -100,7 +117,7 @@
         // Update UI
         const newIsPinned = featuredCardIds.includes(id);
         pinLabel.textContent = newIsPinned ? 'Unpin from Showcase' : 'Pin to Showcase';
-        pinBtn.querySelector('i').className = newIsPinned ? 'fa-solid fa-thumbtack-slash' : 'fa-solid fa-thumbtack';
+        pinBtn.querySelector('i').className = newIsPinned ? 'bx bxs-pin' : 'bx bxs-pin';
 
         // Persist
         try {
@@ -131,10 +148,10 @@
     });
 
     // ── Showcase carousel ───────────────────────────────────────────────────
-    const POSITIONS = ['left2', 'left1', 'center', 'right1', 'right2'];
     let showcaseCards = [];
     let showcaseIdx = 0;
     let autoTimer = null;
+    const SHOWCASE_AUTO_MS = 3500;
 
     function buildShowcaseSlots(cards) {
         const wrap = document.getElementById('pf-showcase-inner');
@@ -142,29 +159,31 @@
         if (!wrap) return;
         wrap.innerHTML = '';
         if (!cards || cards.length === 0) {
-            wrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.08);font-size:2rem;"><i class="fa-solid fa-cards-blank"></i></div>';
+            wrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.08);font-size:2rem;"><i class="bx bxs-id-card"></i></div>';
             return;
         }
         showcaseCards = cards;
 
-        // Create 5 slot DOM elements
-        for (let i = 0; i < 5; i++) {
+        // Build one slot per card, same positioning model as collection page.
+        cards.forEach((card, i) => {
             const slot = document.createElement('div');
             slot.className = 'pf-showcase-slot';
+            slot.dataset.index = String(i);
             slot.setAttribute('data-pos', 'hidden');
+            slot.setAttribute('data-rarity', card.rarity || 'Common');
             const img = document.createElement('img');
             img.loading = 'lazy';
+            img.src = card.image_url || '';
+            img.alt = card.name || '';
             slot.appendChild(img);
             slot.addEventListener('click', () => {
-                const pos = slot.getAttribute('data-pos');
+                const pos = slot.dataset.pos;
+                const target = Number(slot.dataset.index || 0);
                 if (pos === 'center') { openCardModal(showcaseCards[showcaseIdx]); return; }
-                if (pos === 'left1') setShowcaseIdx((showcaseIdx - 1 + cards.length) % cards.length);
-                if (pos === 'right1') setShowcaseIdx((showcaseIdx + 1) % cards.length);
-                if (pos === 'left2') setShowcaseIdx((showcaseIdx - 2 + cards.length) % cards.length);
-                if (pos === 'right2') setShowcaseIdx((showcaseIdx + 2) % cards.length);
+                setShowcaseIdx(target, { fromUser: true });
             });
             wrap.appendChild(slot);
-        }
+        });
 
         // Dots
         if (dots) {
@@ -173,7 +192,7 @@
                 const d = document.createElement('button');
                 d.className = 'pf-dot';
                 d.setAttribute('aria-label', `Card ${i + 1}`);
-                d.addEventListener('click', () => setShowcaseIdx(i));
+                d.addEventListener('click', () => setShowcaseIdx(i, { fromUser: true }));
                 dots.appendChild(d);
             });
         }
@@ -182,30 +201,39 @@
         startShowcaseAuto();
     }
 
-    function setShowcaseIdx(idx) {
+    function setShowcaseIdx(idx, options = {}) {
         const cards = showcaseCards;
         if (!cards || cards.length === 0) return;
-        showcaseIdx = ((idx % cards.length) + cards.length) % cards.length;
+        const fromUser = !!options.fromUser;
+        const cardCount = cards.length;
+        showcaseIdx = ((idx % cardCount) + cardCount) % cardCount;
+
         const slots = document.querySelectorAll('.pf-showcase-slot');
-        const offsets = [-2, -1, 0, 1, 2];
         slots.forEach((slot, i) => {
-            const ci = ((showcaseIdx + offsets[i]) % cards.length + cards.length) % cards.length;
-            const card = cards[ci];
-            const img = slot.querySelector('img');
-            if (img) { img.src = card.image_url || ''; img.alt = card.name || ''; }
-            slot.setAttribute('data-pos', POSITIONS[i]);
-            slot.setAttribute('data-rarity', card.rarity || '');
+            const d = ((i - showcaseIdx) % cardCount + cardCount) % cardCount;
+            if (d === 0) slot.setAttribute('data-pos', 'center');
+            else if (d === 1) slot.setAttribute('data-pos', 'right1');
+            else if (d === 2) slot.setAttribute('data-pos', 'right2');
+            else if (d === cardCount - 1) slot.setAttribute('data-pos', 'left1');
+            else if (d === cardCount - 2) slot.setAttribute('data-pos', 'left2');
+            else slot.setAttribute('data-pos', 'hidden');
         });
         document.querySelectorAll('.pf-dot').forEach((d, i) => {
             d.classList.toggle('active', i === showcaseIdx);
         });
+
+        if (fromUser) {
+            startShowcaseAuto();
+        }
     }
 
     function startShowcaseAuto() {
         if (autoTimer) clearInterval(autoTimer);
         autoTimer = setInterval(() => {
-            if (showcaseCards.length > 1) setShowcaseIdx(showcaseIdx + 1);
-        }, 3500);
+            if (showcaseCards.length > 1) {
+                setShowcaseIdx(showcaseIdx + 1);
+            }
+        }, SHOWCASE_AUTO_MS);
     }
 
     // ── Stats widget ────────────────────────────────────────────────────────
@@ -284,6 +312,21 @@
         });
     }
 
+    function renderWishlist(items) {
+        const wrap = document.getElementById('pf-wishlist-list');
+        if (!wrap) return;
+        if (!Array.isArray(items) || items.length === 0) {
+            wrap.innerHTML = '<p class="pf-wishlist-empty">No wishlist items yet.</p>';
+            return;
+        }
+        wrap.innerHTML = items.map((item) => `
+            <div class="pf-wishlist-item">
+                <i class="bx bxs-star"></i>
+                <span>${escapeHTML(item)}</span>
+            </div>
+        `).join('');
+    }
+
     function timeAgo(iso) {
         try {
             const ms = Date.now() - new Date(iso).getTime();
@@ -296,20 +339,32 @@
     }
 
     // ── Drag-and-drop widget layout ─────────────────────────────────────────
-    const DEFAULT_ORDER = ['widget-showcase', 'widget-stats', 'widget-trophy', 'widget-latest'];
+    const DEFAULT_ORDER = ['widget-showcase', 'widget-stats', 'widget-trophy', 'widget-latest', 'widget-wishlist'];
+    const MIN_REQUIRED_SECTIONS = ['widget-showcase'];
     let savedLayoutOrder = null;
+    let visibleSections = null;
+    let wishlistItems = [];
 
-    function getSavedOrder() {
-        if (savedLayoutOrder && Array.isArray(savedLayoutOrder) && savedLayoutOrder.every(id => DEFAULT_ORDER.includes(id))) {
-            return savedLayoutOrder;
-        }
-        return DEFAULT_ORDER;
+    function normalizeWidgetArray(arr, fallback) {
+        if (!Array.isArray(arr)) return [...fallback];
+        const allowed = arr.filter(id => typeof id === 'string' && DEFAULT_ORDER.includes(id));
+        const unique = [...new Set(allowed)];
+        if (unique.length === 0) return [...fallback];
+        MIN_REQUIRED_SECTIONS.forEach(id => {
+            if (!unique.includes(id)) unique.unshift(id);
+        });
+        return unique;
     }
 
-    async function saveOrder(arr) {
-        // Optimistic local save
-        savedLayoutOrder = arr;
+    function getSavedOrder() {
+        return normalizeWidgetArray(savedLayoutOrder, DEFAULT_ORDER);
+    }
 
+    function getSavedSections() {
+        return normalizeWidgetArray(visibleSections, DEFAULT_ORDER);
+    }
+
+    async function saveLayoutAndSections(layout, sections) {
         try {
             const base = backendBase();
             const token = localStorage.getItem('castle_token');
@@ -320,7 +375,38 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ layout: arr })
+                    body: JSON.stringify({ layout, sections })
+                });
+            }
+        } catch (_) {}
+    }
+
+    async function saveOrder(arr) {
+        // Optimistic local save
+        savedLayoutOrder = normalizeWidgetArray(arr, DEFAULT_ORDER);
+        await saveLayoutAndSections(savedLayoutOrder, getSavedSections());
+    }
+
+    async function saveSections(arr) {
+        visibleSections = normalizeWidgetArray(arr, DEFAULT_ORDER);
+        applyWidgetVisibility(visibleSections);
+        await saveLayoutAndSections(getSavedOrder(), visibleSections);
+    }
+
+    async function saveWishlist(items) {
+        wishlistItems = Array.isArray(items) ? items : [];
+        renderWishlist(wishlistItems);
+        try {
+            const base = backendBase();
+            const token = localStorage.getItem('castle_token');
+            if (token) {
+                await fetch(`${base}/api/viewer/profile/wishlist`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ items: wishlistItems })
                 });
             }
         } catch (_) {}
@@ -336,6 +422,28 @@
         // Showcase always stays full-width (grid-column: 1 / -1)
         const showcase = document.getElementById('widget-showcase');
         if (showcase) showcase.style.gridColumn = '1 / -1';
+    }
+
+    function applyWidgetVisibility(sectionIds) {
+        const visible = new Set(normalizeWidgetArray(sectionIds, DEFAULT_ORDER));
+        DEFAULT_ORDER.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.toggle('hidden', !visible.has(id));
+        });
+    }
+
+    function syncSectionsPanel() {
+        const visible = new Set(getSavedSections());
+        document.querySelectorAll('#pf-sections-panel input[type="checkbox"]').forEach((input) => {
+            const id = input.value;
+            input.checked = visible.has(id);
+            if (MIN_REQUIRED_SECTIONS.includes(id)) {
+                input.disabled = true;
+            }
+        });
+        const editor = document.getElementById('pf-wishlist-editor');
+        if (editor) editor.value = (wishlistItems || []).join('\n');
     }
 
     let dragSrcId = null;
@@ -393,6 +501,7 @@
     }
 
     let editMode = false;
+    let sectionsOpen = false;
     function setEditMode(on) {
         editMode = on;
         document.body.classList.toggle('pf-editing', on);
@@ -405,9 +514,37 @@
         document.querySelectorAll('.pf-widget').forEach(w => {
             w.setAttribute('draggable', on ? 'true' : 'false');
         });
+        if (!on) {
+            sectionsOpen = false;
+            document.getElementById('pf-sections-panel')?.classList.add('hidden');
+            document.getElementById('pf-sections-btn')?.classList.remove('active');
+        }
     }
 
     document.getElementById('pf-edit-btn')?.addEventListener('click', () => setEditMode(!editMode));
+    document.getElementById('pf-sections-btn')?.addEventListener('click', () => {
+        if (!isOwner || !editMode) return;
+        sectionsOpen = !sectionsOpen;
+        document.getElementById('pf-sections-btn')?.classList.toggle('active', sectionsOpen);
+        document.getElementById('pf-sections-panel')?.classList.toggle('hidden', !sectionsOpen);
+        if (sectionsOpen) syncSectionsPanel();
+    });
+    document.getElementById('pf-save-sections')?.addEventListener('click', async () => {
+        if (!isOwner) return;
+        const selected = [];
+        document.querySelectorAll('#pf-sections-panel input[type="checkbox"]:checked').forEach((input) => {
+            selected.push(input.value);
+        });
+        await saveSections(selected);
+        const editor = document.getElementById('pf-wishlist-editor');
+        const lines = String(editor?.value || '')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+            .slice(0, 20);
+        await saveWishlist(lines);
+        if (typeof showToast === 'function') showToast('Profile sections updated.', 'success');
+    });
 
     // ── Copy castle code ───────────────────────────────────────────────────
     document.getElementById('pf-copy-code')?.addEventListener('click', () => {
@@ -472,23 +609,37 @@
                 if (!isOwner) editBtn.style.display = 'none';
                 else editBtn.style.display = 'inline-flex';
             }
+            const sectionsBtn = document.getElementById('pf-sections-btn');
+            if (sectionsBtn) {
+                if (!isOwner) sectionsBtn.classList.add('hidden');
+                else sectionsBtn.classList.remove('hidden');
+            }
 
             // Assign layout from DB
             if (user.profile_layout) {
                 savedLayoutOrder = user.profile_layout;
             }
+            if (user.profile_sections) {
+                visibleSections = user.profile_sections;
+            }
             if (user.featured_card_ids) {
                 featuredCardIds = user.featured_card_ids;
+            }
+            if (Array.isArray(user.wishlist_items)) {
+                wishlistItems = user.wishlist_items;
             }
 
             // Apply saved widget order
             applyWidgetOrder(getSavedOrder());
+            applyWidgetVisibility(getSavedSections());
+            syncSectionsPanel();
 
             // Render widgets
             buildShowcaseSlots(showcase_cards || []);
             renderStats(user, stats || {});
             renderTrophy(trophy_cards || []);
             renderLatest(latest_cards || []);
+            renderWishlist(wishlistItems);
 
             // Init drag
             initDragAndDrop();
@@ -508,8 +659,8 @@
     document.addEventListener('keydown', (e) => {
         if (modal?.classList.contains('open')) return;
         if (showcaseCards.length <= 1) return;
-        if (e.key === 'ArrowLeft')  setShowcaseIdx(showcaseIdx - 1);
-        if (e.key === 'ArrowRight') setShowcaseIdx(showcaseIdx + 1);
+        if (e.key === 'ArrowLeft')  setShowcaseIdx(showcaseIdx - 1, { fromUser: true });
+        if (e.key === 'ArrowRight') setShowcaseIdx(showcaseIdx + 1, { fromUser: true });
     });
 
     document.addEventListener('DOMContentLoaded', loadProfile);

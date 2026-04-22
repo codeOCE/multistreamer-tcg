@@ -124,7 +124,7 @@ function applyCreatorConnectPlatformsUI() {
         if (twitchStatus) twitchStatus.textContent = 'Not connected';
         if (twitchBtn) {
             twitchBtn.disabled = false;
-            twitchBtn.innerHTML = 'Connect <i class="fa-brands fa-twitch ml-1"></i>';
+            twitchBtn.innerHTML = 'Connect <i class="bx bxl-twitch ml-1"></i>';
             twitchBtn.className =
                 'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
             twitchBtn.onclick = () => {
@@ -154,7 +154,7 @@ function applyCreatorConnectPlatformsUI() {
         if (twitchStatus) twitchStatus.textContent = 'Not linked (optional)';
         if (twitchBtn) {
             twitchBtn.disabled = false;
-            twitchBtn.innerHTML = 'Link Twitch <i class="fa-brands fa-twitch ml-1"></i>';
+            twitchBtn.innerHTML = 'Link Twitch <i class="bx bxl-twitch ml-1"></i>';
             twitchBtn.className =
                 'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
             twitchBtn.onclick = () => {
@@ -164,7 +164,7 @@ function applyCreatorConnectPlatformsUI() {
     } else {
         if (twitchStatus) twitchStatus.textContent = 'Connected';
         if (twitchBtn) {
-            twitchBtn.innerHTML = 'Active <i class="fa-solid fa-check ml-1"></i>';
+            twitchBtn.innerHTML = 'Active <i class="bx bxs-check ml-1"></i>';
             twitchBtn.disabled = true;
             twitchBtn.onclick = null;
             twitchBtn.className =
@@ -175,7 +175,7 @@ function applyCreatorConnectPlatformsUI() {
     if (kickLinked || isKickPrimary) {
         if (kickStatus) kickStatus.textContent = isKickPrimary ? 'Signed in with Kick' : 'Connected';
         if (kickBtn) {
-            kickBtn.innerHTML = 'Active <i class="fa-solid fa-check ml-1"></i>';
+            kickBtn.innerHTML = 'Active <i class="bx bxs-check ml-1"></i>';
             kickBtn.disabled = true;
             kickBtn.onclick = null;
             kickBtn.className =
@@ -567,7 +567,7 @@ function showStep(step, prefix) {
     function setComplete(el) {
         if (!el) return;
         el.classList.add('complete', 'active');
-        el.innerHTML = '<i class="fa-solid fa-check text-xs"></i>';
+        el.innerHTML = '<i class="bx bxs-check text-xs"></i>';
     }
     function setActive(el, val) {
         if (!el) return;
@@ -827,7 +827,7 @@ function copyToClipboard(id) {
     el.select();
     document.execCommand('copy');
     const originalValue = el.nextElementSibling.innerHTML;
-    el.nextElementSibling.innerHTML = '<i class="fa-solid fa-check"></i>';
+    el.nextElementSibling.innerHTML = '<i class="bx bxs-check"></i>';
     setTimeout(() => {
         el.nextElementSibling.innerHTML = originalValue;
     }, 2000);
@@ -878,7 +878,7 @@ async function loadFollows() {
                     <p class="text-[10px] text-void-muted truncate">${s.brand_tagline || `@${s.username}`}</p>
                 </div>
                 <button onclick="toggleFavorite('${s.id}', this)" class="p-2 rounded-lg bg-white/5 hover:bg-void-accent/20 ${s.is_favorited ? 'bg-void-accent/20 text-void-accent' : 'text-void-muted'} hover:text-void-accent transition-all">
-                    <i class="${s.is_favorited ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+                    <i class="bx ${s.is_favorited ? 'bxs-star' : 'bx-star'}"></i>
                 </button>
             </div>
         `).join('');
@@ -901,11 +901,11 @@ async function toggleFavorite(streamerId, btn) {
 
         const icon = btn.querySelector('i');
         if (data.favorited) {
-            icon.classList.replace('fa-regular', 'fa-solid');
+            icon.classList.replace('bx-star', 'bxs-star');
             icon.classList.add('text-void-accent');
             btn.classList.add('bg-void-accent/20');
         } else {
-            icon.classList.replace('fa-solid', 'fa-regular');
+            icon.classList.replace('bxs-star', 'bx-star');
             icon.classList.remove('text-void-accent');
             btn.classList.remove('bg-void-accent/20');
         }
@@ -921,7 +921,7 @@ function prevStep(step) {
 async function completeCollectorOnboarding() {
     const btn = document.getElementById('btn-col-complete');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Finalizing...';
+    btn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Finalizing...';
 
     try {
         const res = await fetch(`${API_BASE}/onboarding/collector/complete`, {
@@ -939,12 +939,12 @@ async function completeCollectorOnboarding() {
         } else {
             alert('Failed to complete onboarding');
             btn.disabled = false;
-            btn.innerHTML = 'Get Started <i class="fa-solid fa-circle-play"></i>';
+            btn.innerHTML = 'Get Started <i class="bx bxs-play-circle"></i>';
         }
     } catch (e) {
         showVisualError('Onboarding error. Please try again.', 'col-step-3');
         btn.disabled = false;
-        btn.innerHTML = 'Get Started <i class="fa-solid fa-circle-play"></i>';
+        btn.innerHTML = 'Get Started <i class="bx bxs-play-circle"></i>';
     }
 }
 
@@ -955,7 +955,7 @@ function linkTwitch() {
 async function activateCollection() {
     const btn = document.getElementById('btn-activate');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Activating...';
+    btn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Activating...';
 
     try {
         const res = await fetch(`${API_BASE}/onboarding/activate`, {
@@ -977,12 +977,12 @@ async function activateCollection() {
             const err = await res.json();
             showVisualError(err.error || 'Activation failed.', 'c-step-10');
             btn.disabled = false;
-            btn.innerHTML = 'Launch Collection <i class="fa-solid fa-bolt"></i>';
+            btn.innerHTML = 'Launch Collection <i class="bx bxs-bolt"></i>';
         }
     } catch (e) {
         showVisualError('Activation error.', 'c-step-10');
         btn.disabled = false;
-        btn.innerHTML = 'Launch Collection <i class="fa-solid fa-bolt"></i>';
+        btn.innerHTML = 'Launch Collection <i class="bx bxs-bolt"></i>';
     }
 }
 

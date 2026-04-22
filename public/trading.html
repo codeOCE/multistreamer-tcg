@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Centre · Castle TCG</title>
+
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        :root {
+            --page-accent: var(--void-accent);
+            --page-accent-rgb: var(--void-accent-rgb);
+        }
+
+        /* ── Entry animation ── */
+        @keyframes tr-rise {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .tr-rise   { animation: tr-rise 0.5s var(--ease-premium) both; }
+        .tr-rise-1 { animation-delay: 0.04s; }
+        .tr-rise-2 { animation-delay: 0.10s; }
+        .tr-rise-3 { animation-delay: 0.18s; }
+
+        /* ── Page shell ── */
+        #tr-root {
+            min-height: 100vh;
+            padding-top: 80px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Inner container ── */
+        #tr-inner {
+            flex: 1;
+            max-width: 1920px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 36px 48px 60px;
+            display: flex;
+            gap: 32px;
+            align-items: flex-start;
+        }
+
+        /* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */
+        #tr-sidebar {
+            width: 230px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 96px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .tr-back-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            text-decoration: none;
+            padding: 8px 10px;
+            border-radius: 10px;
+            transition: color 0.2s, background 0.2s;
+            margin-bottom: 4px;
+        }
+        .tr-back-link:hover { color: var(--void-text); background: rgba(255,255,255,0.04); }
+
+        .tr-section-label {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            padding: 10px 10px 6px;
+        }
+
+        .tr-nav-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 9px 12px;
+            border-radius: 10px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+            transition: color 0.2s, background 0.2s;
+        }
+        .tr-nav-btn:hover { color: var(--void-text); background: rgba(255,255,255,0.04); }
+        .tr-nav-btn.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            background: rgba(var(--page-accent-rgb), 0.08);
+        }
+        .tr-nav-btn i { font-size: 1rem; flex-shrink: 0; opacity: 0.7; }
+
+        .tr-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.05);
+            margin: 8px 0;
+        }
+
+        /* Expandable filter panels */
+        .tr-expand {
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.28s ease;
+        }
+        .tr-expand.open { max-height: 320px; }
+
+        .tr-search-field {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 10px;
+            font-size: 0.72rem;
+            color: var(--void-text);
+            outline: none;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+        .tr-search-field::placeholder { color: var(--void-muted); }
+        .tr-search-field:focus { border-color: rgba(var(--page-accent-rgb), 0.4); }
+
+        .tr-trait-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 4px 0 2px;
+        }
+        .tr-trait-chip {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 3px 9px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: transparent;
+            color: var(--void-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tr-trait-chip:hover { color: var(--void-text); border-color: rgba(255,255,255,0.2); }
+        .tr-trait-chip.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            border-color: rgba(var(--page-accent-rgb), 0.4);
+            background: rgba(var(--page-accent-rgb), 0.08);
+        }
+
+        /* Auth status / sign-in nudge */
+        #tr-auth-status {
+            font-size: 0.65rem;
+            line-height: 1.5;
+            color: var(--void-muted);
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.05);
+            margin-top: 4px;
+        }
+
+        /* ── MAIN CONTENT ─────────────────────────────────────────────────── */
+        #tr-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* Page header */
+        #tr-header {
+            margin-bottom: 28px;
+        }
+
+        #tr-page-label {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.8);
+            margin-bottom: 6px;
+        }
+
+        #tr-page-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: clamp(1.6rem, 3vw, 2.4rem);
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            color: var(--void-text);
+            line-height: 1;
+            margin: 0 0 12px;
+        }
+
+        #tr-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tr-sort-btn {
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px;
+            padding: 5px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tr-sort-btn:hover { color: var(--void-text); background: rgba(255,255,255,0.05); }
+        .tr-sort-btn.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            background: rgba(var(--page-accent-rgb), 0.08);
+            border-color: rgba(var(--page-accent-rgb), 0.3);
+        }
+
+        /* Card grid */
+        #tr-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 22px;
+        }
+        @media (max-width: 1600px) { #tr-grid { grid-template-columns: repeat(5, 1fr); } }
+        @media (max-width: 1300px) { #tr-grid { grid-template-columns: repeat(4, 1fr); } }
+        @media (max-width: 900px)  { #tr-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 600px)  { #tr-grid { grid-template-columns: repeat(2, 1fr); } }
+
+        /* Market card tile */
+        .tr-card {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            cursor: pointer;
+        }
+
+        .tr-card-img {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 5/7;
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            transition: transform 0.25s var(--ease-premium), box-shadow 0.25s var(--ease-premium), border-color 0.2s;
+        }
+        .tr-card:hover .tr-card-img {
+            transform: translateY(-6px);
+            border-color: rgba(var(--page-accent-rgb), 0.25);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(var(--page-accent-rgb), 0.15);
+        }
+        .tr-card-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .tr-card-img .tr-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: rgba(255,255,255,0.08);
+        }
+        .tr-mine-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(var(--page-accent-rgb), 0.9);
+            color: #000;
+            font-size: 0.5rem;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 3px 7px;
+            border-radius: 5px;
+        }
+
+        .tr-card-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .tr-card-traits {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .tr-trait-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+            border: 1.5px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .tr-trait-dot img { width: 12px; height: 12px; object-fit: contain; }
+        .tr-card-name {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--void-text);
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            letter-spacing: 0.02em;
+        }
+        .tr-card-rarity {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        /* Empty / loading state */
+        .tr-empty {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 80px 0;
+            color: var(--void-muted);
+        }
+        .tr-empty i { font-size: 2.5rem; opacity: 0.25; }
+        .tr-empty span { font-size: 0.75rem; font-weight: 600; }
+
+        /* Pagination */
+        #tr-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 36px;
+        }
+        .tr-page-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.07);
+            color: var(--void-muted);
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+        .tr-page-btn:hover:not(:disabled) { color: var(--void-text); background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.12); }
+        .tr-page-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+        #tr-page-indicator {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: var(--void-muted);
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* ── MODALS ──────────────────────────────────────────────────────── */
+        .tr-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(12px);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+        .tr-modal-overlay.open { display: flex; opacity: 1; }
+
+        .tr-modal {
+            background: var(--void-bg-alt);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 32px;
+            width: 90%;
+            max-width: 780px;
+            max-height: 82vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+        }
+
+        .tr-modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: var(--void-muted);
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .tr-modal-close:hover { color: var(--void-text); background: rgba(255,255,255,0.1); }
+
+        .tr-modal-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: rgba(var(--page-accent-rgb), 1);
+            margin: 0 0 4px;
+        }
+        .tr-modal-sub {
+            font-size: 0.75rem;
+            color: var(--void-muted);
+            margin: 0 0 24px;
+        }
+
+        /* Picker filters (search + trait chips above the grid) */
+        .tr-picker-filters {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .tr-picker-search {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            font-size: 0.78rem;
+            color: var(--void-text);
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+        }
+        .tr-picker-search::placeholder { color: var(--void-muted); }
+        .tr-picker-search:focus { border-color: rgba(var(--page-accent-rgb), 0.45); }
+        .tr-picker-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .tr-picker-count {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            padding: 4px 2px 0;
+        }
+
+        /* Card picker grid inside modals */
+        .tr-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .tr-picker-card {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            background: rgba(255,255,255,0.03);
+            border: 1.5px solid rgba(255,255,255,0.06);
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+        .tr-picker-card:hover { transform: scale(1.04); border-color: rgba(255,255,255,0.15); }
+        .tr-picker-card.selected {
+            border-color: rgba(var(--page-accent-rgb), 0.9);
+            box-shadow: 0 0 0 3px rgba(var(--page-accent-rgb), 0.25), 0 8px 24px rgba(0,0,0,0.5);
+            transform: scale(1.04);
+        }
+        .tr-picker-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .tr-picker-rarity {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.85));
+            padding: 10px 4px 4px;
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        /* Hover overlay — revealed on :hover with card name + trait chips */
+        .tr-picker-hover {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 10px 8px;
+            gap: 6px;
+            background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0) 100%);
+            opacity: 0;
+            transition: opacity 0.18s ease;
+            pointer-events: none;
+        }
+        .tr-picker-card:hover .tr-picker-hover,
+        .tr-picker-card.selected .tr-picker-hover { opacity: 1; }
+        .tr-picker-card:hover .tr-picker-rarity,
+        .tr-picker-card.selected .tr-picker-rarity { opacity: 0; }
+        .tr-picker-rarity { transition: opacity 0.18s ease; }
+        .tr-picker-hover-name {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #fff;
+            line-height: 1.15;
+            letter-spacing: 0.01em;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+        .tr-picker-hover-rarity {
+            font-size: 0.5rem;
+            font-weight: 900;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+        .tr-picker-hover-traits {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .tr-picker-hover-trait {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #fff;
+        }
+        .tr-picker-hover-trait img {
+            width: 10px;
+            height: 10px;
+            object-fit: contain;
+        }
+
+        /* Modal actions row */
+        .tr-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 8px;
+        }
+
+        /* Buttons */
+        .tr-btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            background: rgba(var(--page-accent-rgb), 1);
+            color: #000;
+            font-size: 0.7rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .tr-btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
+        .tr-btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        .tr-btn-ghost {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            background: transparent;
+            color: var(--void-muted);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .tr-btn-ghost:hover { color: var(--void-text); border-color: rgba(255,255,255,0.18); }
+
+        .tr-btn-danger {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            background: transparent;
+            color: #ef4444;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border: 1px solid rgba(239,68,68,0.2);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tr-btn-danger:hover { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.4); }
+
+        /* Offer rows inside "offers received" modal */
+        .tr-offer-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            margin-bottom: 10px;
+            transition: border-color 0.2s;
+        }
+        .tr-offer-row:hover { border-color: rgba(255,255,255,0.1); }
+        .tr-offer-row img {
+            width: 44px;
+            height: 62px;
+            object-fit: cover;
+            border-radius: 6px;
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.03);
+        }
+        .tr-offer-info { flex: 1; min-width: 0; }
+        .tr-offer-name { font-size: 0.8rem; font-weight: 700; color: var(--void-text); }
+        .tr-offer-meta { font-size: 0.65rem; color: var(--void-muted); margin-top: 2px; }
+
+        .tr-btn-accept {
+            padding: 8px 16px;
+            background: rgba(var(--page-accent-rgb), 0.12);
+            color: rgba(var(--page-accent-rgb), 1);
+            border: 1px solid rgba(var(--page-accent-rgb), 0.3);
+            border-radius: 8px;
+            font-size: 0.65rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .tr-btn-accept:hover { background: rgba(var(--page-accent-rgb), 0.22); }
+        .tr-btn-accept:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Toast */
+        #tr-toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            background: var(--void-bg-alt);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--void-text);
+            padding: 11px 22px;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            z-index: 99999;
+            opacity: 0;
+            transition: opacity 0.25s, transform 0.25s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #tr-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #tr-toast.success { border-color: rgba(var(--page-accent-rgb), 0.5); }
+        #tr-toast.error   { border-color: rgba(239,68,68,0.5); color: #fca5a5; }
+
+        /* Loading state */
+        #tr-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            min-height: calc(100vh - 80px);
+            color: var(--void-muted);
+        }
+        #tr-loading i { font-size: 1.5rem; opacity: 0.4; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+            #tr-inner { flex-direction: column; padding: 20px 16px 40px; }
+            #tr-sidebar { width: 100%; position: static; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+            #tr-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        }
+    </style>
+</head>
+<body class="bg-void-bg text-void-text antialiased">
+<div class="saas-bg-glow"></div>
+
+<!-- ── Navbar ── -->
+<nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
+    <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-2 group cursor-pointer">
+            <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+            </div>
+            <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+        </a>
+        <div class="flex items-center gap-3">
+            <div id="nav-user-preview" class="hidden items-center">
+                <span id="nav-username" class="hidden">---</span>
+                <span id="nav-user-role" class="hidden">Collector</span>
+                <div id="nav-user-menu-root" class="relative">
+                    <button type="button" id="nav-user-menu-trigger"
+                        class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                        aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                        <span class="relative inline-block">
+                            <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
+                            <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                        </span>
+                        <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                    </button>
+                    <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
+                        <div class="border-b border-white/5">
+                            <button type="button" id="nav-user-identity-toggle"
+                                class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                aria-expanded="false" aria-controls="nav-user-team-panel">
+                                <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                                <div class="min-w-0 flex-1">
+                                    <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                    <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                        <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
+                                        <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                    </div>
+                                </div>
+                                <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                    <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                </span>
+                            </button>
+                            <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                            </div>
+                        </div>
+                        <div class="px-4 py-3 border-b border-white/5">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="min-w-0">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                    <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                </div>
+                                <button type="button" id="nav-user-menu-copy-code"
+                                    class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                            </div>
+                        </div>
+                        <div class="p-1.5">
+                            <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
+                                <span class="flex flex-col leading-tight normal-case">
+                                    <span class="uppercase tracking-widest">Account settings</span>
+                                    <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                                </span>
+                            </button>
+                            <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                <i class="bx bx-log-out w-4 text-center"></i> Log out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- ── Loading ── -->
+<div id="tr-loading">
+    <i class="bx bx-loader-alt"></i>
+    <span style="font-size:0.65rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;">Loading</span>
+</div>
+
+<!-- ── Root (hidden until ready) ── -->
+<div id="tr-root" class="hidden">
+    <div id="tr-inner">
+
+        <!-- LEFT SIDEBAR -->
+        <aside id="tr-sidebar" class="tr-rise tr-rise-1">
+            <a href="#" id="tr-back-link" class="tr-back-link">
+                <i class="bx bx-left-arrow-alt"></i>
+                Back to <span id="tr-back-name">Streamer</span>
+            </a>
+
+            <div class="tr-divider"></div>
+
+            <div class="tr-section-label">Browse</div>
+
+            <button class="tr-nav-btn" id="tr-btn-search" onclick="tToggleSearch()">
+                <i class="bx bx-search"></i> Search
+            </button>
+            <div class="tr-expand" id="tr-search-panel" style="padding:0 4px 4px;">
+                <input type="text" class="tr-search-field" id="tr-search-input" placeholder="Card name..." oninput="tOnSearch(this.value)">
+            </div>
+
+            <button class="tr-nav-btn" id="tr-btn-traits" onclick="tToggleTraits()">
+                <i class="bx bx-filter-alt"></i> Traits
+                <i class="bx bx-chevron-down" id="tr-traits-chevron" style="margin-left:auto;font-size:0.85rem;"></i>
+            </button>
+            <div class="tr-expand" id="tr-traits-panel" style="padding:0 4px 6px;">
+                <div class="tr-trait-grid" id="tr-trait-chips"></div>
+            </div>
+
+            <div class="tr-divider"></div>
+
+            <div class="tr-section-label">Actions</div>
+
+            <button class="tr-nav-btn" id="tr-btn-list" onclick="tOpenListModal()">
+                <i class="bx bx-plus-circle"></i> List a card
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-mine" onclick="tViewMyListings()">
+                <i class="bx bxs-layer"></i> Your listings
+            </button>
+
+            <div id="tr-auth-status" class="hidden"></div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main id="tr-main" class="tr-rise tr-rise-2">
+            <div id="tr-header">
+                <div id="tr-page-label">Trading Centre</div>
+                <h1 id="tr-page-title">Market</h1>
+                <div id="tr-controls">
+                    <span style="font-size:0.55rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:var(--void-muted);margin-right:2px;">Sort:</span>
+                    <button class="tr-sort-btn active" data-sort="recent" onclick="tSetSort('recent')">Recent</button>
+                    <button class="tr-sort-btn" data-sort="rarity_high" onclick="tSetSort('rarity_high')">Rarity ↑</button>
+                    <button class="tr-sort-btn" data-sort="rarity_low" onclick="tSetSort('rarity_low')">Rarity ↓</button>
+                </div>
+            </div>
+
+            <div id="tr-grid">
+                <div class="tr-empty"><i class="bx bx-loader-alt" style="animation:spin 0.8s linear infinite;"></i><span>Loading listings…</span></div>
+            </div>
+
+            <div id="tr-pagination">
+                <button class="tr-page-btn" id="tr-prev-btn" onclick="tPrevPage()" disabled title="Previous page"><i class="bx bx-chevron-left"></i></button>
+                <span id="tr-page-indicator"></span>
+                <button class="tr-page-btn" id="tr-next-btn" onclick="tNextPage()" disabled title="Next page"><i class="bx bx-chevron-right"></i></button>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- ── List a Card Modal ── -->
+<div class="tr-modal-overlay" id="tr-list-modal" onclick="if(event.target===this)tCloseModal('tr-list-modal')">
+    <div class="tr-modal">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-list-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">List a Card</p>
+        <p class="tr-modal-sub">Choose a card from your collection to put on the market.</p>
+        <div class="tr-picker-filters">
+            <input type="text" class="tr-picker-search" id="tr-list-search" placeholder="Search by name, rarity, or trait…" oninput="tOnListSearch(this.value)">
+            <div class="tr-picker-chip-row" id="tr-list-trait-chips"></div>
+            <div class="tr-picker-count" id="tr-list-count"></div>
+        </div>
+        <div class="tr-picker-grid" id="tr-list-grid"></div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-list-modal')">Cancel</button>
+            <button class="tr-btn-primary" id="tr-list-confirm" disabled onclick="tConfirmList()">List Selected Card</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Make an Offer Modal ── -->
+<div class="tr-modal-overlay" id="tr-offer-modal" onclick="if(event.target===this)tCloseModal('tr-offer-modal')">
+    <div class="tr-modal">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-offer-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Make an Offer</p>
+        <p class="tr-modal-sub" id="tr-offer-sub">Choose one of your cards to offer in exchange.</p>
+        <div class="tr-picker-grid" id="tr-offer-grid"></div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-offer-modal')">Cancel</button>
+            <button class="tr-btn-primary" id="tr-offer-confirm" disabled onclick="tConfirmOffer()">Submit Offer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Offers Received Modal ── -->
+<div class="tr-modal-overlay" id="tr-offers-modal" onclick="if(event.target===this)tCloseModal('tr-offers-modal')">
+    <div class="tr-modal">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-offers-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Offers Received</p>
+        <p class="tr-modal-sub" id="tr-offers-sub">Accept an offer to complete the trade.</p>
+        <div id="tr-offers-list"></div>
+        <div class="tr-modal-actions" style="margin-top:8px;">
+            <button class="tr-btn-danger" id="tr-cancel-listing-btn" onclick="tCancelMyListing()"><i class="bx bx-x-circle"></i> Cancel Listing</button>
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-offers-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="tr-toast"></div>
+
+<script src="/nav-user-menu.js"></script>
+<script src="/castle-nav.js"></script>
+<script src="/trading.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 /**
- * Shared user avatar dropdown (index + dashboard). Requires Font Awesome (fa-solid + fa-brands).
+ * Shared user avatar dropdown (index + dashboard). Requires Boxicons (bx bxs-* + bxl-*).
  * StreamElements-style identity row: platform icons + role, chevron expands team channels.
  */
 (function () {
@@ -60,7 +60,7 @@
                 return;
             }
             const twitch = document.createElement('i');
-            twitch.className = 'fa-brands fa-twitch text-[11px] leading-none';
+            twitch.className = 'bx bxl-twitch text-[11px] leading-none';
             twitch.style.color = '#9146FF';
             twitch.title = 'Twitch';
             container.appendChild(twitch);
@@ -74,7 +74,7 @@
                 container.appendChild(kickIconEl());
             } else {
                 const twitch = document.createElement('i');
-                twitch.className = 'fa-brands fa-twitch text-[11px] leading-none';
+                twitch.className = 'bx bxl-twitch text-[11px] leading-none';
                 twitch.style.color = '#9146FF';
                 twitch.title = 'Twitch';
                 container.appendChild(twitch);
@@ -334,14 +334,14 @@
         btn.style.display = '';
         if (onDashboard) {
             btn.innerHTML = `
-                <i class="fa-solid fa-eye text-void-muted w-4 text-center shrink-0"></i>
+                <i class="bx bxs-show text-void-muted w-4 text-center shrink-0"></i>
                 <span class="flex flex-col leading-tight normal-case">
                     <span class="uppercase tracking-widest">Viewer View</span>
                     <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Back to your collection</span>
                 </span>`;
         } else {
             btn.innerHTML = `
-                <i class="fa-solid fa-clapperboard text-void-muted w-4 text-center shrink-0"></i>
+                <i class="bx bxs-film text-void-muted w-4 text-center shrink-0"></i>
                 <span class="flex flex-col leading-tight normal-case">
                     <span class="uppercase tracking-widest">Creator View</span>
                     <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Manage your channel</span>
@@ -369,7 +369,7 @@
         };
 
         const editProfileBtn = makeBtn('nav-user-menu-edit-profile', `
-            <i class="fa-solid fa-user-pen text-void-muted w-4 text-center shrink-0"></i>
+            <i class="bx bxs-user-detail text-void-muted w-4 text-center shrink-0"></i>
             <span class="flex flex-col leading-tight normal-case">
                 <span class="uppercase tracking-widest">Edit Profile</span>
                 <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Public page &amp; display name</span>
@@ -378,7 +378,7 @@
         const switchViewBtn = makeBtn('nav-user-menu-switch-view', '');
 
         const redeemBtn = makeBtn('nav-user-menu-redeem', `
-            <i class="fa-solid fa-ticket text-void-muted w-4 text-center shrink-0"></i>
+            <i class="bx bxs-purchase-tag text-void-muted w-4 text-center shrink-0"></i>
             <span class="flex flex-col leading-tight normal-case">
                 <span class="uppercase tracking-widest">Redeem a Code</span>
                 <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Pack or trade code</span>

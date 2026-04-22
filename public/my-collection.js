@@ -6,7 +6,9 @@
         return m ? m.content.replace(/\/$/, '') : '';
     })();
 
-    let collections = [];   // array of { streamer_id, streamer_username, brand_name, brand_color_primary, avatar_url, pack_image_url, card_count, preview_images }
+    let collections = [];   // array of { streamer_id, streamer_username, brand_name, brand_color_primary, avatar_url, pack_image_url, card_count, preview_images, is_favorited }
+    let discoverCollections = [];
+    let mutualCollections = [];
     let currentUser = null;
     let searchQuery = '';
 
@@ -28,6 +30,34 @@
     function escapeHTML(s) {
         if (s == null) return '';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    async function writeFetch(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body || {})
+        });
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw new Error(text || `HTTP ${res.status}`);
+        }
+        return res.json().catch(() => ({}));
+    }
+
+    function sortCollections(items) {
+        return [...(items || [])].sort((a, b) => {
+            const af = a?.is_favorited ? 1 : 0;
+            const bf = b?.is_favorited ? 1 : 0;
+            if (bf !== af) return bf - af;
+            const ac = Number(a?.card_count || 0);
+            const bc = Number(b?.card_count || 0);
+            if (bc !== ac) return bc - ac;
+            const an = (a?.brand_name || a?.streamer_username || '').toLowerCase();
+            const bn = (b?.brand_name || b?.streamer_username || '').toLowerCase();
+            return an.localeCompare(bn);
+        });
     }
 
     function hexToRgb(hex) {
@@ -63,14 +93,16 @@
                 return;
             }
 
-            // Set up nav profile dropdown
+            // Set up nav profile dropdown + shared nav links
             setupNavUser(currentUser);
+            if (window.castleNav) castleNav.autoInit();
 
             // Fetch collections
             const colRes = await fetch(`${BACKEND}/api/my-collections`, { credentials: 'include' });
             if (colRes.ok) {
                 collections = await colRes.json();
                 if (!Array.isArray(collections)) collections = [];
+                collections = sortCollections(collections);
             }
 
             hide('mc-loading');
@@ -79,6 +111,7 @@
             renderHeader();
             renderBinders();
             renderPurchaseList();
+            loadPendingPacks();
 
         } catch (err) {
             console.error('[MyCollection] Init error:', err);
@@ -124,7 +157,7 @@
         const emptySlots = Array(emptyCount).fill(null).map(() => `
             <div class="binder-tile binder-empty">
                 <div class="binder-book binder-book--empty">
-                    <div class="binder-empty-icon"><i class="fa-solid fa-plus"></i></div>
+                    <div class="binder-empty-icon"><i class="bx bxs-plus"></i></div>
                 </div>
                 <div class="binder-label">
                     <span class="binder-name" style="color:var(--void-muted)">Empty Slot</span>
@@ -151,8 +184,13 @@
         const countColor   = isLight ? 'rgba(0,0,0,0.28)'         : 'rgba(255,255,255,0.28)';
         const countShadow  = isLight ? '0 1px 0 rgba(255,255,255,0.14)'  : '0 1px 1px rgba(0,0,0,0.5)';
 
+        const favTitle = c.is_favorited ? 'Unfavorite binder' : 'Favorite binder';
+        const favClass = c.is_favorited ? 'is-favorited' : '';
         return `
         <a class="binder-tile" href="/binder/${handle}" style="--binder-accent-rgb: ${accentRgb}" data-light="${isLight}">
+            <button class="binder-fav-btn ${favClass}" type="button" title="${favTitle}" onclick="event.preventDefault();event.stopPropagation();window._mcToggleFavorite('${escapeHTML(c.streamer_id)}')">
+                <i class="fa-${c.is_favorited ? 'solid' : 'regular'} fa-star"></i>
+            </button>
             <div class="binder-book">
                 <!-- Spine dark strip -->
                 <div class="binder-spine-strip"></div>
@@ -179,6 +217,50 @@
                 </div>
             </div>
         </a>`;
+    }
+
+    function recommendationCardHTML(c, reasonLabel) {
+        const rawColor = c.brand_color_primary || '#3730a3';
+        const { rgb: accentRgb } = hexToRgb(rawColor);
+        const name = escapeHTML(c.brand_name || c.streamer_username || 'Unknown');
+        const handle = escapeHTML(c.streamer_username || '');
+        const overlap = Number(c.overlap_count || c.shared_collectors || 0);
+        const overlapText = overlap > 0 ? `${overlap} mutual${overlap === 1 ? '' : 's'}` : reasonLabel;
+        return `
+        <a class="mc-rec-card" href="/binder/${handle}" style="--binder-accent-rgb:${accentRgb}">
+            <div class="mc-rec-name">${name}</div>
+            <div class="mc-rec-meta">@${handle}</div>
+            <div class="mc-rec-reason">${escapeHTML(overlapText)}</div>
+        </a>`;
+    }
+
+    function discoverModalCardHTML(c, reasonText) {
+        const rawColor = c.brand_color_primary || '#3730a3';
+        const { rgb: accentRgb } = hexToRgb(rawColor);
+        const name = escapeHTML(c.brand_name || c.streamer_username || 'Unknown');
+        const handle = escapeHTML(c.streamer_username || '');
+        const count = Number(c.card_count || 0);
+        return `
+        <a class="mc-rec-card" href="/binder/${handle}" style="--binder-accent-rgb:${accentRgb}">
+            <div class="mc-rec-name">${name}</div>
+            <div class="mc-rec-meta">@${handle}</div>
+            <div class="mc-rec-reason">${escapeHTML(reasonText || `${count} card${count === 1 ? '' : 's'} collected`)}</div>
+        </a>`;
+    }
+
+    function renderRecommendations() {
+        const discoverWrap = document.getElementById('mc-discover-results');
+        const mutualWrap = document.getElementById('mc-mutual-results');
+        if (discoverWrap) {
+            discoverWrap.innerHTML = discoverCollections.length
+                ? discoverCollections.map(c => recommendationCardHTML(c, 'Followed creator')).join('')
+                : '<p class="mc-rec-empty">No follow-based binder suggestions yet.</p>';
+        }
+        if (mutualWrap) {
+            mutualWrap.innerHTML = mutualCollections.length
+                ? mutualCollections.map(c => recommendationCardHTML(c, 'Mutual collection')).join('')
+                : '<p class="mc-rec-empty">No mutual binder recommendations yet.</p>';
+        }
     }
 
     /* ── Purchase modal ──────────────────────────────────────────────────── */
@@ -230,6 +312,174 @@
         renderBinders();
     }
 
+    async function toggleFavorite(streamerId) {
+        if (!streamerId) return;
+        const idx = collections.findIndex(c => c.streamer_id === streamerId);
+        if (idx < 0) return;
+        const prev = collections[idx].is_favorited;
+        collections[idx].is_favorited = !prev;
+        collections = sortCollections(collections);
+        renderBinders();
+        try {
+            const result = await writeFetch(`${BACKEND}/api/favorites/toggle`, { streamer_id: streamerId });
+            const isFav = !!result?.favorited;
+            collections = collections.map(c => c.streamer_id === streamerId ? { ...c, is_favorited: isFav } : c);
+            collections = sortCollections(collections);
+            renderBinders();
+        } catch (err) {
+            collections = collections.map(c => c.streamer_id === streamerId ? { ...c, is_favorited: prev } : c);
+            collections = sortCollections(collections);
+            renderBinders();
+            console.error('[MyCollection] favorite toggle failed:', err);
+        }
+    }
+
+    async function loadDiscover() {
+        const btn = document.getElementById('mc-discover-btn');
+        if (btn) btn.setAttribute('disabled', 'disabled');
+        try {
+            const res = await fetch(`${BACKEND}/api/my-collections/discover`, { credentials: 'include' });
+            discoverCollections = res.ok ? (await res.json()) : [];
+            if (!Array.isArray(discoverCollections)) discoverCollections = [];
+        } catch {
+            discoverCollections = [];
+        } finally {
+            if (btn) btn.removeAttribute('disabled');
+            renderRecommendations();
+        }
+    }
+
+    async function loadMutuals() {
+        const btn = document.getElementById('mc-mutual-btn');
+        if (btn) btn.setAttribute('disabled', 'disabled');
+        try {
+            const res = await fetch(`${BACKEND}/api/my-collections/mutuals`, { credentials: 'include' });
+            mutualCollections = res.ok ? (await res.json()) : [];
+            if (!Array.isArray(mutualCollections)) mutualCollections = [];
+        } catch {
+            mutualCollections = [];
+        } finally {
+            if (btn) btn.removeAttribute('disabled');
+            renderRecommendations();
+        }
+    }
+
+    async function openDiscoverCreators() {
+        const modal = document.getElementById('discover-creators-modal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+
+        const tabFollowed = document.getElementById('discover-tab-followed');
+        const tabRecommended = document.getElementById('discover-tab-recommended');
+        const panelFollowed = document.getElementById('discover-followed-panel');
+        const panelRecommended = document.getElementById('discover-recommended-panel');
+        const followedGrid = document.getElementById('discover-followed-grid');
+        const recommendedGrid = document.getElementById('discover-recommended-grid');
+        const followedEmpty = document.getElementById('discover-followed-empty');
+        const recommendedEmpty = document.getElementById('discover-recommended-empty');
+        const followedCount = document.getElementById('discover-followed-count');
+        const recommendedCount = document.getElementById('discover-recommended-count');
+        const loading = document.getElementById('discover-loading');
+        const error = document.getElementById('discover-error');
+
+        if (error) error.classList.add('hidden');
+        if (loading) loading.classList.remove('hidden');
+        if (followedGrid) followedGrid.innerHTML = '';
+        if (recommendedGrid) recommendedGrid.innerHTML = '';
+        if (followedEmpty) followedEmpty.classList.add('hidden');
+        if (recommendedEmpty) recommendedEmpty.classList.add('hidden');
+
+        if (tabFollowed && tabRecommended && panelFollowed && panelRecommended) {
+            tabFollowed.classList.add('bg-void-accent', 'text-void-bg');
+            tabRecommended.classList.remove('bg-void-accent', 'text-void-bg');
+            panelFollowed.classList.remove('hidden');
+            panelRecommended.classList.add('hidden');
+
+            tabFollowed.onclick = () => {
+                tabFollowed.classList.add('bg-void-accent', 'text-void-bg');
+                tabRecommended.classList.remove('bg-void-accent', 'text-void-bg');
+                panelFollowed.classList.remove('hidden');
+                panelRecommended.classList.add('hidden');
+            };
+            tabRecommended.onclick = () => {
+                tabRecommended.classList.add('bg-void-accent', 'text-void-bg');
+                tabFollowed.classList.remove('bg-void-accent', 'text-void-bg');
+                panelRecommended.classList.remove('hidden');
+                panelFollowed.classList.add('hidden');
+            };
+        }
+
+        const followed = Array.isArray(collections) ? collections : [];
+        if (followedGrid) {
+            if (!followed.length && followedEmpty) {
+                followedEmpty.classList.remove('hidden');
+            } else {
+                followedGrid.innerHTML = followed.map(c => discoverModalCardHTML(c, `${Number(c.card_count || 0)} cards collected`)).join('');
+            }
+        }
+        if (followedCount) followedCount.textContent = `${followed.length} followed`;
+
+        try {
+            const res = await fetch(`${BACKEND}/api/my-collections/mutuals`, { credentials: 'include' });
+            const mutuals = res.ok ? await res.json() : [];
+            mutualCollections = Array.isArray(mutuals) ? mutuals : [];
+            if (recommendedGrid) {
+                if (!mutualCollections.length && recommendedEmpty) {
+                    recommendedEmpty.classList.remove('hidden');
+                } else {
+                    recommendedGrid.innerHTML = mutualCollections.map(c => {
+                        const overlap = Number(c.overlap_count || c.shared_collectors || 0);
+                        const reason = overlap > 0 ? `${overlap} mutual collector${overlap === 1 ? '' : 's'}` : 'Mutual recommendation';
+                        return discoverModalCardHTML(c, reason);
+                    }).join('');
+                }
+            }
+            if (recommendedCount) recommendedCount.textContent = `${mutualCollections.length} recommended`;
+        } catch (err) {
+            console.error('[MyCollection] discover modal failed:', err);
+            if (error) error.classList.remove('hidden');
+        } finally {
+            if (loading) loading.classList.add('hidden');
+        }
+    }
+
+    function closeDiscoverCreators() {
+        const modal = document.getElementById('discover-creators-modal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = '';
+    }
+
+    /* ── Pending packs ───────────────────────────────────────────────────── */
+    async function loadPendingPacks() {
+        // Always make the right panel clickable
+        const rightPanel = document.querySelector('#mc-right .side-panel');
+        if (rightPanel) {
+            rightPanel.style.cursor = 'pointer';
+            rightPanel.onclick = () => { window.location.href = '/pack-opening.html'; };
+        }
+
+        try {
+            const res = await fetch(`${BACKEND}/api/packs/pending`, { credentials: 'include' });
+            if (!res.ok) return;
+            const packs = await res.json();
+            const count = Array.isArray(packs) ? packs.length : 0;
+            if (count === 0) return;
+
+            // Update count badge
+            const badge = document.getElementById('mc-pack-count');
+            if (badge) { badge.textContent = count; badge.classList.remove('hidden'); }
+
+            const label = document.querySelector('#mc-right .side-panel-label');
+            if (label) {
+                label.innerHTML = `Open Your<br><span style="color:var(--void-accent)">${count} Pack${count !== 1 ? 's' : ''}</span>`;
+            }
+        } catch (_) {}
+    }
+
     /* ── Keyboard ────────────────────────────────────────────────────────── */
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') closePurchase();
@@ -239,6 +489,11 @@
     window._mcSearch        = search;
     window._mcOpenPurchase  = openPurchase;
     window._mcClosePurchase = closePurchase;
+    window._mcToggleFavorite = toggleFavorite;
+    window._mcLoadDiscover = loadDiscover;
+    window._mcLoadMutuals = loadMutuals;
+    window.openDiscoverCreators = openDiscoverCreators;
+    window.closeDiscoverCreators = closeDiscoverCreators;
 
     /* ── Boot ────────────────────────────────────────────────────────────── */
     init();
