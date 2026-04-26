@@ -866,6 +866,9 @@
             <button class="tr-nav-btn" id="tr-btn-mine" onclick="tViewMyListings()">
                 <i class="bx bxs-layer"></i> Your listings
             </button>
+            <button class="tr-nav-btn" id="tr-btn-find-traders" onclick="tOpenWishlistMatches()" style="color:var(--void-accent)">
+                <i class="bx bx-search-alt-2"></i> Find Traders
+            </button>
 
             <div id="tr-auth-status" class="hidden"></div>
         </aside>
@@ -939,6 +942,21 @@
         <div class="tr-modal-actions" style="margin-top:8px;">
             <button class="tr-btn-danger" id="tr-cancel-listing-btn" onclick="tCancelMyListing()"><i class="bx bx-x-circle"></i> Cancel Listing</button>
             <button class="tr-btn-ghost" onclick="tCloseModal('tr-offers-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Wishlist matches modal -->
+<div class="tr-modal-overlay" id="tr-wishlist-modal" onclick="if(event.target===this)tCloseModal('tr-wishlist-modal')">
+    <div class="tr-modal-box" style="max-width:520px">
+        <div class="tr-modal-header">
+            <h2 class="tr-modal-title">Find Traders</h2>
+            <button class="tr-modal-x" onclick="tCloseModal('tr-wishlist-modal')"><i class="bx bx-x"></i></button>
+        </div>
+        <p class="tr-modal-sub">Players who own something you want and want something you own.</p>
+        <div id="tr-wishlist-list" class="tr-picker-grid" style="grid-template-columns:1fr;gap:8px;max-height:420px;overflow-y:auto"></div>
+        <div class="tr-modal-actions" style="margin-top:8px">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-wishlist-modal')">Close</button>
         </div>
     </div>
 </div>

@@ -8983,17 +8983,17 @@ function renderLeaderboard() {
                     <div class="w-12 text-center flex-shrink-0">
                         <div class="text-2xl font-bold ${rankColor} italic">${rankIcon}</div>
                     </div>
-                    
-                    <div class="relative flex-shrink-0">
-                        <img src="${avatarUrl}" 
+
+                    <a href="/profile/${encodeURIComponent(user.username)}" class="relative flex-shrink-0 block">
+                        <img src="${avatarUrl}"
                              class="w-16 h-16 rounded-[1.5rem] border-2 border-void-bg void-shadow">
                         ${isCurrentUser ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-void-accent rounded-full border-2 border-void-bg flex items-center justify-center"><i class="bx bxs-user text-[8px] text-void-bg"></i></div>' : ''}
-                    </div>
- 
+                    </a>
+
                     <div class="flex-1 min-w-0 pr-6 border-r border-white/5">
                         <div class="text-[10px] font-black text-void-muted uppercase tracking-[0.2em] mb-1">Collector</div>
                         <div class="font-bold text-void-text truncate text-xl uppercase italic">
-                            ${username}
+                            <a href="/profile/${encodeURIComponent(user.username)}" class="hover:text-void-accent transition-colors">${username}</a>
                             ${isCurrentUser ? '<span class="ml-2 text-[8px] bg-void-accent text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">YOU</span>' : ''}
                         </div>
                     </div>

@@ -40,6 +40,9 @@ let ownedCardIds  = new Set();
 let activeSetId  = '__all__';
 let activeRarity = '__all__';
 
+// card_id → { user_card_id, rarity } for the logged-in user's owned cards on this creator
+let ownedUserCards = new Map();
+
 let showcaseCards = [];
 let showcaseIdx   = 0;
 let showcaseTimer = null;
@@ -92,6 +95,9 @@ console.log('[Collection] Script loaded. CP_SLUG:', CP_SLUG, '| CP_BACKEND:', CP
             if (colRes.ok) {
                 const col = await colRes.json();
                 ownedCardIds = new Set((col || []).map(c => c.card_id));
+                ownedUserCards = new Map((col || [])
+                    .filter(c => c.user_card_id)
+                    .map(c => [c.card_id, { user_card_id: c.user_card_id, rarity: c.rarity }]));
                 const binderBtn = document.getElementById('cp-binder-btn');
                 const binderCount = document.getElementById('cp-binder-count');
                 if (binderBtn) binderBtn.classList.remove('hidden');
@@ -125,6 +131,7 @@ console.log('[Collection] Script loaded. CP_SLUG:', CP_SLUG, '| CP_BACKEND:', CP
         renderLeaderboard();
         renderCatalog();
         updateProgress();
+        loadActivityFeed(streamerData.id);
 
         document.getElementById('cp-loading')?.classList.add('hidden');
         document.getElementById('cp-main')?.classList.remove('hidden');
@@ -424,7 +431,26 @@ function openModal(cardId) {
     if (metaEl) { metaEl.textContent = [card.rarity, card.type, card.set_name].filter(Boolean).join(' · '); metaEl.style.color = rarityColor(card.rarity); }
     const descEl = document.getElementById('cp-modal-desc'); if (descEl) descEl.textContent = card.description || 'No description.';
     const statsEl = document.getElementById('cp-modal-stats'); if (statsEl) statsEl.innerHTML = card.card_number != null ? `<div class="cp-modal-stat"><div class="label">Card #</div><div class="value">#${card.card_number}</div></div>` : '';
-    document.getElementById('cp-modal-owned-badge')?.classList.toggle('hidden', !ownedCardIds.has(card.id));
+    const isOwned = ownedCardIds.has(card.id);
+    document.getElementById('cp-modal-owned-badge')?.classList.toggle('hidden', !isOwned);
+
+    const burnWrap = document.getElementById('cp-modal-burn-wrap');
+    if (burnWrap) {
+        const owned = ownedUserCards.get(card.id);
+        if (owned) {
+            const dustMult = { legendary: 4, epic: 3, rare: 2 }[(card.rarity || '').toLowerCase()] || 1;
+            const dustEarned = 5 * dustMult;
+            const label = document.getElementById('cp-modal-burn-label');
+            if (label) label.textContent = `Burn for ${dustEarned} dust`;
+            burnWrap.classList.remove('hidden');
+            burnWrap.dataset.userCardId = owned.user_card_id;
+            burnWrap.dataset.cardName = card.name;
+            burnWrap.dataset.dustEarned = dustEarned;
+        } else {
+            burnWrap.classList.add('hidden');
+        }
+    }
+
     document.getElementById('cp-card-modal')?.classList.add('open');
     document.body.style.overflow = 'hidden';
 }
@@ -503,8 +529,107 @@ function renderBinder() {
 }
 
 /* ── Global handles (called from onclick in HTML) ───────────────────────────── */
+/* ── Activity feed ──────────────────────────────────────────────────────────── */
+function renderFeed(rows) {
+    const list = document.getElementById('cp-feed-list');
+    if (!list) return;
+    if (!rows?.length) {
+        list.innerHTML = `<p style="font-size:0.65rem;color:var(--void-muted);text-align:center;padding:20px 0">No recent activity yet</p>`;
+        return;
+    }
+    const ICONS = { grant: '🃏', trade: '🤝', battle: '⚔️' };
+    list.innerHTML = rows.slice(0, 20).map(r => {
+        const icon = ICONS[r.category] || '📋';
+        const ts = new Date(r.created_at);
+        const age = Math.floor((Date.now() - ts) / 60000);
+        const timeStr = age < 1 ? 'just now' : age < 60 ? `${age}m ago` : `${Math.floor(age / 60)}h ago`;
+        return `
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.02);border-radius:10px;border:1px solid rgba(255,255,255,0.04)">
+            <span style="font-size:0.85rem;flex-shrink:0;margin-top:1px">${icon}</span>
+            <div style="flex:1;min-width:0">
+                <div style="font-size:0.65rem;color:var(--void-text);line-height:1.4">${escapeHTML(r.message)}</div>
+            </div>
+            <span style="font-size:0.55rem;color:var(--void-muted);white-space:nowrap;flex-shrink:0">${timeStr}</span>
+        </div>`;
+    }).join('');
+}
+
+async function loadActivityFeed(streamerId) {
+    if (!streamerId) return;
+    try {
+        const res = await fetch(`${CP_BACKEND}/api/public/activity-feed?streamer_id=${encodeURIComponent(streamerId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        renderFeed(data.feed || []);
+    } catch (_) {}
+}
+
+/* ── Card burn ──────────────────────────────────────────────────────────────── */
+function openBurnConfirm() {
+    const wrap = document.getElementById('cp-modal-burn-wrap');
+    if (!wrap) return;
+    const cardName = wrap.dataset.cardName || 'this card';
+    const dust = wrap.dataset.dustEarned || '?';
+    const el = document.getElementById('cp-burn-confirm-text');
+    if (el) el.textContent = `Burn "${cardName}" and receive ${dust} magic dust? This cannot be undone.`;
+    const modal = document.getElementById('cp-burn-modal');
+    if (modal) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
+    document.body.style.overflow = 'hidden';
+}
+
+function cancelBurn() {
+    const modal = document.getElementById('cp-burn-modal');
+    if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+}
+
+async function confirmBurn() {
+    const wrap = document.getElementById('cp-modal-burn-wrap');
+    if (!wrap) return;
+    const userCardId = wrap.dataset.userCardId;
+    if (!userCardId) return;
+
+    const btn = document.getElementById('cp-burn-confirm-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Burning…'; }
+
+    try {
+        const res = await fetch(`${CP_BACKEND}/api/dust/burn-card`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_card_id: userCardId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+        cancelBurn();
+        closeModal();
+
+        // Remove from local state so the UI reflects the burn immediately
+        for (const [cid, owned] of ownedUserCards.entries()) {
+            if (owned.user_card_id === userCardId) {
+                ownedUserCards.delete(cid);
+                ownedCardIds.delete(cid);
+                break;
+            }
+        }
+        renderCatalog();
+        updateProgress();
+
+        // Show dust earned toast if toast helper exists
+        if (window.showToast) {
+            window.showToast(`Card burned! +${data.dust_earned} dust (total: ${data.magic_dust})`, 'success');
+        }
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Burn it'; }
+        alert(e.message || 'Burn failed');
+    }
+}
+
 window._cpOpenModal    = openModal;
 window._cpCloseModal   = closeModal;
+window._cpBurnCard     = openBurnConfirm;
+window._cpCancelBurn   = cancelBurn;
+window._cpConfirmBurn  = confirmBurn;
 window._cpOpenBinder   = openBinder;
 window._cpCloseBinder  = closeBinder;
 window._cpFilterSet    = function(setId)  { activeSetId = setId;    document.querySelectorAll('.set-pack-card, .set-tab-all, .set-tab').forEach(t=>t.classList.toggle('active',t.dataset.set===setId)); renderCatalog(); updateProgress(); };

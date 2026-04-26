@@ -4,6 +4,7 @@
  */
 (function () {
     const ACT_AS_KEY = 'castle_act_as_streamer_id';
+    const NAME_ICON_SRC = '/Affiliate.png';
 
     function getBackendUrl() {
         if (typeof getCastleBackendOrigin === 'function') return getCastleBackendOrigin();
@@ -113,15 +114,45 @@
         collapseTeamPanel();
     }
 
+    function ensureNameIconLabel(nameEl) {
+        if (!nameEl) return null;
+        let textEl = document.getElementById('nav-user-menu-name-text');
+        if (textEl) return textEl;
+
+        nameEl.textContent = '';
+        nameEl.classList.add('flex', 'items-center', 'gap-1.5', 'text-2xl');
+
+        const icon = document.createElement('img');
+        icon.id = 'nav-user-menu-name-icon';
+        icon.src = NAME_ICON_SRC;
+        icon.alt = '';
+        icon.className = 'h-5 w-5 object-contain shrink-0';
+        icon.width = 20;
+        icon.height = 20;
+        icon.setAttribute('aria-hidden', 'true');
+
+        textEl = document.createElement('span');
+        textEl.id = 'nav-user-menu-name-text';
+        textEl.className = 'truncate';
+
+        nameEl.appendChild(textEl);
+        nameEl.appendChild(icon);
+        return textEl;
+    }
+
     function updateNavUserMenuLabels() {
         const u = getCastleNavUser();
         const nameEl = document.getElementById('nav-user-menu-name');
         const roleEl = document.getElementById('nav-user-menu-role');
         const navNick = document.getElementById('nav-username');
         const navRole = document.getElementById('nav-user-role');
+        const iconWrap = document.getElementById('nav-user-platform-icons');
         const label = u ? (u.display_name || u.name || 'User') : '—';
         const roleText = accountRoleLabel(u);
-        if (nameEl) nameEl.textContent = label;
+        const nameTextEl = ensureNameIconLabel(nameEl);
+        if (iconWrap) iconWrap.classList.add('hidden');
+        if (roleEl) roleEl.classList.add('hidden');
+        if (nameTextEl) nameTextEl.textContent = label;
         if (roleEl) roleEl.textContent = roleText;
         if (navNick) navNick.textContent = label;
         if (navRole) navRole.textContent = roleText;
@@ -219,6 +250,7 @@
             auth = await fetchAuthStatus();
         }
         renderPlatformIcons(iconWrap, auth, u);
+        if (iconWrap) iconWrap.classList.add('hidden');
 
         // If we don't have the trade_code, fetch it
         if (!u || !u.trade_code) {
@@ -336,7 +368,7 @@
             btn.innerHTML = `
                 <i class="bx bxs-show text-void-muted w-4 text-center shrink-0"></i>
                 <span class="flex flex-col leading-tight normal-case">
-                    <span class="uppercase tracking-widest">Viewer View</span>
+                    <span class="uppercase tracking-widest">Collector Mode</span>
                     <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Back to your collection</span>
                 </span>`;
         } else {

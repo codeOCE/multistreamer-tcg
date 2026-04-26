@@ -688,11 +688,14 @@
             position: relative;
             width: min(210px, 80%);
             height: 295px;
+            margin-bottom: 28px;
         }
 
         .side-pack-stack .side-pack-img {
             position: absolute;
             width: 100%;
+            height: 100%;
+            object-fit: contain;
             top: 0;
             left: 0;
         }
@@ -1043,6 +1046,24 @@
 
                 <!-- Binder grid — injected by JS -->
                 <div id="mc-binders"></div>
+
+                <!-- ── Daily Goals ── -->
+                <div id="mc-goals-section" class="hidden" style="margin-top:48px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap">
+                        <div>
+                            <h2 style="font-family:'Outfit',sans-serif;font-weight:900;font-size:1rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--void-text);margin:0">Daily Goals</h2>
+                            <p id="mc-goals-reset" style="font-size:0.6rem;color:var(--void-muted);margin-top:2px">Resets at UTC midnight</p>
+                        </div>
+                        <div id="mc-streak-badge" class="hidden" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:6px 14px;display:flex;align-items:center;gap:6px">
+                            <span style="font-size:1rem">🔥</span>
+                            <div>
+                                <div id="mc-streak-current" style="font-weight:900;font-size:0.85rem;color:var(--void-accent);line-height:1"></div>
+                                <div style="font-size:0.55rem;color:var(--void-muted);text-transform:uppercase;letter-spacing:0.1em">day streak</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="mc-goals-list" style="display:flex;flex-direction:column;gap:10px"></div>
+                </div>
 
             </div>
 

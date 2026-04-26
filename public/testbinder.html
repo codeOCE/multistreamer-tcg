@@ -1,0 +1,1921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Binder — Castle TCG</title>
+  <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/tailwind-built.css">
+
+  <style>
+    :root {
+      --accent: var(--void-accent);
+      --accent-rgb: var(--void-accent-rgb);
+      --flip-half: 260ms;
+      --pg-w: 540px;
+      --pg-h: 760px;
+      --spine-w: 3px;
+      --leaf-right: calc(var(--pg-w) + var(--spine-w));
+    }
+
+    body::before { opacity: 0.06; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* ══════════════════════════════════════════════
+       PAGE SHELL — 3-column layout
+    ══════════════════════════════════════════════ */
+    #page-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 300px 1fr 280px;
+      grid-template-rows: 80px 1fr;
+      grid-template-areas: "nav nav nav" "left main right";
+    }
+
+    /* ══════════════════════════════════════════════
+       LEFT SIDEBAR
+    ══════════════════════════════════════════════ */
+    #left-panel {
+      grid-area: left;
+      border-right: 1px solid rgba(255,255,255,0.05);
+      padding: 20px 0;
+      display: flex; flex-direction: column; gap: 4px;
+      position: sticky; top: 80px;
+      height: calc(100vh - 80px);
+      overflow-y: auto;
+    }
+    .panel-section-title {
+      font-size: 0.52rem; font-weight: 800;
+      letter-spacing: 0.26em; text-transform: uppercase;
+      color: var(--void-muted); padding: 0 22px; margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .new-badge {
+      font-size: 0.42rem; padding: 2px 6px; border-radius: 99px;
+      background: rgba(var(--accent-rgb),0.15); color: rgba(var(--accent-rgb),1);
+      border: 1px solid rgba(var(--accent-rgb),0.25); letter-spacing: 0.1em;
+    }
+    .binder-tab {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 22px; cursor: pointer;
+      transition: background 0.18s; position: relative;
+      border: none; background: none; width: 100%; text-align: left;
+    }
+    .binder-tab:hover { background: rgba(255,255,255,0.03); }
+    .binder-tab.active { background: rgba(var(--accent-rgb),0.08); }
+    .binder-tab.active::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+      width: 2px; background: rgba(var(--accent-rgb),1); border-radius: 0 2px 2px 0;
+    }
+    .binder-tab-dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(var(--accent-rgb),0.4);
+    }
+    .binder-tab.active .binder-tab-dot { background: rgba(var(--accent-rgb),1); }
+    .binder-tab-name {
+      font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--void-muted); flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .binder-tab.active .binder-tab-name { color: rgba(var(--accent-rgb),1); }
+    .binder-tab-count { font-size: 0.5rem; font-weight: 800; color: var(--void-muted); }
+    .trash-btn {
+      opacity: 0; font-size: 0.7rem; color: var(--void-muted);
+      padding: 2px 4px; border-radius: 4px; border: none;
+      background: none; cursor: pointer; transition: opacity 0.15s, color 0.15s;
+    }
+    .binder-tab:hover .trash-btn { opacity: 1; }
+    .trash-btn:hover { color: #f87171; }
+    .left-divider { height: 1px; background: rgba(255,255,255,0.05); margin: 12px 22px; }
+
+    .new-binder-btn {
+      margin: 0 16px 4px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 9px 16px; border-radius: 10px;
+      border: 1px dashed rgba(var(--accent-rgb),0.3);
+      background: rgba(var(--accent-rgb),0.04); color: rgba(var(--accent-rgb),0.8);
+      font-size: 0.52rem; font-weight: 800; letter-spacing: 0.12em;
+      text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+    }
+    .new-binder-btn:hover {
+      background: rgba(var(--accent-rgb),0.1);
+      border-color: rgba(var(--accent-rgb),0.5);
+      color: rgba(var(--accent-rgb),1);
+    }
+
+    .left-promo {
+      margin: 0 16px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.02); padding: 14px;
+    }
+    .left-promo-title {
+      font-size: 0.55rem; font-weight: 900; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--void-text);
+      text-align: center; margin-bottom: 6px;
+    }
+    .left-promo-desc {
+      font-size: 0.5rem; color: var(--void-muted);
+      text-align: center; line-height: 1.5; margin-bottom: 10px;
+    }
+    .left-promo-btn {
+      display: block; width: 100%; padding: 8px; border-radius: 8px;
+      font-size: 0.52rem; font-weight: 800; letter-spacing: 0.1em;
+      text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+      text-align: center; border: 1px solid transparent; margin-bottom: 5px;
+    }
+    .left-promo-btn:last-child { margin-bottom: 0; }
+    .left-promo-btn.primary { background: rgba(var(--accent-rgb),1); color: #05070a; }
+    .left-promo-btn.primary:hover { opacity: 0.88; }
+    .left-promo-btn.outline { border-color: rgba(255,255,255,0.1); background: transparent; color: var(--void-muted); }
+    .left-promo-btn.outline:hover { color: var(--void-text); border-color: rgba(255,255,255,0.2); }
+
+    /* ══════════════════════════════════════════════
+       CENTER — BOOK
+    ══════════════════════════════════════════════ */
+    #main-area {
+      grid-area: main;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 24px 28px 40px; min-width: 0; overflow: hidden;
+    }
+    #center-header {
+      width: 100%; display: flex; align-items: center;
+      gap: 10px; margin-bottom: 18px;
+    }
+    #center-title {
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      font-size: 1.15rem; letter-spacing: -0.02em;
+      text-transform: uppercase; color: var(--void-text); flex: 1;
+    }
+    #center-title span { color: rgba(var(--accent-rgb),0.75); font-size: 0.78em; }
+    .center-arrow {
+      width: 32px; height: 32px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03); color: var(--void-muted);
+      font-size: 0.85rem; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.18s;
+    }
+    .center-arrow:hover:not(:disabled) {
+      border-color: rgba(var(--accent-rgb),0.3);
+      background: rgba(var(--accent-rgb),0.07);
+      color: rgba(var(--accent-rgb),1);
+    }
+    .center-arrow:disabled { opacity: 0.2; cursor: default; }
+    .share-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 8px;
+      border: 1px solid rgba(var(--accent-rgb),0.25);
+      background: rgba(var(--accent-rgb),0.08); color: rgba(var(--accent-rgb),0.9);
+      font-size: 0.52rem; font-weight: 800; letter-spacing: 0.1em;
+      text-transform: uppercase; cursor: pointer; transition: all 0.18s;
+    }
+    .share-btn:hover {
+      background: rgba(var(--accent-rgb),0.16);
+      border-color: rgba(var(--accent-rgb),0.45);
+      color: rgba(var(--accent-rgb),1);
+    }
+
+    /* ── Book wrap ── */
+    #book-wrap {
+      perspective: 2000px;
+      filter: drop-shadow(0 28px 44px rgba(0,0,0,0.7));
+    }
+    #book {
+      display: flex; align-items: stretch; position: relative;
+    }
+
+    /* ── Static pages ── */
+    .b-page {
+      width: var(--pg-w);
+      height: var(--pg-h);
+      background: #0c0e14;
+      border: 1px solid rgba(255,255,255,0.07);
+      position: relative; overflow: hidden; flex-shrink: 0;
+    }
+    .b-page.left  { border-radius: 8px 0 0 8px; border-right: none; }
+    .b-page.right { border-radius: 0 8px 8px 0; border-left: none; }
+    .b-page.left::after {
+      content:''; position:absolute; top:0; right:0; width:24px; height:100%;
+      background: linear-gradient(to right,transparent,rgba(0,0,0,0.22));
+      pointer-events:none; z-index:2;
+    }
+    .b-page.right::after {
+      content:''; position:absolute; top:0; left:0; width:24px; height:100%;
+      background: linear-gradient(to left,transparent,rgba(0,0,0,0.18));
+      pointer-events:none; z-index:2;
+    }
+    .b-page-num {
+      position:absolute; bottom:10px; z-index:3;
+      font-family:'Space Grotesk',sans-serif; font-size:10px; letter-spacing:0.07em;
+      color:rgba(255,255,255,0.1); pointer-events:none;
+    }
+    .b-page.left  .b-page-num { right:14px; }
+    .b-page.right .b-page-num { left:14px; }
+
+    /* Spine */
+    #book-spine {
+      width: var(--spine-w);
+      background: rgba(var(--accent-rgb),0.18);
+      box-shadow: -6px 0 16px rgba(0,0,0,0.5), 6px 0 16px rgba(0,0,0,0.5);
+      flex-shrink: 0; z-index: 5; position: relative;
+    }
+
+    /* ══════════════════════════════════════════════
+       CARD GRID + SLOTS
+    ══════════════════════════════════════════════ */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 10px; padding: 16px;
+      height: 100%;
+    }
+
+    .card-slot {
+      position: relative; border-radius: 9px; overflow: hidden;
+      cursor: pointer;
+      background: #0d0f14;
+      border: 1px solid rgba(255,255,255,0.05);
+      transition: transform 0.25s cubic-bezier(0.16,1,0.3,1),
+                  box-shadow 0.25s,
+                  border-color 0.25s;
+      --holo-o: 0;
+      --shine-o: 0;
+    }
+    .card-slot img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      position: absolute; inset: 0; z-index: 0;
+    }
+
+    .card-slot .holo-layer {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background: linear-gradient(
+        135deg,
+        rgba(255,0,128,0.4)   0%,
+        rgba(255,165,0,0.35)  16%,
+        rgba(255,255,0,0.35)  33%,
+        rgba(0,255,128,0.35)  50%,
+        rgba(0,200,255,0.35)  66%,
+        rgba(128,0,255,0.35)  83%,
+        rgba(255,0,128,0.4)  100%
+      );
+      background-size: 400% 400%;
+      mix-blend-mode: color-dodge;
+      opacity: var(--holo-o);
+      transition: opacity 0.3s ease;
+      animation: holoShift 6s linear infinite;
+    }
+    @keyframes holoShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .card-slot .shine-layer {
+      position: absolute; inset: 0; z-index: 2; pointer-events: none;
+      background: linear-gradient(
+        105deg,
+        transparent 30%,
+        rgba(255,255,255,0.18) 48%,
+        rgba(255,255,255,0.32) 50%,
+        rgba(255,255,255,0.18) 52%,
+        transparent 70%
+      );
+      opacity: var(--shine-o);
+      transition: opacity 0.3s ease;
+    }
+
+    .rarity-pip {
+      position: absolute; bottom: 5px; right: 5px;
+      width: 6px; height: 6px; border-radius: 50%;
+      z-index: 3; pointer-events: none;
+    }
+    .rarity-Legendary { background:#fbbf24; box-shadow:0 0 6px #fbbf24; }
+    .rarity-Epic      { background:#a855f7; box-shadow:0 0 6px #a855f7; }
+    .rarity-Rare      { background:#3b82f6; box-shadow:0 0 6px #3b82f6; }
+    .rarity-Common    { background:#64748b; }
+
+    .card-slot:hover { transform: translateY(-4px) scale(1.04); }
+    .card-slot.rarity-Legendary:hover { box-shadow: 0 0 22px rgba(251,191,36,0.45), 0 12px 28px rgba(0,0,0,0.6); border-color: rgba(251,191,36,0.4); }
+    .card-slot.rarity-Epic:hover      { box-shadow: 0 0 22px rgba(168,85,247,0.45), 0 12px 28px rgba(0,0,0,0.6); border-color: rgba(168,85,247,0.4); }
+    .card-slot.rarity-Rare:hover      { box-shadow: 0 0 22px rgba(59,130,246,0.45), 0 12px 28px rgba(0,0,0,0.6); border-color: rgba(59,130,246,0.4); }
+    .card-slot.rarity-Common:hover    { box-shadow: 0 8px 24px rgba(0,0,0,0.55); border-color: rgba(255,255,255,0.12); }
+
+    .card-slot.empty {
+      background: rgba(255,255,255,0.015);
+      border-style: dashed; border-color: rgba(255,255,255,0.04);
+      cursor: default; display: flex; align-items: center; justify-content: center;
+    }
+    .card-slot.empty:hover { transform: none; box-shadow: none; border-color: rgba(255,255,255,0.04); }
+    .empty-icon { font-size: 1.4rem; color: rgba(255,255,255,0.05); z-index: 1; }
+
+    /* ══════════════════════════════════════════════
+       FLIP LEAVES
+    ══════════════════════════════════════════════ */
+    .b-leaf {
+      position: absolute; top: 0;
+      width: var(--pg-w); height: var(--pg-h);
+      overflow: hidden; display: none; pointer-events: none;
+      background: #0c0e14; border: 1px solid rgba(255,255,255,0.07);
+    }
+    #depart-leaf.side-right { left: var(--leaf-right); border-radius: 0 8px 8px 0; transform-origin: left center; }
+    #depart-leaf.side-left  { left: 0;                  border-radius: 8px 0 0 8px; transform-origin: right center; }
+    #arrive-leaf.side-left  { left: 0;                  border-radius: 8px 0 0 8px; transform-origin: right center; }
+    #arrive-leaf.side-right { left: var(--leaf-right);  border-radius: 0 8px 8px 0; transform-origin: left center; }
+
+    #depart-leaf.flip-fwd { animation: departFwd var(--flip-half) ease-in  forwards; }
+    #arrive-leaf.flip-fwd { animation: arriveFwd var(--flip-half) ease-out var(--flip-half) both; }
+    #depart-leaf.flip-bwd { animation: departBwd var(--flip-half) ease-in  forwards; }
+    #arrive-leaf.flip-bwd { animation: arriveBwd var(--flip-half) ease-out var(--flip-half) both; }
+
+    @keyframes departFwd { from{transform:rotateY(0)}     to{transform:rotateY(-90deg)} }
+    @keyframes arriveFwd { from{transform:rotateY(90deg)} to{transform:rotateY(0)} }
+    @keyframes departBwd { from{transform:rotateY(0)}     to{transform:rotateY(90deg)} }
+    @keyframes arriveBwd { from{transform:rotateY(-90deg)}to{transform:rotateY(0)} }
+
+    #depart-leaf.flip-fwd::after {
+      content:''; position:absolute; inset:0; z-index:20; pointer-events:none;
+      background: linear-gradient(to left,rgba(0,0,0,0.6),transparent 70%);
+      animation: shadowIn var(--flip-half) ease-in forwards;
+    }
+    #depart-leaf.flip-bwd::after {
+      content:''; position:absolute; inset:0; z-index:20; pointer-events:none;
+      background: linear-gradient(to right,rgba(0,0,0,0.6),transparent 70%);
+      animation: shadowIn var(--flip-half) ease-in forwards;
+    }
+    #arrive-leaf.flip-fwd::after {
+      content:''; position:absolute; inset:0; z-index:20; pointer-events:none;
+      background: linear-gradient(to right,rgba(0,0,0,0.55),transparent 70%);
+      animation: shadowOut var(--flip-half) ease-out var(--flip-half) both;
+    }
+    #arrive-leaf.flip-bwd::after {
+      content:''; position:absolute; inset:0; z-index:20; pointer-events:none;
+      background: linear-gradient(to left,rgba(0,0,0,0.55),transparent 70%);
+      animation: shadowOut var(--flip-half) ease-out var(--flip-half) both;
+    }
+    @keyframes shadowIn  { from{opacity:0} to{opacity:1} }
+    @keyframes shadowOut { from{opacity:1} to{opacity:0} }
+
+    /* ── Nav row ── */
+    #book-nav {
+      display: flex; align-items: center; gap: 14px; margin-top: 16px;
+    }
+    .book-nav-btn {
+      display: flex; align-items: center; gap: 7px;
+      padding: 8px 18px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.02);
+      color: var(--void-muted);
+      font-size: 0.55rem; font-weight: 800;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      cursor: pointer; transition: all 0.18s;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .book-nav-btn:hover:not(:disabled) {
+      color: rgba(var(--accent-rgb),1);
+      border-color: rgba(var(--accent-rgb),0.3);
+      background: rgba(var(--accent-rgb),0.06);
+    }
+    .book-nav-btn:disabled { opacity: 0.2; cursor: default; }
+    #page-indicator {
+      font-family: 'Space Grotesk',sans-serif;
+      font-size: 0.52rem; font-weight: 800;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--void-muted); min-width: 120px; text-align: center;
+    }
+
+    /* ══════════════════════════════════════════════
+       RIGHT SIDEBAR — ACHIEVEMENTS
+    ══════════════════════════════════════════════ */
+    #right-panel {
+      grid-area: right;
+      border-left: 1px solid rgba(255,255,255,0.05);
+      padding: 20px 18px;
+      position: sticky; top: 80px;
+      height: calc(100vh - 80px); overflow-y: auto;
+    }
+    #right-progress {
+      margin-bottom: 16px; padding: 14px; border-radius: 10px;
+      border: 1px solid rgba(var(--accent-rgb),0.15);
+      background: rgba(var(--accent-rgb),0.05);
+    }
+    .prog-label {
+      font-size: 0.48rem; font-weight: 800;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--void-muted); margin-bottom: 8px;
+    }
+    .prog-nums {
+      font-family:'Outfit',sans-serif; font-weight:900;
+      font-size: 1.5rem; color: rgba(var(--accent-rgb),1); line-height: 1;
+    }
+    .prog-sub { font-size: 0.48rem; color: var(--void-muted); margin-top: 4px; letter-spacing: 0.08em; }
+    .prog-bar { width:100%; height:3px; background:rgba(255,255,255,0.06); border-radius:99px; overflow:hidden; margin-top:8px; }
+    .prog-fill { height:100%; background:rgba(var(--accent-rgb),0.8); border-radius:99px; transition:width 0.5s ease; }
+    .achievement-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.05);
+      background: rgba(255,255,255,0.02); margin-bottom: 6px;
+      transition: border-color 0.18s;
+    }
+    .achievement-row:hover { border-color: rgba(255,255,255,0.1); }
+    .achievement-row.earned { border-color: rgba(var(--accent-rgb),0.18); background: rgba(var(--accent-rgb),0.04); }
+    .ach-icon {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem; flex-shrink: 0;
+    }
+    .achievement-row.earned .ach-icon { background: rgba(var(--accent-rgb),0.1); }
+    .ach-text { flex: 1; min-width: 0; }
+    .ach-name {
+      font-size: 0.64rem; font-weight: 800; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--void-text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ach-desc { font-size: 0.5rem; color: var(--void-muted); margin-top: 2px; }
+    .ach-check { color: rgba(var(--accent-rgb),1); font-size: 0.75rem; flex-shrink: 0; }
+
+    /* ══════════════════════════════════════════════
+       CARD INSPECT MODAL
+    ══════════════════════════════════════════════ */
+    #inspect-modal {
+      position: fixed; inset: 0; z-index: 900;
+      background: rgba(5,7,10,0.9);
+      backdrop-filter: blur(24px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    #inspect-modal.open { opacity: 1; pointer-events: all; }
+
+    #inspect-inner {
+      display: flex; gap: 36px; align-items: flex-start;
+      max-width: 720px; width: 100%;
+      position: relative;
+    }
+
+    #inspect-card-wrap {
+      flex-shrink: 0; width: 240px;
+      border-radius: 14px; overflow: hidden;
+      box-shadow: 0 32px 64px rgba(0,0,0,0.7);
+      position: relative;
+    }
+    #inspect-card-wrap img {
+      width: 100%; display: block; aspect-ratio: 2/3; object-fit: cover;
+    }
+    #inspect-card-wrap::after {
+      content: ''; position: absolute; inset: 0; border-radius: 14px;
+      border: 1.5px solid transparent; pointer-events: none;
+    }
+    #inspect-card-wrap.rarity-Legendary::after { border-color: rgba(251,191,36,0.6); box-shadow: inset 0 0 0 1px rgba(251,191,36,0.15), 0 0 40px rgba(251,191,36,0.25); }
+    #inspect-card-wrap.rarity-Epic::after      { border-color: rgba(168,85,247,0.6); box-shadow: inset 0 0 0 1px rgba(168,85,247,0.15), 0 0 40px rgba(168,85,247,0.25); }
+    #inspect-card-wrap.rarity-Rare::after      { border-color: rgba(59,130,246,0.6); box-shadow: inset 0 0 0 1px rgba(59,130,246,0.15),  0 0 40px rgba(59,130,246,0.25); }
+
+    #inspect-info { flex: 1; min-width: 0; }
+    #inspect-rarity-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.52rem; font-weight: 800; letter-spacing: 0.18em;
+      text-transform: uppercase; border-radius: 99px;
+      padding: 4px 12px; margin-bottom: 10px; border: 1px solid transparent;
+    }
+    #inspect-rarity-badge .pip { width: 6px; height: 6px; border-radius: 50%; }
+
+    #inspect-name {
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      font-size: 2rem; letter-spacing: -0.03em; text-transform: uppercase;
+      color: var(--void-text); line-height: 1; margin-bottom: 6px;
+    }
+    #inspect-set {
+      font-size: 0.58rem; font-weight: 700; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--void-muted); margin-bottom: 20px;
+    }
+    #inspect-desc {
+      font-size: 0.78rem; color: rgba(255,255,255,0.55);
+      line-height: 1.65; margin-bottom: 22px;
+      border-left: 2px solid rgba(255,255,255,0.08);
+      padding-left: 14px;
+    }
+    .inspect-stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+    .inspect-stat {
+      text-align: center;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px; padding: 10px 18px;
+    }
+    .inspect-stat .label {
+      font-size: 0.45rem; font-weight: 800; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--void-muted);
+    }
+    .inspect-stat .value {
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      font-size: 1.1rem; color: var(--void-text); margin-top: 2px;
+    }
+
+    .inspect-count-stat { border-color: rgba(var(--inspect-r),0.25); background: rgba(var(--inspect-r),0.06); }
+    .inspect-count-stat .value { color: rgb(var(--inspect-r)); }
+
+    #inspect-close {
+      position: absolute; top: -8px; right: -8px;
+      width: 36px; height: 36px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.06);
+      color: var(--void-muted); font-size: 1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.18s;
+    }
+    #inspect-close:hover { background: rgba(255,255,255,0.12); color: var(--void-text); }
+
+    /* ══════════════════════════════════════════════
+       CREATE BINDER MODAL
+    ══════════════════════════════════════════════ */
+    .cb-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(5,7,10,0.88);
+      backdrop-filter: blur(16px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    .cb-overlay.open { opacity: 1; pointer-events: all; }
+    .cb-box {
+      background: #0c0f18; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px; padding: 36px; width: 100%; max-width: 420px;
+    }
+    .cb-title {
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      font-size: 1.6rem; letter-spacing: -0.03em; text-transform: uppercase;
+      color: var(--void-text); margin-bottom: 6px;
+    }
+    .cb-sub {
+      font-size: 0.5rem; font-weight: 800; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--void-muted); margin-bottom: 24px;
+    }
+    .cb-label {
+      font-size: 0.48rem; font-weight: 800; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(var(--accent-rgb),1);
+      margin-bottom: 8px; display: block;
+    }
+    .cb-input {
+      width: 100%; padding: 12px 16px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; font-size: 0.88rem; font-weight: 700;
+      color: var(--void-text); outline: none; transition: border-color 0.2s;
+      margin-bottom: 20px;
+    }
+    .cb-input:focus { border-color: rgba(var(--accent-rgb),0.5); }
+    .cb-actions { display: flex; gap: 10px; }
+    .cb-submit {
+      flex: 1; padding: 12px; border-radius: 12px;
+      background: rgba(var(--accent-rgb),1); color: #05070a;
+      font-size: 0.55rem; font-weight: 900; letter-spacing: 0.14em;
+      text-transform: uppercase; cursor: pointer; border: none;
+      transition: opacity 0.18s;
+    }
+    .cb-submit:hover { opacity: 0.88; }
+    .cb-cancel {
+      padding: 12px 18px; border-radius: 12px;
+      background: transparent; border: 1px solid rgba(255,255,255,0.08);
+      color: var(--void-muted); font-size: 0.55rem; font-weight: 800;
+      letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
+      transition: all 0.18s;
+    }
+    .cb-cancel:hover { color: var(--void-text); border-color: rgba(255,255,255,0.16); }
+
+    /* ══════════════════════════════════════════════
+       SHARE MODAL
+    ══════════════════════════════════════════════ */
+    #share-modal {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(5,7,10,0.94);
+      backdrop-filter: blur(24px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    #share-modal.open { opacity: 1; pointer-events: all; }
+    .sm-box {
+      background: #0c0f18; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px; width: 100%; max-width: 640px; overflow: hidden;
+    }
+    .sm-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .sm-header-title {
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      font-size: 1.1rem; letter-spacing: -0.02em; text-transform: uppercase;
+      color: rgba(var(--accent-rgb),1);
+    }
+    .sm-close {
+      width: 32px; height: 32px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      color: var(--void-muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.18s;
+    }
+    .sm-close:hover { background: rgba(255,255,255,0.08); color: var(--void-text); }
+    .sm-body { padding: 24px; }
+    #sm-preview {
+      width: 100%; min-height: 200px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 12px; margin-bottom: 20px; overflow: hidden;
+    }
+    #sm-preview img { max-height: 50vh; max-width: 100%; object-fit: contain; border-radius: 8px; }
+    #sm-preview-placeholder {
+      font-size: 0.55rem; font-weight: 800; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--void-muted);
+    }
+    .sm-actions { display: flex; gap: 12px; }
+    #sm-download {
+      flex: 1; padding: 14px; border-radius: 12px;
+      background: rgba(var(--accent-rgb),1); color: #05070a;
+      font-size: 0.55rem; font-weight: 900; letter-spacing: 0.14em;
+      text-transform: uppercase; text-decoration: none;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: opacity 0.18s;
+    }
+    #sm-download:hover { opacity: 0.88; }
+    .sm-cancel {
+      padding: 14px 20px; border-radius: 12px;
+      background: transparent; border: 1px solid rgba(255,255,255,0.08);
+      color: var(--void-muted); font-size: 0.55rem; font-weight: 800;
+      letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
+      transition: all 0.18s;
+    }
+    .sm-cancel:hover { color: var(--void-text); border-color: rgba(255,255,255,0.16); }
+
+    /* ══════════════════════════════════════════════
+       CAPTURE WRAPPER + WATERMARK FOOTER
+    ══════════════════════════════════════════════ */
+    #binder-capture-target {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+
+    #binder-share-footer {
+      display: none;
+      width: 100%;
+      max-width: calc(var(--pg-w) * 2 + var(--spine-w));
+      align-items: stretch;
+      padding: 16px 20px;
+      margin-top: 0;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-top: none;
+      border-radius: 0 0 16px 16px;
+      gap: 0;
+    }
+
+    /* ── Shared footer cells (both-page + single-page watermarks) ── */
+
+    /* Castle logo cell — matches nav: icon + Castle[TCG] */
+    .sf-logo {
+      display: flex; align-items: center; gap: 8px;
+      padding-right: 16px;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    .sf-logo-icon {
+      width: 30px; height: 30px;
+      background: rgba(var(--accent-rgb),0.15);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; padding: 4px; flex-shrink: 0;
+    }
+    .sf-logo-icon img { width: 100%; height: 100%; object-fit: contain; }
+    .sf-logo-wordmark {
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      font-size: 0.7rem; letter-spacing: -0.02em;
+      text-transform: uppercase; color: var(--void-text);
+      line-height: 1; white-space: nowrap;
+    }
+    .sf-logo-wordmark em {
+      color: rgba(var(--accent-rgb),1); font-style: normal;
+    }
+
+    /* Collector + binder name cell (center) */
+    .sf-center {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2px;
+      padding: 0 16px;
+    }
+    .sf-collector-name {
+      font-size: 0.65rem; font-weight: 900; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--void-text);
+    }
+    .sf-binder-label {
+      font-size: 0.42rem; font-weight: 700; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--void-muted);
+    }
+
+    /* Streamer cell (right) */
+    .sf-right {
+      display: flex; align-items: center; gap: 8px;
+      padding-left: 16px;
+      border-left: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    .sf-streamer-text {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+    }
+    .sf-streamer-name {
+      font-size: 0.58rem; font-weight: 900; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--void-text);
+      text-align: right; white-space: nowrap;
+    }
+    .sf-streamer-sub {
+      font-size: 0.38rem; font-weight: 700; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--void-muted);
+    }
+    .sf-streamer-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 1px solid rgba(var(--accent-rgb),0.35);
+      object-fit: cover; flex-shrink: 0; display: block;
+      background: rgba(var(--accent-rgb),0.1);
+    }
+    .sf-streamer-avatar-placeholder {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04); flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.55rem; font-weight: 900;
+      color: rgba(255,255,255,0.35); text-transform: uppercase;
+    }
+
+    /* ── Both-page footer bar ── */
+    #binder-share-footer {
+      display: none;
+      width: 100%;
+      max-width: calc(var(--pg-w) * 2 + var(--spine-w));
+      align-items: center;
+      padding: 14px 20px;
+      margin-top: 0;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-top: none;
+      border-radius: 0 0 16px 16px;
+    }
+
+    /* Show footer + backdrop during capture */
+    #binder-capture-target.capturing {
+      background: #050807;
+      border-radius: 20px;
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    #binder-capture-target.capturing::before {
+      content: '';
+      position: absolute; top: -10%; right: -10%;
+      width: 60%; height: 60%;
+      background: radial-gradient(circle, rgba(var(--accent-rgb),0.1) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    #binder-capture-target.capturing::after {
+      content: '';
+      position: absolute; bottom: -10%; left: -10%;
+      width: 60%; height: 60%;
+      background: radial-gradient(circle, rgba(var(--accent-rgb),0.06) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    #binder-capture-target.capturing #book-wrap,
+    #binder-capture-target.capturing #binder-share-footer {
+      position: relative; z-index: 1;
+    }
+    #binder-capture-target.capturing #binder-share-footer {
+      display: flex;
+    }
+
+    /* ── Single-page watermark bar (injected into temp wrapper) ── */
+    .sp-watermark {
+      display: flex; align-items: center;
+      width: 100%;
+      padding: 10px 16px;
+      background: #0a0c12;
+      border-top: 1px solid rgba(255,255,255,0.07);
+    }
+
+    /* Show footer + backdrop during capture */
+    #binder-capture-target.capturing {
+      background: #050807;
+      border-radius: 20px;
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    #binder-capture-target.capturing::before {
+      content: '';
+      position: absolute; top: -10%; right: -10%;
+      width: 60%; height: 60%;
+      background: radial-gradient(circle, rgba(var(--accent-rgb),0.1) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    #binder-capture-target.capturing::after {
+      content: '';
+      position: absolute; bottom: -10%; left: -10%;
+      width: 60%; height: 60%;
+      background: radial-gradient(circle, rgba(var(--accent-rgb),0.06) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    #binder-capture-target.capturing #book-wrap,
+    #binder-capture-target.capturing #binder-share-footer {
+      position: relative; z-index: 1;
+    }
+    #binder-capture-target.capturing #binder-share-footer {
+      display: flex;
+    }
+
+    /* ══════════════════════════════════════════════
+       SHARE MODAL — PAGE SELECT
+    ══════════════════════════════════════════════ */
+    .sm-page-select {
+      display: flex; gap: 8px; margin-bottom: 18px;
+    }
+    .sm-page-opt {
+      flex: 1; padding: 10px 8px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      cursor: pointer; transition: all 0.18s;
+    }
+    .sm-page-opt:hover {
+      border-color: rgba(var(--accent-rgb),0.3);
+      background: rgba(var(--accent-rgb),0.05);
+    }
+    .sm-page-opt.selected {
+      border-color: rgba(var(--accent-rgb),0.5);
+      background: rgba(var(--accent-rgb),0.1);
+    }
+    .sm-page-opt-icon {
+      display: flex; gap: 3px; align-items: center;
+    }
+    .sm-page-swatch {
+      width: 14px; height: 20px; border-radius: 2px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .sm-page-swatch.active { background: rgba(var(--accent-rgb),0.35); border-color: rgba(var(--accent-rgb),0.4); }
+    .sm-page-opt-label {
+      font-size: 0.45rem; font-weight: 800; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--void-muted);
+      text-align: center;
+    }
+    .sm-page-opt.selected .sm-page-opt-label { color: rgba(var(--accent-rgb),1); }
+    .sm-select-title {
+      font-size: 0.46rem; font-weight: 800; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--void-muted); margin-bottom: 8px;
+    }
+
+    /* ── Toast ── */
+    #tb-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      z-index: 2000; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .tb-toast-item {
+      padding: 10px 18px; border-radius: 10px;
+      font-size: 0.55rem; font-weight: 800; letter-spacing: 0.12em;
+      text-transform: uppercase; backdrop-filter: blur(12px);
+      animation: tbToastIn 0.25s ease both;
+    }
+    @keyframes tbToastIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .tb-toast-item.info    { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; }
+    .tb-toast-item.success { background: rgba(34,197,94,0.15);  border: 1px solid rgba(34,197,94,0.3);  color: #86efac; }
+    .tb-toast-item.error   { background: rgba(239,68,68,0.15);  border: 1px solid rgba(239,68,68,0.3);  color: #fca5a5; }
+  </style>
+</head>
+
+<body class="bg-void-bg text-void-text">
+  <div class="saas-bg-glow"></div>
+
+  <!-- ══ REAL NAV ══ -->
+  <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
+    <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 group cursor-pointer">
+        <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+          <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+        </div>
+        <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+      </a>
+      <div class="flex items-center gap-3">
+        <div id="nav-user-preview" class="hidden items-center">
+          <span id="nav-username" class="hidden">---</span>
+          <span id="nav-user-role" class="hidden">Collector</span>
+          <div id="nav-user-menu-root" class="relative">
+            <button type="button" id="nav-user-menu-trigger"
+              class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+              aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+              <span class="relative inline-block">
+                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
+                <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+              </span>
+              <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+            </button>
+            <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
+              <div class="border-b border-white/5">
+                <button type="button" id="nav-user-identity-toggle"
+                  class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                  aria-expanded="false" aria-controls="nav-user-team-panel">
+                  <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                  <div class="min-w-0 flex-1">
+                    <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                    <div class="flex items-center gap-2 mt-1 flex-wrap">
+                      <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
+                      <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                    </div>
+                  </div>
+                  <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                    <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                  </span>
+                </button>
+                <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                  <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                  <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                </div>
+              </div>
+              <div class="px-4 py-3 border-b border-white/5">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                    <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                  </div>
+                  <button type="button" id="nav-user-menu-copy-code"
+                    class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                </div>
+              </div>
+              <div class="p-1.5">
+                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                  class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                  <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
+                  <span class="flex flex-col leading-tight normal-case">
+                    <span class="uppercase tracking-widest">Account settings</span>
+                    <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                  </span>
+                </button>
+                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                  class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                  <i class="bx bx-log-out w-4 text-center"></i> Log out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div id="page-shell">
+
+    <!-- ══ LEFT ══ -->
+    <aside id="left-panel">
+      <div class="panel-section-title">
+        My Binders <span class="new-badge" id="binder-count-badge"></span>
+      </div>
+      <div id="binder-tab-list"></div>
+      <div class="left-divider"></div>
+      <button class="new-binder-btn" onclick="openCreateBinder()">
+        <i class="bx bx-plus"></i> New Binder
+      </button>
+      <div class="left-divider"></div>
+      <div class="left-promo">
+        <div class="left-promo-title">Get More Cards</div>
+        <div class="left-promo-desc">Subscribe, use Channel Points, or buy packs to summon new cards live on stream.</div>
+        <button class="left-promo-btn outline" onclick="window.location.href='/my-collection'">View My Collections</button>
+      </div>
+    </aside>
+
+    <!-- ══ CENTER ══ -->
+    <main id="main-area">
+      <div id="center-header">
+        <div id="center-title">All Cards <span id="center-page-label">— Page 1</span></div>
+        <button class="share-btn" id="share-binder-btn" onclick="shareBinder()">
+          <i class="bx bx-share-alt"></i> Share
+        </button>
+        <button class="center-arrow" id="top-prev"><i class="bx bx-chevron-left"></i></button>
+        <button class="center-arrow" id="top-next"><i class="bx bx-chevron-right"></i></button>
+      </div>
+
+      <div id="binder-capture-target">
+        <div id="book-wrap">
+          <div id="book">
+            <div class="b-page left"  id="left-page">
+              <div class="card-grid" id="left-grid"></div>
+              <span class="b-page-num" id="left-num"></span>
+            </div>
+            <div id="book-spine"></div>
+            <div class="b-page right" id="right-page">
+              <div class="card-grid" id="right-grid"></div>
+              <span class="b-page-num" id="right-num"></span>
+            </div>
+            <div class="b-leaf" id="depart-leaf"><div class="card-grid" id="depart-grid"></div></div>
+            <div class="b-leaf" id="arrive-leaf"><div class="card-grid"  id="arrive-grid"></div></div>
+          </div>
+        </div>
+
+        <!-- Watermark footer — hidden normally, shown during capture -->
+        <div id="binder-share-footer">
+          <div class="sf-logo">
+            <div class="sf-logo-icon">
+              <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark">
+            </div>
+            <span class="sf-logo-wordmark">Castle<em>TCG</em></span>
+          </div>
+          <div class="sf-center">
+            <span class="sf-collector-name" id="sf-collector-name">—</span>
+            <span class="sf-binder-label" id="sf-binder-label">—</span>
+          </div>
+          <div class="sf-right" id="sf-streamer-cell">
+            <div class="sf-streamer-text">
+              <span class="sf-streamer-name" id="sf-streamer-name">—</span>
+              <span class="sf-streamer-sub">Streamer</span>
+            </div>
+            <div class="sf-streamer-avatar-placeholder" id="sf-streamer-avatar-wrap">
+              <span id="sf-streamer-initial">?</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="book-nav">
+        <button class="book-nav-btn" id="prev-btn" disabled>
+          <i class="bx bx-chevron-left"></i> Prev Page
+        </button>
+        <span id="page-indicator"></span>
+        <button class="book-nav-btn" id="next-btn">
+          Next Page <i class="bx bx-chevron-right"></i>
+        </button>
+      </div>
+    </main>
+
+    <!-- ══ RIGHT ══ -->
+    <aside id="right-panel">
+      <div class="panel-section-title" style="margin-bottom:12px">Collection</div>
+      <div id="right-progress">
+        <div class="prog-label">Cards Owned</div>
+        <div class="prog-nums" id="prog-nums">—</div>
+        <div class="prog-sub">in this binder</div>
+        <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+      </div>
+      <div id="achievement-list"></div>
+    </aside>
+
+  </div>
+
+  <!-- ══ INSPECT MODAL ══ -->
+  <div id="inspect-modal" onclick="if(event.target===this)closeInspect()">
+    <div id="inspect-inner">
+      <button id="inspect-close" onclick="closeInspect()"><i class="bx bx-x"></i></button>
+      <div id="inspect-card-wrap">
+        <img id="inspect-img" src="" alt="">
+      </div>
+      <div id="inspect-info">
+        <div id="inspect-rarity-badge">
+          <span class="pip" id="inspect-pip"></span>
+          <span id="inspect-rarity-text"></span>
+        </div>
+        <div id="inspect-name"></div>
+        <div id="inspect-set"></div>
+        <div id="inspect-desc"></div>
+        <div class="inspect-stat-row" id="inspect-stats"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CREATE BINDER MODAL ══ -->
+  <div class="cb-overlay" id="create-binder-overlay" onclick="if(event.target===this)closeCreateBinder()">
+    <div class="cb-box">
+      <div class="cb-title">New Binder</div>
+      <div class="cb-sub">Organize your cards into a custom binder</div>
+      <label class="cb-label" for="new-binder-name">Binder Name</label>
+      <input class="cb-input" id="new-binder-name" type="text" placeholder="e.g. Legendaries Only"
+        onkeydown="if(event.key==='Enter')submitCreateBinder()">
+      <div class="cb-actions">
+        <button class="cb-submit" onclick="submitCreateBinder()">Save Binder</button>
+        <button class="cb-cancel" onclick="closeCreateBinder()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SHARE MODAL ══ -->
+  <div id="share-modal" onclick="if(event.target===this)closeShareModal()">
+    <div class="sm-box">
+      <div class="sm-header">
+        <div class="sm-header-title">Export Binder</div>
+        <button class="sm-close" onclick="closeShareModal()"><i class="bx bx-x"></i></button>
+      </div>
+      <div class="sm-body">
+        <div class="sm-select-title">Capture Mode</div>
+        <div class="sm-page-select" id="sm-page-select">
+          <div class="sm-page-opt selected" data-mode="both" onclick="selectPageMode(this)">
+            <div class="sm-page-opt-icon">
+              <div class="sm-page-swatch active"></div>
+              <div class="sm-page-swatch active"></div>
+            </div>
+            <span class="sm-page-opt-label">Both Pages</span>
+          </div>
+          <div class="sm-page-opt" data-mode="left" onclick="selectPageMode(this)">
+            <div class="sm-page-opt-icon">
+              <div class="sm-page-swatch active"></div>
+              <div class="sm-page-swatch"></div>
+            </div>
+            <span class="sm-page-opt-label">Left Page</span>
+          </div>
+          <div class="sm-page-opt" data-mode="right" onclick="selectPageMode(this)">
+            <div class="sm-page-opt-icon">
+              <div class="sm-page-swatch"></div>
+              <div class="sm-page-swatch active"></div>
+            </div>
+            <span class="sm-page-opt-label">Right Page</span>
+          </div>
+        </div>
+        <div id="sm-preview">
+          <div id="sm-preview-placeholder">Select a mode and click Generate</div>
+        </div>
+        <div class="sm-actions" style="margin-top:16px">
+          <button class="cb-submit" style="flex:none;padding:12px 20px" onclick="generateShareCapture()">
+            <i class="bx bx-image"></i> Generate
+          </button>
+          <a id="sm-download" href="#" download="binder.png" style="display:none">
+            <i class="bx bxs-download"></i> Save Image
+          </a>
+          <button class="sm-cancel" onclick="closeShareModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TOAST ══ -->
+  <div id="tb-toast"></div>
+
+  <script src="/nav-user-menu.js"></script>
+  <script src="/castle-nav.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    /* ══════════════════════════════════════════════
+       CONFIG
+    ══════════════════════════════════════════════ */
+    const BACKEND = (document.querySelector('meta[name="castle-public-url"]')?.content || '').replace(/\/$/, '');
+
+    /* ══════════════════════════════════════════════
+       STATE
+    ══════════════════════════════════════════════ */
+    let currentUser      = null;
+    let userBinders      = [];
+    let userCollection   = [];   // full flat list of user's card instances
+    let streamerData     = null; // populated from URL path or ?streamer=
+    let activeStreamerSlug = null; // e.g. 'codeoce'
+    let activeBinder     = 'all';
+    let spread         = 0;
+    let flipping       = false;
+    let _csrfToken     = '';
+    const HALF_MS      = 260;
+
+    const RARITY_COLORS = {
+      Legendary: '251,191,36',
+      Epic:      '168,85,247',
+      Rare:      '59,130,246',
+      Common:    '100,116,139'
+    };
+
+    /* ══════════════════════════════════════════════
+       BOOT
+    ══════════════════════════════════════════════ */
+    (async function init() {
+      try {
+        const bsRes = await fetch(`${BACKEND}/api/v2/bootstrap?streamer=all&lite=1`, { credentials: 'include' });
+        if (bsRes.ok) {
+          const bs = await bsRes.json();
+          currentUser = bs?.user ?? null;
+          if (currentUser) {
+            setupNavUser(currentUser);
+            window.castleNav?.autoInit();
+          }
+        }
+
+        // Derive streamer slug: ?streamer= param, or first path segment of /:streamer/testbinder
+        const _pathParts = window.location.pathname.split('/').filter(Boolean);
+        activeStreamerSlug =
+          new URLSearchParams(window.location.search).get('streamer') ||
+          (_pathParts.length === 2 && _pathParts[1] === 'testbinder' ? _pathParts[0] : null);
+
+        if (activeStreamerSlug) {
+          try {
+            const sr = await fetch(`${BACKEND}/api/public/streamer?streamer=${encodeURIComponent(activeStreamerSlug)}`);
+            if (sr.ok) streamerData = await sr.json();
+          } catch { /* non-critical */ }
+        }
+
+        // Fetch binders + collection in parallel, scoped to streamer if known
+        const streamerParam = activeStreamerSlug ? `?streamer=${encodeURIComponent(activeStreamerSlug)}` : '';
+        const [bindersRes, colRes] = await Promise.allSettled([
+          fetch(`${BACKEND}/api/binders${streamerParam}`, { credentials: 'include' }),
+          fetch(`${BACKEND}/api/collection${streamerParam}`, { credentials: 'include' }),
+        ]);
+
+        if (bindersRes.status === 'fulfilled' && bindersRes.value.ok) {
+          userBinders = await bindersRes.value.json();
+          if (!Array.isArray(userBinders)) userBinders = [];
+        }
+
+        if (colRes.status === 'fulfilled' && colRes.value.ok) {
+          const raw = await colRes.value.json();
+          userCollection = (Array.isArray(raw) ? raw : []).map(c => ({
+            ...c,
+            instanceId: c.instanceId || c.user_card_id,
+          }));
+        }
+
+        renderBinderTabs();
+        renderSpread(0);
+        renderProgress();
+      } catch (err) {
+        console.error('[Binder] Init error:', err);
+        showToast('Failed to load binder data', 'error');
+        // Fall back to empty state
+        renderBinderTabs();
+        renderSpread(0);
+      }
+    })();
+
+    /* ══════════════════════════════════════════════
+       NAV USER
+    ══════════════════════════════════════════════ */
+    function setupNavUser(user) {
+      if (!user) return;
+      window.currentUser = { ...user, avatar: user.avatar_url || user.avatar };
+      const navAvatar  = document.getElementById('nav-avatar');
+      const menuAvatar = document.getElementById('nav-user-menu-avatar');
+      if (navAvatar)  navAvatar.src  = window.currentUser.avatar || '';
+      if (menuAvatar) menuAvatar.src = window.currentUser.avatar || '';
+      const preview = document.getElementById('nav-user-preview');
+      if (preview) { preview.classList.remove('hidden'); preview.style.display = 'flex'; }
+      window.initNavUserMenu?.();
+      window.updateNavUserMenuLabels?.();
+    }
+
+    /* ══════════════════════════════════════════════
+       CSRF
+    ══════════════════════════════════════════════ */
+    async function ensureCsrf() {
+      if (_csrfToken) return _csrfToken;
+      const r = await fetch(`${BACKEND}/api/csrf`, { credentials: 'include' });
+      const d = await r.json();
+      _csrfToken = d.token || '';
+      return _csrfToken;
+    }
+
+    async function writeFetch(url, method, body) {
+      const token = await ensureCsrf();
+      const res = await fetch(url, {
+        method: method || 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': token },
+        body: body != null ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+      return res.json().catch(() => ({}));
+    }
+
+    /* ══════════════════════════════════════════════
+       CARD IMAGE URL
+    ══════════════════════════════════════════════ */
+    function resolveCardImageUrl(card) {
+      if (!card) return '';
+      const id = card.instanceId || card.user_card_id;
+      if ((card.template_id || card.has_template) && id) {
+        return `${BACKEND}/api/cards/${id}/image.png`;
+      }
+      return card.image_url || '';
+    }
+
+    /* ══════════════════════════════════════════════
+       CURRENT BINDER CARDS
+    ══════════════════════════════════════════════ */
+    function currentCards() {
+      if (activeBinder === 'all') return userCollection;
+      const b = userBinders.find(x => x.id === activeBinder);
+      if (!b || !b.user_binder_cards?.length) return [];
+      const ids = new Set(b.user_binder_cards.map(c => c.user_card_id || c.instanceId || c.id));
+      return userCollection.filter(c => ids.has(c.instanceId || c.user_card_id));
+    }
+
+    function totalSpreads() {
+      const cards = currentCards();
+      return Math.max(1, Math.ceil(cards.length / 18));
+    }
+
+    /* ══════════════════════════════════════════════
+       RENDER HELPERS
+    ══════════════════════════════════════════════ */
+    function buildSlot(card) {
+      const s = document.createElement('div');
+      if (!card) {
+        s.className = 'card-slot empty';
+        s.innerHTML = '<i class="bx bx-image-alt empty-icon"></i>';
+        return s;
+      }
+
+      const rarity = card.rarity || 'Common';
+      s.className = `card-slot rarity-${rarity}`;
+      s.dataset.cardId = card.instanceId || card.card_id;
+
+      const imgUrl = resolveCardImageUrl(card);
+      if (imgUrl) {
+        const img = Object.assign(document.createElement('img'), {
+          src: imgUrl, alt: card.name || '', loading: 'lazy'
+        });
+        s.appendChild(img);
+      }
+
+      const isHolo = ['Rare','Epic','Legendary'].includes(rarity);
+      if (isHolo) {
+        const hl = document.createElement('div'); hl.className = 'holo-layer';
+        const sl = document.createElement('div'); sl.className = 'shine-layer';
+        s.append(hl, sl);
+        s.addEventListener('mouseenter', () => {
+          s.style.setProperty('--holo-o', '0.28');
+          s.style.setProperty('--shine-o', '0.55');
+        });
+        s.addEventListener('mouseleave', () => {
+          s.style.setProperty('--holo-o', '0');
+          s.style.setProperty('--shine-o', '0');
+        });
+        s.addEventListener('mousemove', e => {
+          const r = s.getBoundingClientRect();
+          const x = (e.clientX - r.left) / r.width;
+          const y = (e.clientY - r.top)  / r.height;
+          const sl2 = s.querySelector('.shine-layer');
+          if (sl2) {
+            const angle = 90 + (x - 0.5) * 40;
+            sl2.style.background = `linear-gradient(${angle}deg,
+              transparent 30%,
+              rgba(255,255,255,${0.12 + y*0.18}) ${48 + (x-0.5)*10}%,
+              rgba(255,255,255,${0.28 + y*0.2})  50%,
+              rgba(255,255,255,${0.12 + y*0.18}) ${52 + (x-0.5)*10}%,
+              transparent 70%)`;
+          }
+        });
+      }
+
+      const pip = document.createElement('span');
+      pip.className = `rarity-pip rarity-${rarity}`;
+      s.appendChild(pip);
+
+      s.addEventListener('click', () => openInspect(card));
+      return s;
+    }
+
+    function renderGrid(el, cards) {
+      if (!el) return;
+      el.innerHTML = '';
+      const slots = Array.from({ length: 9 }, (_, i) => cards[i] || null);
+      slots.forEach(c => el.appendChild(buildSlot(c)));
+    }
+
+    function renderSpread(si) {
+      const cards = currentCards();
+      const pageSize = 9;
+      const leftCards  = cards.slice(si * 18, si * 18 + 9);
+      const rightCards = cards.slice(si * 18 + 9, si * 18 + 18);
+
+      renderGrid(document.getElementById('left-grid'),  leftCards);
+      renderGrid(document.getElementById('right-grid'), rightCards);
+
+      const leftPageNum  = si * 2 + 1;
+      const rightPageNum = si * 2 + 2;
+      document.getElementById('left-num').textContent  = leftPageNum;
+      document.getElementById('right-num').textContent = rightPageNum;
+
+      const total = totalSpreads();
+      document.getElementById('page-indicator').textContent =
+        `Page ${leftPageNum}–${rightPageNum}  of  ${total * 2}`;
+      document.getElementById('center-page-label').textContent = `— Spread ${si + 1}`;
+
+      document.getElementById('prev-btn').disabled = si === 0;
+      document.getElementById('next-btn').disabled = si === total - 1;
+      document.getElementById('top-prev').disabled  = si === 0;
+      document.getElementById('top-next').disabled  = si === total - 1;
+    }
+
+    function renderProgress() {
+      const cards = currentCards();
+      const total  = totalSpreads() * 18;
+      document.getElementById('prog-nums').textContent = cards.length;
+      document.getElementById('prog-fill').style.width =
+        total > 0 ? `${Math.min(100, Math.round(cards.length / total * 100))}%` : '0%';
+    }
+
+    /* ══════════════════════════════════════════════
+       BINDER TABS
+    ══════════════════════════════════════════════ */
+    function renderBinderTabs() {
+      const list = document.getElementById('binder-tab-list');
+      if (!list) return;
+      list.innerHTML = '';
+
+      // "All Cards" tab
+      const allBtn = document.createElement('button');
+      allBtn.className = `binder-tab${activeBinder === 'all' ? ' active' : ''}`;
+      allBtn.innerHTML = `
+        <span class="binder-tab-dot"></span>
+        <span class="binder-tab-name">All Cards</span>
+        <span class="binder-tab-count">${userCollection.length} items</span>`;
+      allBtn.addEventListener('click', () => switchBinder('all'));
+      list.appendChild(allBtn);
+
+      // Custom binders
+      userBinders.forEach(b => {
+        const count = b.user_binder_cards?.length || 0;
+        const btn = document.createElement('button');
+        btn.className = `binder-tab${b.id === activeBinder ? ' active' : ''}`;
+        btn.innerHTML = `
+          <span class="binder-tab-dot"></span>
+          <span class="binder-tab-name">${escapeHTML(b.name)}</span>
+          <span class="binder-tab-count">${count} items</span>
+          <button class="trash-btn" title="Delete binder" onclick="event.stopPropagation();deleteBinder('${escapeHTML(String(b.id))}')"><i class="bx bx-trash"></i></button>`;
+        btn.addEventListener('click', () => switchBinder(b.id));
+        list.appendChild(btn);
+      });
+
+      const badge = document.getElementById('binder-count-badge');
+      if (badge) badge.textContent = userBinders.length > 0 ? `● ${userBinders.length}` : '● New';
+
+      // Update center title
+      const titleEl = document.getElementById('center-title');
+      if (titleEl) {
+        const name = activeBinder === 'all'
+          ? 'All Cards'
+          : (userBinders.find(b => b.id === activeBinder)?.name || 'Binder');
+        titleEl.innerHTML = `${escapeHTML(name)} <span id="center-page-label">— Spread 1</span>`;
+      }
+    }
+
+    function switchBinder(id) {
+      activeBinder = id;
+      spread = 0;
+      renderBinderTabs();
+      renderSpread(0);
+      renderProgress();
+    }
+
+    /* ══════════════════════════════════════════════
+       CREATE BINDER
+    ══════════════════════════════════════════════ */
+    function openCreateBinder() {
+      document.getElementById('create-binder-overlay').classList.add('open');
+      document.getElementById('new-binder-name').value = '';
+      setTimeout(() => document.getElementById('new-binder-name').focus(), 50);
+    }
+    function closeCreateBinder() {
+      document.getElementById('create-binder-overlay').classList.remove('open');
+    }
+
+    async function submitCreateBinder() {
+      const name = document.getElementById('new-binder-name').value.trim();
+      if (!name) { showToast('Please enter a binder name', 'error'); return; }
+      try {
+        const sp = activeStreamerSlug ? `?streamer=${encodeURIComponent(activeStreamerSlug)}` : '';
+        const result = await writeFetch(`${BACKEND}/api/binders${sp}`, 'POST', { name });
+        closeCreateBinder();
+        showToast('Binder created!', 'success');
+        // Refresh binder list
+        const res = await fetch(`${BACKEND}/api/binders${sp}`, { credentials: 'include' });
+        if (res.ok) {
+          userBinders = await res.json();
+          if (!Array.isArray(userBinders)) userBinders = [];
+        }
+        if (result?.id) switchBinder(result.id);
+        else renderBinderTabs();
+      } catch (err) {
+        showToast(err.message || 'Failed to create binder', 'error');
+      }
+    }
+
+    async function deleteBinder(id) {
+      if (!confirm('Delete this binder? Cards are not affected.')) return;
+      try {
+        await writeFetch(`${BACKEND}/api/binders?id=${encodeURIComponent(id)}`, 'DELETE', null);
+        userBinders = userBinders.filter(b => String(b.id) !== String(id));
+        if (activeBinder === id) switchBinder('all');
+        else renderBinderTabs();
+        showToast('Binder deleted', 'success');
+      } catch (err) {
+        showToast(err.message || 'Failed to delete binder', 'error');
+      }
+    }
+
+    // Expose for inline onclick
+    window.openCreateBinder  = openCreateBinder;
+    window.closeCreateBinder = closeCreateBinder;
+    window.submitCreateBinder = submitCreateBinder;
+    window.deleteBinder      = deleteBinder;
+
+    /* ══════════════════════════════════════════════
+       PHOTO SHARING
+    ══════════════════════════════════════════════ */
+    let _shareMode = 'both';  // 'both' | 'left' | 'right'
+
+    async function ensureHtml2Canvas() {
+      if (typeof html2canvas !== 'undefined') return;
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    function selectPageMode(el) {
+      document.querySelectorAll('.sm-page-opt').forEach(o => o.classList.remove('selected'));
+      el.classList.add('selected');
+      _shareMode = el.dataset.mode;
+      // Reset preview when mode changes
+      const preview = document.getElementById('sm-preview');
+      const placeholder = document.getElementById('sm-preview-placeholder');
+      const dl = document.getElementById('sm-download');
+      if (preview) { preview.innerHTML = ''; if (placeholder) { preview.appendChild(placeholder); placeholder.style.display = ''; } }
+      if (dl) dl.style.display = 'none';
+    }
+
+    function shareBinder() {
+      openShareModal();
+    }
+
+    /* Build the watermark bar HTML string (used in both modes) */
+    function buildWatermarkHTML(collectorName, binderName, sData) {
+      const streamerName = sData
+        ? (sData.brand_name || sData.display_name || sData.username || 'Streamer')
+        : 'Castle TCG';
+
+      const avatarEl = (sData && sData.avatar_url)
+        ? `<img class="sf-streamer-avatar" src="${escapeHTML(sData.avatar_url)}" alt="">`
+        : `<div class="sf-streamer-avatar-placeholder">${escapeHTML(streamerName.charAt(0).toUpperCase())}</div>`;
+
+      return `
+        <div class="sf-logo">
+          <div class="sf-logo-icon">
+            <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark" style="width:100%;height:100%;object-fit:contain">
+          </div>
+          <span class="sf-logo-wordmark" style="font-family:'Outfit',sans-serif;font-weight:900;font-size:0.7rem;letter-spacing:-0.02em;text-transform:uppercase;color:#e2e8f0;line-height:1;white-space:nowrap">Castle<span style="color:rgba(var(--accent-rgb),1)">TCG</span></span>
+        </div>
+        <div class="sf-center">
+          <span class="sf-collector-name" style="font-size:0.65rem;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#e2e8f0">${escapeHTML(collectorName.toUpperCase())}</span>
+          <span class="sf-binder-label" style="font-size:0.42rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#64748b">${escapeHTML(binderName.toUpperCase())}</span>
+        </div>
+        <div class="sf-right">
+          <div class="sf-streamer-text">
+            <span class="sf-streamer-name" style="font-size:0.58rem;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#e2e8f0;text-align:right;white-space:nowrap">${escapeHTML(streamerName.toUpperCase())}</span>
+            <span class="sf-streamer-sub" style="font-size:0.38rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#64748b">Streamer</span>
+          </div>
+          ${avatarEl}
+        </div>`;
+    }
+
+    /* Inline all external images in a container as data-URLs */
+    async function inlineImages(container) {
+      const imgs = Array.from(container.querySelectorAll('img'));
+      const originals = new Map();
+      await Promise.all(imgs.map(async img => {
+        const src = img.currentSrc || img.src;
+        if (!src || src.startsWith('data:')) return;
+        originals.set(img, src);
+        try {
+          // Same-origin URLs (including /api/cards/ which now serves CORS headers): fetch direct.
+          // Cross-origin URLs (CDN, Twitch avatars): proxy through /api/share-image.
+          const isSameOrigin = src.startsWith(window.location.origin) || src.startsWith('/');
+          const fetchUrl = isSameOrigin
+            ? src
+            : `${BACKEND}/api/share-image?url=${encodeURIComponent(src)}`;
+          const r = await fetch(fetchUrl, { credentials: 'include', mode: 'cors' });
+          if (!r.ok) throw new Error('fetch failed');
+          const blob = await r.blob();
+          const dataUrl = await new Promise((res, rej) => {
+            const fr = new FileReader();
+            fr.onload = () => res(fr.result);
+            fr.onerror = rej;
+            fr.readAsDataURL(blob);
+          });
+          img.src = dataUrl;
+        } catch { /* leave as-is */ }
+      }));
+      return originals;
+    }
+
+    async function generateShareCapture() {
+      showToast('Generating image…', 'info');
+
+      const collectorName = currentUser
+        ? (currentUser.display_name || currentUser.username || currentUser.twitch_id || 'Collector')
+        : 'Collector';
+      const binderName = activeBinder === 'all'
+        ? 'All Cards'
+        : (userBinders.find(b => b.id === activeBinder)?.name || 'Binder');
+      const safeName = binderName.replace(/\s+/g, '-').toLowerCase();
+
+      await ensureHtml2Canvas();
+
+      if (_shareMode === 'both') {
+        /* ── Both pages: capture the full binder-capture-target + footer ── */
+        const captureWrapper = document.getElementById('binder-capture-target');
+
+        // Populate the persistent footer elements
+        const sfCollector = document.getElementById('sf-collector-name');
+        const sfBinder    = document.getElementById('sf-binder-label');
+        const sfStreamer  = document.getElementById('sf-streamer-name');
+        const sfInitial   = document.getElementById('sf-streamer-initial');
+        const sfAvatarWrap = document.getElementById('sf-streamer-avatar-wrap');
+        const streamerLabel = streamerData
+          ? (streamerData.brand_name || streamerData.display_name || streamerData.username || 'Streamer')
+          : 'Castle TCG';
+
+        if (sfCollector) sfCollector.textContent = collectorName.toUpperCase();
+        if (sfBinder)    sfBinder.textContent    = binderName.toUpperCase();
+        if (sfStreamer)  sfStreamer.textContent   = streamerLabel.toUpperCase();
+
+        if (sfAvatarWrap && streamerData?.avatar_url) {
+          sfAvatarWrap.outerHTML = `<img class="sf-streamer-avatar" id="sf-streamer-avatar-wrap" src="${escapeHTML(streamerData.avatar_url)}" alt="">`;
+        } else if (sfInitial) {
+          sfInitial.textContent = streamerLabel.charAt(0).toUpperCase();
+        }
+
+        captureWrapper.classList.add('capturing');
+        const originals = await inlineImages(captureWrapper);
+        await new Promise(r => setTimeout(r, 350));
+
+        try {
+          const canvas = await html2canvas(captureWrapper, {
+            backgroundColor: null,
+            scale: 2, useCORS: true, logging: false, allowTaint: false,
+            onclone: doc => {
+              const t = doc.getElementById('binder-capture-target');
+              if (t) t.classList.add('capturing');
+            },
+          });
+          originals.forEach((src, img) => { img.src = src; });
+          captureWrapper.classList.remove('capturing');
+          finishCapture(canvas.toDataURL('image/png'), safeName);
+        } catch (err) {
+          originals.forEach((src, img) => { img.src = src; });
+          captureWrapper.classList.remove('capturing');
+          throw err;
+        }
+
+      } else {
+        /* ── Single page: build temp off-screen wrapper with watermark bar ── */
+        const sourcePage = document.getElementById(_shareMode === 'left' ? 'left-page' : 'right-page');
+        if (!sourcePage) { showToast('Page not found', 'error'); return; }
+
+        const pageW = sourcePage.offsetWidth;
+
+        const tempWrapper = document.createElement('div');
+        tempWrapper.style.cssText = `position:fixed;left:-99999px;top:0;display:flex;flex-direction:column;width:${pageW}px;background:#050807;border-radius:12px;overflow:hidden`;
+
+        // Clone page contents (keep same size)
+        const pageClone = sourcePage.cloneNode(true);
+        pageClone.style.cssText = `width:${pageW}px;height:${sourcePage.offsetHeight}px;flex-shrink:0;border-radius:0;border:none`;
+        tempWrapper.appendChild(pageClone);
+
+        // Compact watermark bar below the page
+        const wmBar = document.createElement('div');
+        wmBar.className = 'sp-watermark';
+        wmBar.style.cssText = 'display:flex;align-items:center;width:100%;padding:10px 16px;background:#0a0c12;border-top:1px solid rgba(255,255,255,0.07)';
+        wmBar.innerHTML = buildWatermarkHTML(collectorName, binderName, streamerData);
+        tempWrapper.appendChild(wmBar);
+
+        document.body.appendChild(tempWrapper);
+        const originals = await inlineImages(tempWrapper);
+        await new Promise(r => setTimeout(r, 300));
+
+        try {
+          const canvas = await html2canvas(tempWrapper, {
+            backgroundColor: '#050807',
+            scale: 2, useCORS: true, logging: false, allowTaint: false,
+          });
+          originals.forEach((src, img) => { img.src = src; });
+          document.body.removeChild(tempWrapper);
+          finishCapture(canvas.toDataURL('image/png'), safeName);
+        } catch (err) {
+          originals.forEach((src, img) => { img.src = src; });
+          document.body.removeChild(tempWrapper);
+          throw err;
+        }
+      }
+    }
+
+    function finishCapture(dataUrl, safeName) {
+      const preview = document.getElementById('sm-preview');
+      if (preview) {
+        preview.innerHTML = '';
+        const imgEl = document.createElement('img');
+        imgEl.src = dataUrl;
+        imgEl.style.cssText = 'max-height:48vh;max-width:100%;object-fit:contain;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5)';
+        preview.appendChild(imgEl);
+      }
+      const dl = document.getElementById('sm-download');
+      if (dl) {
+        dl.href = dataUrl;
+        dl.style.display = 'flex';
+        dl.download = `castle-${safeName}-spread${spread + 1}-${_shareMode}.png`;
+      }
+      showToast('Image ready!', 'success');
+    }
+
+    function openShareModal() {
+      _shareMode = 'both';
+      document.querySelectorAll('.sm-page-opt').forEach((o, i) => o.classList.toggle('selected', i === 0));
+      const preview = document.getElementById('sm-preview');
+      const placeholder = document.getElementById('sm-preview-placeholder');
+      const dl = document.getElementById('sm-download');
+      if (preview) preview.innerHTML = '';
+      if (placeholder) {
+        placeholder.textContent = 'Select a mode and click Generate';
+        placeholder.style.display = '';
+        if (preview && !preview.contains(placeholder)) preview.appendChild(placeholder);
+      }
+      if (dl) dl.style.display = 'none';
+      document.getElementById('share-modal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeShareModal() {
+      document.getElementById('share-modal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    async function safeGenerateShareCapture() {
+      try {
+        await generateShareCapture();
+      } catch (err) {
+        console.error('[Binder] Capture failed:', err);
+        showToast('Capture failed — see console', 'error');
+      }
+    }
+
+    window.shareBinder          = shareBinder;
+    window.generateShareCapture = safeGenerateShareCapture;
+    window.closeShareModal      = closeShareModal;
+    window.selectPageMode       = selectPageMode;
+
+    /* ══════════════════════════════════════════════
+       INSPECT MODAL
+    ══════════════════════════════════════════════ */
+    const RARITY_BADGE_STYLES = {
+      Legendary: 'background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fbbf24',
+      Epic:      'background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#a855f7',
+      Rare:      'background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#3b82f6',
+      Common:    'background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.1);color:#64748b',
+    };
+    const PIP_COLORS = { Legendary:'#fbbf24', Epic:'#a855f7', Rare:'#3b82f6', Common:'#64748b' };
+
+    function openInspect(card) {
+      const modal = document.getElementById('inspect-modal');
+      const imgUrl = resolveCardImageUrl(card);
+      document.getElementById('inspect-img').src          = imgUrl;
+      document.getElementById('inspect-name').textContent = card.name || 'Unknown';
+      document.getElementById('inspect-set').textContent  = `Set · ${card.set_name || card.set || '—'}`;
+      document.getElementById('inspect-desc').textContent = card.description || card.flavor_text || '';
+
+      const rarity = card.rarity || 'Common';
+      const badge = document.getElementById('inspect-rarity-badge');
+      badge.setAttribute('style', RARITY_BADGE_STYLES[rarity] || RARITY_BADGE_STYLES.Common);
+      document.getElementById('inspect-rarity-text').textContent = rarity;
+      document.getElementById('inspect-pip').style.cssText =
+        `background:${PIP_COLORS[rarity]};box-shadow:0 0 6px ${PIP_COLORS[rarity]}`;
+
+      document.getElementById('inspect-card-wrap').className = `rarity-${rarity}`;
+
+      const rgb = RARITY_COLORS[rarity] || '100,116,139';
+      document.getElementById('inspect-inner').style.setProperty('--inspect-r', rgb);
+
+      document.getElementById('inspect-stats').innerHTML = `
+        <div class="inspect-stat inspect-count-stat">
+          <div class="label">Owned</div>
+          <div class="value">×${card.count || card.quantity || 1}</div>
+        </div>
+        <div class="inspect-stat">
+          <div class="label">Rarity</div>
+          <div class="value" style="font-size:0.75rem">${rarity}</div>
+        </div>
+        <div class="inspect-stat">
+          <div class="label">Card ID</div>
+          <div class="value" style="font-size:0.75rem">#${String(card.card_id || card.instanceId || '—').padStart(4,'0')}</div>
+        </div>`;
+
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeInspect() {
+      document.getElementById('inspect-modal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    window.closeInspect = closeInspect;
+
+    /* ══════════════════════════════════════════════
+       FLIP
+    ══════════════════════════════════════════════ */
+    function flip(dir) {
+      if (flipping) return;
+      const newSi = spread + (dir === 'fwd' ? 1 : -1);
+      if (newSi < 0 || newSi >= totalSpreads()) return;
+      flipping = true;
+
+      const depart = document.getElementById('depart-leaf');
+      const arrive  = document.getElementById('arrive-leaf');
+      const dg = document.getElementById('depart-grid');
+      const ag = document.getElementById('arrive-grid');
+
+      depart.className = 'b-leaf';
+      arrive.className  = 'b-leaf';
+      void depart.offsetWidth;
+
+      const cards = currentCards();
+      if (dir === 'fwd') {
+        renderGrid(dg, cards.slice(spread * 18 + 9, spread * 18 + 18));
+        renderGrid(ag, cards.slice(newSi * 18, newSi * 18 + 9));
+        depart.classList.add('side-right');
+        arrive.classList.add('side-left');
+      } else {
+        renderGrid(dg, cards.slice(spread * 18, spread * 18 + 9));
+        renderGrid(ag, cards.slice(newSi * 18 + 9, newSi * 18 + 18));
+        depart.classList.add('side-left');
+        arrive.classList.add('side-right');
+      }
+
+      depart.style.display = 'block';
+      arrive.style.display  = 'block';
+      void depart.offsetWidth;
+
+      depart.classList.add(`flip-${dir}`);
+      arrive.classList.add(`flip-${dir}`);
+
+      setTimeout(() => { spread = newSi; renderSpread(spread); }, HALF_MS);
+      setTimeout(() => {
+        depart.style.display = 'none'; arrive.style.display = 'none';
+        depart.className = 'b-leaf'; arrive.className = 'b-leaf';
+        flipping = false;
+      }, HALF_MS * 2 + 30);
+    }
+
+    /* ══════════════════════════════════════════════
+       UTILITY
+    ══════════════════════════════════════════════ */
+    function escapeHTML(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('tb-toast');
+      if (!container) return;
+      const item = document.createElement('div');
+      item.className = `tb-toast-item ${type}`;
+      item.textContent = msg;
+      container.appendChild(item);
+      setTimeout(() => item.remove(), 3000);
+    }
+
+    /* ══════════════════════════════════════════════
+       WIRING
+    ══════════════════════════════════════════════ */
+    document.getElementById('prev-btn').addEventListener('click', () => flip('bwd'));
+    document.getElementById('next-btn').addEventListener('click', () => flip('fwd'));
+    document.getElementById('top-prev').addEventListener('click', () => flip('bwd'));
+    document.getElementById('top-next').addEventListener('click', () => flip('fwd'));
+
+    document.addEventListener('keydown', e => {
+      if (document.getElementById('inspect-modal').classList.contains('open')) {
+        if (e.key === 'Escape') closeInspect();
+        return;
+      }
+      if (document.getElementById('create-binder-overlay').classList.contains('open')) {
+        if (e.key === 'Escape') closeCreateBinder();
+        return;
+      }
+      if (document.getElementById('share-modal').classList.contains('open')) {
+        if (e.key === 'Escape') closeShareModal();
+        return;
+      }
+      if (e.key === 'ArrowRight') flip('fwd');
+      if (e.key === 'ArrowLeft')  flip('bwd');
+    });
+
+  })();
+  </script>
+</body>
+</html>

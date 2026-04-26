@@ -13,53 +13,195 @@
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/tailwind-built.css">
     <style>
-        /* ── Hidden util ── */
         .hidden { display: none !important; }
-
-        /* ── Page chrome ── */
         body { min-height: 100vh; }
-        body::before { opacity: 0.05; }
 
+        /* ── Page frame ── */
         #pf-page {
             max-width: 1340px;
             margin: 0 auto;
-            padding: calc(5rem + env(safe-area-inset-top,0px) + 1.5rem) 24px 80px;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px));
+            padding-bottom: 80px;
         }
-        @media (max-width: 640px) { #pf-page { padding-left: 16px; padding-right: 16px; } }
 
-        /* ── Entrance ── */
+        /* ── Entrance animations ── */
         @keyframes pf-rise {
-            from { opacity: 0; transform: translateY(16px); }
+            from { opacity: 0; transform: translateY(14px); }
             to   { opacity: 1; transform: translateY(0); }
         }
-        .pf-rise   { animation: pf-rise 0.55s var(--ease-premium, cubic-bezier(0.16,1,0.3,1)) both; }
-        .pf-rise-1 { animation-delay: 0.05s; }
-        .pf-rise-2 { animation-delay: 0.12s; }
-        .pf-rise-3 { animation-delay: 0.20s; }
+        .pf-rise   { animation: pf-rise 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+        .pf-rise-1 { animation-delay: 0.04s; }
+        .pf-rise-2 { animation-delay: 0.14s; }
+        .pf-rise-3 { animation-delay: 0.24s; }
 
-        /* ── Hero ── */
-        #pf-hero {
+        /* ══════════════════════════════
+           STEAM-STYLE BANNER
+        ══════════════════════════════ */
+        #pf-banner {
+            position: relative;
+            height: 210px;
+            overflow: hidden;
+            background: #050c10;
+        }
+        #pf-banner-bg {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 60% 120% at 8% 55%,  rgba(var(--void-accent-rgb),0.09) 0%, transparent 58%),
+                radial-gradient(ellipse 40% 80% at 85% 20%,  rgba(var(--void-accent-rgb),0.05) 0%, transparent 52%),
+                radial-gradient(ellipse 30% 60% at 50% 100%, rgba(var(--void-accent-rgb),0.04) 0%, transparent 50%),
+                linear-gradient(160deg, #050c10 0%, #030709 50%, var(--void-bg) 100%);
+        }
+        /* scan-line texture */
+        #pf-banner-bg::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                transparent 2px,
+                rgba(0,0,0,0.07) 2px,
+                rgba(0,0,0,0.07) 4px
+            );
+            pointer-events: none;
+        }
+        /* vertical grid lines */
+        #pf-banner-deco {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                rgba(var(--void-accent-rgb),0.025) 0px,
+                rgba(var(--void-accent-rgb),0.025) 1px,
+                transparent 1px,
+                transparent 90px
+            );
+            pointer-events: none;
+        }
+        /* bottom fade — tall enough to darken behind the overlapping identity bar */
+        #pf-banner::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 160px;
+            background: linear-gradient(to bottom,
+                transparent 0%,
+                rgba(5,7,10,0.55) 40%,
+                rgba(5,7,10,0.88) 75%,
+                var(--void-bg) 100%
+            );
+            pointer-events: none;
+        }
+        /* Castle mark watermark */
+        #pf-banner-mark {
+            position: absolute;
+            right: 40px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 96px;
+            height: 96px;
+            opacity: 0.035;
+            pointer-events: none;
+            user-select: none;
+        }
+        /* Accent line at bottom of banner */
+        #pf-banner-accent {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(var(--void-accent-rgb),0.3) 30%,
+                rgba(var(--void-accent-rgb),0.5) 50%,
+                rgba(var(--void-accent-rgb),0.3) 70%,
+                transparent 100%
+            );
+        }
+        /* Simplified banner mode: show only image */
+        #pf-banner-bg,
+        #pf-banner-deco,
+        #pf-banner-mark,
+        #pf-banner-accent {
+            display: none;
+        }
+        #pf-banner::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 175px;
+            background: linear-gradient(
+                to bottom,
+                rgba(5, 7, 10, 0) 0%,
+                rgba(5, 7, 10, 0.08) 28%,
+                rgba(5, 7, 10, 0.22) 48%,
+                rgba(5, 7, 10, 0.46) 68%,
+                rgba(5, 7, 10, 0.72) 86%,
+                rgba(5, 7, 10, 0.9) 100%
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* ══════════════════════════════
+           IDENTITY BAR — overlaps banner bottom
+        ══════════════════════════════ */
+        #pf-identity-bar {
+            padding: 0 24px 22px;
+            border-bottom: 1px solid rgba(var(--void-accent-rgb),0.12);
+            margin-bottom: 18px;
+            margin-top: -76px;
+            position: relative;
+            z-index: 2;
+        }
+        #pf-identity-inner {
             display: flex;
-            align-items: center;
-            gap: 20px;
-            padding-bottom: 28px;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
-            margin-bottom: 28px;
+            align-items: flex-end;
+            gap: 18px;
             flex-wrap: wrap;
         }
-        #pf-avatar {
-            width: 80px; height: 80px;
-            border-radius: 20px;
-            border: 1px solid rgba(255,255,255,0.1);
-            object-fit: cover;
-            box-shadow: 0 12px 36px rgba(0,0,0,0.5);
-            background: #0a0c10;
+
+        /* Avatar */
+        #pf-avatar-block {
+            position: relative;
             flex-shrink: 0;
+            margin-top: -20px;
+            z-index: 2;
+        }
+        #pf-avatar {
+            width: 104px;
+            height: 104px;
+            border-radius: 14px;
+            object-fit: cover;
+            border: 3px solid rgba(var(--void-accent-rgb),0.55);
+            box-shadow:
+                0 0 0 1px rgba(0,0,0,0.5),
+                0 16px 44px rgba(0,0,0,0.65),
+                0 0 24px rgba(var(--void-accent-rgb),0.08);
+            background: #0a0c10;
+            display: block;
+        }
+        #pf-avatar.creator-border { border-color: rgba(var(--void-accent-rgb), 0.8); }
+
+        /* Info block */
+        #pf-info-block {
+            flex: 1;
+            min-width: 220px;
+            padding-bottom: 2px;
+        }
+        #pf-name-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 7px;
         }
         #pf-name {
             font-family: 'Outfit', sans-serif;
             font-weight: 900;
-            font-size: clamp(1.8rem, 5vw, 3rem);
+            font-size: clamp(1.6rem, 4vw, 2.2rem);
             line-height: 1;
             letter-spacing: -0.03em;
             text-transform: uppercase;
@@ -69,7 +211,7 @@
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            font-size: 0.6rem;
+            font-size: 0.53rem;
             font-weight: 800;
             letter-spacing: 0.18em;
             text-transform: uppercase;
@@ -81,17 +223,87 @@
         }
         #pf-role-badge.creator {
             background: rgba(var(--void-accent-rgb),0.12);
-            border-color: rgba(var(--void-accent-rgb),0.35);
+            border-color: rgba(var(--void-accent-rgb),0.38);
             color: var(--void-accent);
+        }
+
+        /* XP / Level bar */
+        #pf-xp-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .pf-xp-lvl {
+            font-size: 0.52rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(var(--void-accent-rgb),0.85);
+            white-space: nowrap;
+        }
+        #pf-xp-bar {
+            flex: 1;
+            max-width: 200px;
+            height: 5px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.07);
+            overflow: hidden;
+            position: relative;
+        }
+        #pf-xp-fill {
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: 0%;
+            background: linear-gradient(90deg, rgba(87,203,222,0.75), rgba(var(--void-accent-rgb),1));
+            border-radius: 3px;
+            transition: width 1s cubic-bezier(0.16,1,0.3,1);
+        }
+
+
+        /* Profile title (shown under username) */
+        #pf-title-display {
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-accent);
+            opacity: 0.85;
+            margin-bottom: 6px;
+        }
+
+        /* Status line */
+        #pf-status-line {
+            font-size: 0.52rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            font-weight: 700;
+            padding: 5px 10px;
+            border-left: 2px solid rgba(var(--void-accent-rgb),0.5);
+            background: rgba(var(--void-accent-rgb),0.04);
+            border-radius: 0 6px 6px 0;
+            max-width: 480px;
+        }
+        #pf-status-line strong { color: var(--void-text); }
+
+        /* Actions */
+        #pf-hero-actions {
+            margin-left: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+            padding-bottom: 4px;
+            flex-shrink: 0;
         }
         .pf-code-row {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin-top: 6px;
+            gap: 6px;
         }
         .pf-code-label {
-            font-size: 0.55rem;
+            font-size: 0.49rem;
             font-weight: 800;
             letter-spacing: 0.2em;
             text-transform: uppercase;
@@ -99,76 +311,61 @@
         }
         .pf-code-value {
             font-family: 'Space Grotesk', monospace;
-            font-size: 0.8rem;
+            font-size: 0.76rem;
             font-weight: 700;
-            letter-spacing: 0.14em;
+            letter-spacing: 0.12em;
             color: var(--void-accent);
         }
-        #pf-hero-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .pf-action-row { display: flex; gap: 8px; align-items: center; }
+        #pf-edit-btn, #pf-sections-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 13px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #pf-edit-btn:hover, #pf-sections-btn:hover {
+            background: rgba(255,255,255,0.08);
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.2);
+        }
+        #pf-edit-btn.active, #pf-sections-btn.active {
+            background: rgba(var(--void-accent-rgb),0.12);
+            border-color: rgba(var(--void-accent-rgb),0.4);
+            color: var(--void-accent);
+        }
 
-        /* ── Edit mode button ── */
-        #pf-edit-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 8px 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.04);
-            color: var(--void-muted);
-            font-size: 0.65rem;
-            font-weight: 800;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        #pf-edit-btn:hover { background: rgba(255,255,255,0.08); color: var(--void-text); border-color: rgba(255,255,255,0.2); }
-        #pf-edit-btn.active {
-            background: rgba(var(--void-accent-rgb),0.12);
-            border-color: rgba(var(--void-accent-rgb),0.4);
-            color: var(--void-accent);
-        }
-        #pf-sections-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 8px 14px;
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.04);
-            color: var(--void-muted);
-            font-size: 0.62rem;
-            font-weight: 800;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        #pf-sections-btn:hover { background: rgba(255,255,255,0.08); color: var(--void-text); border-color: rgba(255,255,255,0.2); }
-        #pf-sections-btn.active {
-            background: rgba(var(--void-accent-rgb),0.12);
-            border-color: rgba(var(--void-accent-rgb),0.4);
-            color: var(--void-accent);
-        }
+        /* ══════════════════════════════
+           SECTIONS PANEL
+        ══════════════════════════════ */
         #pf-sections-panel {
-            margin-top: 12px;
-            padding: 14px;
+            margin: 0 24px 18px;
+            padding: 16px;
             border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.08);
-            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(var(--void-accent-rgb),0.12);
+            background: rgba(var(--void-accent-rgb),0.03);
         }
         .pf-sections-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0,1fr));
             gap: 8px;
             margin-bottom: 12px;
         }
+        @media (max-width: 500px) { .pf-sections-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
         .pf-sections-item {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: var(--void-muted);
@@ -177,9 +374,9 @@
         .pf-sections-item input { accent-color: rgba(var(--void-accent-rgb),1); }
         #pf-wishlist-editor {
             width: 100%;
-            min-height: 86px;
+            min-height: 80px;
             resize: vertical;
-            border-radius: 10px;
+            border-radius: 8px;
             border: 1px solid rgba(255,255,255,0.1);
             background: rgba(0,0,0,0.2);
             color: var(--void-text);
@@ -188,9 +385,9 @@
             padding: 10px;
             outline: none;
         }
-        #pf-wishlist-editor:focus {
-            border-color: rgba(var(--void-accent-rgb),0.55);
-            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.2);
+        #pf-wishlist-editor:focus, #pf-bio-editor:focus {
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.18);
         }
         #pf-save-sections {
             margin-top: 10px;
@@ -198,171 +395,256 @@
             align-items: center;
             gap: 6px;
             padding: 8px 12px;
-            border-radius: 10px;
+            border-radius: 8px;
             border: 1px solid rgba(var(--void-accent-rgb),0.35);
-            background: rgba(var(--void-accent-rgb),0.12);
+            background: rgba(var(--void-accent-rgb),0.1);
             color: var(--void-accent);
-            font-size: 0.62rem;
+            font-size: 0.6rem;
             font-weight: 800;
             letter-spacing: 0.12em;
             text-transform: uppercase;
             cursor: pointer;
         }
+        #pf-achievement-picker {
+            margin-top: 10px;
+            max-height: 180px;
+            overflow: auto;
+            padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .pf-achievement-pick {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.6rem;
+            color: var(--void-text);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 6px 8px;
+            border-radius: 7px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .pf-achievement-pick input { accent-color: rgba(var(--void-accent-rgb),1); }
+        .pf-achievement-pick .icon { width: 18px; text-align: center; opacity: 0.9; }
 
-        /* ── Widget grid ── */
-        #pf-widgets {
+        /* ══════════════════════════════
+           TWO-COLUMN STEAM LAYOUT
+        ══════════════════════════════ */
+        #pf-steam-layout {
             display: grid;
-            grid-template-columns: 1fr;
-            gap: 16px;
+            grid-template-columns: 268px 1fr;
+            gap: 14px;
+            padding: 0 24px;
+            align-items: start;
         }
-        /* Row 1: showcase spans full width */
-        #widget-showcase { grid-column: 1 / -1; }
-
-        /* Row 2: three columns */
-        @media (min-width: 860px) {
-            #pf-widgets {
-                grid-template-columns: 240px 1fr 240px;
-            }
-            #widget-showcase { grid-column: 1 / -1; }
+        @media (max-width: 900px) {
+            #pf-steam-layout { grid-template-columns: 1fr; padding: 0 16px; }
+            #pf-identity-bar { padding: 0 16px 22px; margin-top: -58px; }
+            #pf-sections-panel { margin: 0 16px 18px; }
+            #pf-banner { height: 160px; }
+            #pf-avatar-block { margin-top: -10px; }
+            #pf-avatar { width: 86px; height: 86px; border-radius: 12px; }
         }
 
-        /* ── Widget base ── */
+        /* Sidebar */
+        #pf-sidebar-widgets {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* Main */
+        #pf-main-widgets {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* Trophy + Latest side by side */
+        #pf-row2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        @media (max-width: 600px) { #pf-row2 { grid-template-columns: 1fr; } }
+
+        /* ══════════════════════════════
+           WIDGET BASE (Steam-style panels)
+        ══════════════════════════════ */
         .pf-widget {
-            background: transparent;
-            border: 1px solid transparent;
-            border-radius: 20px;
+            background: rgba(10,12,16,0.7);
+            border: 1px solid rgba(var(--void-accent-rgb),0.12);
+            border-radius: 14px;
             overflow: hidden;
-            transition: all 0.2s var(--ease-premium, cubic-bezier(0.16,1,0.3,1));
+            transition: border-color 0.2s;
             position: relative;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.55);
         }
         body.pf-editing .pf-widget {
-            background: rgba(255,255,255,0.03);
-            border: 1px dashed rgba(255,255,255,0.12);
+            border-color: rgba(var(--void-accent-rgb),0.28);
+            border-style: dashed;
         }
-        .pf-widget.drag-active { 
+        .pf-widget.drag-active {
             border-style: solid;
-            border-color: rgba(var(--void-accent-rgb),0.5); 
-            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.15); 
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.12);
         }
-        .pf-widget.drag-over { 
+        .pf-widget.drag-over {
             border-style: solid;
-            border-color: rgba(var(--void-accent-rgb),0.8); 
-            background: rgba(var(--void-accent-rgb),0.05); 
+            border-color: rgba(var(--void-accent-rgb),0.8);
+            background: rgba(var(--void-accent-rgb),0.04);
         }
 
-        /* Drag handle — shown only in edit mode */
+        /* Drag handle */
         .pf-drag-handle {
             display: none;
             position: absolute;
-            top: 10px; right: 10px;
-            width: 28px; height: 28px;
+            top: 9px; right: 9px;
+            width: 24px; height: 24px;
             align-items: center;
             justify-content: center;
             background: rgba(255,255,255,0.06);
             border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
+            border-radius: 5px;
             color: var(--void-muted);
-            font-size: 0.7rem;
+            font-size: 0.62rem;
             cursor: grab;
             z-index: 10;
-            transition: background 0.15s;
         }
         body.pf-editing .pf-drag-handle { display: flex; }
         body.pf-editing .pf-widget { cursor: grab; }
         body.pf-editing .pf-widget:active { cursor: grabbing; }
 
-        /* ── Widget titles ── */
+        /* ── Widget section header ── */
         .pf-widget-title {
-            font-size: 0.6rem;
+            font-size: 0.62rem;
             font-weight: 800;
-            letter-spacing: 0.22em;
+            letter-spacing: 0.24em;
             text-transform: uppercase;
             color: var(--void-accent);
-            padding: 16px 18px 0;
+            padding: 14px 16px 0;
             margin-bottom: 12px;
+            border-top: 1px solid rgba(var(--void-accent-rgb),0.2);
         }
 
-        /* ── Showcase carousel ── */
+        /* ══════════════════════════════
+           SHOWCASE CAROUSEL
+        ══════════════════════════════ */
         #pf-showcase-inner {
-            padding: 0 0 24px;
             position: relative;
-            height: 480px;
+            height: 430px;
             perspective: 1400px;
+            padding-bottom: 16px;
         }
         .pf-showcase-slot {
             position: absolute;
-            width: 230px;
-            height: 322px;
-            border-radius: 14px;
+            width: 200px; height: 280px;
+            border-radius: 10px;
             overflow: hidden;
             top: 50%;
-            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.6s cubic-bezier(0.16,1,0.3,1);
             cursor: pointer;
             background: #0d0f14;
-            box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.55);
         }
         .pf-showcase-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .pf-showcase-slot[data-pos="center"] {
             left: 50%; transform: translateX(-50%) translateY(-50%) scale(1.1);
-            z-index: 10; box-shadow: 0 0 50px 6px rgba(var(--void-accent-rgb),0.22), 0 25px 60px rgba(0,0,0,0.7);
+            z-index: 10;
+            box-shadow: 0 0 50px 6px rgba(var(--void-accent-rgb),0.22), 0 25px 60px rgba(0,0,0,0.7);
         }
-        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 255px); transform: translateX(-50%) translateY(-53%) rotateY(-22deg) scale(0.82); z-index: 7; opacity: 0.75; }
-        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 460px); transform: translateX(-50%) translateY(-57%) rotateY(-38deg) scale(0.62); z-index: 4; opacity: 0.38; }
-        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 255px); transform: translateX(-50%) translateY(-53%) rotateY(22deg) scale(0.82);  z-index: 7; opacity: 0.75; }
-        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 460px); transform: translateX(-50%) translateY(-57%) rotateY(38deg) scale(0.62);   z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 225px); transform: translateX(-50%) translateY(-53%) rotateY(-22deg) scale(0.82); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 405px); transform: translateX(-50%) translateY(-57%) rotateY(-38deg) scale(0.62); z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 225px); transform: translateX(-50%) translateY(-53%) rotateY(22deg)  scale(0.82); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 405px); transform: translateX(-50%) translateY(-57%) rotateY(38deg)  scale(0.62); z-index: 4; opacity: 0.38; }
         .pf-showcase-slot[data-pos="hidden"] { left: 50%; transform: translateX(-50%) translateY(-60%) scale(0.4); z-index: 1; opacity: 0; pointer-events: none; }
-        /* Rarity accent on center slot */
-        .pf-showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 48px 8px rgba(251,191,36,0.3), 0 20px 48px rgba(0,0,0,0.6); }
+
+        .pf-showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 48px 8px rgba(251,191,36,0.3),  0 20px 48px rgba(0,0,0,0.6); }
         .pf-showcase-slot[data-pos="center"][data-rarity="Epic"]      { box-shadow: 0 0 48px 8px rgba(168,85,247,0.28), 0 20px 48px rgba(0,0,0,0.6); }
         .pf-showcase-slot[data-pos="center"][data-rarity="Rare"]      { box-shadow: 0 0 40px 4px rgba(59,130,246,0.25), 0 20px 48px rgba(0,0,0,0.6); }
 
-        /* Empty slot placeholder */
         .pf-showcase-empty {
             width: 100%; height: 100%;
             display: flex; align-items: center; justify-content: center;
-            color: rgba(255,255,255,0.08); font-size: 2rem;
+            color: rgba(255,255,255,0.07); font-size: 2.5rem;
         }
+        #pf-dots { display: flex; justify-content: center; gap: 5px; margin-top: 12px; padding-bottom: 14px; }
+        /* Showcase view toggle */
+        .pf-showcase-view-btn {
+            margin-left: auto;
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .pf-showcase-view-btn:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+        /* Static grid view */
+        #pf-showcase-grid-view {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            padding: 0 14px 16px;
+        }
+        .pf-showcase-grid-card {
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            aspect-ratio: 5 / 7;
+            background: #0d0f14;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .pf-showcase-grid-card:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 12px 32px rgba(0,0,0,0.6); }
+        .pf-showcase-grid-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.1); transition: all 0.3s; cursor: pointer; }
+        .pf-dot.active { width: 16px; border-radius: 2px; background: rgba(var(--void-accent-rgb),0.75); }
 
-        /* Nav dots */
-        #pf-dots { display: flex; justify-content: center; gap: 6px; margin-top: 16px; }
-        .pf-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.12); transition: all 0.3s; cursor: pointer; }
-        .pf-dot.active { width: 18px; border-radius: 3px; background: rgba(var(--void-accent-rgb),0.75); }
-
-        /* ── Stats widget ── */
-        #widget-stats .pf-widget-title { color: rgba(var(--void-accent-rgb),0.9); }
+        /* ══════════════════════════════
+           STATS WIDGET
+        ══════════════════════════════ */
         .pf-stat-row {
             display: flex;
             justify-content: space-between;
             align-items: baseline;
-            padding: 6px 18px;
+            padding: 5px 14px;
             border-bottom: 1px solid rgba(255,255,255,0.04);
-            font-size: 0.6rem;
-            letter-spacing: 0.08em;
+            font-size: 0.56rem;
+            letter-spacing: 0.07em;
             text-transform: uppercase;
             font-weight: 700;
-            color: var(--void-muted);
+            color: #8f98a0;
         }
         .pf-stat-row:last-child { border-bottom: none; }
         .pf-stat-row .val {
             font-family: 'Space Grotesk', monospace;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 700;
             color: var(--void-text);
         }
-        #pf-stats-footer { padding: 14px 18px 18px; }
+        #pf-stats-footer { padding: 10px 14px 14px; }
 
-        /* ── Trophy cabinet ── */
+        /* ══════════════════════════════
+           TROPHY CABINET
+        ══════════════════════════════ */
         #pf-trophy-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-            padding: 0 18px 20px;
+            gap: 7px;
+            padding: 0 14px 16px;
         }
         .pf-trophy-slot {
             aspect-ratio: 5/7;
             border-radius: 10px;
             overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.07);
             background: rgba(255,255,255,0.02);
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
@@ -370,49 +652,51 @@
         }
         .pf-trophy-slot:hover { transform: translateY(-3px); }
         .pf-trophy-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .pf-trophy-slot.legendary { border-color: rgba(251,191,36,0.4); box-shadow: 0 0 12px rgba(251,191,36,0.15); }
-        .pf-trophy-slot.epic      { border-color: rgba(168,85,247,0.35); box-shadow: 0 0 12px rgba(168,85,247,0.12); }
-        .pf-trophy-slot.rare      { border-color: rgba(59,130,246,0.3);  box-shadow: 0 0 12px rgba(59,130,246,0.1); }
+        .pf-trophy-slot.legendary { border-color: rgba(251,191,36,0.4); box-shadow: 0 0 10px rgba(251,191,36,0.14); }
+        .pf-trophy-slot.epic      { border-color: rgba(168,85,247,0.35); box-shadow: 0 0 10px rgba(168,85,247,0.12); }
+        .pf-trophy-slot.rare      { border-color: rgba(59,130,246,0.3);  box-shadow: 0 0 10px rgba(59,130,246,0.10); }
         .pf-trophy-slot.empty { cursor: default; }
         .pf-trophy-slot.empty::after {
             content: '';
             position: absolute; inset: 0;
-            border: 2px dashed rgba(255,255,255,0.06);
+            border: 2px dashed rgba(255,255,255,0.05);
             border-radius: 9px;
         }
         .pf-rarity-pip {
-            position: absolute; top: 5px; right: 5px;
-            width: 6px; height: 6px; border-radius: 50%;
+            position: absolute; top: 4px; right: 4px;
+            width: 5px; height: 5px; border-radius: 50%;
         }
-        .pf-rarity-pip.legendary { background: #fbbf24; box-shadow: 0 0 5px #fbbf24; }
-        .pf-rarity-pip.epic      { background: #a855f7; box-shadow: 0 0 5px #a855f7; }
-        .pf-rarity-pip.rare      { background: #3b82f6; box-shadow: 0 0 5px #3b82f6; }
+        .pf-rarity-pip.legendary { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
+        .pf-rarity-pip.epic      { background: #a855f7; box-shadow: 0 0 4px #a855f7; }
+        .pf-rarity-pip.rare      { background: #3b82f6; box-shadow: 0 0 4px #3b82f6; }
 
-        /* ── Latest pack pull ── */
-        #pf-latest-inner { padding: 8px 18px 22px; }
+        /* ══════════════════════════════
+           LATEST PACK PULL
+        ══════════════════════════════ */
+        #pf-latest-inner { padding: 6px 14px 16px; }
         .pf-latest-card {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 8px 0;
+            gap: 9px;
+            padding: 6px 0;
             border-bottom: 1px solid rgba(255,255,255,0.04);
             cursor: pointer;
             transition: background 0.15s;
-            border-radius: 8px;
+            border-radius: 5px;
         }
         .pf-latest-card:last-child { border-bottom: none; }
-        .pf-latest-card:hover { background: rgba(255,255,255,0.03); padding-left: 6px; }
+        .pf-latest-card:hover { background: rgba(255,255,255,0.03); padding-left: 5px; }
         .pf-latest-thumb {
-            width: 36px; height: 50px;
-            border-radius: 6px;
+            width: 30px; height: 42px;
+            border-radius: 4px;
             object-fit: cover;
             flex-shrink: 0;
-            border: 1px solid rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.07);
             background: #0d0f14;
         }
         .pf-latest-info { min-width: 0; flex: 1; }
         .pf-latest-name {
-            font-size: 0.7rem;
+            font-size: 0.63rem;
             font-weight: 700;
             color: var(--void-text);
             white-space: nowrap;
@@ -420,53 +704,428 @@
             text-overflow: ellipsis;
         }
         .pf-latest-meta {
-            font-size: 0.55rem;
+            font-size: 0.49rem;
             font-weight: 600;
             letter-spacing: 0.1em;
             text-transform: uppercase;
             color: var(--void-muted);
             margin-top: 2px;
         }
-        .pf-rarity-dot-sm {
-            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
-        }
+        .pf-rarity-dot-sm { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 
-        /* ── Wishlist widget ── */
-        #widget-wishlist .pf-widget-title { color: rgba(var(--void-accent-rgb),0.9); }
+        /* ══════════════════════════════
+           WISHLIST
+        ══════════════════════════════ */
         #pf-wishlist-list {
-            padding: 0 18px 18px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+            padding: 0 10px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
         }
-        .pf-wishlist-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 9px 10px;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.06);
-            font-size: 0.68rem;
-            color: var(--void-text);
+        .pf-wishlist-card {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 9px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: #0d0f14;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .pf-wishlist-card:hover { transform: translateY(-2px); }
+        .pf-wishlist-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-wishlist-card-overlay {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%);
+            padding: 18px 6px 5px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .pf-wishlist-card:hover .pf-wishlist-card-overlay { opacity: 1; }
+        .pf-wishlist-card-name {
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #fff;
+            line-height: 1.3;
+        }
+        .pf-wishlist-card-set {
+            font-size: 0.42rem;
+            color: rgba(var(--void-accent-rgb),0.85);
             letter-spacing: 0.06em;
             text-transform: uppercase;
             font-weight: 700;
+            margin-top: 1px;
         }
-        .pf-wishlist-item i { color: rgba(var(--void-accent-rgb),0.85); font-size: 0.85rem; }
         .pf-wishlist-empty {
-            padding: 2px 18px 18px;
+            grid-column: 1 / -1;
+            padding: 8px 4px 6px;
             color: var(--void-muted);
-            font-size: 0.68rem;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
+            font-size: 0.63rem;
             font-style: italic;
         }
 
-        /* ── Card modal (lightweight) ── */
+        /* ── Wishlist picker (in sections panel) ── */
+        #pf-wishlist-search-wrap { position: relative; margin-bottom: 8px; }
+        #pf-wishlist-search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.2);
+            color: var(--void-text);
+            font-size: 0.68rem;
+            outline: none;
+        }
+        #pf-wishlist-search-input:focus {
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.18);
+        }
+        #pf-wishlist-search-results {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            margin-bottom: 8px;
+            min-height: 0;
+        }
+        .pf-wl-result {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 7px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: #0d0f14;
+            transition: border-color 0.15s;
+        }
+        .pf-wl-result img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-wl-result:hover { border-color: rgba(var(--void-accent-rgb),0.5); }
+        .pf-wl-result.selected { border-color: rgba(var(--void-accent-rgb),0.9); box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.2); }
+        .pf-wl-result-check {
+            position: absolute; top: 3px; right: 3px;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: rgba(var(--void-accent-rgb),1);
+            display: none;
+            align-items: center; justify-content: center;
+            font-size: 8px; color: #000;
+        }
+        .pf-wl-result.selected .pf-wl-result-check { display: flex; }
+        .pf-wl-result-name {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
+            padding: 12px 4px 3px;
+            font-size: 0.4rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #fff;
+            line-height: 1.2;
+        }
+        #pf-wishlist-search-status {
+            font-size: 0.52rem;
+            color: var(--void-muted);
+            font-style: italic;
+            margin-bottom: 6px;
+            min-height: 1em;
+        }
+        #pf-wishlist-current-label {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-bottom: 5px;
+        }
+        #pf-wishlist-current {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .pf-wl-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px 3px 6px;
+            border-radius: 100px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.25);
+            background: rgba(var(--void-accent-rgb),0.07);
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            cursor: pointer;
+        }
+        .pf-wl-chip:hover { border-color: rgba(255,100,100,0.4); background: rgba(255,100,100,0.07); }
+        .pf-wl-chip i { font-size: 0.6rem; color: var(--void-muted); }
+
+        /* ══════════════════════════════
+           ACHIEVEMENTS
+        ══════════════════════════════ */
+        #pf-achievements-grid {
+            padding: 0 14px 14px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0,1fr));
+            gap: 8px;
+        }
+        @media (max-width: 640px) { #pf-achievements-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+        .pf-achievement-card {
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(10,12,16,0.6);
+            padding: 10px;
+            min-height: 62px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+        .pf-achievement-card .icon {
+            width: 22px; height: 22px;
+            border-radius: 8px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.3);
+            background: rgba(var(--void-accent-rgb),0.1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.78rem; flex-shrink: 0;
+        }
+        .pf-achievement-card .title {
+            font-size: 0.54rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.07em;
+            color: var(--void-text); line-height: 1.3;
+        }
+        .pf-achievement-card .meta {
+            margin-top: 3px; font-size: 0.47rem;
+            color: var(--void-muted); letter-spacing: 0.06em; text-transform: uppercase;
+            display: flex; flex-direction: column; gap: 2px;
+        }
+        .pf-ach-creator {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            color: rgba(var(--void-accent-rgb),0.85);
+            font-size: 0.46rem;
+        }
+        .pf-ach-creator i { font-size: 0.58rem; }
+        .pf-achievements-empty {
+            grid-column: 1 / -1;
+            color: var(--void-muted); font-size: 0.63rem;
+            font-style: italic; padding: 4px 2px;
+        }
+
+        /* ══════════════════════════════
+           BIO WIDGET
+        ══════════════════════════════ */
+        #pf-bio-content {
+            padding: 4px 14px 16px;
+            font-size: 0.68rem;
+            line-height: 1.65;
+            color: var(--void-muted);
+            white-space: pre-wrap;
+        }
+        #pf-bio-content.empty::after {
+            content: 'No bio set yet.';
+            opacity: 0.45;
+            font-style: italic;
+        }
+
+        /* ══════════════════════════════
+           COLLECTION BREAKDOWN
+        ══════════════════════════════ */
+        #pf-rarity-bars {
+            padding: 0 14px 16px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        .pf-rarity-pill {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 4px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.04);
+        }
+        .pf-rarity-pill-label {
+            font-size: 0.45rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .pf-rarity-pill-count {
+            font-size: 1.1rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        /* ══════════════════════════════
+           BATTLE RECORD
+        ══════════════════════════════ */
+        #pf-battle-inner { padding: 0 16px 18px; }
+        .pf-battle-numbers {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 28px;
+            padding: 12px 0 16px;
+        }
+        .pf-battle-stat { text-align: center; }
+        .pf-battle-num {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 2.2rem;
+            line-height: 1;
+        }
+        .pf-battle-lbl {
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-top: 4px;
+        }
+        .pf-battle-divider {
+            font-size: 1.4rem;
+            color: rgba(255,255,255,0.08);
+            font-weight: 900;
+            padding-bottom: 12px;
+        }
+        .pf-battle-bar-track {
+            height: 5px;
+            border-radius: 3px;
+            background: rgba(168,85,247,0.18);
+            overflow: hidden;
+            margin-bottom: 7px;
+        }
+        .pf-battle-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, rgba(var(--void-accent-rgb),0.7), rgba(var(--void-accent-rgb),1));
+            width: 0%;
+            transition: width 1s cubic-bezier(0.16,1,0.3,1);
+        }
+        .pf-battle-rate {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .pf-battle-rate .win { color: rgba(var(--void-accent-rgb),0.9); }
+        .pf-battle-rate .lose { color: rgba(168,85,247,0.8); }
+        .pf-battle-empty {
+            padding: 16px 0 8px;
+            text-align: center;
+            font-size: 0.62rem;
+            font-style: italic;
+            color: var(--void-muted);
+            opacity: 0.6;
+        }
+
+        /* ══════════════════════════════
+           SUPPORTED CREATORS
+        ══════════════════════════════ */
+        #pf-creators-inner { padding: 0 14px 16px; }
+        .pf-creators-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+        }
+        .pf-creator-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(255,255,255,0.03);
+            overflow: hidden;
+        }
+        .pf-creator-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .pf-creator-name {
+            font-size: 0.58rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-creator-count {
+            margin-left: auto;
+            font-size: 0.5rem;
+            font-weight: 800;
+            color: var(--void-muted);
+            flex-shrink: 0;
+        }
+
+        /* ══════════════════════════════
+           CARD SETS
+        ══════════════════════════════ */
+        #pf-sets-inner { padding: 0 14px 16px; display: flex; flex-direction: column; gap: 7px; }
+        .pf-set-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pf-set-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .pf-set-name {
+            font-size: 0.58rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-set-code {
+            font-size: 0.46rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            opacity: 0.6;
+        }
+        .pf-set-bar-wrap {
+            flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.06);
+            overflow: hidden;
+        }
+        .pf-set-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, rgba(var(--void-accent-rgb),0.6), rgba(var(--void-accent-rgb),1));
+            transition: width 1s cubic-bezier(0.16,1,0.3,1);
+        }
+        .pf-set-count {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            color: rgba(var(--void-accent-rgb),0.85);
+            white-space: nowrap;
+        }
+
+        /* ══════════════════════════════
+           CARD MODAL
+        ══════════════════════════════ */
         #pf-card-modal {
             position: fixed; inset: 0; z-index: 9000;
-            background: rgba(5,7,10,0.9);
+            background: rgba(5,7,10,0.88);
             backdrop-filter: blur(18px);
             display: flex; align-items: center; justify-content: center;
             padding: 24px;
@@ -476,33 +1135,192 @@
         #pf-card-modal.open { opacity: 1; pointer-events: all; }
         #pf-modal-inner {
             position: relative;
-            max-width: 360px; width: 100%;
-            background: rgba(10,12,16,0.96);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 20px;
+            max-width: 340px; width: 100%;
+            background: rgba(10,12,16,0.98);
+            border: 1px solid rgba(var(--void-accent-rgb),0.15);
+            border-radius: 24px;
             overflow: hidden;
             box-shadow: 0 40px 80px rgba(0,0,0,0.7);
         }
         #pf-modal-img { width: 100%; aspect-ratio: 5/7; object-fit: cover; display: block; }
-        #pf-modal-body { padding: 16px 20px 22px; }
+        #pf-modal-body { padding: 14px 18px 20px; }
         #pf-modal-name {
             font-family: 'Outfit', sans-serif;
-            font-weight: 900;
-            font-size: 1.25rem;
-            letter-spacing: -0.02em;
-            text-transform: uppercase;
-            color: var(--void-text);
-            margin-bottom: 4px;
+            font-weight: 900; font-size: 1.1rem;
+            letter-spacing: -0.02em; text-transform: uppercase;
+            color: var(--void-text); margin-bottom: 4px;
         }
-        .pf-modal-meta { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--void-muted); }
+        .pf-modal-meta { font-size: 0.56rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--void-muted); }
         #pf-modal-close {
-            position: absolute; top: 12px; right: 12px;
-            width: 32px; height: 32px;
+            position: absolute; top: 10px; right: 10px;
+            width: 28px; height: 28px;
             background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; color: var(--void-muted); font-size: 0.75rem; transition: all 0.15s;
+            border-radius: 6px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--void-muted); font-size: 0.72rem; transition: all 0.15s;
         }
         #pf-modal-close:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+
+        /* ══════════════════════════════
+           BANNER IMAGE (earned/selected)
+        ══════════════════════════════ */
+        #pf-banner-img {
+            position: absolute;
+            inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            object-position: center;
+            display: block;
+            z-index: 1;
+        }
+        #pf-banner.has-banner-img #pf-banner-img { display: block; }
+        #pf-banner.has-banner-img #pf-banner-bg {
+            background:
+                radial-gradient(ellipse 60% 120% at 8% 55%,  rgba(var(--void-accent-rgb),0.14) 0%, transparent 58%),
+                radial-gradient(ellipse 40% 80% at 85% 20%,  rgba(var(--void-accent-rgb),0.08) 0%, transparent 52%),
+                radial-gradient(ellipse 30% 60% at 50% 100%, rgba(var(--void-accent-rgb),0.06) 0%, transparent 50%),
+                linear-gradient(160deg, rgba(5,12,16,0.72) 0%, rgba(3,7,9,0.62) 50%, rgba(6,9,15,0.80) 100%);
+        }
+
+        /* Banner picker (in sections panel) */
+        #pf-banner-picker {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            max-height: 160px;
+            overflow-y: auto;
+            padding-bottom: 4px;
+        }
+        .pf-banner-thumb {
+            position: relative;
+            width: 118px; height: 44px;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+            transition: border-color 0.15s;
+            background: rgba(255,255,255,0.03);
+        }
+        .pf-banner-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-banner-thumb:hover { border-color: rgba(var(--void-accent-rgb),0.5); }
+        .pf-banner-thumb.selected {
+            border-color: rgba(var(--void-accent-rgb),0.9);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.22);
+        }
+        .pf-banner-thumb-none {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.49rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .pf-banner-thumb.selected.pf-banner-thumb-none { color: var(--void-accent); }
+
+        /* ══════════════════════════════
+           TRADE OFFER BUTTON (visitor)
+        ══════════════════════════════ */
+        #pf-trade-offer-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.38);
+            background: rgba(var(--void-accent-rgb),0.10);
+            color: var(--void-accent);
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #pf-trade-offer-btn:hover {
+            background: rgba(var(--void-accent-rgb),0.20);
+            border-color: rgba(var(--void-accent-rgb),0.65);
+        }
+
+        /* ══════════════════════════════
+           TITLE PICKER
+        ══════════════════════════════ */
+        #pf-title-picker {
+            max-height: 240px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 2px;
+        }
+        .pf-title-category-header {
+            font-size: 0.42rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: rgba(var(--void-accent-rgb), 0.65);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-top: 4px;
+        }
+        .pf-title-category-header:first-child { padding-top: 0; }
+        .pf-title-category-header::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(var(--void-accent-rgb), 0.1);
+        }
+        .pf-title-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+        .pf-title-item {
+            position: relative;
+            padding: 8px 10px 7px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255,255,255,0.02);
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+            user-select: none;
+            overflow: hidden;
+        }
+        .pf-title-item.unlocked:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.35);
+            background: rgba(var(--void-accent-rgb), 0.06);
+        }
+        .pf-title-item.selected {
+            border-color: rgba(var(--void-accent-rgb), 0.65) !important;
+            background: rgba(var(--void-accent-rgb), 0.1) !important;
+            box-shadow: 0 0 14px rgba(var(--void-accent-rgb), 0.1);
+        }
+        .pf-title-item.locked { opacity: 0.25; cursor: not-allowed; }
+        .pf-title-item-status {
+            position: absolute;
+            top: 6px; right: 7px;
+            font-size: 0.55rem;
+            color: var(--void-muted);
+            line-height: 1;
+        }
+        .pf-title-item.selected .pf-title-item-status { color: var(--void-accent); }
+        .pf-title-item-name {
+            font-size: 0.6rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            line-height: 1.2;
+            padding-right: 14px;
+            margin-bottom: 3px;
+        }
+        .pf-title-item.selected .pf-title-item-name { color: var(--void-accent); }
+        .pf-title-item-desc {
+            font-size: 0.44rem;
+            color: var(--void-muted);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            line-height: 1.3;
+            opacity: 0.75;
+        }
 
         /* ── Loading / Not found ── */
         #pf-loading, #pf-not-found {
@@ -512,7 +1330,7 @@
             gap: 14px; text-align: center; padding: 40px;
         }
         .pf-spinner {
-            width: 36px; height: 36px;
+            width: 34px; height: 34px;
             border: 2px solid rgba(var(--void-accent-rgb),0.15);
             border-top-color: var(--void-accent);
             border-radius: 50%;
@@ -554,91 +1372,200 @@
     <!-- MAIN PAGE -->
     <main id="pf-page" class="hidden">
 
-        <!-- HERO -->
-        <div id="pf-hero" class="pf-rise pf-rise-1">
-            <img id="pf-avatar" src="" alt="Avatar">
-            <div>
-                <div class="flex items-center gap-3 flex-wrap mb-1">
-                    <h1 id="pf-name">—</h1>
-                    <span id="pf-role-badge"><i class="bx bxs-user text-[8px]"></i> <span id="pf-role-text">Collector</span></span>
+        <!-- ░░ STEAM-STYLE BANNER ░░ -->
+        <div id="pf-banner" class="pf-rise pf-rise-1 has-banner-img">
+            <img id="pf-banner-img" src="/default_banner.png" alt="">
+            <div id="pf-banner-bg"></div>
+            <div id="pf-banner-deco"></div>
+            <img id="pf-banner-mark" src="https://cdn.codeoce.com/logo/logo_white.png" alt="">
+            <div id="pf-banner-accent"></div>
+        </div>
+
+        <!-- ░░ IDENTITY BAR ░░ -->
+        <div id="pf-identity-bar" class="pf-rise pf-rise-1">
+            <div id="pf-identity-inner">
+
+                <!-- Avatar -->
+                <div id="pf-avatar-block">
+                    <img id="pf-avatar" src="" alt="Avatar">
                 </div>
-                <div class="pf-code-row">
-                    <span class="pf-code-label">Castle code</span>
-                    <span id="pf-code" class="pf-code-value">—</span>
-                    <button id="pf-copy-code" class="w-5 h-5 rounded-md bg-white/[0.06] border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent transition-colors" title="Copy code">
-                        <i class="bx bxs-copy text-[9px]"></i>
-                    </button>
+
+                <!-- Info -->
+                <div id="pf-info-block">
+                    <div id="pf-name-row">
+                        <h1 id="pf-name">—</h1>
+                        <span id="pf-role-badge"><i class="bx bxs-user" style="font-size:8px"></i> <span id="pf-role-text">Collector</span></span>
+                    </div>
+                    <p id="pf-status-line" style="margin-bottom:8px;">—</p>
+                    <div id="pf-xp-row">
+                        <span class="pf-xp-lvl">Lvl <span id="pf-level">1</span></span>
+                        <div id="pf-xp-bar"><div id="pf-xp-fill"></div></div>
+                        <span class="pf-xp-lvl" id="pf-xp-next-label">Lvl 2</span>
+                    </div>
                 </div>
-            </div>
-            <div id="pf-hero-actions">
-                <button id="pf-edit-btn">
-                    <i class="bx bxs-dots-vertical text-[10px]"></i>
-                    <span id="pf-edit-label">Edit layout</span>
-                </button>
-                <button id="pf-sections-btn" class="hidden">
-                    <i class="bx bxs-cog text-[10px]"></i>
-                    <span>Sections</span>
-                </button>
+
+                <!-- Actions -->
+                <div id="pf-hero-actions">
+                    <div class="pf-code-row">
+                        <span class="pf-code-label">Castle code</span>
+                        <span id="pf-code" class="pf-code-value">—</span>
+                        <button id="pf-copy-code" class="w-5 h-5 rounded flex items-center justify-center bg-white/[0.05] border border-white/10 text-void-muted hover:text-void-accent transition-colors" title="Copy code">
+                            <i class="bx bxs-copy" style="font-size:9px"></i>
+                        </button>
+                    </div>
+                    <div class="pf-action-row">
+                        <button id="pf-trade-offer-btn" class="hidden">
+                            <i class="bx bxs-transfer" style="font-size:10px"></i>
+                            <span>Send Trade Offer</span>
+                        </button>
+                        <button id="pf-edit-btn">
+                            <i class="bx bxs-pencil" style="font-size:10px"></i>
+                            <span id="pf-edit-label">Edit profile</span>
+                        </button>
+                        <button id="pf-sections-btn" class="hidden">
+                            <i class="bx bxs-cog" style="font-size:10px"></i>
+                            <span>Sections</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
+        <!-- ░░ SECTIONS PANEL ░░ -->
         <div id="pf-sections-panel" class="hidden pf-rise pf-rise-2">
-            <div class="pf-widget-title" style="padding:0;margin-bottom:10px;">Profile Sections</div>
+            <div class="pf-widget-title" style="border:none;padding:0;margin-bottom:10px;">Profile Sections</div>
             <div class="pf-sections-grid">
-                <label class="pf-sections-item"><input type="checkbox" value="widget-showcase" checked> Showcase</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-stats" checked> Stats</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-trophy" checked> Trophy Cabinet</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-latest" checked> Latest Pulls</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-wishlist" checked> Wishlist</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-showcase"      checked> Showcase</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-stats"         checked> Stats</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-rarity-chart"  checked> Rarity Breakdown</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-trophy"        checked> Trophy Cabinet</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-latest"        checked> Latest Pulls</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-wishlist"      checked> Wishlist</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-achievements"  checked> Achievements</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-battle-record" checked> Battle Record</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-creators"      checked> Supported Creators</label>
+                <label class="pf-sections-item"><input type="checkbox" value="widget-sets"          checked> Card Sets</label>
             </div>
-            <label for="pf-wishlist-editor" class="pf-sections-item" style="margin-bottom:6px;">Wishlist (one item per line)</label>
-            <textarea id="pf-wishlist-editor" placeholder="Example: Golden Dragon&#10;Any Genesis Mint&#10;Legendary cards from your favorite creator"></textarea>
+            <label class="pf-sections-item" style="margin-bottom:10px;">
+                <input type="checkbox" id="pf-trades-public-toggle"> Accept trade offers <span style="opacity:0.5;font-size:0.9em;">(visible to all visitors)</span>
+            </label>
+            <div class="pf-sections-item" style="margin-bottom:8px;">Profile Title <span style="opacity:0.45;font-size:0.88em;">(earned — click to equip)</span></div>
+            <div id="pf-title-picker"></div>
+            <div style="margin-top:12px;">
+                <div class="pf-sections-item" style="margin-bottom:4px;">Profile Banner <span style="opacity:0.45;font-size:0.88em;">(earned from packs)</span></div>
+                <div id="pf-banner-picker-status" style="font-size:0.52rem;color:var(--void-muted);font-style:italic;margin-bottom:6px;min-height:1em;"></div>
+                <div id="pf-banner-picker"></div>
+            </div>
+            <div style="margin-top:10px;">
+                <div class="pf-sections-item" style="margin-bottom:6px;">Wishlist Cards (search &amp; click to add)</div>
+                <div id="pf-wishlist-search-wrap">
+                    <input id="pf-wishlist-search-input" type="text" placeholder="Search cards… (e.g. Dragon, Legendary)">
+                </div>
+                <div id="pf-wishlist-search-status"></div>
+                <div id="pf-wishlist-search-results"></div>
+                <div id="pf-wishlist-current-label" class="hidden">On your wishlist</div>
+                <div id="pf-wishlist-current"></div>
+            </div>
+            <label class="pf-sections-item" style="margin-top:10px;">Pinned Achievements (up to 6)</label>
+            <div id="pf-achievement-picker"></div>
             <button id="pf-save-sections">
-                <i class="bx bxs-save text-[10px]"></i>
+                <i class="bx bxs-save" style="font-size:10px"></i>
                 Save profile sections
             </button>
         </div>
 
-        <!-- WIDGETS -->
-        <div id="pf-widgets" class="pf-rise pf-rise-2">
+        <!-- ░░ STEAM TWO-COLUMN LAYOUT ░░ -->
+        <div id="pf-steam-layout" class="pf-rise pf-rise-2">
 
-            <!-- SHOWCASE -->
-            <div class="pf-widget" id="widget-showcase" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                <div class="pf-widget-title" id="pf-showcase-title">—'s Collection</div>
-                <div id="pf-showcase-inner"></div>
-                <div id="pf-dots"></div>
+            <!-- LEFT SIDEBAR -->
+            <aside id="pf-sidebar-widgets">
+
+                <!-- STATS -->
+                <div class="pf-widget" id="widget-stats" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title" id="pf-stats-title">Castle Stats</div>
+                    <div id="pf-stats-rows"></div>
+                    <div id="pf-stats-footer"></div>
+                </div>
+
+                <!-- WISHLIST -->
+                <div class="pf-widget" id="widget-wishlist" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Wishlist</div>
+                    <div id="pf-wishlist-list"></div>
+                </div>
+
+                <!-- COLLECTION BREAKDOWN -->
+                <div class="pf-widget" id="widget-rarity-chart" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Collection Breakdown</div>
+                    <div id="pf-rarity-bars"></div>
+                </div>
+
+            </aside>
+
+            <!-- MAIN CONTENT -->
+            <div id="pf-main-widgets">
+
+                <!-- SHOWCASE -->
+                <div class="pf-widget" id="widget-showcase" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title" id="pf-showcase-title" style="display:flex;align-items:center;">
+                        <span id="pf-showcase-title-text">—'s Collection</span>
+                        <button id="pf-showcase-view-toggle" class="pf-showcase-view-btn" title="Switch to grid"><i class="bx bx-grid-alt"></i></button>
+                    </div>
+                    <div id="pf-showcase-inner"></div>
+                    <div id="pf-dots"></div>
+                    <div id="pf-showcase-grid-view" class="hidden"></div>
+                </div>
+
+                <!-- TROPHY + LATEST (side by side) -->
+                <div id="pf-row2">
+
+                    <div class="pf-widget" id="widget-trophy" draggable="false">
+                        <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                        <div class="pf-widget-title">Trophy Cabinet</div>
+                        <div id="pf-trophy-grid"></div>
+                    </div>
+
+                    <div class="pf-widget" id="widget-latest" draggable="false">
+                        <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                        <div class="pf-widget-title">Latest Pack Pull</div>
+                        <div id="pf-latest-inner"></div>
+                    </div>
+
+                </div>
+
+                <!-- ACHIEVEMENTS -->
+                <div class="pf-widget" id="widget-achievements" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Pinned Achievements</div>
+                    <div id="pf-achievements-grid"></div>
+                </div>
+
+                <!-- BATTLE RECORD -->
+                <div class="pf-widget" id="widget-battle-record" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Battle Record</div>
+                    <div id="pf-battle-inner"></div>
+                </div>
+
+                <!-- SUPPORTED CREATORS -->
+                <div class="pf-widget" id="widget-creators" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Supported Creators</div>
+                    <div id="pf-creators-inner"></div>
+                </div>
+
+                <!-- SET BREAKDOWN -->
+                <div class="pf-widget" id="widget-sets" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Card Sets</div>
+                    <div id="pf-sets-inner"></div>
+                </div>
+
             </div>
+        </div>
 
-            <!-- STATS -->
-            <div class="pf-widget" id="widget-stats" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                <div class="pf-widget-title" id="pf-stats-title">—'s Castle Stats</div>
-                <div id="pf-stats-rows"></div>
-                <div id="pf-stats-footer"></div>
-            </div>
-
-            <!-- TROPHY CABINET -->
-            <div class="pf-widget" id="widget-trophy" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                <div class="pf-widget-title">Trophy Cabinet</div>
-                <div id="pf-trophy-grid"></div>
-            </div>
-
-            <!-- LATEST PACK PULL -->
-            <div class="pf-widget" id="widget-latest" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                <div class="pf-widget-title">Latest Pack Pull</div>
-                <div id="pf-latest-inner"></div>
-            </div>
-
-            <!-- WISHLIST -->
-            <div class="pf-widget" id="widget-wishlist" draggable="false">
-                <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                <div class="pf-widget-title">Wishlist</div>
-                <div id="pf-wishlist-list"></div>
-            </div>
-
-        </div><!-- /pf-widgets -->
     </main>
 
     <!-- CARD MODAL -->
@@ -649,7 +1576,6 @@
             <div id="pf-modal-body">
                 <div id="pf-modal-name">—</div>
                 <div class="pf-modal-meta" id="pf-modal-meta">—</div>
-                
                 <button id="pf-pin-btn" class="hidden w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all font-black uppercase tracking-widest text-[9px]">
                     <i class="bx bxs-pin"></i>
                     <span id="pf-pin-label">Pin to Showcase</span>

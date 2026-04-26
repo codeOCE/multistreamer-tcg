@@ -32,13 +32,33 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    let _csrfToken = '';
+    async function ensureCsrfToken() {
+        if (_csrfToken) return _csrfToken;
+        const r = await fetch(`${BACKEND}/api/csrf`, { credentials: 'include' });
+        const d = await r.json();
+        _csrfToken = d.token || '';
+        return _csrfToken;
+    }
+
     async function writeFetch(url, body) {
-        const res = await fetch(url, {
+        const token = await ensureCsrfToken();
+        let res = await fetch(url, {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': token },
             body: JSON.stringify(body || {})
         });
+        if (res.status === 403) {
+            _csrfToken = '';
+            const retryToken = await ensureCsrfToken();
+            res = await fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': retryToken },
+                body: JSON.stringify(body || {})
+            });
+        }
         if (!res.ok) {
             const text = await res.text().catch(() => '');
             throw new Error(text || `HTTP ${res.status}`);
@@ -112,6 +132,7 @@
             renderBinders();
             renderPurchaseList();
             loadPendingPacks();
+            loadDailyGoals();
 
         } catch (err) {
             console.error('[MyCollection] Init error:', err);
@@ -480,6 +501,87 @@
         } catch (_) {}
     }
 
+    /* ── Daily Goals ─────────────────────────────────────────────────────── */
+    function timeUntilMidnightUTC() {
+        const now = new Date();
+        const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+        const diff = midnight - now;
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        return `${h}h ${m}m`;
+    }
+
+    function renderGoals(data) {
+        const section = document.getElementById('mc-goals-section');
+        const list = document.getElementById('mc-goals-list');
+        if (!section || !list) return;
+
+        const { goals = [], streak = {}, reroll_available = false } = data;
+        if (!goals.length) return;
+
+        section.classList.remove('hidden');
+
+        const resetEl = document.getElementById('mc-goals-reset');
+        if (resetEl) resetEl.textContent = `Resets in ${timeUntilMidnightUTC()}`;
+
+        const streakBadge = document.getElementById('mc-streak-badge');
+        const streakCurrent = document.getElementById('mc-streak-current');
+        if (streakBadge && streak.current_streak > 0) {
+            streakCurrent.textContent = streak.current_streak;
+            streakBadge.classList.remove('hidden');
+            streakBadge.style.display = 'flex';
+        }
+
+        list.innerHTML = goals.map(g => {
+            const pct = Math.min(100, Math.round((g.progress / g.target) * 100));
+            const done = g.is_completed;
+            const canReroll = reroll_available && !done && g.type === 'rotating';
+            const accentColor = done ? '#4ade80' : 'var(--void-accent)';
+
+            return `
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,${done ? '0.12' : '0.06'});border-radius:16px;padding:16px 18px;opacity:${done ? '0.65' : '1'};transition:opacity 0.3s">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
+                    <div style="flex:1;min-width:0">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            ${done ? '<span style="color:#4ade80;font-size:0.75rem">&#10003;</span>' : ''}
+                            <span style="font-weight:700;font-size:0.8rem;color:var(--void-text);text-transform:uppercase;letter-spacing:0.04em">${escapeHTML(g.title)}</span>
+                            <span style="font-size:0.55rem;color:var(--void-muted);background:rgba(255,255,255,0.04);border-radius:6px;padding:2px 6px;text-transform:uppercase">${g.type}</span>
+                        </div>
+                        <div style="font-size:0.65rem;color:var(--void-muted);margin-top:3px">${escapeHTML(g.description)}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                        <div style="text-align:right">
+                            <div style="font-size:0.7rem;font-weight:700;color:${accentColor}">${done ? g.xp_reward : `+${g.xp_reward}`} XP</div>
+                            <div style="font-size:0.55rem;color:var(--void-muted)">${g.progress}/${g.target}</div>
+                        </div>
+                        ${canReroll ? `<button onclick="window._mcRerollGoal('${escapeHTML(g.id)}')" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.08em;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:var(--void-muted);cursor:pointer;white-space:nowrap" title="Swap this goal (1 free reroll per day)">Reroll</button>` : ''}
+                    </div>
+                </div>
+                <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
+                    <div style="height:100%;width:${pct}%;background:${accentColor};border-radius:2px;transition:width 0.5s ease"></div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function loadDailyGoals() {
+        try {
+            const res = await fetch(`${BACKEND}/api/goals/daily`, { credentials: 'include' });
+            if (!res.ok) return;
+            const data = await res.json();
+            renderGoals(data);
+        } catch (_) {}
+    }
+
+    async function rerollGoal(goalRowId) {
+        try {
+            await writeFetch(`${BACKEND}/api/goals/reroll`, { goal_row_id: goalRowId });
+            await loadDailyGoals();
+        } catch (e) {
+            alert(e.message || 'Reroll failed');
+        }
+    }
+
     /* ── Keyboard ────────────────────────────────────────────────────────── */
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') closePurchase();
@@ -494,6 +596,7 @@
     window._mcLoadMutuals = loadMutuals;
     window.openDiscoverCreators = openDiscoverCreators;
     window.closeDiscoverCreators = closeDiscoverCreators;
+    window._mcRerollGoal = rerollGoal;
 
     /* ── Boot ────────────────────────────────────────────────────────────── */
     init();

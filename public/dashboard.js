@@ -470,6 +470,11 @@ async function initDashboard() {
         initialSection = 'stream-features';
     }
     switchSection(initialSection);
+
+    const qsTab = params.get('tab');
+    if (qsTab && SECTIONS[initialSection]?.tabs.includes(qsTab)) {
+        switchTab(qsTab);
+    }
 }
 
 /** Onboarding-style HSV void picker for Settings binder color (matches onboarding.html). */
@@ -937,6 +942,17 @@ function switchTab(tabId) {
 
     const contentArea = document.querySelector('.dashboard-content-area');
     if (contentArea) contentArea.scrollTop = 0;
+
+    try {
+        const u = new URL(window.location.href);
+        const sectionDefault = SECTIONS[currentSection]?.default;
+        if (tabId === sectionDefault) {
+            u.searchParams.delete('tab');
+        } else {
+            u.searchParams.set('tab', tabId);
+        }
+        history.replaceState({ section: currentSection, tab: tabId }, '', u.pathname + u.search);
+    } catch (_) {}
 
     loadTabData(tabId);
 }
@@ -5422,24 +5438,23 @@ async function loadCreatorProgress() {
         }
 
         function tierCard({ id, icon, name, split, status, statusColor, reqsHtml, perks, monthStatsHtml, locked }) {
-            const statusBadge = status ? `<span class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${statusColor}">${status}</span>` : '';
-            return `<div class="glass-card overflow-hidden ${locked ? 'opacity-70' : ''}">
-                <div class="flex items-center gap-4 p-5 cursor-pointer" onclick="toggleTierSection('${id}')">
-                    <div class="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-2xl ${id === 'partner' ? 'bg-yellow-400/10 border border-yellow-400/20' : id === 'affiliate' ? 'bg-purple-400/10 border border-purple-400/20' : 'bg-void-accent/10 border border-void-accent/20'}">${icon}</div>
+            const statusBadge = status ? `<span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest border ${statusColor}">${status}</span>` : '';
+            return `<div class="glass-card overflow-hidden ${locked ? 'opacity-60' : ''}">
+                <div class="flex items-center gap-3 px-4 py-3 cursor-pointer" onclick="toggleTierSection('${id}')">
+                    <div class="w-12 h-12 flex-shrink-0 flex items-center justify-center">${icon}</div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-base font-black uppercase italic tracking-tight text-white">${name}</span>
-                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest bg-void-accent/10 border border-void-accent/20 text-void-accent">${split} split</span>
+                            <span class="text-sm font-black uppercase italic tracking-tight text-white">${name}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-void-accent/10 border border-void-accent/20 text-void-accent">${split} split</span>
                             ${locked ? '<span class="flex items-center gap-1 text-[9px] text-void-muted"><i class="bx bx-lock-alt"></i> Complete Affiliate first</span>' : ''}
                         </div>
-                        ${perks.length ? `<p class="text-[10px] text-void-muted mt-0.5 truncate">${perks[0]}${perks.length > 1 ? ` + ${perks.length - 1} more` : ''}</p>` : ''}
                     </div>
-                    <div class="flex items-center gap-3 flex-shrink-0">
+                    <div class="flex items-center gap-2 flex-shrink-0">
                         ${statusBadge}
-                        <i class="bx bx-chevron-down text-void-muted transition-transform tier-chevron-${id} text-xl"></i>
+                        <i class="bx bx-chevron-down text-void-muted transition-transform tier-chevron-${id} text-base"></i>
                     </div>
                 </div>
-                <div id="tier-body-${id}" class="hidden border-t border-white/5 px-5 pb-5 pt-4 space-y-4">
+                <div id="tier-body-${id}" class="hidden border-t border-white/5 px-4 pb-4 pt-3 space-y-3">
                     ${reqsHtml ? `<div><p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2">Requirements</p>${reqsHtml}</div>` : ''}
                     ${monthStatsHtml ? `<div><p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-2">Monthly Activity (last 6 months)</p><div class="flex items-end gap-2 h-12">${monthStatsHtml}</div></div>` : ''}
                     ${perksBlock(perks)}
@@ -5450,26 +5465,66 @@ async function loadCreatorProgress() {
         const affiliateMonths = data.monthly_stats.map(m => ({ ...m, _threshold: 150 }));
         const partnerMonths   = data.monthly_stats.map(m => ({ ...m, _threshold: 500 }));
 
-        const baseStatus      = data.current_tier !== 'base' ? { label: 'ACHIEVED', color: 'border-green-500/40 text-green-400 bg-green-500/10' } : { label: 'ACTIVE', color: 'border-void-accent/40 text-void-accent bg-void-accent/10' };
         const affiliateStatus = data.affiliate.unlocked ? { label: 'ACHIEVED', color: 'border-green-500/40 text-green-400 bg-green-500/10' } : data.affiliate.eligible ? { label: 'ELIGIBLE', color: 'border-purple-400/40 text-purple-300 bg-purple-400/10' } : { label: 'IN PROGRESS', color: 'border-white/20 text-void-muted' };
         const partnerStatus   = data.partner.unlocked ? { label: 'ACHIEVED', color: 'border-green-500/40 text-green-400 bg-green-500/10' } : data.partner.eligible ? { label: 'ELIGIBLE', color: 'border-yellow-400/40 text-yellow-300 bg-yellow-400/10' } : { label: 'IN PROGRESS', color: 'border-white/20 text-void-muted' };
 
         const aReqs = data.affiliate.requirements;
         const pReqs = data.partner.requirements;
 
-        const basePerks      = ['Access to the platform', '70/30 revenue split', 'Viewer achievement system', 'Custom card & pack design'];
         const affiliatePerks = ['80/20 revenue split', 'Listed in the marketplace', 'Affiliate referral code', 'Priority support'];
         const partnerPerks   = ['90/10 revenue split', 'Promoted in marketplace', 'Add custom trinkets to the site', 'Exclusive partner badge', 'Referral revenue share'];
 
+        const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+        const ACHIEVEMENT_ICONS = {
+            genesis: '/Achievement_Genesis_Hollow_White.png',
+            supply_1: '/Achievement_Supply_Demand.png', supply_2: '/Achievement_Supply_Demand.png', supply_3: '/Achievement_Supply_Demand.png', supply_4: '/Achievement_Supply_Demand.png', supply_5: '/Achievement_Supply_Demand.png',
+            knights_tale: '/Achievement_Knights_Tale.png', fit_for_king: '/Achievement_Fit_For_King.png',
+            noble_steed: '/Achievement_Noble_Steed.png', drawbridge: '/Achievement_Lower_Drawbridge.png',
+            llc_1: '/Achievement_LLC.png', llc_2: '/Achievement_LLC.png', llc_3: '/Achievement_LLC.png', llc_4: '/Achievement_LLC.png', llc_5: '/Achievement_LLC.png',
+            brick_by_brick: '/Achievement_Brick_by_Brick.png',
+        };
+
+        function fmtProgress(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 2).replace(/\.?0+$/, '') + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 2).replace(/\.?0+$/, '') + 'K';
+            return String(n);
+        }
+
+        function achievementRow({ id, name, desc, tier, progress, total }) {
+            const pct = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : 100;
+            const tierLabel = ROMAN[tier] || String(tier);
+            const iconVal = ACHIEVEMENT_ICONS[id] || '🏆';
+            const iconHtml = typeof iconVal === 'string' && iconVal.startsWith('/')
+                ? `<img src="${iconVal}" alt="" class="w-full h-full object-contain rounded-md p-0.5" />`
+                : iconVal;
+            return `<div class="relative overflow-hidden rounded-2xl border border-white/5" style="background:rgba(255,255,255,0.02)">
+                <div class="flex items-center gap-3 px-4 py-2.5">
+                    <div class="relative flex-shrink-0 w-10 h-10">
+                        <div class="w-full h-full flex items-center justify-center text-xl">${iconHtml}</div>
+                        <span style="position:absolute;top:-4px;right:-4px;width:26px;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;background:#00f2fe;color:#000;overflow:hidden;flex-shrink:0">${tierLabel}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-bold text-white text-sm leading-snug">${name}</p>
+                        <p class="text-[10px] text-void-muted mb-1.5">${desc}</p>
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1 rounded-full overflow-hidden" style="height:6px;background:rgba(255,255,255,0.08)">
+                                <div class="h-full rounded-full transition-all duration-700" style="width:${pct}%;background:#00f2fe"></div>
+                            </div>
+                            <span class="text-[10px] font-bold whitespace-nowrap" style="color:rgba(255,255,255,0.45)">${fmtProgress(progress)} / ${fmtProgress(total)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        const achievementsHtml = (data.creator_achievements || []).length
+            ? `<div class="space-y-2">${data.creator_achievements.map(achievementRow).join('')}</div>`
+            : '';
+
         content.innerHTML = [
+            '<p class="text-[9px] font-black uppercase tracking-widest text-void-muted">Creator Tiers</p>',
             tierCard({
-                id: 'base', icon: '🎴', name: 'Base Creator', split: '70/30',
-                status: baseStatus.label, statusColor: baseStatus.color,
-                reqsHtml: '', monthStatsHtml: '',
-                perks: basePerks, locked: false,
-            }),
-            tierCard({
-                id: 'affiliate', icon: '⚡', name: 'Affiliate', split: '80/20',
+                id: 'affiliate', icon: '<img src="/Affiliate%20BLUE.png" alt="" class="w-full h-full object-contain" />', name: 'Affiliate', split: '80/20',
                 status: affiliateStatus.label, statusColor: affiliateStatus.color,
                 reqsHtml: [
                     reqRow('Upload 25 unique cards', aReqs.cards_uploaded.current, aReqs.cards_uploaded.required, aReqs.cards_uploaded.met),
@@ -5480,7 +5535,7 @@ async function loadCreatorProgress() {
                 perks: affiliatePerks, locked: false,
             }),
             tierCard({
-                id: 'partner', icon: '👑', name: 'Partner', split: '90/10',
+                id: 'partner', icon: '<img src="/Partner%20BLUE.png" alt="" class="w-full h-full object-contain" />', name: 'Partner', split: '90/10',
                 status: data.partner.locked ? '' : partnerStatus.label, statusColor: partnerStatus.color,
                 reqsHtml: [
                     reqRow('Upload 75 unique cards', pReqs.cards_uploaded.current, pReqs.cards_uploaded.required, pReqs.cards_uploaded.met),
@@ -5490,6 +5545,8 @@ async function loadCreatorProgress() {
                 monthStatsHtml: partnerMonths.map(monthBar).join(''),
                 perks: partnerPerks, locked: !!data.partner.locked,
             }),
+            achievementsHtml ? '<p class="text-[9px] font-black uppercase tracking-widest text-void-muted pt-2">Achievements</p>' : '',
+            achievementsHtml,
         ].join('');
 
         if (data.current_tier !== 'base') toggleTierSection(data.current_tier);

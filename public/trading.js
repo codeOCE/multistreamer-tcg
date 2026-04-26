@@ -744,9 +744,57 @@
         return `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f87171;font-size:0.75rem;">${esc(msg)}</div>`;
     }
 
+    /* ── Wishlist Matches ────────────────────────────────────────────────────── */
+    async function openWishlistMatches() {
+        const modal = document.getElementById('tr-wishlist-modal');
+        const list  = document.getElementById('tr-wishlist-list');
+        if (!modal || !list) return;
+
+        list.innerHTML = loadingHTML();
+        modal.style.display = 'flex';
+        modal.classList.add('open');
+
+        try {
+            const res = await fetch(`${BACKEND}/api/trade/wishlist-matches`, { credentials: 'include' });
+            if (res.status === 401) { list.innerHTML = emptyHTML('Sign in to find trading partners'); return; }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const matches = data.matches || [];
+
+            if (!matches.length) {
+                list.innerHTML = emptyHTML('No matches yet — add cards to your wishlist and collect more cards to unlock mutual matches');
+                return;
+            }
+
+            list.innerHTML = matches.map(m => {
+                const cardPreviews = (m.they_have || []).slice(0, 3).map(c =>
+                    c.image_url
+                        ? `<img src="${esc(c.image_url)}" title="${esc(c.name)}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;border:1px solid rgba(255,255,255,0.08)">`
+                        : `<div style="width:32px;height:44px;border-radius:4px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:0.5rem;color:var(--void-muted)">${esc(c.name?.slice(0,3)||'?')}</div>`
+                ).join('');
+                return `
+                <div style="display:flex;align-items:center;gap:12px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px">
+                    <img src="${esc(m.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${m.username}`)}" style="width:40px;height:40px;border-radius:10px;object-fit:cover;flex-shrink:0">
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:700;font-size:0.75rem;color:var(--void-text);text-transform:uppercase;letter-spacing:0.04em">${esc(m.username)}</div>
+                        <div style="font-size:0.6rem;color:var(--void-muted);margin-top:2px">Has ${m.they_have?.length||0} cards you want · You have ${m.i_have_count} they want</div>
+                        <div style="display:flex;gap:4px;margin-top:6px">${cardPreviews}</div>
+                    </div>
+                    <button onclick="window.location.href='/trading?streamer=${encodeURIComponent(streamerSlug)}';" style="font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:var(--void-text);cursor:pointer;white-space:nowrap" title="Copy trade code: ${esc(m.trade_code)}" onclick="navigator.clipboard?.writeText('${esc(m.trade_code)}')">
+                        ${esc(m.trade_code)}
+                    </button>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            list.innerHTML = errorHTML(e.message || 'Failed to load matches');
+        }
+    }
+
+    window.tOpenWishlistMatches = openWishlistMatches;
+
     /* ── Keyboard shortcuts ──────────────────────────────────────────────────── */
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') ['tr-list-modal','tr-offer-modal','tr-offers-modal'].forEach(closeModal);
+        if (e.key === 'Escape') ['tr-list-modal','tr-offer-modal','tr-offers-modal','tr-wishlist-modal'].forEach(closeModal);
         if (e.key === 'ArrowLeft'  && !e.target.closest('input')) tPrevPage();
         if (e.key === 'ArrowRight' && !e.target.closest('input')) tNextPage();
     });
