@@ -145,7 +145,7 @@
 
             const backLink = qs('bt-back-link');
             if (backLink && STREAMER) {
-                backLink.href = `/binder/${STREAMER}`;
+                backLink.href = `/${STREAMER}`;
                 const lbl = qs('bt-back-label');
                 if (lbl) lbl.textContent = `${streamerData?.brand_name || STREAMER} Binder`;
             }

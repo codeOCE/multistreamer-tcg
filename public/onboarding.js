@@ -1,3 +1,30 @@
+function initTosScrollGate(scrollId, checkId, labelId, hintId) {
+    const scroll = document.getElementById(scrollId);
+    const check  = document.getElementById(checkId);
+    const label  = document.getElementById(labelId);
+    const hint   = document.getElementById(hintId);
+    if (!scroll || !check || !label) return;
+
+    function unlock() {
+        check.disabled = false;
+        label.classList.remove('tos-label-locked');
+        if (hint) hint.style.display = 'none';
+        scroll.removeEventListener('scroll', onScroll);
+    }
+
+    function onScroll() {
+        if (scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 8) unlock();
+    }
+
+    // Already fits without scrolling — unlock immediately
+    if (scroll.scrollHeight <= scroll.clientHeight + 8) {
+        unlock();
+        return;
+    }
+
+    scroll.addEventListener('scroll', onScroll, { passive: true });
+}
+
 const CASTLE_ORIGIN =
     typeof getCastleBackendOrigin === 'function' ? getCastleBackendOrigin() : window.location.origin;
 const API_BASE = `${CASTLE_ORIGIN}/api`;
@@ -78,7 +105,10 @@ function showRolePicker() {
     const stepsContainer = document.getElementById('steps-container');
     const progressStepper = document.getElementById('progress-stepper');
 
-    if (rolePicker) rolePicker.classList.remove('hidden');
+    if (rolePicker) {
+        rolePicker.classList.remove('hidden');
+        requestAnimationFrame(() => requestAnimationFrame(() => rolePicker.classList.add('active')));
+    }
     if (stepsContainer) stepsContainer.classList.add('hidden');
     if (progressStepper) progressStepper.classList.add('hidden');
 }
@@ -161,7 +191,8 @@ function applyCreatorConnectPlatformsUI() {
                 window.location.href = `${CASTLE_ORIGIN}/auth/twitch?role=creator`;
             };
         }
-    } else {
+    } else if (streamerData && streamerData.twitch_id) {
+        // User has completed creator OAuth (has a streamer row with Twitch linked)
         if (twitchStatus) twitchStatus.textContent = 'Connected';
         if (twitchBtn) {
             twitchBtn.innerHTML = 'Active <i class="bx bxs-check ml-1"></i>';
@@ -170,6 +201,24 @@ function applyCreatorConnectPlatformsUI() {
             twitchBtn.className =
                 'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
         }
+    } else {
+        // Authenticated as viewer only — must complete creator OAuth to proceed
+        if (twitchStatus) twitchStatus.textContent = 'Not connected';
+        if (twitchBtn) {
+            twitchBtn.disabled = false;
+            twitchBtn.innerHTML = 'Connect <i class="bx bxl-twitch ml-1"></i>';
+            twitchBtn.className =
+                'px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest shrink-0';
+            twitchBtn.onclick = () => {
+                window.location.href = `${CASTLE_ORIGIN}/auth/twitch?role=creator`;
+            };
+        }
+        if (step3Continue) {
+            step3Continue.disabled = true;
+            step3Continue.classList.add('opacity-50');
+            step3Continue.textContent = 'Sign in to continue';
+        }
+        return;
     }
 
     if (kickLinked || isKickPrimary) {
@@ -202,6 +251,16 @@ function applyCreatorConnectPlatformsUI() {
     }
 }
 
+function applyCollectionMethodsUI() {
+    const u = onboardingUser;
+    const isKickPrimary = !!(u && String(u.twitch_id || '').startsWith('kick_'));
+    const kickLinked = !!(u && u.kick_linked);
+    const twitchSection = document.getElementById('collection-twitch-section');
+    const kickSection = document.getElementById('collection-kick-section');
+    if (twitchSection) twitchSection.classList.toggle('hidden', isKickPrimary);
+    if (kickSection) kickSection.classList.toggle('hidden', !isKickPrimary && !kickLinked);
+}
+
 async function initCreatorOnboarding() {
     document.getElementById('creator-steps').classList.remove('hidden');
     document.getElementById('collector-steps').classList.add('hidden');
@@ -210,17 +269,31 @@ async function initCreatorOnboarding() {
     if (headerRole) headerRole.textContent = 'Creator';
 
     applyCreatorConnectPlatformsUI();
+    applyCollectionMethodsUI();
 
     if (streamerData) {
         // Populate fields if they exist
-        if (streamerData.brand_name) document.getElementById('brand-name').value = streamerData.brand_name;
+        const brandNameEl = document.getElementById('brand-name');
+        if (streamerData.brand_name) {
+            brandNameEl.value = streamerData.brand_name;
+        } else {
+            const rawName = onboardingUser?.display_name || onboardingUser?.username || '';
+            const streamerName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : '';
+            if (streamerName) brandNameEl.value = `${streamerName}'s Collection`;
+        }
         if (streamerData.binder_color) {
             document.getElementById('binder-color').value = streamerData.binder_color;
             document.getElementById('binder-color-hex').value = streamerData.binder_color;
         }
-        if (streamerData.battles_enabled !== undefined) document.getElementById('toggle-battles').checked = streamerData.battles_enabled;
         if (streamerData.trading_enabled !== undefined) document.getElementById('toggle-trading').checked = streamerData.trading_enabled;
-        if (streamerData.tos_accepted) document.getElementById('tos-check').checked = true;
+        if (streamerData.tos_accepted) {
+            const tosCheck = document.getElementById('tos-check');
+            const tosLabel = document.getElementById('tos-label');
+            const tosHint  = document.getElementById('tos-scroll-hint');
+            if (tosCheck) { tosCheck.disabled = false; tosCheck.checked = true; }
+            if (tosLabel) tosLabel.classList.remove('tos-label-locked');
+            if (tosHint)  tosHint.style.display = 'none';
+        }
 
         // Populate collection methods (only if they've been saved before)
         if (streamerData.collection_methods && typeof streamerData.collection_methods === 'object') {
@@ -232,6 +305,19 @@ async function initCreatorOnboarding() {
         }
 
         updateOBSLinks();
+
+        // Detect unresolved slug conflict for both Kick-only and Twitch creators
+        const isKickOnly = onboardingUser?.twitch_id?.startsWith('kick_');
+        const kickName = (streamerData.kick_username || '').toLowerCase();
+        const twitchHandle = (onboardingUser?.username || '').toLowerCase();
+        const canonicalName = isKickOnly ? kickName : twitchHandle;
+        const needsSlugClaim = canonicalName && streamerData.username !== canonicalName;
+        if (needsSlugClaim) {
+            showStep('username', 'c');
+            initSlugStep(canonicalName, streamerData.username);
+            return;
+        }
+
         showStep(streamerData.onboarding_step || 1, 'c');
     } else {
         showStep(1, 'c');
@@ -242,18 +328,22 @@ async function initCreatorOnboarding() {
     const colorHex = document.getElementById('binder-color-hex');
     const brandNameInput = document.getElementById('brand-name');
     
-    // New preview elements
-    const previewBinderItem = document.getElementById('preview-binder-item');
-    const previewBinderName = document.getElementById('preview-binder-name');
-    const previewSidebarBinder = document.getElementById('preview-sidebar-binder');
-    const previewSidebarBinderName = document.getElementById('preview-sidebar-binder-name');
-    const previewNavCollection = document.getElementById('preview-nav-collection');
-    const previewShareCollectionName = document.getElementById('preview-share-collection-name');
-    const previewAccentLogoShell = document.getElementById('preview-accent-logo-shell');
-    const previewAccentWordmark = document.getElementById('preview-accent-wordmark');
-    const previewAccentRole = document.getElementById('preview-accent-role');
-    const previewAccentShareMark = document.getElementById('preview-accent-share-mark');
-    const previewAccentTrophy = document.getElementById('preview-accent-trophy');
+    // Testbinder full-site preview elements
+    const previewTbSpine          = document.getElementById('preview-tb-spine');
+    const previewTbBar            = document.getElementById('preview-tb-bar');
+    const previewTbDot            = document.getElementById('preview-tb-dot');
+    const previewTbBinderName     = document.getElementById('preview-tb-binder-name');
+    const previewTbActiveTab      = document.getElementById('preview-tb-active-tab');
+    const previewTbRareSlot       = document.getElementById('preview-tb-slot-rare');
+    const previewTbNavMark        = document.getElementById('preview-tb-nav-mark');
+    const previewTbNavCreator     = document.getElementById('preview-tb-creator-name');
+    const previewTbNavLinkActive  = document.getElementById('preview-tb-nav-link-active');
+    const previewTbNavAvatar      = document.getElementById('preview-tb-nav-avatar');
+    const previewTbShareBtn       = document.getElementById('preview-tb-share-btn');
+    const previewTbNewBinderBtn   = document.getElementById('preview-tb-new-binder-btn');
+    const previewTbProfileAvatar  = document.getElementById('preview-tb-profile-avatar');
+    const previewTbProfileName    = document.getElementById('preview-tb-profile-name');
+    const previewTbUrlSlug        = document.getElementById('preview-tb-url-slug');
 
     const swatch = document.getElementById('color-preview-swatch');
     const popover = document.getElementById('void-picker-popover');
@@ -326,7 +416,7 @@ async function initCreatorOnboarding() {
     }
 
     function normalizePreviewHex(hex) {
-        let n = (hex != null && String(hex).trim()) ? String(hex).trim() : '#00f2fe';
+        let n = (hex != null && String(hex).trim()) ? String(hex).trim() : '#3faaff';
         if (!n.startsWith('#')) n = '#' + n.replace(/^#/, '');
         n = n.toUpperCase();
         if (!/^#[0-9A-F]{6}$/.test(n)) n = '#00F2FE';
@@ -336,7 +426,7 @@ async function initCreatorOnboarding() {
     function updatePreviewColor(hex) {
         const normalized = normalizePreviewHex(hex);
         const rgb = hexToRgb(normalized);
-        const ra = (a) => (rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : `rgba(0,242,254,${a})`);
+        const ra = (a) => (rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : `rgba(63,170,255,${a})`);
 
         const colorSwatch = document.getElementById('color-preview-swatch');
         if (colorSwatch) {
@@ -344,22 +434,24 @@ async function initCreatorOnboarding() {
             colorSwatch.style.boxShadow = `0 0 20px ${normalized}33`;
         }
 
-        if (previewBinderItem) {
-            previewBinderItem.style.background = ra(0.12);
-            previewBinderItem.style.borderColor = ra(0.2);
-        }
-        if (previewSidebarBinder) {
-            previewSidebarBinder.style.background = ra(0.08);
-            previewSidebarBinder.style.borderColor = ra(0.25);
-        }
-        if (previewNavCollection) {
-            previewNavCollection.style.background = ra(0.15);
-        }
-        if (previewAccentLogoShell) previewAccentLogoShell.style.backgroundColor = ra(0.12);
-        if (previewAccentWordmark) previewAccentWordmark.style.color = normalized;
-        if (previewAccentRole) previewAccentRole.style.color = normalized;
-        if (previewAccentShareMark) previewAccentShareMark.style.backgroundColor = ra(0.2);
-        if (previewAccentTrophy) previewAccentTrophy.style.color = normalized;
+        // Nav
+        if (previewTbNavMark)       { previewTbNavMark.style.background = ra(0.12); previewTbNavMark.style.borderColor = ra(0.28); }
+        if (previewTbNavCreator)      previewTbNavCreator.style.color = normalized;
+        if (previewTbNavLinkActive)  { previewTbNavLinkActive.style.color = normalized; previewTbNavLinkActive.style.background = ra(0.08); }
+        if (previewTbNavAvatar)       previewTbNavAvatar.style.borderColor = ra(0.28);
+        // Sidebar
+        if (previewTbActiveTab)       previewTbActiveTab.style.background = ra(0.08);
+        if (previewTbBar)             previewTbBar.style.background = normalized;
+        if (previewTbDot)             previewTbDot.style.background = normalized;
+        if (previewTbBinderName)      previewTbBinderName.style.color = normalized;
+        if (previewTbNewBinderBtn)   { previewTbNewBinderBtn.style.borderColor = ra(0.28); previewTbNewBinderBtn.style.color = ra(0.75); previewTbNewBinderBtn.style.background = ra(0.04); }
+        // Book
+        if (previewTbSpine)           previewTbSpine.style.background = ra(0.18);
+        if (previewTbRareSlot)       { previewTbRareSlot.style.borderColor = ra(0.3); previewTbRareSlot.style.boxShadow = `0 0 10px ${ra(0.14)}, inset 0 0 16px ${ra(0.05)}`; }
+        // Right panel
+        if (previewTbProfileAvatar)   previewTbProfileAvatar.style.borderColor = ra(0.22);
+        // Center share button
+        if (previewTbShareBtn)       { previewTbShareBtn.style.borderColor = ra(0.25); previewTbShareBtn.style.background = ra(0.08); previewTbShareBtn.style.color = ra(0.9); }
     }
 
     if (swatch) {
@@ -441,11 +533,15 @@ async function initCreatorOnboarding() {
         updatePreviewColor(colorPicker.value.toUpperCase());
     }
 
+    function slugify(text) {
+        return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'my-collection';
+    }
+
     function syncBrandNameToPreview(val) {
-        const name = val || 'My Collection';
-        if (previewBinderName) previewBinderName.textContent = name;
-        if (previewSidebarBinderName) previewSidebarBinderName.textContent = name;
-        if (previewShareCollectionName) previewShareCollectionName.textContent = name;
+        const name = (val && val.trim()) ? val.trim() : 'My Collection';
+        if (previewTbNavCreator)   previewTbNavCreator.textContent = name.toUpperCase();
+        if (previewTbProfileName)  previewTbProfileName.textContent = name;
+        if (previewTbUrlSlug)      previewTbUrlSlug.textContent = slugify(name);
     }
 
     if (brandNameInput) {
@@ -454,6 +550,8 @@ async function initCreatorOnboarding() {
         });
         syncBrandNameToPreview(brandNameInput.value);
     }
+
+    window.addEventListener('resize', scalePreview);
 
 }
 
@@ -465,13 +563,7 @@ async function initCollectorOnboarding() {
     if (headerRole) headerRole.textContent = 'Collector';
 
     if (!isAuthenticated) {
-        document.getElementById('col-auth-section').classList.remove('hidden');
-        const startBtn = document.getElementById('btn-col-tos');
-        if (startBtn) {
-            startBtn.disabled = true;
-            startBtn.classList.add('opacity-50');
-        }
-        showStep(1, 'col');
+        showStep(0, 'col');
         return;
     }
 
@@ -492,8 +584,19 @@ async function initCollectorOnboarding() {
     }
 }
 
+function scalePreview() {
+    const viewport = document.querySelector('.preview-tb-viewport');
+    const site     = document.querySelector('.preview-tb-site');
+    if (!viewport || !site) return;
+    const w = viewport.offsetWidth;
+    const h = viewport.offsetHeight;
+    if (w === 0) return;
+    const scaleW = w / 860;
+    const scaleH = h > 0 ? h / 510 : scaleW;
+    site.style.transform = `scale(${Math.min(scaleW, scaleH)})`;
+}
+
 function showStep(step, prefix) {
-    // Hide all top-level step containers
     document.querySelectorAll('.animate-step').forEach(el => {
         el.classList.add('hidden');
         el.classList.remove('active');
@@ -503,7 +606,13 @@ function showStep(step, prefix) {
     const nextStepEl = document.getElementById(stepId);
     if (nextStepEl) {
         nextStepEl.classList.remove('hidden');
-        setTimeout(() => nextStepEl.classList.add('active'), 10);
+        nextStepEl.classList.add('active');
+    }
+
+    if (prefix === 'c' && step === 2) {
+        initTosScrollGate('tos-scroll', 'tos-check', 'tos-label', 'tos-scroll-hint');
+    } else if (prefix === 'col' && step === 1) {
+        initTosScrollGate('col-tos-scroll', 'col-tos-check', 'col-tos-label', 'col-tos-scroll-hint');
     }
 
     // Toggle Branding Preview
@@ -511,7 +620,7 @@ function showStep(step, prefix) {
     if (brandingPreview) {
         if (prefix === 'c' && step === 4) {
             brandingPreview.classList.remove('hidden');
-            setTimeout(() => brandingPreview.classList.add('visible'), 10);
+            requestAnimationFrame(() => requestAnimationFrame(() => { brandingPreview.classList.add('visible'); scalePreview(); }));
         } else {
             brandingPreview.classList.remove('visible');
             setTimeout(() => brandingPreview.classList.add('hidden'), 600);
@@ -520,11 +629,7 @@ function showStep(step, prefix) {
 
     currentStep = step;
 
-    // Update progress bar
-    const totalSteps = prefix === 'c' ? 10 : 3;
-
     // Progress Stepper Mapping
-    const progressStepper = document.getElementById('progress-stepper');
     if (prefix === 'c') {
         // Map 7 steps to 3 dots
         const dot1 = document.getElementById('dot-1');
@@ -586,6 +691,10 @@ function showStep(step, prefix) {
         else el.classList.remove('complete', 'active');
     }
 
+    if (prefix === 'c' && step === 1) {
+        initReferralInput();
+    }
+
     if (prefix === 'col' && step === 2) {
         loadFollows();
     }
@@ -601,6 +710,197 @@ function showStep(step, prefix) {
 async function nextStep(step) {
     saveStepProgress(step);
     showStep(step, 'c');
+}
+
+let _slugCheckTimer = null;
+let _referralCheckTimer = null;
+
+function initReferralInput() {
+    const input = document.getElementById('referral-code-input');
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = '1';
+    input.addEventListener('input', () => {
+        clearTimeout(_referralCheckTimer);
+        const val = input.value.trim();
+        setReferralFeedback('', null);
+        if (!val) return;
+        setReferralFeedback('Checking...', 'muted');
+        _referralCheckTimer = setTimeout(() => checkReferralCode(val), 500);
+    });
+}
+
+async function checkReferralCode(code) {
+    try {
+        const res = await fetch(`${API_BASE}/onboarding/referral`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ code, check_only: true }),
+            credentials: 'include',
+        });
+        if (res.status === 404) {
+            setReferralFeedback('Code not found', 'error');
+        } else if (res.status === 400) {
+            setReferralFeedback('Cannot use your own code', 'error');
+        } else if (res.ok) {
+            const data = await res.json();
+            setReferralFeedback(`Referred by ${data.referrer}`, 'success');
+        }
+    } catch {
+        setReferralFeedback('Could not verify code', 'error');
+    }
+}
+
+function setReferralFeedback(msg, state) {
+    const fb = document.getElementById('referral-feedback');
+    const status = document.getElementById('referral-status');
+    if (!fb || !status) return;
+    fb.classList.remove('hidden', 'text-red-400', 'text-green-400', 'text-void-muted');
+    status.classList.remove('hidden', 'text-red-400', 'text-green-400', 'text-void-muted');
+    if (!msg) { fb.classList.add('hidden'); status.classList.add('hidden'); return; }
+    fb.textContent = msg;
+    if (state === 'success') {
+        fb.classList.add('text-green-400');
+        status.innerHTML = '<i class="bx bxs-check-circle"></i>';
+        status.classList.add('text-green-400');
+    } else if (state === 'error') {
+        fb.classList.add('text-red-400');
+        status.innerHTML = '<i class="bx bxs-x-circle"></i>';
+        status.classList.add('text-red-400');
+    } else {
+        fb.classList.add('text-void-muted');
+        status.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i>';
+        status.classList.add('text-void-muted');
+    }
+    fb.classList.remove('hidden');
+    status.classList.remove('hidden');
+}
+
+async function saveReferralAndContinue() {
+    const input = document.getElementById('referral-code-input');
+    const code = input ? input.value.trim() : '';
+
+    if (code) {
+        try {
+            const res = await fetch(`${API_BASE}/onboarding/referral`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                body: JSON.stringify({ code }),
+                credentials: 'include',
+            });
+            if (res.status === 404) { setReferralFeedback('Code not found — check and try again', 'error'); return; }
+            if (res.status === 400) { setReferralFeedback('Cannot use your own code', 'error'); return; }
+            if (!res.ok) { setReferralFeedback('Something went wrong', 'error'); return; }
+        } catch {
+            setReferralFeedback('Something went wrong', 'error');
+            return;
+        }
+    }
+    nextStep(2);
+}
+
+function initSlugStep(canonicalName, currentSlug) {
+    const nameEl = document.getElementById('slug-kick-name');
+    const input = document.getElementById('slug-input');
+    const btn = document.getElementById('slug-claim-btn');
+
+    if (nameEl) nameEl.textContent = canonicalName;
+    if (input) {
+        input.value = currentSlug || (canonicalName + '_');
+        input.addEventListener('input', () => scheduleSlugCheck(canonicalName));
+        scheduleSlugCheck(canonicalName);
+    }
+    if (btn) btn.disabled = true;
+}
+
+function scheduleSlugCheck(canonicalName) {
+    clearTimeout(_slugCheckTimer);
+    const input = document.getElementById('slug-input');
+    const btn = document.getElementById('slug-claim-btn');
+    const feedback = document.getElementById('slug-feedback');
+    if (!input || !btn || !feedback) return;
+
+    const val = input.value.trim().toLowerCase();
+    const formatOk = /^[a-z0-9][a-z0-9_-]{1,29}$/.test(val);
+    const containsName = val.includes(canonicalName);
+
+    feedback.classList.remove('hidden', 'text-red-400', 'text-green-400', 'text-void-muted');
+    btn.disabled = true;
+
+    if (!formatOk) {
+        feedback.textContent = 'Only letters, numbers, _ and - allowed (2-30 characters).';
+        feedback.classList.add('text-red-400');
+        return;
+    }
+    if (!containsName) {
+        feedback.textContent = `Must contain your username: ${canonicalName}`;
+        feedback.classList.add('text-red-400');
+        return;
+    }
+
+    feedback.textContent = 'Checking availability...';
+    feedback.classList.add('text-void-muted');
+
+    _slugCheckTimer = setTimeout(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/creator/check-slug?slug=${encodeURIComponent(val)}`, { credentials: 'include' });
+            const data = await res.json();
+            feedback.classList.remove('text-void-muted', 'text-red-400', 'text-green-400');
+            if (data.available) {
+                feedback.textContent = `castle.gg/${val} is available`;
+                feedback.classList.add('text-green-400');
+                btn.disabled = false;
+            } else {
+                feedback.textContent = `castle.gg/${val} is already taken`;
+                feedback.classList.add('text-red-400');
+                btn.disabled = true;
+            }
+        } catch {
+            feedback.classList.remove('text-void-muted');
+            feedback.textContent = 'Could not check availability';
+            feedback.classList.add('text-red-400');
+        }
+    }, 400);
+}
+
+async function claimSlug() {
+    const input = document.getElementById('slug-input');
+    const btn = document.getElementById('slug-claim-btn');
+    const feedback = document.getElementById('slug-feedback');
+    if (!input || !btn) return;
+
+    const slug = input.value.trim().toLowerCase();
+    btn.disabled = true;
+    btn.textContent = 'Claiming...';
+
+    try {
+        const res = await fetch(`${API_BASE}/creator/claim-slug`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ slug }),
+            credentials: 'include',
+        });
+        if (res.ok) {
+            streamerData.username = slug;
+            showStep(streamerData.onboarding_step || 1, 'c');
+        } else {
+            const msg = await res.text();
+            if (feedback) {
+                feedback.textContent = msg || 'That URL is already taken.';
+                feedback.classList.remove('hidden', 'text-green-400');
+                feedback.classList.add('text-red-400');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Claim URL';
+        }
+    } catch (e) {
+        if (feedback) {
+            feedback.textContent = 'Something went wrong. Try again.';
+            feedback.classList.remove('hidden', 'text-green-400');
+            feedback.classList.add('text-red-400');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Claim URL';
+    }
 }
 
 async function saveStepProgress(step) {
@@ -699,7 +999,7 @@ async function saveBranding() {
                 brand_name: name,
                 brand_tagline: streamerData?.brand_tagline ?? '',
                 binder_color: color,
-                battles_enabled: document.getElementById('toggle-battles').checked,
+                battles_enabled: false,
                 trading_enabled: document.getElementById('toggle-trading').checked
             }),
             credentials: 'include'
@@ -708,7 +1008,7 @@ async function saveBranding() {
             const updatedStreamer = await res.json();
             streamerData = updatedStreamer;
             updateOBSLinks();
-            nextStep(5);
+            nextStep(6);
         }
         else throw new Error('Failed to save branding');
     } catch (e) {
@@ -763,7 +1063,7 @@ async function saveOBSStyle() {
             body: JSON.stringify({ pack_style: anim }),
             credentials: 'include'
         });
-        if (res.ok) nextStep(9);
+        if (res.ok) nextStep(10);
         else throw new Error('Failed to save OBS style');
     } catch (e) {
         console.error(e);

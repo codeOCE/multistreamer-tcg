@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Collection · Castle TCG</title>
     <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
@@ -13,6 +13,7 @@
         href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/tailwind-built.css">
 
@@ -37,11 +38,75 @@
             padding: 40px 24px 40px;
         }
 
-        @media (max-width: 1024px) {
+        /* ── Responsive ─────────────────────────────────────────────────────── */
 
+        /* Minimum viewport for side panels: 900px center + 2×180px min-width = 1260px.
+           Use 1280px as a clean cut so there's never any overlap with the body. */
+        @media (max-width: 1279px) {
             #mc-left,
             #mc-right {
                 display: none;
+            }
+        }
+
+        /* 1280–1480px: panels exist but are narrow — shrink imagery to match */
+        @media (min-width: 1280px) and (max-width: 1480px) {
+            .side-pack-img {
+                width: min(140px, 72%);
+            }
+            .side-pack-stack {
+                height: min(220px, 30vh);
+                margin-bottom: 12px;
+            }
+            .side-panel {
+                min-height: min(360px, 55vh);
+                gap: 12px;
+            }
+            #mc-left {
+                padding: 0 6px;
+            }
+            #mc-right {
+                padding: 0 14px;
+            }
+        }
+
+        /* Viewport height safety: keep panels from running off short screens */
+        @media (max-height: 820px) {
+            .side-pack-stack {
+                height: min(220px, 28vh);
+                margin-bottom: 10px;
+            }
+            .side-panel {
+                min-height: min(360px, 52vh);
+            }
+        }
+
+        /* Binder grid: 3 cols when viewport is narrower than full center width */
+        @media (max-width: 860px) {
+            #mc-binders {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 24px 16px;
+            }
+            #mc-body {
+                padding: 28px 16px 40px;
+            }
+        }
+
+        /* Binder grid: 2 cols on small/mobile */
+        @media (max-width: 560px) {
+            #mc-binders {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 18px 10px;
+            }
+            #mc-body {
+                padding: 16px 12px 28px;
+            }
+            #mc-header-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            #mc-discover-btn {
+                width: 100%;
             }
         }
 
@@ -56,6 +121,48 @@
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+
+        /* ── Left tab slider ── */
+        #mc-left-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        #mc-left-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 99px;
+            padding: 3px;
+            gap: 2px;
+            margin-bottom: 14px;
+        }
+
+        .mc-left-tab {
+            padding: 5px 14px;
+            border-radius: 99px;
+            border: none;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 0.48rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            color: var(--void-muted);
+        }
+
+        .mc-left-tab.active {
+            background: var(--void-accent);
+            color: #000;
+        }
+
+        .mc-left-slide {
+            width: 100%;
         }
 
         .mc-panel-title {
@@ -212,10 +319,18 @@
             color: var(--void-accent);
         }
 
+        #mc-header-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 18px auto 0;
+            max-width: 620px;
+        }
+
         #mc-search-wrap {
             position: relative;
-            max-width: 380px;
-            margin: 18px auto 0;
+            flex: 1;
+            min-width: 0;
         }
 
         #mc-search-wrap i {
@@ -253,6 +368,7 @@
             grid-template-columns: repeat(4, 1fr);
             gap: 32px 28px;
             margin-top: 32px;
+            align-items: start;
         }
 
         /* ── Binder tile ── */
@@ -294,14 +410,6 @@
             background: rgba(250, 204, 21, 0.12);
         }
 
-        #mc-action-row {
-            margin: 18px auto 0;
-            max-width: 620px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            justify-content: center;
-        }
 
         .mc-action-btn {
             padding: 8px 14px;
@@ -519,7 +627,7 @@
             position: absolute;
             left: 0;
             right: 0;
-            bottom: 30%;
+            bottom: 20%;
             padding: 0 16px;
             text-align: center;
         }
@@ -540,6 +648,22 @@
             letter-spacing: 0.18em;
             text-transform: uppercase;
             margin-top: 5px;
+        }
+
+        /* Streamer avatar — centered on the binder face, scales with tile width */
+        .binder-avatar {
+            position: absolute;
+            top: 42%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: clamp(46px, 46%, 86px);
+            height: auto;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            z-index: 5;
         }
 
         /* Card count — bottom-right, color set via inline style from JS */
@@ -617,7 +741,7 @@
             margin-right: auto;
         }
 
-        /* ── Right panel ── */
+        /* ── Right panel (goals) ── */
         #mc-right {
             position: fixed;
             right: 0;
@@ -625,9 +749,12 @@
             transform: translateY(-50%);
             width: calc((100vw - 900px) / 2);
             min-width: 180px;
+            max-height: 80vh;
+            overflow-y: auto;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
+            align-items: stretch;
+            padding: 0 20px;
         }
 
         /* ── Side panel ── */
@@ -639,7 +766,7 @@
             padding: 0;
             cursor: pointer;
             width: 100%;
-            min-height: 420px;
+            min-height: min(420px, 60vh);
             user-select: none;
             background: none;
             border: none;
@@ -687,7 +814,7 @@
         .side-pack-stack {
             position: relative;
             width: min(210px, 80%);
-            height: 295px;
+            height: min(295px, 38vh);
             margin-bottom: 28px;
         }
 
@@ -886,6 +1013,7 @@
             }
         }
     </style>
+    <script src="/castle-prefs.js"></script>
 </head>
 
 <body class="bg-void-bg text-void-text antialiased">
@@ -893,7 +1021,7 @@
 
     <!-- Navbar -->
     <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-        <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
+        <div class="w-full px-8 h-20 flex items-center justify-between">
             <a href="/" class="flex items-center gap-2 group cursor-pointer">
                 <div
                     class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
@@ -914,12 +1042,10 @@
                             aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
                             <span class="relative inline-block">
                                 <img id="nav-avatar" src="" alt=""
-                                    class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
-                                <span
-                                    class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                                    class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
                             </span>
                             <i
-                                class="fa-solid fa-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                                class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
                         </button>
                         <div id="nav-user-menu"
                             class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
@@ -944,7 +1070,7 @@
                                     <span id="nav-user-team-chevron-wrap"
                                         class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
                                         <i id="nav-user-team-chevron"
-                                            class="fa-solid fa-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                            class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
                                     </span>
                                 </button>
                                 <div id="nav-user-team-panel"
@@ -1011,14 +1137,34 @@
     <div id="mc-root" class="hidden">
         <div id="mc-body">
 
-            <!-- ── LEFT: Purchase Packs ── -->
+            <!-- ── LEFT: Purchase / Open Packs ── -->
             <div id="mc-left">
-                <div class="side-panel" onclick="window._mcOpenPurchase()">
-                    <div class="side-pack-wrap">
-                        <img class="side-pack-img" src="https://cdn.codeoce.com/branding/default-pack.png"
-                            alt="Booster Pack">
+                <div id="mc-left-inner">
+                    <div id="mc-left-tabs">
+                        <button class="mc-left-tab active" id="mc-tab-purchase" onclick="window._mcLeftTab('purchase')">Buy</button>
+                        <button class="mc-left-tab" id="mc-tab-open" onclick="window._mcLeftTab('open')">Open</button>
                     </div>
-                    <div class="side-panel-label">Purchase<br>Packs</div>
+                    <div id="mc-left-purchase" class="mc-left-slide">
+                        <div class="side-panel" onclick="window._mcOpenPurchase()">
+                            <div class="side-pack-wrap">
+                                <img class="side-pack-img" src="https://cdn.codeoce.com/branding/default-pack.png" alt="Booster Pack">
+                            </div>
+                            <div class="side-panel-label">Purchase<br>Packs</div>
+                        </div>
+                    </div>
+                    <div id="mc-left-open" class="mc-left-slide hidden">
+                        <div class="side-panel" style="cursor:default">
+                            <div id="mc-packs-rings" class="side-pack-wrap">
+                                <div class="side-pack-stack">
+                                    <img class="side-pack-img side-pack-back-2" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                                    <img class="side-pack-img side-pack-back-1" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                                    <img class="side-pack-img side-pack-front" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                                </div>
+                                <div id="mc-pack-count" class="side-pack-count hidden">0</div>
+                            </div>
+                            <div class="side-panel-label">Unopened<br>Packs</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1027,12 +1173,12 @@
                 <div id="mc-header">
                     <p id="mc-username"></p>
                     <h1 id="mc-title">Your <span>Collection</span></h1>
-                    <div id="mc-search-wrap">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input id="mc-search" type="text" placeholder="Search binders…"
-                            oninput="window._mcSearch(this.value)">
-                    </div>
-                    <div id="mc-action-row">
+                    <div id="mc-header-controls">
+                        <div id="mc-search-wrap">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input id="mc-search" type="text" placeholder="Search binders…"
+                                oninput="window._mcSearch(this.value)">
+                        </div>
                         <button id="mc-discover-btn" class="mc-action-btn" type="button" onclick="window.openDiscoverCreators && window.openDiscoverCreators()">Discover Creators</button>
                     </div>
                 </div>
@@ -1047,8 +1193,11 @@
                 <!-- Binder grid — injected by JS -->
                 <div id="mc-binders"></div>
 
-                <!-- ── Daily Goals ── -->
-                <div id="mc-goals-section" class="hidden" style="margin-top:48px">
+            </div>
+
+            <!-- ── RIGHT: Daily Goals ── -->
+            <div id="mc-right">
+                <div id="mc-goals-section" class="hidden">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap">
                         <div>
                             <h2 style="font-family:'Outfit',sans-serif;font-weight:900;font-size:1rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--void-text);margin:0">Daily Goals</h2>
@@ -1063,26 +1212,6 @@
                         </div>
                     </div>
                     <div id="mc-goals-list" style="display:flex;flex-direction:column;gap:10px"></div>
-                </div>
-
-            </div>
-
-            <!-- ── RIGHT: Unopened Packs ── -->
-            <div id="mc-right">
-                <div class="side-panel" style="cursor:default">
-                    <!-- Filled by JS when user has packs; shows placeholder stack by default -->
-                    <div id="mc-packs-rings" class="side-pack-wrap">
-                        <div class="side-pack-stack">
-                            <img class="side-pack-img side-pack-back-2"
-                                src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
-                            <img class="side-pack-img side-pack-back-1"
-                                src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
-                            <img class="side-pack-img side-pack-front"
-                                src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
-                        </div>
-                        <div id="mc-pack-count" class="side-pack-count hidden">0</div>
-                    </div>
-                    <div class="side-panel-label">Unopened<br>Packs</div>
                 </div>
             </div>
 

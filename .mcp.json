@@ -1,5 +1,10 @@
 {
   "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--access-token", "YOUR_SUPABASE_PAT_HERE"],
+      "type": "stdio"
+    },
     "code-review-graph": {
       "command": "code-review-graph",
       "args": [

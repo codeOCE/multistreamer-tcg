@@ -56,35 +56,28 @@ console.log('[Collection] Script loaded. CP_SLUG:', CP_SLUG, '| CP_BACKEND:', CP
         console.log('[Collection] Init() running');
         if (!CP_SLUG) { console.warn('[Collection] No slug — showing not found'); showNotFound(); return; }
 
-        // Use the lightweight public/streamer endpoint — avoids the heavy bootstrap
-        // RPC so this page works even if get_bootstrap_data_v4 is unavailable.
-        const [streamerRes, catalogRes, setsRes, lbRes] = await Promise.allSettled([
-            fetch(`${CP_BACKEND}/api/public/streamer?streamer=${encodeURIComponent(CP_SLUG)}`),
-            fetch(`${CP_BACKEND}/api/public/catalog?streamer=${encodeURIComponent(CP_SLUG)}`),
-            fetch(`${CP_BACKEND}/api/sets?streamer=${encodeURIComponent(CP_SLUG)}`),
-            fetch(`${CP_BACKEND}/api/leaderboard?streamer=${encodeURIComponent(CP_SLUG)}`),
-        ]);
-
-        console.log('[Collection] Fetches complete. streamerRes:', streamerRes.status, streamerRes.value?.status);
-        if (streamerRes.status !== 'fulfilled' || !streamerRes.value.ok) {
-            console.warn('[Collection] Streamer fetch failed — showing not found');
+        // Single aggregate fetch — replaces 4 parallel round trips with 1.
+        const pageRes = await fetch(`${CP_BACKEND}/api/public/collection-page?streamer=${encodeURIComponent(CP_SLUG)}`);
+        console.log('[Collection] Fetch complete. pageRes:', pageRes.status);
+        if (!pageRes.ok) {
+            console.warn('[Collection] Collection-page fetch failed — showing not found');
             showNotFound(); return;
         }
-        streamerData = await streamerRes.value.json();
+        const pageData = await pageRes.json();
+        streamerData = pageData.streamer;
         console.log('[Collection] Streamer data:', streamerData?.username);
         if (!streamerData) { showNotFound(); return; }
+        catalogCards = pageData.catalog    || [];
+        sets         = pageData.sets       || [];
+        leaderboard  = pageData.leaderboard || [];
 
         // Restore clean URL (/codeoce instead of /collection.html?slug=codeoce)
         if (new URLSearchParams(window.location.search).get('slug') && CP_SLUG) {
             history.replaceState(null, '', '/' + CP_SLUG);
         }
 
-        applyBrandColor(streamerData.brand_color_primary);
+        applyBrandColor(streamerData.binder_color || streamerData.brand_color_primary);
         renderHero(streamerData, null);
-
-        if (catalogRes.status === 'fulfilled' && catalogRes.value.ok) catalogCards = await catalogRes.value.json();
-        if (setsRes.status === 'fulfilled' && setsRes.value.ok)     sets          = await setsRes.value.json();
-        if (lbRes.status === 'fulfilled' && lbRes.value.ok)         leaderboard   = await lbRes.value.json();
 
         // Try to fetch the viewer's own collection + user data (401 silently if not logged in)
         try {
@@ -127,6 +120,7 @@ console.log('[Collection] Script loaded. CP_SLUG:', CP_SLUG, '| CP_BACKEND:', CP
             <span class="cp-stat"><span class="val">${sets.length}</span> Sets</span>
             <span class="cp-stat"><span class="val">${leaderboard.length}</span> Collectors</span>`;
 
+        renderSetTabs();
         renderShowcase();
         renderLeaderboard();
         renderCatalog();
@@ -293,7 +287,9 @@ function renderSetTabs() {
     const tabsEl = document.getElementById('cp-set-tabs');
     if (!tabsEl) return;
 
-    const fallbackPack = streamerData?.pack_image_url || '/default_pack.png';
+    const DEFAULT_PACK_CDN = 'https://cdn.codeoce.com/branding/default-pack.png';
+    const rawStreamerPack = streamerData?.pack_image_url;
+    const fallbackPack = (rawStreamerPack?.startsWith('http') ? rawStreamerPack : null) || DEFAULT_PACK_CDN;
 
     // "All" pill
     let html = `<div class="set-tab-all active" data-set="__all__" onclick="window._cpFilterSet('__all__')">All · <span class="set-count">${catalogCards.length}</span></div>`;
@@ -477,7 +473,7 @@ function escapeHTML(str) {
     if (str == null) return '';
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-function rarityColor(r) { return {Legendary:'#fbbf24',Epic:'#a855f7',Rare:'#3b82f6',Common:'#94a3b8'}[r]||'#94a3b8'; }
+function rarityColor(r) { return {Legendary:'#fbbf24',Epic:'#a855f7',Rare:'#3faaff',Common:'#94a3b8'}[r]||'#94a3b8'; }
 function rankLabel(rank) { return rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':`#${rank}`; }
 
 /* ── Binder overlay ──────────────────────────────────────────────────────────── */

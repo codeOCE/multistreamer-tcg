@@ -25,5 +25,7 @@ Thumbs.db
 
 # MRQ Local Config
 .mrq.json
+# Local MCP config (contains secrets)
+.mcp.json
 # Added by code-review-graph
 .code-review-graph/

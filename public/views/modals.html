@@ -201,6 +201,20 @@
                     <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-void-muted/70">Copies by variant</div>
                     <div id="card-detail-traits-breakdown-list" class="card-detail-trait-list"></div>
                 </div>
+                <div class="flex items-center gap-4">
+                    <button id="card-detail-fav-btn" type="button" onclick="toggleCardDetailFavourite()"
+                        class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest transition-all duration-200 text-void-muted/50 hover:text-yellow-400"
+                        title="Toggle favourite">
+                        <i class="fa-regular fa-heart text-sm"></i>
+                        <span id="card-detail-fav-label">Add to Favourites</span>
+                    </button>
+                    <button id="card-detail-report-btn" type="button" onclick="openCardReport()"
+                        class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest transition-all duration-200 text-void-muted/30 hover:text-red-400"
+                        title="Report this card">
+                        <i class="bx bx-flag text-sm"></i>
+                        <span>Report</span>
+                    </button>
+                </div>
                 <div id="card-detail-id" class="text-[8px] text-void-muted/35 font-mono tracking-tight hidden"></div>
             </div>
         </div>
@@ -556,6 +570,48 @@
                 class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-void-text font-black">
                 Close
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Card Report Modal -->
+<div id="card-report-modal"
+    class="fixed inset-0 bg-void-bg/80 backdrop-blur-md z-[2100] hidden flex items-center justify-center p-4"
+    onclick="if(event.target===this)closeCardReport()">
+    <div class="bg-[#12141a] border border-white/[0.08] rounded-2xl w-full max-w-sm p-6 space-y-5 shadow-2xl">
+        <div class="flex items-center justify-between">
+            <h3 class="text-sm font-black uppercase tracking-widest text-white">Report Card</h3>
+            <button onclick="closeCardReport()" class="text-void-muted hover:text-white transition-colors">
+                <i class="bx bx-x text-xl"></i>
+            </button>
+        </div>
+        <p class="text-[10px] text-void-muted leading-relaxed">Select the reason for your report. Our team will review it.</p>
+        <div id="card-report-reasons" class="space-y-2">
+            <label class="card-report-reason-opt">
+                <input type="radio" name="card-report-reason" value="inappropriate_content" class="sr-only">
+                <div class="card-report-reason-label">Inappropriate name or description</div>
+            </label>
+            <label class="card-report-reason-opt">
+                <input type="radio" name="card-report-reason" value="offensive_hateful" class="sr-only">
+                <div class="card-report-reason-label">Offensive or hateful content</div>
+            </label>
+            <label class="card-report-reason-opt">
+                <input type="radio" name="card-report-reason" value="wrong_information" class="sr-only">
+                <div class="card-report-reason-label">Wrong or misleading information</div>
+            </label>
+            <label class="card-report-reason-opt">
+                <input type="radio" name="card-report-reason" value="spam_duplicate" class="sr-only">
+                <div class="card-report-reason-label">Spam or duplicate</div>
+            </label>
+            <label class="card-report-reason-opt">
+                <input type="radio" name="card-report-reason" value="other" class="sr-only">
+                <div class="card-report-reason-label">Other</div>
+            </label>
+        </div>
+        <div id="card-report-feedback" class="hidden text-[10px] font-bold text-void-accent text-center py-2"></div>
+        <div class="flex gap-3 pt-1">
+            <button onclick="closeCardReport()" class="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all">Cancel</button>
+            <button id="card-report-submit" onclick="submitCardReport()" class="flex-1 py-3 rounded-xl bg-red-500/10 border border-red-500/25 hover:bg-red-500 text-red-400 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all">Submit Report</button>
         </div>
     </div>
 </div>

@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+  <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Binder — Castle TCG</title>
+  <title>Binder � Castle TCG</title>
   <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,20 +27,20 @@
     body::before { opacity: 0.06; }
     *, *::before, *::after { box-sizing: border-box; }
 
-    /* ══════════════════════════════════════════════
-       PAGE SHELL — 3-column layout
-    ══════════════════════════════════════════════ */
+    /* ----------------------------------------------
+       PAGE SHELL � 3-column layout
+    ---------------------------------------------- */
     #page-shell {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: 300px 1fr 280px;
+      grid-template-columns: 320px 1fr 320px;
       grid-template-rows: 80px 1fr;
       grid-template-areas: "nav nav nav" "left main right";
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        LEFT SIDEBAR
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     #left-panel {
       grid-area: left;
       border-right: 1px solid rgba(255,255,255,0.05);
@@ -135,9 +135,80 @@
     .left-promo-btn.outline { border-color: rgba(255,255,255,0.1); background: transparent; color: var(--void-muted); }
     .left-promo-btn.outline:hover { color: var(--void-text); border-color: rgba(255,255,255,0.2); }
 
-    /* ══════════════════════════════════════════════
-       CENTER — BOOK
-    ══════════════════════════════════════════════ */
+    /* -- Left pack panel -- */
+    #left-pack-panel {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; padding: 4px 12px 16px; gap: 0; min-height: 0;
+      --side-pack-w: min(180px, 80%);
+      --side-pack-h: min(252px, 34vh);
+    }
+    #left-pack-panel .lp-slide {
+      flex: 1; width: 100%; display: flex; flex-direction: column; min-height: 0;
+    }
+    .lp-slide { width: 100%; }
+    .lp-slide.hidden { display: none; }
+
+    /* -- Side panel (mirrors my-collection) -- */
+    @keyframes side-pack-float {
+      0%, 100% { transform: translateY(0px) rotate(-1.5deg); }
+      40%       { transform: translateY(-14px) rotate(1.5deg); }
+      70%       { transform: translateY(-6px) rotate(-0.5deg); }
+    }
+    .side-panel {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 0; cursor: pointer; width: 100%;
+      min-height: min(380px, 56vh); user-select: none;
+      background: none; border: none; gap: 18px;
+    }
+    .side-panel--compact {
+      flex: 1; min-height: 0; width: 100%;
+    }
+    .side-pack-wrap {
+      display: flex; align-items: center; justify-content: center;
+      position: relative; width: 100%;
+    }
+  /* Shared pack frame � open stack + purchase single pack */
+    .side-pack-stack,
+    .side-pack-slot {
+      position: relative;
+      width: var(--side-pack-w);
+      height: var(--side-pack-h);
+      flex-shrink: 0;
+    }
+    .side-pack-slot .side-pack-img,
+    .side-pack-stack .side-pack-img {
+      position: absolute; width: 100%; height: 100%; object-fit: contain;
+      top: 0; left: 0; display: block;
+      border-radius: 10px;
+      filter: drop-shadow(0 20px 28px rgba(0,0,0,0.7));
+      transition: filter 0.3s;
+    }
+    .side-panel:hover .side-pack-slot .side-pack-img,
+    .side-panel:hover .side-pack-stack .side-pack-img {
+      animation: side-pack-float 3.5s ease-in-out infinite;
+    }
+    .side-pack-back-2 { transform: rotate(-7deg) translate(-8px, 8px); opacity: 0.45; animation-delay: -1.4s; }
+    .side-pack-back-1 { transform: rotate(-3.5deg) translate(-4px, 4px); opacity: 0.7; animation-delay: -0.7s; }
+    .side-pack-front  { position: relative !important; transform: rotate(0deg); animation-delay: 0s; }
+    .side-pack-count {
+      position: absolute; top: 8px; right: 8px;
+      background: var(--void-accent); color: #000;
+      font-size: 0.5rem; font-weight: 900; border-radius: 99px;
+      padding: 2px 7px; letter-spacing: 0.06em;
+    }
+    .side-panel-label {
+      font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 0.52rem;
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgba(255,255,255,0.38); text-align: center;
+      line-height: 1.6; margin-top: 0; flex-shrink: 0;
+    }
+    #left-pack-panel .side-panel--compact {
+      gap: 14px;
+    }
+
+    /* ----------------------------------------------
+       CENTER � BOOK
+    ---------------------------------------------- */
     #main-area {
       grid-area: main;
       display: flex; flex-direction: column; align-items: center;
@@ -180,7 +251,7 @@
       color: rgba(var(--accent-rgb),1);
     }
 
-    /* ── Book wrap ── */
+    /* -- Book wrap -- */
     #book-wrap {
       perspective: 2000px;
       filter: drop-shadow(0 28px 44px rgba(0,0,0,0.7));
@@ -189,12 +260,12 @@
       display: flex; align-items: stretch; position: relative;
     }
 
-    /* ── Static pages ── */
+    /* -- Static pages -- */
     .b-page {
       width: var(--pg-w);
       height: var(--pg-h);
       background: #0c0e14;
-      border: 1px solid rgba(255,255,255,0.07);
+      border: 1px solid rgba(var(--accent-rgb), 0.14);
       position: relative; overflow: hidden; flex-shrink: 0;
     }
     .b-page.left  { border-radius: 8px 0 0 8px; border-right: none; }
@@ -217,17 +288,22 @@
     .b-page.left  .b-page-num { right:14px; }
     .b-page.right .b-page-num { left:14px; }
 
-    /* Spine */
+    /* Spine — uses streamer binder / brand colour via --accent-rgb */
     #book-spine {
       width: var(--spine-w);
-      background: rgba(var(--accent-rgb),0.18);
+      background: linear-gradient(
+        180deg,
+        rgba(var(--accent-rgb), 0.22) 0%,
+        rgba(var(--accent-rgb), 0.52) 48%,
+        rgba(var(--accent-rgb), 0.22) 100%
+      );
       box-shadow: -6px 0 16px rgba(0,0,0,0.5), 6px 0 16px rgba(0,0,0,0.5);
       flex-shrink: 0; z-index: 5; position: relative;
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        CARD GRID + SLOTS
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     .card-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -297,13 +373,13 @@
     }
     .rarity-Legendary { background:#fbbf24; box-shadow:0 0 6px #fbbf24; }
     .rarity-Epic      { background:#a855f7; box-shadow:0 0 6px #a855f7; }
-    .rarity-Rare      { background:#3b82f6; box-shadow:0 0 6px #3b82f6; }
+    .rarity-Rare      { background:#3faaff; box-shadow:0 0 6px #3faaff; }
     .rarity-Common    { background:#64748b; }
 
     .card-slot:hover { transform: translateY(-4px) scale(1.04); }
     .card-slot.rarity-Legendary:hover { box-shadow: 0 0 22px rgba(251,191,36,0.45), 0 12px 28px rgba(0,0,0,0.6); border-color: rgba(251,191,36,0.4); }
     .card-slot.rarity-Epic:hover      { box-shadow: 0 0 22px rgba(168,85,247,0.45), 0 12px 28px rgba(0,0,0,0.6); border-color: rgba(168,85,247,0.4); }
-    .card-slot.rarity-Rare:hover      { box-shadow: 0 0 22px rgba(59,130,246,0.45), 0 12px 28px rgba(0,0,0,0.6); border-color: rgba(59,130,246,0.4); }
+    .card-slot.rarity-Rare:hover      { box-shadow: 0 0 22px rgba(63,170,255,0.45), 0 12px 28px rgba(0,0,0,0.6); border-color: rgba(63,170,255,0.4); }
     .card-slot.rarity-Common:hover    { box-shadow: 0 8px 24px rgba(0,0,0,0.55); border-color: rgba(255,255,255,0.12); }
 
     .card-slot.empty {
@@ -314,9 +390,9 @@
     .card-slot.empty:hover { transform: none; box-shadow: none; border-color: rgba(255,255,255,0.04); }
     .empty-icon { font-size: 1.4rem; color: rgba(255,255,255,0.05); z-index: 1; }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        FLIP LEAVES
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     .b-leaf {
       position: absolute; top: 0;
       width: var(--pg-w); height: var(--pg-h);
@@ -361,7 +437,7 @@
     @keyframes shadowIn  { from{opacity:0} to{opacity:1} }
     @keyframes shadowOut { from{opacity:1} to{opacity:0} }
 
-    /* ── Nav row ── */
+    /* -- Nav row -- */
     #book-nav {
       display: flex; align-items: center; gap: 14px; margin-top: 16px;
     }
@@ -389,9 +465,9 @@
       color: var(--void-muted); min-width: 120px; text-align: center;
     }
 
-    /* ══════════════════════════════════════════════
-       RIGHT SIDEBAR — ACHIEVEMENTS
-    ══════════════════════════════════════════════ */
+    /* ----------------------------------------------
+       RIGHT SIDEBAR � ACHIEVEMENTS
+    ---------------------------------------------- */
     #right-panel {
       grid-area: right;
       border-left: 1px solid rgba(255,255,255,0.05);
@@ -429,21 +505,101 @@
       width: 30px; height: 30px; border-radius: 8px;
       background: rgba(255,255,255,0.05);
       display: flex; align-items: center; justify-content: center;
-      font-size: 0.9rem; flex-shrink: 0;
+      font-size: 1.1rem; flex-shrink: 0;
+      font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
     }
     .achievement-row.earned .ach-icon { background: rgba(var(--accent-rgb),0.1); }
     .ach-text { flex: 1; min-width: 0; }
     .ach-name {
-      font-size: 0.64rem; font-weight: 800; letter-spacing: 0.06em;
+      font-size: 0.6rem; font-weight: 800; letter-spacing: 0.05em;
       text-transform: uppercase; color: var(--void-text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      overflow-wrap: break-word; word-break: break-word; line-height: 1.3;
     }
     .ach-desc { font-size: 0.5rem; color: var(--void-muted); margin-top: 2px; }
     .ach-check { color: rgba(var(--accent-rgb),1); font-size: 0.75rem; flex-shrink: 0; }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
+       SORT / VIEW CONTROLS BAR
+    ---------------------------------------------- */
+    #binder-controls {
+      width: 100%; display: flex; align-items: center; gap: 8px;
+      margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .bc-label {
+      font-size: 0.48rem; font-weight: 800; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--void-muted); white-space: nowrap;
+    }
+    .bc-group { display: flex; align-items: center; gap: 4px; }
+    .bc-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 11px; border-radius: 7px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.02); color: var(--void-muted);
+      font-size: 0.5rem; font-weight: 800; letter-spacing: 0.09em;
+      text-transform: uppercase; cursor: pointer; transition: all 0.15s;
+      font-family: 'Space Grotesk', sans-serif; white-space: nowrap;
+    }
+    .bc-btn:hover { color: rgba(var(--accent-rgb),1); border-color: rgba(var(--accent-rgb),0.3); background: rgba(var(--accent-rgb),0.06); }
+    .bc-btn.active { border-color: rgba(var(--accent-rgb),0.4); background: rgba(var(--accent-rgb),0.1); color: rgba(var(--accent-rgb),1); }
+    .bc-divider { width: 1px; height: 16px; background: rgba(255,255,255,0.07); flex-shrink: 0; margin: 0 2px; }
+
+    /* Privacy toggle on binder tabs */
+    .privacy-btn {
+      opacity: 0; font-size: 0.7rem; color: var(--void-muted);
+      padding: 2px 4px; border-radius: 4px; border: none;
+      background: none; cursor: pointer; transition: opacity 0.15s, color 0.15s;
+    }
+    .binder-tab:hover .privacy-btn { opacity: 1; }
+    .privacy-btn:hover { color: rgba(var(--accent-rgb),1); }
+    .privacy-btn.public { opacity: 1; color: rgba(var(--accent-rgb),0.65); }
+    .privacy-btn.public:hover { color: rgba(var(--accent-rgb),1); }
+
+    /* Copy share link button in center header */
+    .copy-link-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.03); color: var(--void-muted);
+      font-size: 0.52rem; font-weight: 800; letter-spacing: 0.1em;
+      text-transform: uppercase; cursor: pointer; transition: all 0.18s;
+    }
+    .copy-link-btn:hover { color: rgba(var(--accent-rgb),1); border-color: rgba(var(--accent-rgb),0.3); background: rgba(var(--accent-rgb),0.07); }
+
+    /* Share-view read-only banner */
+    #share-view-banner {
+      width: 100%; padding: 8px 14px; border-radius: 8px;
+      border: 1px solid rgba(var(--accent-rgb),0.2);
+      background: rgba(var(--accent-rgb),0.05);
+      font-size: 0.52rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: rgba(var(--accent-rgb),0.75);
+      margin-bottom: 12px; text-align: center;
+    }
+
+    /* Stack count badge */
+    .slot-count-badge {
+      position: absolute; bottom: 6px; left: 6px; z-index: 4;
+      background: rgba(0,0,0,0.78); backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 5px;
+      font-size: 0.44rem; font-weight: 900; letter-spacing: 0.08em;
+      color: #fff; padding: 2px 5px; pointer-events: none;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .slot-trait-badge {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 4;
+      background: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.55) 60%, transparent 100%);
+      padding: 10px 5px 4px;
+      font-size: 0.42rem; font-weight: 800; letter-spacing: 0.07em;
+      color: rgba(255,255,255,0.88); text-align: center;
+      pointer-events: none; text-transform: uppercase;
+      font-family: 'Space Grotesk', sans-serif;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .slot-trait-badge--genesis { color: #e8c97a; }
+
+    /* ----------------------------------------------
        CARD INSPECT MODAL
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     #inspect-modal {
       position: fixed; inset: 0; z-index: 900;
       background: rgba(5,7,10,0.9);
@@ -476,7 +632,7 @@
     }
     #inspect-card-wrap.rarity-Legendary::after { border-color: rgba(251,191,36,0.6); box-shadow: inset 0 0 0 1px rgba(251,191,36,0.15), 0 0 40px rgba(251,191,36,0.25); }
     #inspect-card-wrap.rarity-Epic::after      { border-color: rgba(168,85,247,0.6); box-shadow: inset 0 0 0 1px rgba(168,85,247,0.15), 0 0 40px rgba(168,85,247,0.25); }
-    #inspect-card-wrap.rarity-Rare::after      { border-color: rgba(59,130,246,0.6); box-shadow: inset 0 0 0 1px rgba(59,130,246,0.15),  0 0 40px rgba(59,130,246,0.25); }
+    #inspect-card-wrap.rarity-Rare::after      { border-color: rgba(63,170,255,0.6); box-shadow: inset 0 0 0 1px rgba(63,170,255,0.15),  0 0 40px rgba(63,170,255,0.25); }
 
     #inspect-info { flex: 1; min-width: 0; }
     #inspect-rarity-badge {
@@ -531,9 +687,9 @@
     }
     #inspect-close:hover { background: rgba(255,255,255,0.12); color: var(--void-text); }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        CREATE BINDER MODAL
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     .cb-overlay {
       position: fixed; inset: 0; z-index: 1000;
       background: rgba(5,7,10,0.88);
@@ -588,9 +744,79 @@
     }
     .cb-cancel:hover { color: var(--void-text); border-color: rgba(255,255,255,0.16); }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
+       BUY PACKS MODAL
+    ---------------------------------------------- */
+    #buy-packs-modal {
+      position: fixed; inset: 0; z-index: 1100;
+      background: rgba(5,7,10,0.88); backdrop-filter: blur(20px);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+      opacity: 0; pointer-events: none; transition: opacity 0.22s ease;
+    }
+    #buy-packs-modal.open { opacity: 1; pointer-events: all; }
+    #buy-packs-inner {
+      background: #0c0f18; border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 20px; padding: 28px 28px 32px;
+      width: 100%; max-width: 520px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    #buy-packs-header {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    #buy-packs-title {
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      font-size: 1.5rem; letter-spacing: -0.03em; text-transform: uppercase;
+      color: var(--void-text); line-height: 1;
+    }
+    #buy-packs-sub {
+      font-size: 0.48rem; font-weight: 800; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--void-muted); margin-top: 6px;
+    }
+    #buy-packs-close {
+      flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05);
+      color: var(--void-muted); font-size: 1.1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.18s;
+    }
+    #buy-packs-close:hover { color: var(--void-text); background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+    #buy-packs-grid {
+      display: flex; flex-direction: row; gap: 16px;
+    }
+    .bp-pack-card {
+      flex: 1; display: flex; flex-direction: column; gap: 8px;
+      text-decoration: none; cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .bp-pack-card:hover { transform: translateY(-4px); }
+    .bp-pack-img-wrap {
+      width: 100%; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      transition: box-shadow 0.2s;
+    }
+    .bp-pack-card:hover .bp-pack-img-wrap {
+      box-shadow: 0 12px 32px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(var(--accent-rgb),0.5);
+    }
+    .bp-pack-img-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .bp-pack-info { text-align: center; }
+    .bp-pack-name {
+      font-size: 0.52rem; font-weight: 800; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--void-text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+    }
+    .bp-pack-count {
+      font-size: 0.44rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--void-muted); margin-top: 2px;
+    }
+    #buy-packs-empty {
+      text-align: center; padding: 40px 0;
+      font-size: 0.55rem; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--void-muted);
+    }
+
+    /* ----------------------------------------------
        SHARE MODAL
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     #share-modal {
       position: fixed; inset: 0; z-index: 1000;
       background: rgba(5,7,10,0.94);
@@ -654,9 +880,9 @@
     }
     .sm-cancel:hover { color: var(--void-text); border-color: rgba(255,255,255,0.16); }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        CAPTURE WRAPPER + WATERMARK FOOTER
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     #binder-capture-target {
       display: flex; flex-direction: column; align-items: center; gap: 0;
     }
@@ -675,9 +901,9 @@
       gap: 0;
     }
 
-    /* ── Shared footer cells (both-page + single-page watermarks) ── */
+    /* -- Shared footer cells (both-page + single-page watermarks) -- */
 
-    /* Castle logo cell — matches nav: icon + Castle[TCG] */
+    /* Castle logo cell � matches nav: icon + Castle[TCG] */
     .sf-logo {
       display: flex; align-items: center; gap: 8px;
       padding-right: 16px;
@@ -751,7 +977,7 @@
       color: rgba(255,255,255,0.35); text-transform: uppercase;
     }
 
-    /* ── Both-page footer bar ── */
+    /* -- Both-page footer bar -- */
     #binder-share-footer {
       display: none;
       width: 100%;
@@ -795,7 +1021,7 @@
       display: flex;
     }
 
-    /* ── Single-page watermark bar (injected into temp wrapper) ── */
+    /* -- Single-page watermark bar (injected into temp wrapper) -- */
     .sp-watermark {
       display: flex; align-items: center;
       width: 100%;
@@ -834,9 +1060,9 @@
       display: flex;
     }
 
-    /* ══════════════════════════════════════════════
-       SHARE MODAL — PAGE SELECT
-    ══════════════════════════════════════════════ */
+    /* ----------------------------------------------
+       SHARE MODAL � PAGE SELECT
+    ---------------------------------------------- */
     .sm-page-select {
       display: flex; gap: 8px; margin-bottom: 18px;
     }
@@ -875,7 +1101,7 @@
       text-transform: uppercase; color: var(--void-muted); margin-bottom: 8px;
     }
 
-    /* ── Toast ── */
+    /* -- Toast -- */
     #tb-toast {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
       z-index: 2000; display: flex; flex-direction: column; gap: 8px;
@@ -891,22 +1117,29 @@
     .tb-toast-item.info    { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; }
     .tb-toast-item.success { background: rgba(34,197,94,0.15);  border: 1px solid rgba(34,197,94,0.3);  color: #86efac; }
     .tb-toast-item.error   { background: rgba(239,68,68,0.15);  border: 1px solid rgba(239,68,68,0.3);  color: #fca5a5; }
+
+    /* Ensure binder-style card detail modal has a concrete card viewport size */
+    #card-detail-modal .card-detail-flip-scene {
+      width: min(72vw, 320px);
+      aspect-ratio: 2 / 3;
+    }
   </style>
+    <script src="/castle-prefs.js"></script>
 </head>
 
 <body class="bg-void-bg text-void-text">
   <div class="saas-bg-glow"></div>
 
-  <!-- ══ REAL NAV ══ -->
+  <!-- -- REAL NAV -- -->
   <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-    <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
-      <a href="/" class="flex items-center gap-2 group cursor-pointer">
+    <div class="w-full px-8 h-20 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 group cursor-pointer shrink-0">
         <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
           <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
         </div>
         <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
       </a>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 shrink-0">
         <div id="nav-user-preview" class="hidden items-center">
           <span id="nav-username" class="hidden">---</span>
           <span id="nav-user-role" class="hidden">Collector</span>
@@ -915,10 +1148,9 @@
               class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
               aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
               <span class="relative inline-block">
-                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
-                <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
               </span>
-              <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+              <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
             </button>
             <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
               <div class="border-b border-white/5">
@@ -927,10 +1159,10 @@
                   aria-expanded="false" aria-controls="nav-user-team-panel">
                   <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
                   <div class="min-w-0 flex-1">
-                    <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                    <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">�</p>
                     <div class="flex items-center gap-2 mt-1 flex-wrap">
                       <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
-                      <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                      <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">�</span>
                     </div>
                   </div>
                   <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
@@ -946,7 +1178,7 @@
                 <div class="flex items-center justify-between gap-2">
                   <div class="min-w-0">
                     <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
-                    <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                    <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">�</p>
                   </div>
                   <button type="button" id="nav-user-menu-copy-code"
                     class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
@@ -975,34 +1207,77 @@
 
   <div id="page-shell">
 
-    <!-- ══ LEFT ══ -->
+    <!-- -- LEFT -- -->
     <aside id="left-panel">
-      <div class="panel-section-title">
-        My Binders <span class="new-badge" id="binder-count-badge"></span>
+      <div id="left-pack-panel">
+
+        <!-- OPEN packs � top -->
+        <div id="left-pack-open" class="lp-slide">
+          <div class="side-panel side-panel--compact" onclick="window.location.href='/pack-opening'">
+            <div class="side-pack-wrap">
+              <div class="side-pack-stack">
+                <img id="left-pack-img-back2" class="side-pack-img side-pack-back-2" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                <img id="left-pack-img-back1" class="side-pack-img side-pack-back-1" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                <img id="left-pack-img-front" class="side-pack-img side-pack-front"  src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+              </div>
+              <div id="left-pack-count" class="side-pack-count hidden">0</div>
+            </div>
+            <div class="side-panel-label" id="left-pack-open-label">Unopened<br>Packs</div>
+          </div>
+        </div>
+
+        <div class="left-divider"></div>
+
+        <!-- PURCHASE packs � bottom -->
+        <div id="left-pack-buy" class="lp-slide">
+          <div class="side-panel side-panel--compact" onclick="openBuyPacksModal()">
+            <div class="side-pack-wrap">
+              <div class="side-pack-slot">
+                <img id="left-pack-img" class="side-pack-img" src="https://cdn.codeoce.com/branding/default-pack.png" alt="Booster Pack">
+              </div>
+            </div>
+            <div class="side-panel-label">Purchase<br>Packs</div>
+          </div>
+        </div>
+
       </div>
-      <div id="binder-tab-list"></div>
+
       <div class="left-divider"></div>
       <button class="new-binder-btn" onclick="openCreateBinder()">
         <i class="bx bx-plus"></i> New Binder
       </button>
-      <div class="left-divider"></div>
-      <div class="left-promo">
-        <div class="left-promo-title">Get More Cards</div>
-        <div class="left-promo-desc">Subscribe, use Channel Points, or buy packs to summon new cards live on stream.</div>
-        <button class="left-promo-btn outline" onclick="window.location.href='/my-collection'">View My Collections</button>
-      </div>
     </aside>
 
-    <!-- ══ CENTER ══ -->
+    <!-- -- CENTER -- -->
     <main id="main-area">
       <div id="center-header">
-        <div id="center-title">All Cards <span id="center-page-label">— Page 1</span></div>
+        <div id="center-title">All Cards</div>
+        <button class="copy-link-btn" id="copy-link-btn" style="display:none" onclick="copyBinderLink()">
+          <i class="bx bx-link"></i> Copy Link
+        </button>
         <button class="share-btn" id="share-binder-btn" onclick="shareBinder()">
           <i class="bx bx-share-alt"></i> Share
         </button>
         <button class="center-arrow" id="top-prev"><i class="bx bx-chevron-left"></i></button>
         <button class="center-arrow" id="top-next"><i class="bx bx-chevron-right"></i></button>
       </div>
+
+      <div id="binder-controls">
+        <span class="bc-label">Sort</span>
+        <div class="bc-group">
+          <button class="bc-btn active" data-sort="recent"      onclick="setSort('recent')"><i class="bx bx-time-five"></i> Recent</button>
+          <button class="bc-btn"        data-sort="rarity-high" onclick="setSort('rarity-high')"><i class="bx bx-sort-down"></i> Rarity ?</button>
+          <button class="bc-btn"        data-sort="rarity-low"  onclick="setSort('rarity-low')"><i class="bx bx-sort-up"></i> Rarity ?</button>
+          <button class="bc-btn"        data-sort="quantity"    onclick="setSort('quantity')"><i class="bx bx-copy"></i> Quantity</button>
+        </div>
+        <div class="bc-divider"></div>
+        <div class="bc-group">
+          <button class="bc-btn active" data-view="individual" onclick="setView('individual')"><i class="bx bx-grid-alt"></i> Individual</button>
+          <button class="bc-btn"        data-view="stack"      onclick="setView('stack')"><i class="bx bx-duplicate"></i> Stack</button>
+        </div>
+      </div>
+
+      <div id="share-view-banner" style="display:none"></div>
 
       <div id="binder-capture-target">
         <div id="book-wrap">
@@ -1021,7 +1296,7 @@
           </div>
         </div>
 
-        <!-- Watermark footer — hidden normally, shown during capture -->
+        <!-- Watermark footer � hidden normally, shown during capture -->
         <div id="binder-share-footer">
           <div class="sf-logo">
             <div class="sf-logo-icon">
@@ -1030,12 +1305,12 @@
             <span class="sf-logo-wordmark">Castle<em>TCG</em></span>
           </div>
           <div class="sf-center">
-            <span class="sf-collector-name" id="sf-collector-name">—</span>
-            <span class="sf-binder-label" id="sf-binder-label">—</span>
+            <span class="sf-collector-name" id="sf-collector-name">�</span>
+            <span class="sf-binder-label" id="sf-binder-label">�</span>
           </div>
           <div class="sf-right" id="sf-streamer-cell">
             <div class="sf-streamer-text">
-              <span class="sf-streamer-name" id="sf-streamer-name">—</span>
+              <span class="sf-streamer-name" id="sf-streamer-name">�</span>
               <span class="sf-streamer-sub">Streamer</span>
             </div>
             <div class="sf-streamer-avatar-placeholder" id="sf-streamer-avatar-wrap">
@@ -1056,41 +1331,29 @@
       </div>
     </main>
 
-    <!-- ══ RIGHT ══ -->
+    <!-- -- RIGHT -- -->
     <aside id="right-panel">
-      <div class="panel-section-title" style="margin-bottom:12px">Collection</div>
-      <div id="right-progress">
-        <div class="prog-label">Cards Owned</div>
-        <div class="prog-nums" id="prog-nums">—</div>
-        <div class="prog-sub">in this binder</div>
-        <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
-      </div>
+      <div class="panel-section-title" style="margin-bottom:12px">Achievements</div>
       <div id="achievement-list"></div>
     </aside>
 
   </div>
 
-  <!-- ══ INSPECT MODAL ══ -->
-  <div id="inspect-modal" onclick="if(event.target===this)closeInspect()">
-    <div id="inspect-inner">
-      <button id="inspect-close" onclick="closeInspect()"><i class="bx bx-x"></i></button>
-      <div id="inspect-card-wrap">
-        <img id="inspect-img" src="" alt="">
-      </div>
-      <div id="inspect-info">
-        <div id="inspect-rarity-badge">
-          <span class="pip" id="inspect-pip"></span>
-          <span id="inspect-rarity-text"></span>
+  <!-- -- BUY PACKS MODAL -- -->
+  <div id="buy-packs-modal" onclick="if(event.target===this)closeBuyPacksModal()">
+    <div id="buy-packs-inner">
+      <div id="buy-packs-header">
+        <div>
+          <div id="buy-packs-title">Get Packs</div>
+          <div id="buy-packs-sub">Choose a set to earn packs from</div>
         </div>
-        <div id="inspect-name"></div>
-        <div id="inspect-set"></div>
-        <div id="inspect-desc"></div>
-        <div class="inspect-stat-row" id="inspect-stats"></div>
+        <button id="buy-packs-close" onclick="closeBuyPacksModal()"><i class="bx bx-x"></i></button>
       </div>
+      <div id="buy-packs-grid"></div>
     </div>
   </div>
 
-  <!-- ══ CREATE BINDER MODAL ══ -->
+  <!-- -- CREATE BINDER MODAL -- -->
   <div class="cb-overlay" id="create-binder-overlay" onclick="if(event.target===this)closeCreateBinder()">
     <div class="cb-box">
       <div class="cb-title">New Binder</div>
@@ -1105,7 +1368,7 @@
     </div>
   </div>
 
-  <!-- ══ SHARE MODAL ══ -->
+  <!-- -- SHARE MODAL -- -->
   <div id="share-modal" onclick="if(event.target===this)closeShareModal()">
     <div class="sm-box">
       <div class="sm-header">
@@ -1153,29 +1416,148 @@
     </div>
   </div>
 
-  <!-- ══ TOAST ══ -->
+  <!-- -- TOAST -- -->
   <div id="tb-toast"></div>
 
+  <!-- -- CARD DETAIL MODAL -- -->
+  <!-- -- INSPECT MODAL (original binder card detail) -- -->
+  <div id="card-detail-modal" class="fixed inset-0 z-[2000] hidden card-detail-modal-backdrop overflow-y-auto overflow-x-hidden">
+    <button type="button" onclick="closeInspect()" aria-label="Close" class="fixed top-5 right-5 z-[2010] w-10 h-10 rounded-full border border-white/10 bg-black/30 backdrop-blur-md hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-colors duration-200">
+      <i class="bx bx-x text-base"></i>
+    </button>
+    <div class="min-h-full w-full flex items-center justify-center p-6 pt-16 pb-10 sm:p-10" onclick="if(event.target===this) closeInspect()">
+      <div class="card-detail-modal-layout void-fade w-full max-w-[min(100%,38rem)] lg:max-w-[min(100%,46rem)] mx-auto grid grid-cols-1 lg:grid-cols-[auto_minmax(0,19rem)] gap-6 lg:gap-8 lg:items-center" onclick="event.stopPropagation()">
+        <div class="card-detail-art-col flex justify-center lg:justify-start items-center shrink-0">
+          <div id="card-detail-flip-scene" class="card-detail-flip-scene card-detail-foil-drag-only outline-none select-none" tabindex="0" role="button" aria-label="Card � tap to flip; drag to tilt � dragging never flips" aria-pressed="false">
+            <div class="card-detail-tilt-wrap">
+              <div class="card-detail-flip-track">
+                <div class="card-detail-face card-detail-face--front">
+                  <div class="card-detail-card-face absolute inset-0">
+                    <img id="card-detail-image" src="" alt="" class="absolute inset-0 h-full w-full object-cover block z-0 pointer-events-none">
+                    <div id="card-detail-holo-layer" class="holo-layer holo-layer--card-detail hidden" aria-hidden="true"></div>
+                    <div id="card-detail-holo-shine" class="holo-shine holo-shine--card-detail hidden" aria-hidden="true"></div>
+                    <div class="card-detail-sparkle" aria-hidden="true"></div>
+                  </div>
+                </div>
+                <div class="card-detail-face card-detail-face--back">
+                  <img id="card-detail-back-image" src="/Castle_Default_Cardback.png" alt="" class="h-full w-full object-contain object-center block pointer-events-none" draggable="false">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-detail-body flex flex-col min-w-0 gap-4 lg:max-h-[min(70vh,548px)] lg:overflow-y-auto lg:pr-1 custom-scrollbar">
+          <header class="space-y-2">
+            <div id="card-detail-rarity" class="card-detail-rarity-label leading-none" data-rarity="common">�</div>
+            <h3 id="card-detail-name" class="font-display text-xl sm:text-2xl font-bold uppercase tracking-tight text-white leading-tight">�</h3>
+            <div class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-snug text-void-muted/90">
+              <span class="inline-flex items-baseline gap-1"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">Set</span> <span id="card-detail-set" class="text-void-text/85 font-semibold">�</span></span>
+              <span class="text-white/12 px-0.5 select-none" aria-hidden="true">�</span>
+              <span class="inline-flex items-baseline gap-0.5"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">No.</span> <span id="card-detail-number" class="text-void-text/85 font-semibold tabular-nums">�</span></span>
+              <span class="text-white/12 px-0.5 select-none" aria-hidden="true">�</span>
+              <span class="inline-flex items-baseline gap-0.5"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">Owned</span> <span class="text-void-text/85 font-semibold tabular-nums">�<span id="card-detail-count">1</span></span></span>
+            </div>
+          </header>
+          <p id="card-detail-description" class="card-detail-description text-[12px] sm:text-[13px] text-void-muted/90 leading-relaxed pl-3 border-l border-white/[0.07]">�</p>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="card-detail-stat-pill">
+              <span class="card-detail-stat-label">Attack</span>
+              <div id="card-detail-attack" class="card-detail-stat-value">0</div>
+            </div>
+            <div class="card-detail-stat-pill">
+              <span class="card-detail-stat-label">Defense</span>
+              <div id="card-detail-defense" class="card-detail-stat-value">0</div>
+            </div>
+          </div>
+          <div id="card-detail-traits-breakdown" class="hidden flex flex-col gap-2">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-void-muted/70">Copies by variant</div>
+            <div id="card-detail-traits-breakdown-list" class="card-detail-trait-list"></div>
+          </div>
+          <div class="flex items-center gap-4">
+            <button id="card-detail-fav-btn" type="button" onclick="toggleInspectFavourite()"
+              class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest transition-all duration-200 text-void-muted/50 hover:text-yellow-400"
+              title="Toggle favourite">
+              <i class="fa-regular fa-heart text-sm"></i>
+              <span id="card-detail-fav-label">Add to Favourites</span>
+            </button>
+            <button type="button" onclick="openCardReport()"
+              class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest transition-all duration-200 text-void-muted/30 hover:text-red-400"
+              title="Report this card">
+              <i class="bx bx-flag text-sm"></i>
+              <span>Report</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- -- CARD REPORT MODAL -- -->
+  <div id="card-report-modal"
+      class="fixed inset-0 bg-void-bg/80 backdrop-blur-md z-[2100] hidden flex items-center justify-center p-4"
+      onclick="if(event.target===this)closeCardReport()">
+    <div class="bg-[#12141a] border border-white/[0.08] rounded-2xl w-full max-w-sm p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-black uppercase tracking-widest text-white">Report Card</h3>
+        <button onclick="closeCardReport()" class="text-void-muted hover:text-white transition-colors">
+          <i class="bx bx-x text-xl"></i>
+        </button>
+      </div>
+      <p class="text-[10px] text-void-muted leading-relaxed">Select the reason for your report. Our team will review it.</p>
+      <div class="space-y-2">
+        <label class="card-report-reason-opt">
+          <input type="radio" name="card-report-reason" value="inappropriate_content" class="sr-only">
+          <div class="card-report-reason-label">Inappropriate name or description</div>
+        </label>
+        <label class="card-report-reason-opt">
+          <input type="radio" name="card-report-reason" value="offensive_hateful" class="sr-only">
+          <div class="card-report-reason-label">Offensive or hateful content</div>
+        </label>
+        <label class="card-report-reason-opt">
+          <input type="radio" name="card-report-reason" value="wrong_information" class="sr-only">
+          <div class="card-report-reason-label">Wrong or misleading information</div>
+        </label>
+        <label class="card-report-reason-opt">
+          <input type="radio" name="card-report-reason" value="spam_duplicate" class="sr-only">
+          <div class="card-report-reason-label">Spam or duplicate</div>
+        </label>
+        <label class="card-report-reason-opt">
+          <input type="radio" name="card-report-reason" value="other" class="sr-only">
+          <div class="card-report-reason-label">Other</div>
+        </label>
+      </div>
+      <div id="card-report-feedback" class="hidden text-[10px] font-bold text-void-accent text-center py-2"></div>
+      <div class="flex gap-3 pt-1">
+        <button onclick="closeCardReport()" class="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all">Cancel</button>
+        <button id="card-report-submit" onclick="submitCardReport()" class="flex-1 py-3 rounded-xl bg-red-500/10 border border-red-500/25 hover:bg-red-500 text-red-400 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all">Submit Report</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/nav-user-menu.js"></script>
-  <script src="/castle-nav.js"></script>
+  <script src="/streamer-nav.js"></script>
   <script>
   (function () {
     'use strict';
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        CONFIG
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     const BACKEND = (document.querySelector('meta[name="castle-public-url"]')?.content || '').replace(/\/$/, '');
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        STATE
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     let currentUser      = null;
     let userBinders      = [];
     let userCollection   = [];   // full flat list of user's card instances
     let streamerData     = null; // populated from URL path or ?streamer=
     let activeStreamerSlug = null; // e.g. 'codeoce'
+    let achievementsData = [];
     let activeBinder     = 'all';
+    let isShareView    = false;
+    let sortMode       = 'recent';
+    let viewMode       = 'individual';
     let spread         = 0;
     let flipping       = false;
     let _csrfToken     = '';
@@ -1184,15 +1566,61 @@
     const RARITY_COLORS = {
       Legendary: '251,191,36',
       Epic:      '168,85,247',
-      Rare:      '59,130,246',
+      Rare:      '63,170,255',
       Common:    '100,116,139'
     };
 
-    /* ══════════════════════════════════════════════
+    /** Dashboard binder colour (or brand primary) → page + open binder accents */
+    function applyStreamerTheme(streamer) {
+      if (!streamer) return;
+      const hex = streamer.binder_color || streamer.brand_color_primary;
+      if (!hex || !/^#[0-9a-fA-F]{6}$/i.test(hex)) return;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const rgb = `${r}, ${g}, ${b}`;
+      const root = document.documentElement;
+      root.style.setProperty('--void-accent', hex);
+      root.style.setProperty('--void-accent-rgb', rgb);
+      root.style.setProperty('--accent', hex);
+      root.style.setProperty('--accent-rgb', rgb);
+      root.style.setProperty('--binder-accent-rgb', rgb);
+    }
+
+    /* ----------------------------------------------
        BOOT
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     (async function init() {
       try {
+        // Share view: load a public binder by its share token (?share=<uuid>)
+        const _shareToken = new URLSearchParams(window.location.search).get('share');
+        if (_shareToken) {
+          isShareView = true;
+          const _r = await fetch(`${BACKEND}/api/binders/share?token=${encodeURIComponent(_shareToken)}`);
+          if (_r.ok) {
+            const _d = await _r.json();
+            userCollection = (_d.cards || []).map(c => ({
+              ...c, instanceId: c.instanceId || c.user_card_id,
+              is_favourite: false, is_tradeable: true,
+            }));
+            activeBinder = 'all';
+            const _title = document.getElementById('center-title');
+            if (_title) _title.textContent = _d.binder?.name || 'Shared Binder';
+            const _banner = document.getElementById('share-view-banner');
+            if (_banner) {
+              _banner.textContent = `Viewing ${escapeHTML(_d.owner?.username || 'someone')}'s binder � read only`;
+              _banner.style.display = 'block';
+            }
+            document.getElementById('share-binder-btn')?.classList.add('hidden');
+            renderSpread(0);
+            renderProgress();
+            renderAchievements();
+            return;
+          }
+          isShareView = false;
+          showToast('Binder not found or is no longer public', 'error');
+        }
+
         const bsRes = await fetch(`${BACKEND}/api/v2/bootstrap?streamer=all&lite=1`, { credentials: 'include' });
         if (bsRes.ok) {
           const bs = await bsRes.json();
@@ -1203,24 +1631,64 @@
           }
         }
 
-        // Derive streamer slug: ?streamer= param, or first path segment of /:streamer/testbinder
+        // Derive streamer slug: ?streamer= / ?slug=, or /:streamer/binder (same routes as streamer-nav.js)
         const _pathParts = window.location.pathname.split('/').filter(Boolean);
-        activeStreamerSlug =
-          new URLSearchParams(window.location.search).get('streamer') ||
-          (_pathParts.length === 2 && _pathParts[1] === 'testbinder' ? _pathParts[0] : null);
+        const _qs = new URLSearchParams(window.location.search);
+        activeStreamerSlug = (
+          _qs.get('streamer') ||
+          _qs.get('slug') ||
+          (_pathParts.length === 2 && _pathParts[1] === 'binder' ? _pathParts[0] : null) ||
+          ''
+        ).trim().toLowerCase() || null;
 
         if (activeStreamerSlug) {
-          try {
-            const sr = await fetch(`${BACKEND}/api/public/streamer?streamer=${encodeURIComponent(activeStreamerSlug)}`);
-            if (sr.ok) streamerData = await sr.json();
-          } catch { /* non-critical */ }
+          // Point the "Watch Stream" link at the streamer's channel
+          const channelLink = document.getElementById('left-channel-link');
+          if (channelLink) channelLink.href = '/' + activeStreamerSlug;
+
+          // collection-page returns streamer.pack_image_url + sets in one response (same as /mavro collection)
+          const [pageRes, packsRes] = await Promise.allSettled([
+            fetch(`${BACKEND}/api/public/collection-page?streamer=${encodeURIComponent(activeStreamerSlug)}`),
+            fetch(`${BACKEND}/api/packs/pending`, { credentials: 'include' }),
+          ]);
+
+          let leftSets = [];
+          if (pageRes.status === 'fulfilled' && pageRes.value.ok) {
+            const pageData = await pageRes.value.json();
+            streamerData = pageData?.streamer || null;
+            leftSets = Array.isArray(pageData?.sets) ? pageData.sets : [];
+          } else {
+            // Fallback: public streamer row + /api/sets
+            try {
+              const [sr, setsRes] = await Promise.all([
+                fetch(`${BACKEND}/api/public/streamer?streamer=${encodeURIComponent(activeStreamerSlug)}`),
+                fetch(`${BACKEND}/api/sets?streamer=${encodeURIComponent(activeStreamerSlug)}`),
+              ]);
+              if (sr.ok) streamerData = await sr.json();
+              if (setsRes.ok) leftSets = await setsRes.json();
+            } catch { /* non-critical */ }
+          }
+          applyStreamerTheme(streamerData);
+
+          const leftPacks = (packsRes.status === 'fulfilled' && packsRes.value.ok)
+            ? await packsRes.value.json()
+            : [];
+
+          renderLeftPacks(
+            Array.isArray(leftSets) ? leftSets : [],
+            Array.isArray(leftPacks) ? leftPacks : [],
+            activeStreamerSlug
+          );
+        } else {
+          renderLeftPacks([], [], null);
         }
 
-        // Fetch binders + collection in parallel, scoped to streamer if known
+        // Fetch binders + collection + achievements in parallel, scoped to streamer if known
         const streamerParam = activeStreamerSlug ? `?streamer=${encodeURIComponent(activeStreamerSlug)}` : '';
-        const [bindersRes, colRes] = await Promise.allSettled([
+        const [bindersRes, colRes, achRes] = await Promise.allSettled([
           fetch(`${BACKEND}/api/binders${streamerParam}`, { credentials: 'include' }),
           fetch(`${BACKEND}/api/collection${streamerParam}`, { credentials: 'include' }),
+          fetch(`${BACKEND}/api/achievements${streamerParam}`, { credentials: 'include' }),
         ]);
 
         if (bindersRes.status === 'fulfilled' && bindersRes.value.ok) {
@@ -1233,24 +1701,49 @@
           userCollection = (Array.isArray(raw) ? raw : []).map(c => ({
             ...c,
             instanceId: c.instanceId || c.user_card_id,
+            is_favourite: c.is_favourite || false,
+            is_tradeable: c.is_trading_eligible !== false,
           }));
+        }
+
+        if (achRes.status === 'fulfilled' && achRes.value.ok) {
+          const raw = await achRes.value.json();
+          achievementsData = Array.isArray(raw) ? raw : [];
+        }
+
+        // Apply URL-param binder selection (set by streamer-binders.html)
+        const _p = new URLSearchParams(window.location.search);
+        const _binderParam  = _p.get('binder');
+        const _filterParam  = _p.get('filter');
+        const _setParam     = _p.get('set');
+        if (_binderParam) {
+          activeBinder = _binderParam;
+        } else if (_filterParam === 'favourites') {
+          activeBinder = 'favourites';
+        } else if (_filterParam === 'collectables') {
+          activeBinder = 'collectables';
+        } else if (_setParam) {
+          activeBinder = '__set__:' + _setParam;
         }
 
         renderBinderTabs();
         renderSpread(0);
         renderProgress();
+        renderAchievements();
       } catch (err) {
         console.error('[Binder] Init error:', err);
         showToast('Failed to load binder data', 'error');
         // Fall back to empty state
         renderBinderTabs();
         renderSpread(0);
+        renderProgress();
+        renderAchievements();
       }
     })();
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        NAV USER
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function setupNavUser(user) {
       if (!user) return;
       window.currentUser = { ...user, avatar: user.avatar_url || user.avatar };
@@ -1264,9 +1757,158 @@
       window.updateNavUserMenuLabels?.();
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
+       LEFT PACK PANEL
+    ---------------------------------------------- */
+    // Pack panel state
+    var _leftPackSets     = [];
+    var _leftPendingPacks = [];
+    var _leftPendingCount = 0;
+    var _leftPackTab      = 'buy';
+    var _leftSlug         = null;
+
+    const DEFAULT_PACK_IMG = 'https://cdn.codeoce.com/branding/default-pack.png';
+    const PACK_URL_SKIP = new Set(['/default_pack.png', '/pack.png', '/default-pack.png']);
+
+    /** True for absolute http(s) URLs; skips legacy site-relative defaults that 404 on the page origin. */
+    function isUsablePackUrl(url) {
+      if (typeof url !== 'string') return false;
+      const u = url.trim();
+      if (!u || PACK_URL_SKIP.has(u.toLowerCase())) return false;
+      return u.startsWith('https://') || u.startsWith('http://') || u.startsWith('//');
+    }
+
+    /** Legacy broken upload paths ? branding/{slug}_pack.png (e.g. mavro_pack.png). */
+    function resolvePackCdnUrl(url, slug) {
+      if (typeof url === 'string' && url.includes('/branding/') && isUsablePackUrl(url)) {
+        return url.trim();
+      }
+      const u = typeof url === 'string' ? url.trim() : '';
+      const legacyBroken = u && isUsablePackUrl(u) &&
+        /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^/]+$/i.test(u) &&
+        !u.includes('/card_images/') && !u.includes('/branding/');
+      if (legacyBroken && slug) {
+        return `https://cdn.codeoce.com/branding/${slug}_pack.png`;
+      }
+      return u;
+    }
+
+    function pickPackUrl(slug, ...candidates) {
+      for (const raw of candidates) {
+        const resolved = resolvePackCdnUrl(raw, slug);
+        if (isUsablePackUrl(resolved)) return resolved.trim();
+      }
+      return null;
+    }
+
+    /** Pack art: set override ? streamer row ? pending-pack streamer join ? platform default. */
+    function resolveBinderPackImage(sets) {
+      const slug = _leftSlug || streamerData?.username || activeStreamerSlug || null;
+      for (const s of sets || []) {
+        const u = pickPackUrl(slug, s?.pack_image_url);
+        if (u) return u;
+      }
+      const streamerUrl = pickPackUrl(slug, streamerData?.pack_image_url);
+      if (streamerUrl) return streamerUrl;
+
+      const streamerDbId = streamerData?.id || null;
+      const pending = streamerDbId
+        ? _leftPendingPacks.filter(p => p.streamer_id === streamerDbId)
+        : _leftPendingPacks;
+      const pendingSlug = pending[0]?.streamer?.username || slug;
+      const pendingUrl = pickPackUrl(pendingSlug, pending[0]?.streamer?.pack_image_url);
+      if (pendingUrl) return pendingUrl;
+
+      return DEFAULT_PACK_IMG;
+    }
+
+    function applyLeftPackImages(packImg) {
+      const slug = _leftSlug || streamerData?.username || activeStreamerSlug || null;
+      const url = pickPackUrl(slug, packImg) || DEFAULT_PACK_IMG;
+      ['left-pack-img', 'left-pack-img-back2', 'left-pack-img-back1', 'left-pack-img-front'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.onerror = () => {
+          el.onerror = null;
+          if (el.src !== DEFAULT_PACK_IMG) el.src = DEFAULT_PACK_IMG;
+        };
+        el.src = url;
+      });
+    }
+
+    function renderLeftPacks(sets, pendingPacks, slug) {
+      _leftPackSets      = sets;
+      _leftPendingPacks  = Array.isArray(pendingPacks) ? pendingPacks : [];
+      _leftSlug          = slug;
+
+      // Filter pending packs to this streamer's ID
+      const streamerDbId = streamerData?.id || null;
+      const pending = streamerDbId
+        ? pendingPacks.filter(p => p.streamer_id === streamerDbId)
+        : pendingPacks;
+      _leftPendingCount = pending.length;
+
+      applyLeftPackImages(resolveBinderPackImage(sets));
+      setPackTab();
+    }
+
+    function setPackTab() {
+      const countEl   = document.getElementById('left-pack-count');
+      const openLabel = document.getElementById('left-pack-open-label');
+      const n = _leftPendingCount;
+      if (countEl) {
+        countEl.textContent = n;
+        countEl.classList.toggle('hidden', n === 0);
+      }
+      if (openLabel) {
+        openLabel.innerHTML = n > 0
+          ? n + ' Pack' + (n !== 1 ? 's' : '') + '<br>Ready to Open'
+          : 'Unopened<br>Packs';
+      }
+    }
+
+    function openBuyPacksModal() {
+      const modal = document.getElementById('buy-packs-modal');
+      const grid  = document.getElementById('buy-packs-grid');
+      if (!modal || !grid) return;
+
+      const fallback = resolveBinderPackImage(_leftPackSets);
+      if (!_leftPackSets.length) {
+        grid.innerHTML = '<div id="buy-packs-empty">No packs available yet</div>';
+      } else {
+        const modalSlug = _leftSlug || streamerData?.username || activeStreamerSlug || null;
+        grid.innerHTML = _leftPackSets.map(s => {
+          const raw = pickPackUrl(modalSlug, s.pack_image_url) || fallback;
+          const img  = escapeHTML(raw);
+          const name = escapeHTML(s.name || 'Pack');
+          const dest = escapeHTML(_leftSlug ? '/' + _leftSlug : '#');
+          return `<a class="bp-pack-card" href="${dest}">
+            <div class="bp-pack-img-wrap">
+              <img src="${img}" alt="${name}" loading="lazy">
+            </div>
+            <div class="bp-pack-info">
+              <span class="bp-pack-name">${name}</span>
+            </div>
+          </a>`;
+        }).join('');
+      }
+
+      modal.classList.add('open');
+      document.addEventListener('keydown', _buyModalEscHandler);
+    }
+
+    function closeBuyPacksModal() {
+      document.getElementById('buy-packs-modal')?.classList.remove('open');
+      document.removeEventListener('keydown', _buyModalEscHandler);
+    }
+
+    function _buyModalEscHandler(e) {
+      if (e.key === 'Escape') closeBuyPacksModal();
+    }
+
+    /* ----------------------------------------------
        CSRF
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     async function ensureCsrf() {
       if (_csrfToken) return _csrfToken;
       const r = await fetch(`${BACKEND}/api/csrf`, { credentials: 'include' });
@@ -1290,37 +1932,103 @@
       return res.json().catch(() => ({}));
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        CARD IMAGE URL
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function resolveCardImageUrl(card) {
       if (!card) return '';
+      // Prefer catalog art from collection (cards.image_url) � same as pack opening / trading
+      if (card.image_url) return card.image_url;
+      if (card.baked_image_url) return card.baked_image_url;
       const id = card.instanceId || card.user_card_id;
       if ((card.template_id || card.has_template) && id) {
         return `${BACKEND}/api/cards/${id}/image.png`;
       }
-      return card.image_url || '';
+      return '';
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        CURRENT BINDER CARDS
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function currentCards() {
       if (activeBinder === 'all') return userCollection;
+      if (activeBinder === 'favourites') return userCollection.filter(c => c.is_favourite);
+      if (activeBinder === 'collectables') return userCollection.filter(c => !c.is_tradeable);
+      if (activeBinder.startsWith('__set__:')) {
+        const setName = activeBinder.slice('__set__:'.length);
+        return userCollection.filter(c => c.set_name === setName);
+      }
       const b = userBinders.find(x => x.id === activeBinder);
       if (!b || !b.user_binder_cards?.length) return [];
       const ids = new Set(b.user_binder_cards.map(c => c.user_card_id || c.instanceId || c.id));
       return userCollection.filter(c => ids.has(c.instanceId || c.user_card_id));
     }
 
+    function cardDate(c) {
+      return new Date(c.created_at || c.acquired_at || c.updated_at || 0).getTime();
+    }
+
+    function rarityRank(card) {
+      const raw = String(card?.rarity || card?.cards_rarity || card?.card_rarity || '').trim().toLowerCase();
+      if (raw.includes('legend') || raw === 'test') return 4;
+      if (raw.startsWith('epic')) return 3;
+      if (raw.startsWith('rare')) return 2;
+      return 1;
+    }
+
+    function countOf(card) {
+      const id = String(card.card_id || card.id || '');
+      if (!id) return 1;
+      return userCollection.filter(c => String(c.card_id || c.id) === id).length || 1;
+    }
+
+    function getDisplayCards() {
+      const base = currentCards();
+      let cards;
+
+      if (viewMode === 'stack') {
+        const groups = new Map();
+        base.forEach(c => {
+          const key = String(c.card_id || c.id || c.instanceId || '');
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(c);
+        });
+        cards = Array.from(groups.values()).map(copies => {
+          copies.sort((a, b) => cardDate(b) - cardDate(a));
+          return { ...copies[0], count: copies.length, _copies: copies };
+        });
+      } else {
+        cards = base.slice();
+      }
+
+      switch (sortMode) {
+        case 'rarity-high':
+          cards.sort((a, b) => rarityRank(b) - rarityRank(a) || cardDate(b) - cardDate(a));
+          break;
+        case 'rarity-low':
+          cards.sort((a, b) => rarityRank(a) - rarityRank(b) || cardDate(b) - cardDate(a));
+          break;
+        case 'quantity':
+          cards.sort((a, b) => {
+            const qa = viewMode === 'stack' ? (a.count || 1) : countOf(a);
+            const qb = viewMode === 'stack' ? (b.count || 1) : countOf(b);
+            return qb - qa || cardDate(b) - cardDate(a);
+          });
+          break;
+        default: // recent
+          cards.sort((a, b) => cardDate(b) - cardDate(a));
+      }
+      return cards;
+    }
+
     function totalSpreads() {
-      const cards = currentCards();
+      const cards = getDisplayCards();
       return Math.max(1, Math.ceil(cards.length / 18));
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        RENDER HELPERS
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function buildSlot(card) {
       const s = document.createElement('div');
       if (!card) {
@@ -1375,6 +2083,23 @@
       pip.className = `rarity-pip rarity-${rarity}`;
       s.appendChild(pip);
 
+      if (card.count && card.count > 1) {
+        const badge = document.createElement('div');
+        badge.className = 'slot-count-badge';
+        badge.textContent = `�${card.count}`;
+        s.appendChild(badge);
+      }
+
+      const genName  = (card.genesis_mechanic_display_name || card.genesis_mechanic_name || '').trim();
+      const mechName = (card.mechanic_display_name || card.mechanic_name || '').trim();
+      if (genName || mechName) {
+        const tb = document.createElement('div');
+        tb.className = 'slot-trait-badge' + (genName ? ' slot-trait-badge--genesis' : '');
+        tb.title = [genName, mechName].filter(Boolean).join(' � ');
+        tb.textContent = genName ? `? ${genName}` + (mechName ? ` � ${mechName}` : '') : mechName;
+        s.appendChild(tb);
+      }
+
       s.addEventListener('click', () => openInspect(card));
       return s;
     }
@@ -1387,8 +2112,7 @@
     }
 
     function renderSpread(si) {
-      const cards = currentCards();
-      const pageSize = 9;
+      const cards = getDisplayCards();
       const leftCards  = cards.slice(si * 18, si * 18 + 9);
       const rightCards = cards.slice(si * 18 + 9, si * 18 + 18);
 
@@ -1402,8 +2126,7 @@
 
       const total = totalSpreads();
       document.getElementById('page-indicator').textContent =
-        `Page ${leftPageNum}–${rightPageNum}  of  ${total * 2}`;
-      document.getElementById('center-page-label').textContent = `— Spread ${si + 1}`;
+        `Page ${leftPageNum}�${rightPageNum}  of  ${total * 2}`;
 
       document.getElementById('prev-btn').disabled = si === 0;
       document.getElementById('next-btn').disabled = si === total - 1;
@@ -1414,15 +2137,76 @@
     function renderProgress() {
       const cards = currentCards();
       const total  = totalSpreads() * 18;
-      document.getElementById('prog-nums').textContent = cards.length;
-      document.getElementById('prog-fill').style.width =
-        total > 0 ? `${Math.min(100, Math.round(cards.length / total * 100))}%` : '0%';
+      const numsEl = document.getElementById('prog-nums');
+      const fillEl = document.getElementById('prog-fill');
+      if (numsEl) numsEl.textContent = cards.length;
+      if (fillEl) fillEl.style.width = total > 0 ? `${Math.min(100, Math.round(cards.length / total * 100))}%` : '0%';
     }
 
-    /* ══════════════════════════════════════════════
+    function normalizeAchievement(a) {
+      const title = a?.title || a?.name || a?.label || 'Achievement';
+      const description = a?.description || a?.desc || '';
+      const unlocked = !!(a?.unlocked || a?.earned || a?.completed || a?.is_unlocked);
+      const icon = a?.icon || (unlocked ? '??' : '??');
+      return { title, description, unlocked, icon };
+    }
+
+    function localFallbackAchievements() {
+      const owned = userCollection.length;
+      return [
+        { title: 'First Pull', description: 'Own at least 1 card', unlocked: owned >= 1, icon: '?' },
+        { title: 'Collector', description: 'Own at least 25 cards', unlocked: owned >= 25, icon: '??' },
+        { title: 'Vault Builder', description: 'Own at least 100 cards', unlocked: owned >= 100, icon: '???' },
+      ];
+    }
+
+    function renderAchievements() {
+      const container = document.getElementById('achievement-list');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const source = achievementsData.length > 0 ? achievementsData.map(normalizeAchievement) : localFallbackAchievements();
+      source.forEach((ach) => {
+        const row = document.createElement('div');
+        row.className = `achievement-row${ach.unlocked ? ' earned' : ''}`;
+
+        // textContent so the emoji is never HTML-escaped (escapeHTML breaks multi-codepoint emoji)
+        const achIconEl = document.createElement('div');
+        achIconEl.className = 'ach-icon';
+        achIconEl.textContent = String(ach.icon || '??');
+
+        row.innerHTML = `
+          <div class="ach-text">
+            <div class="ach-name">${escapeHTML(String(ach.title || 'Achievement'))}</div>
+            <div class="ach-desc">${escapeHTML(String(ach.description || ''))}</div>
+          </div>
+          <div class="ach-check">${ach.unlocked ? '<i class="bx bxs-check-circle"></i>' : '<i class="bx bx-lock-alt"></i>'}</div>
+        `;
+        row.prepend(achIconEl);
+        container.appendChild(row);
+      });
+    }
+
+    /* ----------------------------------------------
        BINDER TABS
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function renderBinderTabs() {
+      // Always update the center title, even when the tab list is absent
+      const titleEl = document.getElementById('center-title');
+      if (titleEl) {
+        const name = activeBinder === 'all'
+          ? 'All Cards'
+          : activeBinder === 'favourites'
+          ? 'Favourites'
+          : activeBinder === 'collectables'
+          ? 'Collectables'
+          : activeBinder.startsWith('__set__:')
+          ? activeBinder.slice('__set__:'.length)
+          : (userBinders.find(b => b.id === activeBinder)?.name || 'Binder');
+        titleEl.textContent = escapeHTML(name);
+      }
+      updateCopyLinkBtn();
+
       const list = document.getElementById('binder-tab-list');
       if (!list) return;
       list.innerHTML = '';
@@ -1437,31 +2221,44 @@
       allBtn.addEventListener('click', () => switchBinder('all'));
       list.appendChild(allBtn);
 
+      // Favourites premade tab
+      const favCount = userCollection.filter(c => c.is_favourite).length;
+      const favBtn = document.createElement('button');
+      favBtn.className = `binder-tab binder-premade${activeBinder === 'favourites' ? ' active' : ''}`;
+      favBtn.innerHTML = `
+        <span class="binder-tab-dot" style="background:rgba(250,204,21,1)"></span>
+        <span class="binder-tab-name"><i class="fa-solid fa-heart" style="color:rgba(250,204,21,0.85);margin-right:4px;font-size:10px"></i>Favourites</span>
+        <span class="binder-tab-count">${favCount} items</span>`;
+      favBtn.addEventListener('click', () => switchBinder('favourites'));
+      list.appendChild(favBtn);
+
+      // Collectables premade tab
+      const colCount = userCollection.filter(c => !c.is_tradeable).length;
+      const colBtn = document.createElement('button');
+      colBtn.className = `binder-tab binder-premade${activeBinder === 'collectables' ? ' active' : ''}`;
+      colBtn.innerHTML = `
+        <span class="binder-tab-dot" style="background:rgba(168,85,247,1)"></span>
+        <span class="binder-tab-name"><i class="bx bxs-star" style="color:rgba(168,85,247,0.85);margin-right:4px;font-size:10px"></i>Collectables</span>
+        <span class="binder-tab-count">${colCount} items</span>`;
+      colBtn.addEventListener('click', () => switchBinder('collectables'));
+      list.appendChild(colBtn);
+
       // Custom binders
       userBinders.forEach(b => {
         const count = b.user_binder_cards?.length || 0;
+        const isPublic = b.is_public || false;
         const btn = document.createElement('button');
         btn.className = `binder-tab${b.id === activeBinder ? ' active' : ''}`;
         btn.innerHTML = `
           <span class="binder-tab-dot"></span>
           <span class="binder-tab-name">${escapeHTML(b.name)}</span>
           <span class="binder-tab-count">${count} items</span>
+          <button class="privacy-btn${isPublic ? ' public' : ''}" title="${isPublic ? 'Public � click to make private' : 'Private � click to make public'}" onclick="event.stopPropagation();toggleBinderPrivacy('${escapeHTML(String(b.id))}',${!isPublic})"><i class="bx ${isPublic ? 'bx-globe' : 'bx-lock'}"></i></button>
           <button class="trash-btn" title="Delete binder" onclick="event.stopPropagation();deleteBinder('${escapeHTML(String(b.id))}')"><i class="bx bx-trash"></i></button>`;
         btn.addEventListener('click', () => switchBinder(b.id));
         list.appendChild(btn);
       });
 
-      const badge = document.getElementById('binder-count-badge');
-      if (badge) badge.textContent = userBinders.length > 0 ? `● ${userBinders.length}` : '● New';
-
-      // Update center title
-      const titleEl = document.getElementById('center-title');
-      if (titleEl) {
-        const name = activeBinder === 'all'
-          ? 'All Cards'
-          : (userBinders.find(b => b.id === activeBinder)?.name || 'Binder');
-        titleEl.innerHTML = `${escapeHTML(name)} <span id="center-page-label">— Spread 1</span>`;
-      }
     }
 
     function switchBinder(id) {
@@ -1472,9 +2269,67 @@
       renderProgress();
     }
 
-    /* ══════════════════════════════════════════════
+    function setSort(mode) {
+      sortMode = mode;
+      document.querySelectorAll('.bc-btn[data-sort]').forEach(b =>
+        b.classList.toggle('active', b.dataset.sort === mode));
+      spread = 0;
+      renderSpread(0);
+      document.getElementById('prev-btn').disabled = true;
+      document.getElementById('top-prev').disabled  = true;
+    }
+
+    function setView(mode) {
+      viewMode = mode;
+      document.querySelectorAll('.bc-btn[data-view]').forEach(b =>
+        b.classList.toggle('active', b.dataset.view === mode));
+      spread = 0;
+      renderSpread(0);
+      renderProgress();
+      document.getElementById('prev-btn').disabled = true;
+      document.getElementById('top-prev').disabled  = true;
+    }
+
+    window.setSort = setSort;
+    window.setView = setView;
+
+    /* ----------------------------------------------
+       BINDER PRIVACY + SHARE LINK
+    ---------------------------------------------- */
+    async function toggleBinderPrivacy(id, makePublic) {
+      try {
+        await writeFetch(`${BACKEND}/api/binders`, 'PATCH', { id, is_public: makePublic });
+        const b = userBinders.find(x => String(x.id) === String(id));
+        if (b) b.is_public = makePublic;
+        renderBinderTabs();
+        showToast(makePublic ? 'Binder is now public � share the link!' : 'Binder is now private', 'success');
+      } catch (err) {
+        showToast(err.message || 'Failed to update privacy', 'error');
+      }
+    }
+
+    function updateCopyLinkBtn() {
+      const btn = document.getElementById('copy-link-btn');
+      if (!btn || isShareView) return;
+      const b = userBinders.find(x => String(x.id) === String(activeBinder));
+      btn.style.display = (b?.is_public && b?.share_token) ? 'flex' : 'none';
+    }
+
+    function copyBinderLink() {
+      const b = userBinders.find(x => String(x.id) === String(activeBinder));
+      if (!b?.share_token) { showToast('Make this binder public first', 'error'); return; }
+      const shareUrl = `${window.location.origin}/testbinder.html?share=${encodeURIComponent(b.share_token)}`;
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => showToast('Link copied to clipboard!', 'success'))
+        .catch(() => showToast('Could not copy � check browser permissions', 'error'));
+    }
+
+    window.toggleBinderPrivacy = toggleBinderPrivacy;
+    window.copyBinderLink      = copyBinderLink;
+
+    /* ----------------------------------------------
        CREATE BINDER
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function openCreateBinder() {
       document.getElementById('create-binder-overlay').classList.add('open');
       document.getElementById('new-binder-name').value = '';
@@ -1524,9 +2379,9 @@
     window.submitCreateBinder = submitCreateBinder;
     window.deleteBinder      = deleteBinder;
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        PHOTO SHARING
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     let _shareMode = 'both';  // 'both' | 'left' | 'right'
 
     async function ensureHtml2Canvas() {
@@ -1616,20 +2471,24 @@
     }
 
     async function generateShareCapture() {
-      showToast('Generating image…', 'info');
+      showToast('Generating image�', 'info');
 
       const collectorName = currentUser
         ? (currentUser.display_name || currentUser.username || currentUser.twitch_id || 'Collector')
         : 'Collector';
       const binderName = activeBinder === 'all'
         ? 'All Cards'
+        : activeBinder === 'favourites'
+        ? 'Favourites'
+        : activeBinder === 'collectables'
+        ? 'Collectables'
         : (userBinders.find(b => b.id === activeBinder)?.name || 'Binder');
       const safeName = binderName.replace(/\s+/g, '-').toLowerCase();
 
       await ensureHtml2Canvas();
 
       if (_shareMode === 'both') {
-        /* ── Both pages: capture the full binder-capture-target + footer ── */
+        /* -- Both pages: capture the full binder-capture-target + footer -- */
         const captureWrapper = document.getElementById('binder-capture-target');
 
         // Populate the persistent footer elements
@@ -1675,7 +2534,7 @@
         }
 
       } else {
-        /* ── Single page: build temp off-screen wrapper with watermark bar ── */
+        /* -- Single page: build temp off-screen wrapper with watermark bar -- */
         const sourcePage = document.getElementById(_shareMode === 'left' ? 'left-page' : 'right-page');
         if (!sourcePage) { showToast('Page not found', 'error'); return; }
 
@@ -1760,7 +2619,7 @@
         await generateShareCapture();
       } catch (err) {
         console.error('[Binder] Capture failed:', err);
-        showToast('Capture failed — see console', 'error');
+        showToast('Capture failed � see console', 'error');
       }
     }
 
@@ -1769,64 +2628,479 @@
     window.closeShareModal      = closeShareModal;
     window.selectPageMode       = selectPageMode;
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        INSPECT MODAL
-    ══════════════════════════════════════════════ */
-    const RARITY_BADGE_STYLES = {
-      Legendary: 'background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fbbf24',
-      Epic:      'background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#a855f7',
-      Rare:      'background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:#3b82f6',
-      Common:    'background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.1);color:#64748b',
+    ---------------------------------------------- */
+    const CARD_DETAIL_DRAG_FOIL = {
+      rare:      { maxH: 0.55, maxS: 0.65, idleH: 0.28, idleS: 0.38, tilt: 15 },
+      epic:      { maxH: 0.70, maxS: 0.80, idleH: 0.38, idleS: 0.50, tilt: 16 },
+      legendary: { maxH: 0.88, maxS: 0.95, idleH: 0.50, idleS: 0.65, tilt: 18 }
     };
-    const PIP_COLORS = { Legendary:'#fbbf24', Epic:'#a855f7', Rare:'#3b82f6', Common:'#64748b' };
+
+    function normalizeBinderRarity(card) {
+      const raw = String(card?.rarity || card?.cards_rarity || card?.card_rarity || '').trim().toLowerCase();
+      if (!raw) return 'common';
+      if (raw.includes('legend') || raw.includes('leged') || raw === 'test') return 'legendary';
+      if (raw.startsWith('epic')) return 'epic';
+      if (raw.startsWith('rare')) return 'rare';
+      if (raw.startsWith('common')) return 'common';
+      return 'common';
+    }
+
+    function sizeCardDetailArtFromImage(imgW, imgH) {
+      const scene = document.getElementById('card-detail-flip-scene');
+      if (!scene) return;
+      const aspect = (imgW && imgH && imgH > 0) ? imgW / imgH : 5 / 7;
+      const maxH = Math.min(window.innerHeight * 0.7, 548);
+      const maxW = Math.min(window.innerWidth * 0.92, 380);
+      let h = maxH;
+      let w = h * aspect;
+      if (w > maxW) {
+        w = maxW;
+        h = w / aspect;
+      }
+      scene.style.width = `${Math.round(w)}px`;
+      scene.style.height = `${Math.round(h)}px`;
+      scene.style.aspectRatio = '';
+    }
+
+    function resetCardDetailTiltVisuals() {
+      const scene = document.getElementById('card-detail-flip-scene');
+      const tilt = scene?.querySelector('.card-detail-tilt-wrap');
+      if (tilt) {
+        tilt.style.transition = '';
+        tilt.style.transform = '';
+        tilt.style.filter = '';
+      }
+      if (scene) {
+        scene.style.removeProperty('--holo-o');
+        scene.style.removeProperty('--shine-o');
+        scene.style.removeProperty('--foil-x');
+        scene.style.removeProperty('--foil-y');
+        scene.style.removeProperty('--foil-angle');
+        scene.classList.remove('is-card-tilting');
+      }
+    }
+
+    function toggleCardDetailFlip(event) {
+      if (event?.stopPropagation) event.stopPropagation();
+      const scene = document.getElementById('card-detail-flip-scene');
+      if (!scene) return;
+      scene.classList.toggle('is-flipped');
+      scene.setAttribute('aria-pressed', scene.classList.contains('is-flipped') ? 'true' : 'false');
+    }
+
+    function initCardDetailCardInteraction() {
+      const scene = document.getElementById('card-detail-flip-scene');
+      if (!scene || scene.__pointerBound) return;
+      const tiltWrap = scene.querySelector('.card-detail-tilt-wrap');
+      if (!tiltWrap) return;
+      scene.__pointerBound = true;
+
+      const TAP_MOVE_LIMIT_PX = 5;
+      let dragging = false;
+      let engagedDrag = false;
+      let startX = 0;
+      let startY = 0;
+      let maxDistFromStart = 0;
+
+      function readTiltVars() {
+        if (scene.classList.contains('holo-legendary')) return CARD_DETAIL_DRAG_FOIL.legendary;
+        if (scene.classList.contains('holo-epic')) return CARD_DETAIL_DRAG_FOIL.epic;
+        if (scene.classList.contains('holo-rare')) return CARD_DETAIL_DRAG_FOIL.rare;
+        return { maxH: 0.22, maxS: 0.50, idleH: 0, idleS: 0, tilt: 12 };
+      }
+
+      function applyTilt(clientX, clientY, light = false) {
+        const r = scene.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const x = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+        const y = Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+        const p = readTiltVars();
+        const rx = (0.5 - y) * p.tilt * (light ? 0.55 : 1);
+        const ry = (x - 0.5) * p.tilt * (light ? 0.55 : 1);
+        tiltWrap.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+        scene.classList.add('is-card-tilting');
+        scene.style.setProperty('--foil-x', String(x));
+        scene.style.setProperty('--foil-y', String(y));
+        scene.style.setProperty('--foil-angle', String((x - 0.5) * 32));
+        const dist = Math.min(1, Math.hypot(x - 0.5, y - 0.5) * 1.9);
+        scene.style.setProperty('--holo-o', String(p.idleH + (p.maxH - p.idleH) * dist));
+        scene.style.setProperty('--shine-o', String(p.idleS + (p.maxS - p.idleS) * dist));
+      }
+
+      function resetTilt() {
+        const p = readTiltVars();
+        tiltWrap.style.transition = 'transform 300ms cubic-bezier(0.22,1,0.36,1)';
+        tiltWrap.style.transform = '';
+        setTimeout(() => { tiltWrap.style.transition = ''; }, 320);
+        scene.classList.remove('is-card-tilting');
+        scene.style.setProperty('--foil-x', '0.5');
+        scene.style.setProperty('--foil-y', '0.5');
+        scene.style.setProperty('--foil-angle', '0');
+        scene.style.setProperty('--holo-o', String(p.idleH || 0));
+        scene.style.setProperty('--shine-o', String(p.idleS || 0));
+      }
+
+      scene.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        dragging = true;
+        engagedDrag = false;
+        maxDistFromStart = 0;
+        startX = e.clientX;
+        startY = e.clientY;
+        scene.setPointerCapture?.(e.pointerId);
+      });
+
+      scene.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const d = Math.hypot(e.clientX - startX, e.clientY - startY);
+        maxDistFromStart = Math.max(maxDistFromStart, d);
+        if (maxDistFromStart > TAP_MOVE_LIMIT_PX) {
+          engagedDrag = true;
+          applyTilt(e.clientX, e.clientY);
+        }
+      });
+
+      function endPointer(e) {
+        if (!dragging) return;
+        dragging = false;
+        try { scene.releasePointerCapture?.(e.pointerId); } catch {}
+        resetTilt();
+        if (!engagedDrag) toggleCardDetailFlip(e);
+      }
+
+      scene.addEventListener('pointerup', endPointer);
+      scene.addEventListener('pointercancel', endPointer);
+      scene.addEventListener('mousemove', (e) => {
+        if (dragging) return;
+        applyTilt(e.clientX, e.clientY, true);
+      });
+      scene.addEventListener('mouseleave', () => { if (!dragging) resetTilt(); });
+      scene.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleCardDetailFlip(e);
+        }
+      });
+    }
+
+    function htmlMechanicIcon(icon, imgClass = 'w-5 h-5 object-contain inline-block align-middle') {
+      if (!icon) return '';
+      const s = String(icon).trim();
+      if (s.startsWith('/') || s.startsWith('http://') || s.startsWith('https://')) {
+        return `<img src="${escapeHTML(s)}" alt="" class="${imgClass}" />`;
+      }
+      return escapeHTML(s);
+    }
+
+    function htmlCardDetailTraitRow(iconToken, label, description) {
+      const desc = description != null && String(description).trim() ? String(description).trim() : '';
+      const bigIcon = htmlMechanicIcon(iconToken, 'card-detail-trait-tooltip-icon-img');
+      const tip = desc
+        ? `<div class="card-detail-trait-tooltip" role="tooltip">
+                <div class="card-detail-trait-tooltip-inner">
+                    <div class="card-detail-trait-tooltip-icon-wrap" aria-hidden="true">${bigIcon}</div>
+                    <p class="card-detail-trait-tooltip-body">${escapeHTML(desc)}</p>
+                </div>
+            </div>`
+        : '';
+      const tippable = desc ? ' card-detail-trait-row-line--tippable' : '';
+      const tab = desc ? ' tabindex="0"' : '';
+      return `<div class="card-detail-trait-row-line${tippable}"${tab}>
+                <span class="card-detail-trait-icon" aria-hidden="true">${htmlMechanicIcon(iconToken, 'card-detail-trait-icon-img')}</span>
+                <span class="card-detail-trait-title">${escapeHTML(label)}</span>
+                ${tip}
+            </div>`;
+    }
+
+    function traitVariantKey(c) {
+      const m = String(c.mechanic_id || c.mechanic_name || '').trim();
+      const g = String(c.genesis_mechanic_name || '').trim();
+      return `${m || '__none__'}|${g || '__none__'}`;
+    }
+
+    function formatTraitVariantLabel(c) {
+      const gen = (c.genesis_mechanic_display_name || c.genesis_mechanic_name || '').trim();
+      const mech = (c.mechanic_display_name || c.mechanic_name || '').trim();
+      const parts = [];
+      if (gen) parts.push(gen);
+      if (mech) parts.push(mech);
+      if (parts.length === 0) return 'Base (no traits)';
+      return parts.join(' � ');
+    }
+
+    function htmlCardDetailTraitVariant(sample, n) {
+      const genName = (sample.genesis_mechanic_display_name || sample.genesis_mechanic_name || '').trim();
+      const mechName = (sample.mechanic_display_name || sample.mechanic_name || '').trim();
+      const genDesc = (sample.genesis_mechanic_description || '').trim();
+      const mechDesc = (sample.mechanic_description || '').trim();
+      const countStr = `�${parseInt(n, 10)}`;
+      const iid = escapeHTML(sample.instanceId || '');
+      const imgUrl = escapeHTML(sample.image_url || '');
+      const clickAttr = iid ? ` role="button" tabindex="0" style="cursor:pointer;" onclick="switchCardDetailVariant('${iid}','${imgUrl}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();switchCardDetailVariant('${iid}','${imgUrl}')}"` : '';
+
+      if (genName) {
+        const genIcon = sample.genesis_mechanic_icon || '?';
+        const genTitle = `Genesis ${genName}`;
+        let stackInner = `
+          <div class="card-detail-trait-stack">
+            ${htmlCardDetailTraitRow(genIcon, genTitle, genDesc)}`;
+        if (mechName) {
+          const mIcon = sample.mechanic_icon || '??';
+          stackInner += `
+            <div class="card-detail-trait-row-divider" aria-hidden="true"></div>
+            ${htmlCardDetailTraitRow(mIcon, mechName, mechDesc)}`;
+        }
+        stackInner += '</div>';
+        return `
+        <div class="card-detail-variant-group"${clickAttr} data-variant-iid="${iid}">
+          <div class="card-detail-variant-boxes">
+            <div class="card-detail-trait-box card-detail-trait-box--genesis-combo">${stackInner}</div>
+          </div>
+          <span class="card-detail-variant-count">${countStr}</span>
+        </div>`;
+      }
+
+      if (mechName) {
+        const icon = sample.mechanic_icon || '??';
+        const inner = htmlCardDetailTraitRow(icon, mechName, mechDesc);
+        return `
+        <div class="card-detail-variant-group"${clickAttr} data-variant-iid="${iid}">
+          <div class="card-detail-variant-boxes">
+            <div class="card-detail-trait-box card-detail-trait-box--mech">
+              <div class="card-detail-trait-box-inner card-detail-trait-box-inner--stack">${inner}</div>
+            </div>
+          </div>
+          <span class="card-detail-variant-count">${countStr}</span>
+        </div>`;
+      }
+
+      return `
+        <div class="card-detail-variant-group"${clickAttr} data-variant-iid="${iid}">
+          <div class="card-detail-variant-boxes">
+            <div class="card-detail-trait-box card-detail-trait-box--base">
+              <div class="card-detail-trait-box-inner">
+                <span class="card-detail-trait-title card-detail-trait-title--muted">Standard copy</span>
+              </div>
+            </div>
+          </div>
+          <span class="card-detail-variant-count">${countStr}</span>
+        </div>`;
+    }
+
+    function switchCardDetailVariant(instanceId, imageUrl) {
+      const img = document.getElementById('card-detail-image');
+      if (img && imageUrl) {
+        img.src = imageUrl;
+        img.onload = function () { sizeCardDetailArtFromImage(this.naturalWidth, this.naturalHeight); };
+      }
+      document.querySelectorAll('#card-detail-traits-breakdown-list .card-detail-variant-group').forEach(el => {
+        el.classList.toggle('card-detail-variant-group--active', el.dataset.variantIid === instanceId);
+      });
+    }
+    window.switchCardDetailVariant = switchCardDetailVariant;
+
+
+
+    function cardDetailHoloMaskStyleFromUrl(url) {
+      const src = url && String(url).trim() ? String(url) : '';
+      const ref = `url(${JSON.stringify(src)})`;
+      return [
+        `mask-image: ${ref}`, `-webkit-mask-image: ${ref}`,
+        'mask-size: contain', '-webkit-mask-size: contain',
+        'mask-position: center', '-webkit-mask-position: center',
+        'mask-repeat: no-repeat', '-webkit-mask-repeat: no-repeat',
+        'mask-mode: alpha', '-webkit-mask-mode: alpha'
+      ].join('; ');
+    }
+
+    function applyCardDetailHoloMaskFromUrl(url, alsoShine) {
+      const hl = document.getElementById('card-detail-holo-layer');
+      const hs = document.getElementById('card-detail-holo-shine');
+      if (!hl) return;
+      const style = cardDetailHoloMaskStyleFromUrl(url);
+      hl.setAttribute('style', style);
+      if (alsoShine && hs) hs.setAttribute('style', style);
+      else if (hs) hs.removeAttribute('style');
+    }
 
     function openInspect(card) {
-      const modal = document.getElementById('inspect-modal');
+      const modal = document.getElementById('card-detail-modal');
+      if (!modal || !card) return;
+
       const imgUrl = resolveCardImageUrl(card);
-      document.getElementById('inspect-img').src          = imgUrl;
-      document.getElementById('inspect-name').textContent = card.name || 'Unknown';
-      document.getElementById('inspect-set').textContent  = `Set · ${card.set_name || card.set || '—'}`;
-      document.getElementById('inspect-desc').textContent = card.description || card.flavor_text || '';
+      const rarity = normalizeBinderRarity(card);
+      const isHolo = ['rare', 'epic', 'legendary'].includes(rarity);
 
-      const rarity = card.rarity || 'Common';
-      const badge = document.getElementById('inspect-rarity-badge');
-      badge.setAttribute('style', RARITY_BADGE_STYLES[rarity] || RARITY_BADGE_STYLES.Common);
-      document.getElementById('inspect-rarity-text').textContent = rarity;
-      document.getElementById('inspect-pip').style.cssText =
-        `background:${PIP_COLORS[rarity]};box-shadow:0 0 6px ${PIP_COLORS[rarity]}`;
+      // Flip scene: reset state and apply holo class
+      const scene = document.getElementById('card-detail-flip-scene');
+      const tilt = scene?.querySelector('.card-detail-tilt-wrap');
+      if (tilt) { tilt.style.transition = ''; tilt.style.transform = ''; tilt.style.filter = ''; }
+      if (scene) {
+        scene.classList.remove('is-card-tilting', 'is-flipped', 'holo-rare', 'holo-epic', 'holo-legendary');
+        scene.setAttribute('aria-pressed', 'false');
+        if (isHolo) scene.classList.add(`holo-${rarity}`);
+        const foil = CARD_DETAIL_DRAG_FOIL[rarity];
+        scene.style.setProperty('--foil-x', '0.5');
+        scene.style.setProperty('--foil-y', '0.5');
+        scene.style.setProperty('--foil-angle', '0');
+        scene.style.setProperty('--holo-o', foil && isHolo ? String(foil.idleH) : '0');
+        scene.style.setProperty('--shine-o', foil && isHolo ? String(foil.idleS) : '0');
+      }
 
-      document.getElementById('inspect-card-wrap').className = `rarity-${rarity}`;
+      // Holo layers: apply mask so foil follows card silhouette
+      const hl = document.getElementById('card-detail-holo-layer');
+      const hs = document.getElementById('card-detail-holo-shine');
+      if (hl) { hl.classList.add('hidden'); hl.removeAttribute('style'); }
+      if (hs) { hs.classList.add('hidden'); hs.removeAttribute('style'); }
+      if (isHolo && imgUrl) {
+        applyCardDetailHoloMaskFromUrl(imgUrl, true);
+        if (hl) hl.classList.remove('hidden');
+        if (hs) hs.classList.remove('hidden');
+      }
 
-      const rgb = RARITY_COLORS[rarity] || '100,116,139';
-      document.getElementById('inspect-inner').style.setProperty('--inspect-r', rgb);
+      // Card image
+      const img = document.getElementById('card-detail-image');
+      if (img) {
+        img.onload = function () { sizeCardDetailArtFromImage(this.naturalWidth, this.naturalHeight); };
+        img.src = imgUrl;
+      }
+      sizeCardDetailArtFromImage();
 
-      document.getElementById('inspect-stats').innerHTML = `
-        <div class="inspect-stat inspect-count-stat">
-          <div class="label">Owned</div>
-          <div class="value">×${card.count || card.quantity || 1}</div>
-        </div>
-        <div class="inspect-stat">
-          <div class="label">Rarity</div>
-          <div class="value" style="font-size:0.75rem">${rarity}</div>
-        </div>
-        <div class="inspect-stat">
-          <div class="label">Card ID</div>
-          <div class="value" style="font-size:0.75rem">#${String(card.card_id || card.instanceId || '—').padStart(4,'0')}</div>
-        </div>`;
+      // Card back fallback
+      const backImg = document.getElementById('card-detail-back-image');
+      if (backImg) backImg.onerror = function () { this.onerror = null; this.src = '/Castle_Default_Cardback.png'; };
 
-      modal.classList.add('open');
+      // Text fields
+      const el = id => document.getElementById(id);
+      if (el('card-detail-name'))   el('card-detail-name').textContent   = card.name || '�';
+      if (el('card-detail-rarity')) { el('card-detail-rarity').textContent = card.rarity || '�'; el('card-detail-rarity').setAttribute('data-rarity', rarity); }
+      if (el('card-detail-set'))    el('card-detail-set').textContent    = card.set_name || card.set || '�';
+      if (el('card-detail-description')) el('card-detail-description').textContent = card.description || card.flavor_text || 'No description available.';
+      if (el('card-detail-attack'))  el('card-detail-attack').textContent  = card.attack  ?? 0;
+      if (el('card-detail-defense')) el('card-detail-defense').textContent = card.defense ?? 0;
+
+      const sameCopies = (userCollection || []).filter(c => String(c.card_id || c.id) === String(card.card_id || card.id));
+      const owned = sameCopies.length > 0 ? sameCopies.length : (card.count || card.quantity || 1);
+      if (el('card-detail-count')) el('card-detail-count').textContent = owned;
+
+      const cn = card.card_number;
+      if (el('card-detail-number')) el('card-detail-number').textContent = (cn != null && String(cn).trim() && String(cn).toLowerCase() !== 'null') ? String(cn) : '�';
+
+      // Trait breakdown � group all owned copies of this base card by variant
+      const breakdown     = el('card-detail-traits-breakdown');
+      const breakdownList = el('card-detail-traits-breakdown-list');
+      if (breakdown && breakdownList) {
+        const copies = sameCopies.length > 0 ? sameCopies : [card];
+        const variantMap = new Map();
+        copies.forEach(c => {
+          const key = traitVariantKey(c);
+          if (!variantMap.has(key)) variantMap.set(key, { sample: c, n: 0 });
+          variantMap.get(key).n++;
+        });
+        const sorted = [...variantMap.entries()].sort((a, b) =>
+          formatTraitVariantLabel(a[1].sample).localeCompare(formatTraitVariantLabel(b[1].sample))
+        );
+        breakdownList.innerHTML = sorted.map(([, { sample, n }]) => htmlCardDetailTraitVariant(sample, n)).join('');
+        breakdown.classList.remove('hidden');
+      }
+
+      _inspectCard = card;
+      _updateInspectFavBtn();
+
+      initCardDetailCardInteraction();
+      modal.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
     }
 
+    let _inspectCard = null;
+
+    function _updateInspectFavBtn() {
+      const btn = document.getElementById('card-detail-fav-btn');
+      if (!btn || !_inspectCard) return;
+      const isFav = !!_inspectCard.is_favourite;
+      const icon  = btn.querySelector('i');
+      const label = document.getElementById('card-detail-fav-label');
+      if (icon)  icon.className       = isFav ? 'fa-solid fa-heart text-sm' : 'fa-regular fa-heart text-sm';
+      if (label) label.textContent    = isFav ? 'Favourited' : 'Add to Favourites';
+      btn.classList.toggle('text-yellow-400',  isFav);
+      btn.classList.toggle('text-void-muted/50', !isFav);
+    }
+
+    async function toggleInspectFavourite() {
+      if (!_inspectCard || !currentUser) { showToast('Sign in to favourite cards', 'error'); return; }
+      const cardId = _inspectCard.card_id || _inspectCard.id;
+      const wasFav = _inspectCard.is_favourite;
+      try {
+        await writeFetch(`${BACKEND}/api/cards/${encodeURIComponent(cardId)}/favourite`, wasFav ? 'DELETE' : 'POST', wasFav ? null : {});
+        userCollection.forEach(c => {
+          if (String(c.card_id || c.id) === String(cardId)) c.is_favourite = !wasFav;
+        });
+        _inspectCard = { ..._inspectCard, is_favourite: !wasFav };
+        _updateInspectFavBtn();
+        renderBinderTabs();
+        showToast(wasFav ? 'Removed from Favourites' : 'Added to Favourites', 'success');
+      } catch (err) {
+        showToast(err.message || 'Failed to update favourite', 'error');
+      }
+    }
+    window.toggleInspectFavourite = toggleInspectFavourite;
+
     function closeInspect() {
-      document.getElementById('inspect-modal').classList.remove('open');
+      const scene = document.getElementById('card-detail-flip-scene');
+      if (scene) { scene.classList.remove('is-flipped'); scene.setAttribute('aria-pressed', 'false'); }
+      resetCardDetailTiltVisuals();
+      const modal = document.getElementById('card-detail-modal');
+      if (modal) modal.classList.add('hidden');
       document.body.style.overflow = '';
     }
     window.closeInspect = closeInspect;
 
-    /* ══════════════════════════════════════════════
+    function openCardReport() {
+      const m = document.getElementById('card-report-modal');
+      if (!m) return;
+      document.querySelectorAll('input[name="card-report-reason"]').forEach(r => r.checked = false);
+      const fb = document.getElementById('card-report-feedback');
+      if (fb) { fb.textContent = ''; fb.classList.add('hidden'); }
+      const sb = document.getElementById('card-report-submit');
+      if (sb) { sb.disabled = false; sb.textContent = 'Submit Report'; }
+      m.classList.remove('hidden');
+    }
+    function closeCardReport() {
+      const m = document.getElementById('card-report-modal');
+      if (m) m.classList.add('hidden');
+    }
+    async function submitCardReport() {
+      const cardId = _inspectCard ? String(_inspectCard.card_id || _inspectCard.id || '') : '';
+      if (!cardId) return;
+      const sel = document.querySelector('input[name="card-report-reason"]:checked');
+      const fb = document.getElementById('card-report-feedback');
+      const sb = document.getElementById('card-report-submit');
+      if (!sel) {
+        if (fb) { fb.textContent = 'Please select a reason.'; fb.classList.remove('hidden'); }
+        return;
+      }
+      if (sb) { sb.disabled = true; sb.textContent = 'Submitting...'; }
+      try {
+        await writeFetch(`${BACKEND}/api/cards/${encodeURIComponent(cardId)}/report`, 'POST', { reason: sel.value });
+        if (fb) { fb.textContent = 'Report submitted. Thank you.'; fb.classList.remove('hidden'); }
+        if (sb) sb.textContent = 'Submitted';
+        setTimeout(() => closeCardReport(), 1800);
+      } catch (err) {
+        const msg = err && err.message ? err.message : '';
+        const alreadyReported = msg.includes('Already reported') || msg.includes('already reported');
+        if (fb) { fb.textContent = alreadyReported ? 'You have already reported this card.' : 'Something went wrong. Please try again.'; fb.classList.remove('hidden'); }
+        if (sb) { sb.disabled = false; sb.textContent = 'Submit Report'; }
+      }
+    }
+    window.openCardReport = openCardReport;
+    window.closeCardReport = closeCardReport;
+    window.submitCardReport = submitCardReport;
+
+    /* ----------------------------------------------
        FLIP
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function flip(dir) {
       if (flipping) return;
       const newSi = spread + (dir === 'fwd' ? 1 : -1);
@@ -1870,9 +3144,9 @@
       }, HALF_MS * 2 + 30);
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        UTILITY
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     function escapeHTML(s) {
       if (s == null) return '';
       return String(s)
@@ -1890,16 +3164,16 @@
       setTimeout(() => item.remove(), 3000);
     }
 
-    /* ══════════════════════════════════════════════
+    /* ----------------------------------------------
        WIRING
-    ══════════════════════════════════════════════ */
+    ---------------------------------------------- */
     document.getElementById('prev-btn').addEventListener('click', () => flip('bwd'));
     document.getElementById('next-btn').addEventListener('click', () => flip('fwd'));
     document.getElementById('top-prev').addEventListener('click', () => flip('bwd'));
     document.getElementById('top-next').addEventListener('click', () => flip('fwd'));
 
     document.addEventListener('keydown', e => {
-      if (document.getElementById('inspect-modal').classList.contains('open')) {
+      if (!document.getElementById('card-detail-modal').classList.contains('hidden')) {
         if (e.key === 'Escape') closeInspect();
         return;
       }
@@ -1917,5 +3191,6 @@
 
   })();
   </script>
+
 </body>
 </html>

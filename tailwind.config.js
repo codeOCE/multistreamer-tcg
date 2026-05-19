@@ -11,7 +11,7 @@ module.exports = {
         'void-text': '#fcfaf7',
         'void-muted': '#94a3b8',
         'rarity-common': '#94a3b8',
-        'rarity-rare': '#3b82f6',
+        'rarity-rare': '#3faaff',
         'rarity-epic': '#a855f7',
         'rarity-legendary': '#fbbf24',
       },
@@ -29,10 +29,10 @@ module.exports = {
       keyframes: {
         floatUp: {
           '0%': { transform: 'translateY(0)' },
-          '100%': { transform: 'translateY(calc(-50% - 8px))' },
+          '100%': { transform: 'translateY(-50%)' },
         },
         floatDown: {
-          '0%': { transform: 'translateY(calc(-50% - 8px))' },
+          '0%': { transform: 'translateY(-50%)' },
           '100%': { transform: 'translateY(0)' },
         },
         glowPulse: {

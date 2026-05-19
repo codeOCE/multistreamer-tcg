@@ -1,7 +1,7 @@
 {
-	"name": "multistreamer-tcg",
+	"name": "castletcg",
 	"main": "src/index.ts",
-	"compatibility_date": "2024-02-27",
+	"compatibility_date": "2026-05-08",
 	"assets": {
 		"directory": "public",
 		"binding": "ASSETS",
@@ -25,12 +25,23 @@
 		"ENCRYPTION_SECRET": "",
 		"WORKER_DEV_URL": ""
 	},
+	"routes": [
+		{ "pattern": "tcg.creatorcastle.gg", "custom_domain": true, "zone_name": "creatorcastle.gg" }
+	],
 	"kv_namespaces": [
 		{
 			"binding": "KV_CACHE",
-			"id": "10f08283758e4956b18e78fb2febc5d9"
+			"id": "f394df472f0f4e939f6281aadbce9020"
 		}
 	],
+	"unsafe": {
+		"bindings": [
+			{ "name": "RATE_LIMITER_BOOTSTRAP",   "type": "ratelimit", "namespace_id": "1001", "simple": { "limit": 50,  "period": 60 } },
+			{ "name": "RATE_LIMITER_ADMIN_LOGIN",  "type": "ratelimit", "namespace_id": "1002", "simple": { "limit": 10,  "period": 60 } },
+			{ "name": "RATE_LIMITER_ADMIN",        "type": "ratelimit", "namespace_id": "1003", "simple": { "limit": 600, "period": 60 } },
+			{ "name": "RATE_LIMITER_API",          "type": "ratelimit", "namespace_id": "1004", "simple": { "limit": 300, "period": 60 } }
+		]
+	},
 	"durable_objects": {
 		"bindings": [
 			{

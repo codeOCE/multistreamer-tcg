@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -11,6 +11,7 @@
         href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;700;900&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="/arena.css">
+    <script src="/castle-prefs.js"></script>
 </head>
 
 <body class="bg-transparent text-white overflow-hidden" style="font-family:'Inter',sans-serif">
@@ -69,13 +70,17 @@
             <div class="arena-glow-blue"></div>
 
             
+            <!-- Target (opponent) — cards above midline, pill hugging the line -->
             <div class="flex flex-col items-center"
-                style="position:absolute;bottom:50%;left:0;right:0;padding-bottom:80px;">
-                <div id="target-cards" class="flex gap-5 justify-center mb-4"></div>
+                style="position:absolute;bottom:50%;left:0;right:0;padding-bottom:6px;">
+                <div id="target-cards" class="flex gap-4 justify-center mb-2"></div>
                 <div class="player-bar player-bar-red">
                     <img id="board-t-avatar" src="" class="player-avatar border-red-400" crossorigin="anonymous">
-                    <div>
-                        <div id="board-t-name" class="player-bar-name text-red-100">Player 2</div>
+                    <div class="player-bar-name text-red-100" id="board-t-name">Player 2</div>
+                    <div id="target-match-score" class="flex gap-1 ml-1">
+                        <div class="score-dot score-dot-red"></div>
+                        <div class="score-dot score-dot-red"></div>
+                        <div class="score-dot score-dot-red"></div>
                     </div>
                 </div>
             </div>
@@ -83,24 +88,24 @@
             
             <div class="battlefield-strip">
                 <div class="bf-line"></div>
-                <div class="bf-label">⚔ BATTLEFIELD ⚔</div>
-                <div class="bf-line"></div>
             </div>
 
-            
-            <div class="flex flex-col items-center" style="position:absolute;top:50%;left:0;right:0;padding-top:80px;">
-                <div class="player-bar player-bar-blue mb-4">
+            <!-- Challenger — pill hugging the line, cards below -->
+            <div class="flex flex-col items-center" style="position:absolute;top:50%;left:0;right:0;padding-top:6px;">
+                <div class="player-bar player-bar-blue mb-2">
                     <img id="board-c-avatar" src="" class="player-avatar border-void-accent/40" crossorigin="anonymous">
-                    <div>
-                        <div id="board-c-name" class="player-bar-name text-void-accent/10">Player 1</div>
+                    <div class="player-bar-name text-void-accent/90" id="board-c-name">Player 1</div>
+                    <div id="challenger-match-score" class="flex gap-1 ml-1">
+                        <div class="score-dot score-dot-blue"></div>
+                        <div class="score-dot score-dot-blue"></div>
+                        <div class="score-dot score-dot-blue"></div>
                     </div>
                 </div>
-                <div id="challenger-cards" class="flex gap-5 justify-center"></div>
+                <div id="challenger-cards" class="flex gap-4 justify-center"></div>
             </div>
         </div>
 
         
-        <div id="round-banner" class="round-banner">ROUND 1</div>
 
         
         <div id="winner-banner" class="absolute inset-0 z-50 flex flex-col items-center justify-center hidden"

@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Centre · Castle TCG</title>
 
@@ -124,7 +124,7 @@
             max-height: 0;
             transition: max-height 0.28s ease;
         }
-        .tr-expand.open { max-height: 320px; }
+        .tr-expand.open { max-height: 600px; }
 
         .tr-search-field {
             width: 100%;
@@ -189,7 +189,45 @@
         /* Page header */
         #tr-header {
             margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            gap: 32px;
         }
+        #tr-header-left { flex-shrink: 0; }
+
+        /* Conveyor belt — horizontal strip to the right of the title */
+        #tr-belt-wrap {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            height: 100px;
+            -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+            mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+        }
+        #tr-belt-track {
+            display: flex;
+            gap: 10px;
+            width: max-content;
+            animation: belt-scroll 60s linear infinite;
+        }
+        #tr-belt-track:empty { display: none; }
+        @keyframes belt-scroll {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-50%); }
+        }
+        .tr-belt-card {
+            flex-shrink: 0;
+            height: 100px;
+            width: 71px; /* 5:7 ratio */
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .tr-belt-card:hover { transform: scale(1.08); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .tr-belt-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
         #tr-page-label {
             font-size: 0.5rem;
@@ -413,10 +451,41 @@
             padding: 32px;
             width: 90%;
             max-width: 780px;
+            height: 82vh;
             max-height: 82vh;
-            overflow-y: auto;
+            overflow: hidden;
             position: relative;
             box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Pager controls inside modals */
+        .tr-modal-pager {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 10px 0 2px;
+            flex-shrink: 0;
+        }
+        .tr-pager-btn {
+            width: 30px; height: 30px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+        }
+        .tr-pager-btn:hover:not(:disabled) { color: var(--void-text); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.07); }
+        .tr-pager-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+        .tr-pager-info {
+            font-size: 0.58rem; font-weight: 800;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--void-muted); min-width: 56px; text-align: center;
         }
 
         .tr-modal-close {
@@ -446,11 +515,13 @@
             letter-spacing: 0.02em;
             color: rgba(var(--page-accent-rgb), 1);
             margin: 0 0 4px;
+            flex-shrink: 0;
         }
         .tr-modal-sub {
             font-size: 0.75rem;
             color: var(--void-muted);
             margin: 0 0 24px;
+            flex-shrink: 0;
         }
 
         /* Picker filters (search + trait chips above the grid) */
@@ -461,6 +532,7 @@
             margin-bottom: 18px;
             padding-bottom: 14px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
+            flex-shrink: 0;
         }
         .tr-picker-search {
             width: 100%;
@@ -496,7 +568,10 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 14px;
-            margin-bottom: 24px;
+            flex: 1;
+            min-height: 0;
+            align-content: start;
+            overflow-y: auto;
         }
         .tr-picker-card {
             position: relative;
@@ -509,6 +584,19 @@
             transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
         }
         .tr-picker-card:hover { transform: scale(1.04); border-color: rgba(255,255,255,0.15); }
+        .tr-picker-copies {
+            position: absolute;
+            top: 5px; right: 5px;
+            background: rgba(0,0,0,0.75);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 99px;
+            padding: 2px 7px;
+            font-size: 0.52rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            color: #fff;
+            backdrop-filter: blur(4px);
+        }
         .tr-picker-card.selected {
             border-color: rgba(var(--page-accent-rgb), 0.9);
             box-shadow: 0 0 0 3px rgba(var(--page-accent-rgb), 0.25), 0 8px 24px rgba(0,0,0,0.5);
@@ -598,6 +686,7 @@
             justify-content: flex-end;
             gap: 10px;
             padding-top: 8px;
+            flex-shrink: 0;
         }
 
         /* Buttons */
@@ -655,6 +744,147 @@
             transition: all 0.2s;
         }
         .tr-btn-danger:hover { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.4); }
+
+        /* ── Card Detail Modal ── */
+        .tr-detail-modal { max-width: 820px; padding: 0; overflow: hidden; }
+
+        .tr-detail-layout {
+            display: flex;
+            min-height: 420px;
+        }
+
+        .tr-detail-img-col {
+            width: 260px;
+            flex-shrink: 0;
+            background: rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 24px;
+        }
+
+        .tr-detail-img-wrap {
+            width: 100%;
+            aspect-ratio: 5/7;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+            background: rgba(255,255,255,0.04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tr-detail-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .tr-detail-info-col {
+            flex: 1;
+            min-width: 0;
+            padding: 36px 32px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .tr-detail-set {
+            font-size: 0.52rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        .tr-detail-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: var(--void-text);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .tr-detail-rarity-pill {
+            display: inline-block;
+            width: fit-content;
+            font-size: 0.55rem;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 99px;
+            border: 1px solid currentColor;
+            opacity: 0.85;
+        }
+
+        .tr-detail-traits {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .tr-detail-trait {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 99px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.04);
+            font-size: 0.58rem;
+            font-weight: 700;
+            color: var(--void-text);
+        }
+
+        .tr-detail-trait img {
+            width: 12px;
+            height: 12px;
+            object-fit: contain;
+            border-radius: 2px;
+        }
+
+        .tr-detail-lister {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .tr-detail-lister img {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: rgba(255,255,255,0.1);
+            flex-shrink: 0;
+        }
+
+        .tr-detail-lister-text {
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: var(--void-muted);
+        }
+
+        .tr-detail-lister-text strong {
+            color: var(--void-text);
+            font-weight: 800;
+        }
+
+        @media (max-width: 640px) {
+            .tr-detail-layout { flex-direction: column; }
+            .tr-detail-img-col { width: 100%; padding: 24px; }
+            .tr-detail-img-col .tr-detail-img-wrap { max-width: 180px; margin: 0 auto; }
+            .tr-detail-info-col { padding: 20px; }
+            .tr-detail-name { font-size: 1.2rem; }
+        }
 
         /* Offer rows inside "offers received" modal */
         .tr-offer-row {
@@ -740,13 +970,14 @@
             #tr-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
         }
     </style>
+    <script src="/castle-prefs.js"></script>
 </head>
 <body class="bg-void-bg text-void-text antialiased">
 <div class="saas-bg-glow"></div>
 
 <!-- ── Navbar ── -->
 <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-    <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
+    <div class="w-full px-8 h-20 flex items-center justify-between">
         <a href="/" class="flex items-center gap-2 group cursor-pointer">
             <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
                 <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
@@ -762,10 +993,9 @@
                         class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
                         aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
                         <span class="relative inline-block">
-                            <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
-                            <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                            <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
                         </span>
-                        <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                        <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
                     </button>
                     <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
                         <div class="border-b border-white/5">
@@ -832,13 +1062,6 @@
 
         <!-- LEFT SIDEBAR -->
         <aside id="tr-sidebar" class="tr-rise tr-rise-1">
-            <a href="#" id="tr-back-link" class="tr-back-link">
-                <i class="bx bx-left-arrow-alt"></i>
-                Back to <span id="tr-back-name">Streamer</span>
-            </a>
-
-            <div class="tr-divider"></div>
-
             <div class="tr-section-label">Browse</div>
 
             <button class="tr-nav-btn" id="tr-btn-search" onclick="tToggleSearch()">
@@ -854,6 +1077,28 @@
             </button>
             <div class="tr-expand" id="tr-traits-panel" style="padding:0 4px 6px;">
                 <div class="tr-trait-grid" id="tr-trait-chips"></div>
+            </div>
+
+            <button class="tr-nav-btn" id="tr-btn-rarity" onclick="tToggleRarity()">
+                <i class="bx bx-star"></i> Rarity
+                <i class="bx bx-chevron-down" id="tr-rarity-chevron" style="margin-left:auto;font-size:0.85rem;"></i>
+            </button>
+            <div class="tr-expand" id="tr-rarity-panel" style="padding:0 4px 6px;">
+                <div class="tr-trait-grid">
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="legendary" onclick="tSetRarity('legendary')" style="color:#fbbf24;border-color:rgba(251,191,36,0.3);">Legendary</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="epic"      onclick="tSetRarity('epic')"      style="color:#a855f7;border-color:rgba(168,85,247,0.3);">Epic</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="rare"      onclick="tSetRarity('rare')"      style="color:#3faaff;border-color:rgba(63,170,255,0.3);">Rare</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="uncommon"  onclick="tSetRarity('uncommon')"  style="color:#34d399;border-color:rgba(52,211,153,0.3);">Uncommon</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="common"    onclick="tSetRarity('common')"    style="color:#64748b;border-color:rgba(100,116,139,0.3);">Common</button>
+                </div>
+            </div>
+
+            <button class="tr-nav-btn" id="tr-btn-set" onclick="tToggleSet()">
+                <i class="bx bx-collection"></i> Set
+                <i class="bx bx-chevron-down" id="tr-set-chevron" style="margin-left:auto;font-size:0.85rem;"></i>
+            </button>
+            <div class="tr-expand" id="tr-set-panel" style="padding:0 4px 6px;">
+                <div class="tr-trait-grid" id="tr-set-chips"></div>
             </div>
 
             <div class="tr-divider"></div>
@@ -876,13 +1121,18 @@
         <!-- MAIN CONTENT -->
         <main id="tr-main" class="tr-rise tr-rise-2">
             <div id="tr-header">
-                <div id="tr-page-label">Trading Centre</div>
-                <h1 id="tr-page-title">Market</h1>
-                <div id="tr-controls">
-                    <span style="font-size:0.55rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:var(--void-muted);margin-right:2px;">Sort:</span>
-                    <button class="tr-sort-btn active" data-sort="recent" onclick="tSetSort('recent')">Recent</button>
-                    <button class="tr-sort-btn" data-sort="rarity_high" onclick="tSetSort('rarity_high')">Rarity ↑</button>
-                    <button class="tr-sort-btn" data-sort="rarity_low" onclick="tSetSort('rarity_low')">Rarity ↓</button>
+                <div id="tr-header-left">
+                    <div id="tr-page-label">Trading Centre</div>
+                    <h1 id="tr-page-title">Market</h1>
+                    <div id="tr-controls">
+                        <span style="font-size:0.55rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:var(--void-muted);margin-right:2px;">Sort:</span>
+                        <button class="tr-sort-btn active" data-sort="recent" onclick="tSetSort('recent')">Recent</button>
+                        <button class="tr-sort-btn" data-sort="rarity_high" onclick="tSetSort('rarity_high')">Rarity ↑</button>
+                        <button class="tr-sort-btn" data-sort="rarity_low" onclick="tSetSort('rarity_low')">Rarity ↓</button>
+                    </div>
+                </div>
+                <div id="tr-belt-wrap">
+                    <div id="tr-belt-track"></div>
                 </div>
             </div>
 
@@ -903,14 +1153,27 @@
 <div class="tr-modal-overlay" id="tr-list-modal" onclick="if(event.target===this)tCloseModal('tr-list-modal')">
     <div class="tr-modal">
         <button class="tr-modal-close" onclick="tCloseModal('tr-list-modal')"><i class="bx bx-x"></i></button>
-        <p class="tr-modal-title">List a Card</p>
-        <p class="tr-modal-sub">Choose a card from your collection to put on the market.</p>
-        <div class="tr-picker-filters">
-            <input type="text" class="tr-picker-search" id="tr-list-search" placeholder="Search by name, rarity, or trait…" oninput="tOnListSearch(this.value)">
+        <p class="tr-modal-title" id="tr-list-title">List a Card</p>
+        <p class="tr-modal-sub" id="tr-list-sub">Choose a card from your collection to put on the market.</p>
+        <!-- Breadcrumb shown in instance-picker (level 2) -->
+        <div id="tr-list-breadcrumb" style="display:none;align-items:center;gap:8px;margin-bottom:12px">
+            <button type="button" onclick="tListBack()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:var(--void-muted);font-size:0.6rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;transition:all 0.15s" onmouseover="this.style.color='var(--void-text)'" onmouseout="this.style.color='var(--void-muted)'">
+                <i class="bx bx-arrow-back" style="font-size:0.85rem"></i> All Cards
+            </button>
+            <span style="font-size:0.6rem;color:rgba(255,255,255,0.2)">/</span>
+            <span id="tr-list-breadcrumb-name" style="font-size:0.65rem;font-weight:800;color:var(--void-text);letter-spacing:0.04em"></span>
+        </div>
+        <div id="tr-list-filters">
+            <input type="text" class="tr-picker-search" id="tr-list-search" placeholder="Search by name or rarity…" oninput="tOnListSearch(this.value)">
             <div class="tr-picker-chip-row" id="tr-list-trait-chips"></div>
             <div class="tr-picker-count" id="tr-list-count"></div>
         </div>
         <div class="tr-picker-grid" id="tr-list-grid"></div>
+        <div class="tr-modal-pager" id="tr-list-pager">
+            <button class="tr-pager-btn" id="tr-list-prev" onclick="tListPagePrev()"><i class="bx bx-chevron-left"></i></button>
+            <span class="tr-pager-info" id="tr-list-page-info"></span>
+            <button class="tr-pager-btn" id="tr-list-next" onclick="tListPageNext()"><i class="bx bx-chevron-right"></i></button>
+        </div>
         <div class="tr-modal-actions">
             <button class="tr-btn-ghost" onclick="tCloseModal('tr-list-modal')">Cancel</button>
             <button class="tr-btn-primary" id="tr-list-confirm" disabled onclick="tConfirmList()">List Selected Card</button>
@@ -925,6 +1188,11 @@
         <p class="tr-modal-title">Make an Offer</p>
         <p class="tr-modal-sub" id="tr-offer-sub">Choose one of your cards to offer in exchange.</p>
         <div class="tr-picker-grid" id="tr-offer-grid"></div>
+        <div class="tr-modal-pager" id="tr-offer-pager">
+            <button class="tr-pager-btn" id="tr-offer-prev" onclick="tOfferPagePrev()"><i class="bx bx-chevron-left"></i></button>
+            <span class="tr-pager-info" id="tr-offer-page-info"></span>
+            <button class="tr-pager-btn" id="tr-offer-next" onclick="tOfferPageNext()"><i class="bx bx-chevron-right"></i></button>
+        </div>
         <div class="tr-modal-actions">
             <button class="tr-btn-ghost" onclick="tCloseModal('tr-offer-modal')">Cancel</button>
             <button class="tr-btn-primary" id="tr-offer-confirm" disabled onclick="tConfirmOffer()">Submit Offer</button>
@@ -961,11 +1229,53 @@
     </div>
 </div>
 
+<!-- ── Card Detail Modal ── -->
+<div class="tr-modal-overlay" id="tr-detail-modal" onclick="if(event.target===this)tCloseModal('tr-detail-modal')">
+    <div class="tr-modal tr-detail-modal">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-detail-modal')"><i class="bx bx-x"></i></button>
+        <div class="tr-detail-layout">
+            <div class="tr-detail-img-col">
+                <div class="tr-detail-img-wrap">
+                    <img id="tr-detail-img" src="" alt="" style="display:none">
+                    <div id="tr-detail-img-placeholder" class="tr-placeholder"><i class="bx bxs-image"></i></div>
+                </div>
+            </div>
+            <div class="tr-detail-info-col">
+                <div id="tr-detail-set" class="tr-detail-set"></div>
+                <div id="tr-detail-name" class="tr-detail-name"></div>
+                <div id="tr-detail-rarity" class="tr-detail-rarity-pill"></div>
+                <div id="tr-detail-traits" class="tr-detail-traits"></div>
+                <div id="tr-detail-lister" class="tr-detail-lister"></div>
+                <div class="tr-modal-actions" style="margin-top:auto;padding-top:24px;">
+                    <button class="tr-btn-ghost" onclick="tCloseModal('tr-detail-modal')">Close</button>
+                    <button id="tr-detail-cancel-btn" class="tr-btn-danger" style="display:none" onclick="tDetailCancel()">Cancel Listing</button>
+                    <button id="tr-detail-offer-btn" class="tr-btn-primary" onclick="tDetailOffer()">Send Offer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Card Catalog Modal ── -->
+<div class="tr-modal-overlay" id="tr-catalog-modal" onclick="if(event.target===this)tCloseModal('tr-catalog-modal')">
+    <div class="tr-modal" style="max-width:1000px;">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-catalog-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">All Cards</p>
+        <p class="tr-modal-sub" id="tr-catalog-count"></p>
+        <div class="tr-picker-grid" id="tr-catalog-grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr));"></div>
+        <div class="tr-modal-pager" id="tr-catalog-pager">
+            <button class="tr-pager-btn" onclick="tCatalogPagePrev()"><i class="bx bx-chevron-left"></i></button>
+            <span class="tr-pager-info" id="tr-catalog-page-info"></span>
+            <button class="tr-pager-btn" onclick="tCatalogPageNext()"><i class="bx bx-chevron-right"></i></button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div id="tr-toast"></div>
 
 <script src="/nav-user-menu.js"></script>
-<script src="/castle-nav.js"></script>
+<script src="/streamer-nav.js"></script>
 <script src="/trading.js"></script>
 </body>
 </html>

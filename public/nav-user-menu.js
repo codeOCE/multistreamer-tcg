@@ -4,12 +4,12 @@
  */
 (function () {
     const ACT_AS_KEY = 'castle_act_as_streamer_id';
-    const NAME_ICON_SRC = '/Affiliate.png';
+    const NAME_ICON_SRC = '/Affiliate%20BLUE.png';
 
     function getBackendUrl() {
         if (typeof getCastleBackendOrigin === 'function') return getCastleBackendOrigin();
         if (typeof window.BACKEND_URL === 'string' && window.BACKEND_URL) return window.BACKEND_URL;
-        return 'https://multistreamer-tcg.codeoce.workers.dev';
+        return 'https://tcg.creatorcastle.gg';
     }
 
     function getCastleNavUser() {
@@ -129,6 +129,7 @@
         icon.className = 'h-5 w-5 object-contain shrink-0';
         icon.width = 20;
         icon.height = 20;
+        icon.style.display = 'none';
         icon.setAttribute('aria-hidden', 'true');
 
         textEl = document.createElement('span');
@@ -147,7 +148,7 @@
         const navNick = document.getElementById('nav-username');
         const navRole = document.getElementById('nav-user-role');
         const iconWrap = document.getElementById('nav-user-platform-icons');
-        const label = u ? (u.display_name || u.name || 'User') : '—';
+        const label = u ? (u.display_name || u.username || u.name || '—') : '—';
         const roleText = accountRoleLabel(u);
         const nameTextEl = ensureNameIconLabel(nameEl);
         if (iconWrap) iconWrap.classList.add('hidden');
@@ -156,6 +157,11 @@
         if (roleEl) roleEl.textContent = roleText;
         if (navNick) navNick.textContent = label;
         if (navRole) navRole.textContent = roleText;
+        const iconEl = document.getElementById('nav-user-menu-name-icon');
+        if (iconEl) {
+            const isAffiliate = !!(u && (u.role === 'affiliate' || u.role === 'partner'));
+            iconEl.style.display = isAffiliate ? '' : 'none';
+        }
     }
 
     function syncMenuAvatar(u) {
@@ -237,13 +243,12 @@
 
         const codeEl = document.getElementById('nav-user-menu-castle-code');
         const teamList = document.getElementById('nav-user-team-list');
-        const chev = document.getElementById('nav-user-team-chevron');
         const chevWrap = document.getElementById('nav-user-team-chevron-wrap');
         const identityToggle = document.getElementById('nav-user-identity-toggle');
         const iconWrap = document.getElementById('nav-user-platform-icons');
 
-        if (codeEl) codeEl.textContent = (u && u.trade_code) ? u.trade_code : '…';
-        
+        if (codeEl) codeEl.textContent = (u && u.trade_code) ? u.trade_code.toUpperCase() : '…';
+
         // Use auth_status from bootstrap if available, otherwise fetch
         let auth = (u && u.auth_status) ? u.auth_status : null;
         if (!auth) {
@@ -258,7 +263,7 @@
                 const res = await fetch(`${getBackendUrl()}/api/trade/code`, { credentials: 'include' });
                 if (res.ok) {
                     const data = await res.json();
-                    if (codeEl) codeEl.textContent = data.trade_code || '—';
+                    if (codeEl) codeEl.textContent = data.trade_code ? data.trade_code.toUpperCase() : '—';
                 } else if (codeEl) codeEl.textContent = '—';
             } catch (_) {
                 if (codeEl) codeEl.textContent = '—';
@@ -269,7 +274,8 @@
         const sorted = [...memberships].sort((a, b) =>
             streamerLabel(a).localeCompare(streamerLabel(b), undefined, { sensitivity: 'base' })
         );
-        const hasTeams = sorted.length > 0;
+        const isPlatformAdmin = !!(u && (u.is_platform_admin || u.is_admin));
+        const hasTeams = sorted.length > 0 || isPlatformAdmin;
 
         if (chevWrap) chevWrap.classList.toggle('hidden', !hasTeams);
         if (identityToggle) {
@@ -279,7 +285,9 @@
             if (hasTeams) {
                 identityToggle.setAttribute(
                     'title',
-                    'Press the row or arrow to open your team channels (mod / editor)'
+                    isPlatformAdmin
+                        ? 'Switch to any channel (platform admin)'
+                        : 'Press the row or arrow to open your team channels (mod / editor)'
                 );
             } else {
                 identityToggle.removeAttribute('title');
@@ -291,6 +299,75 @@
             sorted.forEach((m) => {
                 teamList.appendChild(buildTeamChannelRow(m));
             });
+        }
+
+        if (isPlatformAdmin) {
+            const panel = document.getElementById('nav-user-team-panel');
+            if (panel && !document.getElementById('nav-admin-channel-switcher')) {
+                const wrap = document.createElement('div');
+                wrap.id = 'nav-admin-channel-switcher';
+                wrap.className = 'border-t border-white/5 mt-1 pt-2 px-1';
+                wrap.innerHTML = `
+                    <p class="text-[9px] font-black uppercase tracking-widest text-amber-400/80 px-1 pb-1.5">Admin: switch channel</p>
+                    <div class="flex gap-1.5">
+                        <input id="nav-admin-channel-input" type="text" placeholder="username"
+                            class="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[11px] text-white placeholder-void-muted/50 focus:outline-none focus:border-void-accent/50" />
+                        <button id="nav-admin-channel-go" type="button"
+                            class="shrink-0 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-[9px] font-black uppercase tracking-widest text-amber-300 transition-colors">
+                            Go
+                        </button>
+                    </div>
+                    <p id="nav-admin-channel-error" class="text-[9px] text-red-400 mt-1 hidden"></p>
+                    <button id="nav-admin-channel-clear" type="button"
+                        class="mt-1.5 w-full text-left px-1 py-1 text-[9px] font-black uppercase tracking-widest text-void-muted hover:text-amber-300 transition-colors hidden">
+                        &larr; Back to my channel
+                    </button>`;
+                panel.appendChild(wrap);
+
+                const input = wrap.querySelector('#nav-admin-channel-input');
+                const btn = wrap.querySelector('#nav-admin-channel-go');
+                const errEl = wrap.querySelector('#nav-admin-channel-error');
+                const clearBtn = wrap.querySelector('#nav-admin-channel-clear');
+
+                async function doAdminSwitch() {
+                    const q = (input.value || '').trim();
+                    if (!q) return;
+                    errEl.classList.add('hidden');
+                    btn.disabled = true;
+                    btn.textContent = '...';
+                    try {
+                        const res = await fetch(`${getBackendUrl()}/api/admin/streamer-lookup?q=${encodeURIComponent(q)}`, { credentials: 'include' });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+                        const rows = Array.isArray(data) ? data : [];
+                        const match = rows.find(r => r.username.toLowerCase() === q.toLowerCase()) || rows[0];
+                        if (!match) throw new Error('No streamer found for "' + q + '"');
+                        try { localStorage.setItem(ACT_AS_KEY, String(match.id)); } catch (_) {}
+                        window.location.href = '/dashboard';
+                    } catch (e) {
+                        errEl.textContent = e.message || 'Error';
+                        errEl.classList.remove('hidden');
+                        btn.disabled = false;
+                        btn.textContent = 'Go';
+                    }
+                }
+
+                btn.addEventListener('click', doAdminSwitch);
+                input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdminSwitch(); });
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', () => {
+                        try { localStorage.removeItem(ACT_AS_KEY); } catch (_) { /* ignore */ }
+                        window.location.reload();
+                    });
+                }
+            }
+            // Update clear button visibility each time the menu opens
+            const existingClearBtn = document.getElementById('nav-admin-channel-clear');
+            if (existingClearBtn) {
+                try {
+                    existingClearBtn.classList.toggle('hidden', !localStorage.getItem(ACT_AS_KEY));
+                } catch (_) { /* ignore */ }
+            }
         }
 
         updateSwitchViewButton();
@@ -315,7 +392,7 @@
 
     function openEditProfile() {
         closeNavUserMenu();
-        window.location.href = '/settings';
+        window.location.href = '/profile';
     }
 
     function switchView() {
@@ -330,52 +407,29 @@
         }
     }
 
-    function redeemCode() {
-        closeNavUserMenu();
-        // If the SPA redeem view exists use it, otherwise show a simple prompt
-        if (typeof window.openRedeemModal === 'function') {
-            window.openRedeemModal();
-            return;
-        }
-        // Fallback: navigate to home and let SPA handle it
-        const code = window.prompt('Enter your pack or trade code:');
-        if (!code || !code.trim()) return;
-        const backend = getBackendUrl();
-        fetch(`${backend}/api/redeem`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code.trim() }),
-        }).then(r => r.json()).then(data => {
-            const msg = data.message || data.error || (data.success ? 'Code redeemed!' : 'Invalid code.');
-            if (typeof showToast === 'function') showToast(msg, data.success ? 'success' : 'error');
-            else alert(msg);
-        }).catch(() => alert('Something went wrong. Try again.'));
-    }
-
     function updateSwitchViewButton() {
         const btn = document.getElementById('nav-user-menu-switch-view');
         if (!btn) return;
         const u = getCastleNavUser();
-        const onDashboard = window.location.pathname === '/dashboard';
-        const canSeeDashboard = u && (u.is_creator || (u.team_memberships && u.team_memberships.length > 0));
-        if (!canSeeDashboard && !onDashboard) {
+        const isCreator = !!(u && u.is_creator);
+        if (!isCreator) {
             btn.style.display = 'none';
             return;
         }
+        const onDashboard = window.location.pathname === '/dashboard';
         btn.style.display = '';
         if (onDashboard) {
             btn.innerHTML = `
                 <i class="bx bxs-show text-void-muted w-4 text-center shrink-0"></i>
                 <span class="flex flex-col leading-tight normal-case">
-                    <span class="uppercase tracking-widest">Collector Mode</span>
+                    <span class="uppercase tracking-widest">Switch to Collector Mode</span>
                     <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Back to your collection</span>
                 </span>`;
         } else {
             btn.innerHTML = `
                 <i class="bx bxs-film text-void-muted w-4 text-center shrink-0"></i>
                 <span class="flex flex-col leading-tight normal-case">
-                    <span class="uppercase tracking-widest">Creator View</span>
+                    <span class="uppercase tracking-widest">Switch to Creator Mode</span>
                     <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Manage your channel</span>
                 </span>`;
         }
@@ -400,36 +454,42 @@
             return btn;
         };
 
+        const myCollectionBtn = makeBtn('nav-user-menu-my-collection', `
+            <i class="bx bxs-collection text-void-muted w-4 text-center shrink-0"></i>
+            <span class="flex flex-col leading-tight normal-case">
+                <span class="uppercase tracking-widest">My Collection</span>
+                <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">View your cards</span>
+            </span>`);
+
         const editProfileBtn = makeBtn('nav-user-menu-edit-profile', `
             <i class="bx bxs-user-detail text-void-muted w-4 text-center shrink-0"></i>
             <span class="flex flex-col leading-tight normal-case">
-                <span class="uppercase tracking-widest">Edit Profile</span>
+                <span class="uppercase tracking-widest">View Profile</span>
                 <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Public page &amp; display name</span>
             </span>`);
 
         const switchViewBtn = makeBtn('nav-user-menu-switch-view', '');
 
-        const redeemBtn = makeBtn('nav-user-menu-redeem', `
-            <i class="bx bxs-purchase-tag text-void-muted w-4 text-center shrink-0"></i>
-            <span class="flex flex-col leading-tight normal-case">
-                <span class="uppercase tracking-widest">Redeem a Code</span>
-                <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Pack or trade code</span>
-            </span>`);
-
-        // Insert order: Edit Profile → Creator/Viewer toggle → Redeem → separator → Settings → Logout
+        // Insert order: My Collection → View Profile → Settings → separator → Creator/Viewer toggle → Logout
+        container.insertBefore(myCollectionBtn, settingsBtn);
         container.insertBefore(editProfileBtn, settingsBtn);
-        container.insertBefore(switchViewBtn, settingsBtn);
-        container.insertBefore(redeemBtn, settingsBtn);
 
-        // Add a subtle divider before settings
+        // Switch view goes between settings and logout, with a divider above it
+        const logoutBtn = document.getElementById('nav-user-menu-logout');
         const divider = document.createElement('div');
         divider.className = 'my-1 border-t border-white/5';
-        container.insertBefore(divider, settingsBtn);
+        if (logoutBtn) {
+            container.insertBefore(divider, logoutBtn);
+            container.insertBefore(switchViewBtn, logoutBtn);
+        } else {
+            container.appendChild(divider);
+            container.appendChild(switchViewBtn);
+        }
 
         // Wire up new buttons
+        myCollectionBtn.addEventListener('click', (e) => { e.stopPropagation(); closeNavUserMenu(); window.location.href = '/my-collection'; });
         editProfileBtn.addEventListener('click', (e) => { e.stopPropagation(); openEditProfile(); });
         switchViewBtn.addEventListener('click',  (e) => { e.stopPropagation(); switchView(); });
-        redeemBtn.addEventListener('click',      (e) => { e.stopPropagation(); redeemCode(); });
 
         updateSwitchViewButton();
     }

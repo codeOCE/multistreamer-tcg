@@ -3,12 +3,42 @@
  * Safe reads (status, follows) still hit the API so the UI can show real data when logged in.
  */
 
+function initTosScrollGate(scrollId, checkId, labelId, hintId) {
+    const scroll = document.getElementById(scrollId);
+    const check  = document.getElementById(checkId);
+    const label  = document.getElementById(labelId);
+    const hint   = document.getElementById(hintId);
+    if (!scroll || !check || !label) return;
+
+    function unlock() {
+        check.disabled = false;
+        label.classList.remove('tos-label-locked');
+        if (hint) hint.style.display = 'none';
+        scroll.removeEventListener('scroll', onScroll);
+    }
+
+    function onScroll() {
+        if (scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 8) unlock();
+    }
+
+    if (scroll.scrollHeight <= scroll.clientHeight + 8) {
+        unlock();
+        return;
+    }
+
+    scroll.addEventListener('scroll', onScroll, { passive: true });
+}
+
 const API_BASE = `${window.location.origin}/api`;
 let currentStep = 1;
 let streamerData = null;
 let collectorData = null;
+let onboardingUser = null;
 let currentRole = null; // 'creator' or 'collector'
 let csrfToken = null;
+let _slugCheckTimer = null;
+let _referralCheckTimer = null;
+let _testTakenSlug = null; // slug simulated as already taken in test flows
 /** Favorites toggled during this session only (collector step 2); never POSTed from this page */
 const testFlowFavoriteIds = new Set();
 
@@ -56,6 +86,7 @@ async function checkStatus() {
 
         const data = await res.json();
         streamerData = data.streamer;
+        onboardingUser = data.user || null;
 
         // Determine if they should be on collector or creator flow
         if (currentRole === 'collector') {
@@ -77,7 +108,10 @@ function showRolePicker() {
     const stepsContainer = document.getElementById('steps-container');
     const progressStepper = document.getElementById('progress-stepper');
 
-    if (rolePicker) rolePicker.classList.remove('hidden');
+    if (rolePicker) {
+        rolePicker.classList.remove('hidden');
+        requestAnimationFrame(() => requestAnimationFrame(() => rolePicker.classList.add('active')));
+    }
     if (stepsContainer) stepsContainer.classList.add('hidden');
     if (progressStepper) progressStepper.classList.add('hidden');
 }
@@ -111,14 +145,27 @@ async function initCreatorOnboarding(data) {
         streamerData = data.streamer;
 
         // Populate fields if they exist
-        if (streamerData.brand_name) document.getElementById('brand-name').value = streamerData.brand_name;
+        const brandNameEl = document.getElementById('brand-name');
+        if (streamerData.brand_name) {
+            brandNameEl.value = streamerData.brand_name;
+        } else {
+            const rawName = onboardingUser?.display_name || onboardingUser?.username || '';
+            const streamerName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : '';
+            if (streamerName) brandNameEl.value = `${streamerName}'s Collection`;
+        }
         if (streamerData.binder_color) {
             document.getElementById('binder-color').value = streamerData.binder_color;
             document.getElementById('binder-color-hex').value = streamerData.binder_color;
         }
-        if (streamerData.battles_enabled !== undefined) document.getElementById('toggle-battles').checked = streamerData.battles_enabled;
         if (streamerData.trading_enabled !== undefined) document.getElementById('toggle-trading').checked = streamerData.trading_enabled;
-        if (streamerData.tos_accepted) document.getElementById('tos-check').checked = true;
+        if (streamerData.tos_accepted) {
+            const tosCheck = document.getElementById('tos-check');
+            const tosLabel = document.getElementById('tos-label');
+            const tosHint  = document.getElementById('tos-scroll-hint');
+            if (tosCheck) { tosCheck.disabled = false; tosCheck.checked = true; }
+            if (tosLabel) tosLabel.classList.remove('tos-label-locked');
+            if (tosHint)  tosHint.style.display = 'none';
+        }
 
         // Populate collection methods (only if they've been saved before)
         if (streamerData.collection_methods && Object.keys(streamerData.collection_methods).length > 0) {
@@ -138,20 +185,23 @@ async function initCreatorOnboarding(data) {
     const colorPicker = document.getElementById('binder-color');
     const colorHex = document.getElementById('binder-color-hex');
     const brandNameInput = document.getElementById('brand-name');
-    const hueSlider = document.getElementById('hue-slider');
-    
-    // New preview elements
-    const previewBinderItem = document.getElementById('preview-binder-item');
-    const previewBinderName = document.getElementById('preview-binder-name');
-    const previewSidebarBinder = document.getElementById('preview-sidebar-binder');
-    const previewSidebarBinderName = document.getElementById('preview-sidebar-binder-name');
-    const previewNavCollection = document.getElementById('preview-nav-collection');
-    const previewShareCollectionName = document.getElementById('preview-share-collection-name');
-    const previewAccentLogoShell = document.getElementById('preview-accent-logo-shell');
-    const previewAccentWordmark = document.getElementById('preview-accent-wordmark');
-    const previewAccentRole = document.getElementById('preview-accent-role');
-    const previewAccentShareMark = document.getElementById('preview-accent-share-mark');
-    const previewAccentTrophy = document.getElementById('preview-accent-trophy');
+    // Testbinder full-site preview elements
+    const previewTbSpine          = document.getElementById('preview-tb-spine');
+    const previewTbBar            = document.getElementById('preview-tb-bar');
+    const previewTbDot            = document.getElementById('preview-tb-dot');
+    const previewTbBinderName     = document.getElementById('preview-tb-binder-name');
+    const previewTbActiveTab      = document.getElementById('preview-tb-active-tab');
+    const previewTbRareSlot       = document.getElementById('preview-tb-slot-rare');
+    const previewTbNavMark        = document.getElementById('preview-tb-nav-mark');
+    const previewTbNavCreator     = document.getElementById('preview-tb-creator-name');
+    const previewTbNavLinkActive  = document.getElementById('preview-tb-nav-link-active');
+    const previewTbNavAvatar      = document.getElementById('preview-tb-nav-avatar');
+    const previewTbShareBtn       = document.getElementById('preview-tb-share-btn');
+    const previewTbNewBinderBtn   = document.getElementById('preview-tb-new-binder-btn');
+    const previewTbProfileAvatar  = document.getElementById('preview-tb-profile-avatar');
+    const previewTbProfileName    = document.getElementById('preview-tb-profile-name');
+    const previewTbUrlSlug        = document.getElementById('preview-tb-url-slug');
+
 
     const swatch = document.getElementById('color-preview-swatch');
     const popover = document.getElementById('void-picker-popover');
@@ -224,7 +274,7 @@ async function initCreatorOnboarding(data) {
     }
 
     function normalizePreviewHex(hex) {
-        let n = (hex != null && String(hex).trim()) ? String(hex).trim() : '#00f2fe';
+        let n = (hex != null && String(hex).trim()) ? String(hex).trim() : '#3faaff';
         if (!n.startsWith('#')) n = '#' + n.replace(/^#/, '');
         n = n.toUpperCase();
         if (!/^#[0-9A-F]{6}$/.test(n)) n = '#00F2FE';
@@ -234,7 +284,7 @@ async function initCreatorOnboarding(data) {
     function updatePreviewColor(hex) {
         const normalized = normalizePreviewHex(hex);
         const rgb = hexToRgb(normalized);
-        const ra = (a) => (rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : `rgba(0,242,254,${a})`);
+        const ra = (a) => (rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : `rgba(63,170,255,${a})`);
 
         const colorSwatch = document.getElementById('color-preview-swatch');
         if (colorSwatch) {
@@ -242,22 +292,24 @@ async function initCreatorOnboarding(data) {
             colorSwatch.style.boxShadow = `0 0 20px ${normalized}33`;
         }
 
-        if (previewBinderItem) {
-            previewBinderItem.style.background = ra(0.12);
-            previewBinderItem.style.borderColor = ra(0.2);
-        }
-        if (previewSidebarBinder) {
-            previewSidebarBinder.style.background = ra(0.08);
-            previewSidebarBinder.style.borderColor = ra(0.25);
-        }
-        if (previewNavCollection) {
-            previewNavCollection.style.background = ra(0.15);
-        }
-        if (previewAccentLogoShell) previewAccentLogoShell.style.backgroundColor = ra(0.12);
-        if (previewAccentWordmark) previewAccentWordmark.style.color = normalized;
-        if (previewAccentRole) previewAccentRole.style.color = normalized;
-        if (previewAccentShareMark) previewAccentShareMark.style.backgroundColor = ra(0.2);
-        if (previewAccentTrophy) previewAccentTrophy.style.color = normalized;
+        // Nav
+        if (previewTbNavMark)       { previewTbNavMark.style.background = ra(0.12); previewTbNavMark.style.borderColor = ra(0.28); }
+        if (previewTbNavCreator)      previewTbNavCreator.style.color = normalized;
+        if (previewTbNavLinkActive)  { previewTbNavLinkActive.style.color = normalized; previewTbNavLinkActive.style.background = ra(0.08); }
+        if (previewTbNavAvatar)       previewTbNavAvatar.style.borderColor = ra(0.28);
+        // Sidebar
+        if (previewTbActiveTab)       previewTbActiveTab.style.background = ra(0.08);
+        if (previewTbBar)             previewTbBar.style.background = normalized;
+        if (previewTbDot)             previewTbDot.style.background = normalized;
+        if (previewTbBinderName)      previewTbBinderName.style.color = normalized;
+        if (previewTbNewBinderBtn)   { previewTbNewBinderBtn.style.borderColor = ra(0.28); previewTbNewBinderBtn.style.color = ra(0.75); previewTbNewBinderBtn.style.background = ra(0.04); }
+        // Book
+        if (previewTbSpine)           previewTbSpine.style.background = ra(0.18);
+        if (previewTbRareSlot)       { previewTbRareSlot.style.borderColor = ra(0.3); previewTbRareSlot.style.boxShadow = `0 0 10px ${ra(0.14)}, inset 0 0 16px ${ra(0.05)}`; }
+        // Right panel
+        if (previewTbProfileAvatar)   previewTbProfileAvatar.style.borderColor = ra(0.22);
+        // Center share button
+        if (previewTbShareBtn)       { previewTbShareBtn.style.borderColor = ra(0.25); previewTbShareBtn.style.background = ra(0.08); previewTbShareBtn.style.color = ra(0.9); }
     }
 
     if (swatch) {
@@ -355,11 +407,15 @@ async function initCreatorOnboarding(data) {
         updatePreviewColor(colorPicker.value.toUpperCase());
     }
 
+    function slugify(text) {
+        return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'my-collection';
+    }
+
     function syncBrandNameToPreview(val) {
-        const name = val || 'My Collection';
-        if (previewBinderName) previewBinderName.textContent = name;
-        if (previewSidebarBinderName) previewSidebarBinderName.textContent = name;
-        if (previewShareCollectionName) previewShareCollectionName.textContent = name;
+        const name = (val && val.trim()) ? val.trim() : 'My Collection';
+        if (previewTbNavCreator)   previewTbNavCreator.textContent = name.toUpperCase();
+        if (previewTbProfileName)  previewTbProfileName.textContent = name;
+        if (previewTbUrlSlug)      previewTbUrlSlug.textContent = slugify(name);
     }
 
     if (brandNameInput) {
@@ -368,6 +424,8 @@ async function initCreatorOnboarding(data) {
         });
         syncBrandNameToPreview(brandNameInput.value);
     }
+
+    window.addEventListener('resize', scalePreview);
 
 }
 
@@ -396,9 +454,20 @@ async function initCollectorOnboarding() {
     }
 }
 
+function scalePreview() {
+    const viewport = document.querySelector('.preview-tb-viewport');
+    const site     = document.querySelector('.preview-tb-site');
+    if (!viewport || !site) return;
+    const w = viewport.offsetWidth;
+    const h = viewport.offsetHeight;
+    if (w === 0) return;
+    const scaleW = w / 860;
+    const scaleH = h > 0 ? h / 510 : scaleW;
+    site.style.transform = `scale(${Math.min(scaleW, scaleH)})`;
+}
+
 function showStep(step, prefix) {
     console.log(`[TEST MODE] Showing step ${prefix}-${step}`);
-    // Hide all top-level step containers
     document.querySelectorAll('.animate-step').forEach(el => {
         el.classList.add('hidden');
         el.classList.remove('active');
@@ -408,7 +477,13 @@ function showStep(step, prefix) {
     const nextStepEl = document.getElementById(stepId);
     if (nextStepEl) {
         nextStepEl.classList.remove('hidden');
-        setTimeout(() => nextStepEl.classList.add('active'), 10);
+        nextStepEl.classList.add('active');
+    }
+
+    if (prefix === 'c' && step === 2) {
+        initTosScrollGate('tos-scroll', 'tos-check', 'tos-label', 'tos-scroll-hint');
+    } else if (prefix === 'col' && step === 1) {
+        initTosScrollGate('col-tos-scroll', 'col-tos-check', 'col-tos-label', 'col-tos-scroll-hint');
     }
 
     // Toggle Branding Preview
@@ -416,7 +491,7 @@ function showStep(step, prefix) {
     if (brandingPreview) {
         if (prefix === 'c' && step === 4) {
             brandingPreview.classList.remove('hidden');
-            setTimeout(() => brandingPreview.classList.add('visible'), 10);
+            requestAnimationFrame(() => requestAnimationFrame(() => { brandingPreview.classList.add('visible'); scalePreview(); }));
         } else {
             brandingPreview.classList.remove('visible');
             setTimeout(() => brandingPreview.classList.add('hidden'), 600);
@@ -425,11 +500,7 @@ function showStep(step, prefix) {
 
     currentStep = step;
 
-    // Update progress bar
-    const totalSteps = prefix === 'c' ? 10 : 3;
-
     // Progress Stepper Mapping
-    const progressStepper = document.getElementById('progress-stepper');
     if (prefix === 'c') {
         // Map 10 steps to 3 dots: 1-3 (Init), 4-7 (Config), 8-10 (Deploy)
         const dot1 = document.getElementById('dot-1');
@@ -491,6 +562,10 @@ function showStep(step, prefix) {
         else el.classList.remove('complete', 'active');
     }
 
+    if (prefix === 'c' && step === 1) {
+        initReferralInput();
+    }
+
     if (prefix === 'col' && step === 2) {
         loadFollows();
     }
@@ -510,6 +585,65 @@ async function nextStep(step) {
 
 async function saveStepProgress(step) {
     console.log('[TEST MODE] Skipping server save for step', step, '(flow test only)');
+}
+
+// Referral — test stubs (mock: 'codeoce' is a valid code, anything else is not found)
+const TEST_VALID_REFERRAL = 'codeoce';
+
+function initReferralInput() {
+    const input = document.getElementById('referral-code-input');
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = '1';
+    input.addEventListener('input', () => {
+        clearTimeout(_referralCheckTimer);
+        const val = input.value.trim();
+        setReferralFeedback('', null);
+        if (!val) return;
+        setReferralFeedback('Checking...', 'muted');
+        _referralCheckTimer = setTimeout(() => {
+            if (val.toLowerCase() === TEST_VALID_REFERRAL) {
+                setReferralFeedback(`Referred by ${TEST_VALID_REFERRAL}`, 'success');
+            } else {
+                setReferralFeedback('Code not found', 'error');
+            }
+        }, 500);
+    });
+}
+
+function setReferralFeedback(msg, state) {
+    const fb = document.getElementById('referral-feedback');
+    const status = document.getElementById('referral-status');
+    if (!fb || !status) return;
+    fb.classList.remove('hidden', 'text-red-400', 'text-green-400', 'text-void-muted');
+    status.classList.remove('hidden', 'text-red-400', 'text-green-400', 'text-void-muted');
+    if (!msg) { fb.classList.add('hidden'); status.classList.add('hidden'); return; }
+    fb.textContent = msg;
+    if (state === 'success') {
+        fb.classList.add('text-green-400');
+        status.innerHTML = '<i class="bx bxs-check-circle"></i>';
+        status.classList.add('text-green-400');
+    } else if (state === 'error') {
+        fb.classList.add('text-red-400');
+        status.innerHTML = '<i class="bx bxs-x-circle"></i>';
+        status.classList.add('text-red-400');
+    } else {
+        fb.classList.add('text-void-muted');
+        status.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i>';
+        status.classList.add('text-void-muted');
+    }
+    fb.classList.remove('hidden');
+    status.classList.remove('hidden');
+}
+
+async function saveReferralAndContinue() {
+    const input = document.getElementById('referral-code-input');
+    const code = input ? input.value.trim() : '';
+    if (code && code.toLowerCase() !== TEST_VALID_REFERRAL) {
+        setReferralFeedback('Code not found — check and try again', 'error');
+        return;
+    }
+    if (code) console.log('[TEST MODE] Referral not persisted (flow test only):', code);
+    nextStep(2);
 }
 
 function showVisualError(message, stepId) {
@@ -569,18 +703,18 @@ async function saveBranding() {
         brand_name: name,
         brand_tagline: streamerData?.brand_tagline ?? '',
         binder_color: document.getElementById('binder-color').value,
-        battles_enabled: document.getElementById('toggle-battles').checked,
+        battles_enabled: false,
         trading_enabled: document.getElementById('toggle-trading').checked
     };
     updateOBSLinks();
-    nextStep(5);
+    nextStep(6);
 }
 
 async function saveOBSStyle() {
     const anim = localStorage.getItem('onboarding_pack_animation') || 'style1';
     console.log('[TEST MODE] OBS style not persisted:', anim, '(flow test only)');
     if (streamerData) streamerData.pack_animation_style = anim;
-    nextStep(9);
+    nextStep(10);
 }
 
 function updateOBSLinks() {
@@ -634,7 +768,7 @@ async function saveCollectionMethods() {
 function copyToClipboard(id) {
     const el = document.getElementById(id);
     el.select();
-    document.execCommand('copy');
+    navigator.clipboard?.writeText(el.value);
     const btn = el.nextElementSibling;
     const originalIcon = btn.innerHTML;
     btn.innerHTML = '<i class="bx bxs-check"></i>';
@@ -768,6 +902,122 @@ function validateColTOS() {
 }
 
 // --- TEST MODE HELPERS ---
+
+function _enterCreatorSlugStep(canonicalName, currentSlug, takenSlug) {
+    _testTakenSlug = takenSlug;
+    currentRole = 'creator';
+    document.getElementById('role-picker').classList.add('hidden');
+    document.getElementById('steps-container').classList.remove('hidden');
+    document.getElementById('progress-stepper').classList.remove('hidden');
+    document.getElementById('creator-steps').classList.remove('hidden');
+    document.getElementById('collector-steps').classList.add('hidden');
+    showStep('username', 'c');
+    initSlugStep(canonicalName, currentSlug);
+}
+
+function testKickSlugConflict() {
+    // Simulate: Twitch already owns 'codeoce', Kick user signs up second
+    _enterCreatorSlugStep('codeoce', 'codeoce_kick', 'codeoce');
+}
+
+function testTwitchSlugConflict() {
+    // Simulate: Kick already owns 'codeoce', Twitch user signs up second
+    _enterCreatorSlugStep('codeoce', 'codeoce_twitch', 'codeoce');
+}
+
+function initSlugStep(canonicalName, currentSlug) {
+    const nameEl = document.getElementById('slug-kick-name');
+    const input = document.getElementById('slug-input');
+    const btn = document.getElementById('slug-claim-btn');
+
+    if (nameEl) nameEl.textContent = canonicalName;
+    if (input) {
+        input.value = currentSlug || (canonicalName + '_');
+        input.addEventListener('input', () => scheduleSlugCheck(canonicalName));
+        scheduleSlugCheck(canonicalName);
+    }
+    if (btn) btn.disabled = true;
+}
+
+function scheduleSlugCheck(canonicalName) {
+    clearTimeout(_slugCheckTimer);
+    const input = document.getElementById('slug-input');
+    const btn = document.getElementById('slug-claim-btn');
+    const feedback = document.getElementById('slug-feedback');
+    if (!input || !btn || !feedback) return;
+
+    const val = input.value.trim().toLowerCase();
+    const formatOk = /^[a-z0-9][a-z0-9_-]{1,29}$/.test(val);
+    const containsName = val.includes(canonicalName);
+
+    feedback.classList.remove('hidden', 'text-red-400', 'text-green-400', 'text-void-muted');
+    btn.disabled = true;
+
+    if (!formatOk) {
+        feedback.textContent = 'Only letters, numbers, _ and - allowed (2-30 characters).';
+        feedback.classList.add('text-red-400');
+        return;
+    }
+    if (!containsName) {
+        feedback.textContent = `Must contain your username: ${canonicalName}`;
+        feedback.classList.add('text-red-400');
+        return;
+    }
+
+    feedback.textContent = 'Checking availability...';
+    feedback.classList.add('text-void-muted');
+
+    _slugCheckTimer = setTimeout(() => {
+        feedback.classList.remove('text-void-muted', 'text-red-400', 'text-green-400');
+        const isTaken = val === _testTakenSlug;
+        if (isTaken) {
+            feedback.textContent = `castle.gg/${val} is already taken`;
+            feedback.classList.add('text-red-400');
+            btn.disabled = true;
+        } else {
+            feedback.textContent = `castle.gg/${val} is available`;
+            feedback.classList.add('text-green-400');
+            btn.disabled = false;
+        }
+    }, 400);
+}
+
+async function claimSlug() {
+    const input = document.getElementById('slug-input');
+    const btn = document.getElementById('slug-claim-btn');
+    const feedback = document.getElementById('slug-feedback');
+    if (!input || !btn) return;
+
+    const slug = input.value.trim().toLowerCase();
+    btn.disabled = true;
+    btn.textContent = 'Claiming...';
+
+    await new Promise(r => setTimeout(r, 600));
+
+    if (slug === _testTakenSlug) {
+        if (feedback) {
+            feedback.textContent = `castle.gg/${slug} is already taken`;
+            feedback.classList.remove('hidden', 'text-green-400');
+            feedback.classList.add('text-red-400');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Claim URL';
+        return;
+    }
+
+    console.log('[TEST MODE] Slug claim not persisted (flow test only):', slug);
+    if (feedback) {
+        feedback.textContent = `TEST MODE: castle.gg/${slug} claimed (not saved to server)`;
+        feedback.classList.remove('hidden', 'text-red-400');
+        feedback.classList.add('text-green-400');
+    }
+
+    if (!streamerData) streamerData = {};
+    streamerData.username = slug;
+
+    await new Promise(r => setTimeout(r, 800));
+    showStep(1, 'c');
+}
 
 async function resetTestState() {
     if (!confirm('Reload this playground? Nothing on the server is changed; your real onboarding progress stays as-is.')) return;

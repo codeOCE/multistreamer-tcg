@@ -176,7 +176,7 @@
         const minSlots = Math.max(COLS * 2, Math.ceil(filtered.length / COLS) * COLS);
         const emptyCount = minSlots - filtered.length;
         const emptySlots = Array(emptyCount).fill(null).map(() => `
-            <div class="binder-tile binder-empty">
+            <div class="binder-tile binder-empty" style="cursor:pointer" onclick="window.openDiscoverCreators && window.openDiscoverCreators()">
                 <div class="binder-book binder-book--empty">
                     <div class="binder-empty-icon"><i class="bx bxs-plus"></i></div>
                 </div>
@@ -190,7 +190,7 @@
 
     function binderTileHTML(c) {
         // Use brand color, fall back to a rich dark indigo if not set
-        const rawColor = c.brand_color_primary || '#3730a3';
+        const rawColor = c.binder_color || c.brand_color_primary || '#3730a3';
         const { rgb: accentRgb, light: isLight } = hexToRgb(rawColor);
         const brandName = escapeHTML(c.brand_name || c.streamer_username);
         const handle = escapeHTML(c.streamer_username);
@@ -198,17 +198,19 @@
 
         // Light covers: dark debossed text (pressed-in look)
         // Dark covers: light embossed text (raised look)
-        const etchColor    = isLight ? 'rgba(0,0,0,0.32)'         : 'rgba(255,255,255,0.35)';
-        const etchShadow   = isLight ? '0 1px 1px rgba(255,255,255,0.22)' : '0 1px 2px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,255,255,0.08)';
-        const etchColorSub = isLight ? 'rgba(0,0,0,0.22)'         : 'rgba(255,255,255,0.22)';
-        const etchShadowSub= isLight ? '0 1px 0 rgba(255,255,255,0.14)'  : '0 1px 2px rgba(0,0,0,0.5)';
-        const countColor   = isLight ? 'rgba(0,0,0,0.28)'         : 'rgba(255,255,255,0.28)';
-        const countShadow  = isLight ? '0 1px 0 rgba(255,255,255,0.14)'  : '0 1px 1px rgba(0,0,0,0.5)';
+        const etchColor    = isLight ? 'rgba(0,0,0,0.72)'         : 'rgba(255,255,255,0.85)';
+        const etchShadow   = isLight ? '0 1px 1px rgba(255,255,255,0.30)' : '0 1px 2px rgba(0,0,0,0.7), 0 -1px 0 rgba(255,255,255,0.12)';
+        const etchColorSub = isLight ? 'rgba(0,0,0,0.55)'         : 'rgba(255,255,255,0.65)';
+        const etchShadowSub= isLight ? '0 1px 0 rgba(255,255,255,0.20)'  : '0 1px 2px rgba(0,0,0,0.6)';
+        const countColor   = isLight ? 'rgba(0,0,0,0.60)'         : 'rgba(255,255,255,0.70)';
+        const countShadow  = isLight ? '0 1px 0 rgba(255,255,255,0.20)'  : '0 1px 1px rgba(0,0,0,0.6)';
 
         const favTitle = c.is_favorited ? 'Unfavorite binder' : 'Favorite binder';
         const favClass = c.is_favorited ? 'is-favorited' : '';
+        const avatarUrl = escapeHTML(c.avatar_url || '');
+        const avatarImg = avatarUrl ? `<img class="binder-avatar" src="${avatarUrl}" alt="${handle}" loading="lazy" onerror="this.style.display='none'">` : '';
         return `
-        <a class="binder-tile" href="/binder/${handle}" style="--binder-accent-rgb: ${accentRgb}" data-light="${isLight}">
+        <a class="binder-tile" href="/${handle}/binders" style="--binder-accent-rgb: ${accentRgb}" data-light="${isLight}">
             <button class="binder-fav-btn ${favClass}" type="button" title="${favTitle}" onclick="event.preventDefault();event.stopPropagation();window._mcToggleFavorite('${escapeHTML(c.streamer_id)}')">
                 <i class="fa-${c.is_favorited ? 'solid' : 'regular'} fa-star"></i>
             </button>
@@ -221,6 +223,7 @@
                     <div class="binder-sheen"></div>
                     <div class="binder-stitch"></div>
                     <div class="binder-zipper"></div>
+                    ${avatarImg}
                     <!-- Etched brand + handle -->
                     <div class="binder-etched">
                         <div class="binder-etch-name" style="color:${etchColor};text-shadow:${etchShadow}">${brandName}</div>
@@ -241,14 +244,14 @@
     }
 
     function recommendationCardHTML(c, reasonLabel) {
-        const rawColor = c.brand_color_primary || '#3730a3';
+        const rawColor = c.binder_color || c.brand_color_primary || '#3730a3';
         const { rgb: accentRgb } = hexToRgb(rawColor);
         const name = escapeHTML(c.brand_name || c.streamer_username || 'Unknown');
         const handle = escapeHTML(c.streamer_username || '');
         const overlap = Number(c.overlap_count || c.shared_collectors || 0);
         const overlapText = overlap > 0 ? `${overlap} mutual${overlap === 1 ? '' : 's'}` : reasonLabel;
         return `
-        <a class="mc-rec-card" href="/binder/${handle}" style="--binder-accent-rgb:${accentRgb}">
+        <a class="mc-rec-card" href="/${handle}" style="--binder-accent-rgb:${accentRgb}">
             <div class="mc-rec-name">${name}</div>
             <div class="mc-rec-meta">@${handle}</div>
             <div class="mc-rec-reason">${escapeHTML(overlapText)}</div>
@@ -256,13 +259,13 @@
     }
 
     function discoverModalCardHTML(c, reasonText) {
-        const rawColor = c.brand_color_primary || '#3730a3';
+        const rawColor = c.binder_color || c.brand_color_primary || '#3730a3';
         const { rgb: accentRgb } = hexToRgb(rawColor);
         const name = escapeHTML(c.brand_name || c.streamer_username || 'Unknown');
         const handle = escapeHTML(c.streamer_username || '');
         const count = Number(c.card_count || 0);
         return `
-        <a class="mc-rec-card" href="/binder/${handle}" style="--binder-accent-rgb:${accentRgb}">
+        <a class="mc-rec-card" href="/${handle}" style="--binder-accent-rgb:${accentRgb}">
             <div class="mc-rec-name">${name}</div>
             <div class="mc-rec-meta">@${handle}</div>
             <div class="mc-rec-reason">${escapeHTML(reasonText || `${count} card${count === 1 ? '' : 's'} collected`)}</div>
@@ -295,7 +298,7 @@
         }
 
         list.innerHTML = collections.map(c => {
-            const { rgb: accentRgb } = hexToRgb(c.brand_color_primary);
+            const { rgb: accentRgb } = hexToRgb(c.binder_color || c.brand_color_primary);
             const name = escapeHTML(c.brand_name || c.streamer_username);
             const slug = escapeHTML(c.streamer_username);
             const avatarHTML = c.avatar_url
@@ -309,7 +312,7 @@
                     <div style="font-size:0.7rem;font-weight:700;color:var(--void-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
                     <div style="font-size:0.55rem;color:var(--void-muted)">${c.card_count} cards collected</div>
                 </div>
-                <a href="/binder/${slug}?tab=packs" style="padding:7px 14px;background:rgba(${accentRgb},0.1);border:1px solid rgba(${accentRgb},0.25);border-radius:8px;font-size:0.55rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:rgba(${accentRgb},0.9);text-decoration:none;white-space:nowrap;transition:all 0.2s"
+                <a href="/${slug}/binder?tab=packs" style="padding:7px 14px;background:rgba(${accentRgb},0.1);border:1px solid rgba(${accentRgb},0.25);border-radius:8px;font-size:0.55rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:rgba(${accentRgb},0.9);text-decoration:none;white-space:nowrap;transition:all 0.2s"
                    onmouseover="this.style.background='rgba(${accentRgb},0.2)'" onmouseout="this.style.background='rgba(${accentRgb},0.1)'">
                     Buy Packs
                 </a>
@@ -476,11 +479,11 @@
 
     /* ── Pending packs ───────────────────────────────────────────────────── */
     async function loadPendingPacks() {
-        // Always make the right panel clickable
-        const rightPanel = document.querySelector('#mc-right .side-panel');
-        if (rightPanel) {
-            rightPanel.style.cursor = 'pointer';
-            rightPanel.onclick = () => { window.location.href = '/pack-opening.html'; };
+        // Make the open packs panel clickable
+        const openPanel = document.querySelector('#mc-left-open .side-panel');
+        if (openPanel) {
+            openPanel.style.cursor = 'pointer';
+            openPanel.onclick = () => { window.location.href = '/pack-opening.html'; };
         }
 
         try {
@@ -494,12 +497,41 @@
             const badge = document.getElementById('mc-pack-count');
             if (badge) { badge.textContent = count; badge.classList.remove('hidden'); }
 
-            const label = document.querySelector('#mc-right .side-panel-label');
+            const label = document.querySelector('#mc-left-open .side-panel-label');
             if (label) {
                 label.innerHTML = `Open Your<br><span style="color:var(--void-accent)">${count} Pack${count !== 1 ? 's' : ''}</span>`;
             }
+
+            // Update pack stack images to show the first streamer's custom pack art
+            const packImgUrl = packs[0]?.streamer?.pack_image_url;
+            if (packImgUrl?.startsWith('http')) {
+                document.querySelectorAll('#mc-packs-rings .side-pack-img').forEach(el => {
+                    el.src = packImgUrl;
+                });
+            }
+
+            // Auto-switch to Open tab when packs are waiting
+            window._mcLeftTab('open');
         } catch (_) {}
     }
+
+    window._mcLeftTab = function(tab) {
+        const purchase = document.getElementById('mc-left-purchase');
+        const open = document.getElementById('mc-left-open');
+        const tabPurchase = document.getElementById('mc-tab-purchase');
+        const tabOpen = document.getElementById('mc-tab-open');
+        if (tab === 'purchase') {
+            purchase?.classList.remove('hidden');
+            open?.classList.add('hidden');
+            tabPurchase?.classList.add('active');
+            tabOpen?.classList.remove('active');
+        } else {
+            purchase?.classList.add('hidden');
+            open?.classList.remove('hidden');
+            tabPurchase?.classList.remove('active');
+            tabOpen?.classList.add('active');
+        }
+    };
 
     /* ── Daily Goals ─────────────────────────────────────────────────────── */
     function timeUntilMidnightUTC() {
@@ -588,15 +620,15 @@
     });
 
     /* ── Globals ─────────────────────────────────────────────────────────── */
-    window._mcSearch        = search;
-    window._mcOpenPurchase  = openPurchase;
-    window._mcClosePurchase = closePurchase;
-    window._mcToggleFavorite = toggleFavorite;
-    window._mcLoadDiscover = loadDiscover;
-    window._mcLoadMutuals = loadMutuals;
-    window.openDiscoverCreators = openDiscoverCreators;
+    window._mcSearch             = search;
+    window._mcOpenPurchase       = openPurchase;
+    window._mcClosePurchase      = closePurchase;
+    window._mcToggleFavorite     = toggleFavorite;
+    window._mcLoadDiscover       = loadDiscover;
+    window._mcLoadMutuals        = loadMutuals;
+    window.openDiscoverCreators  = openDiscoverCreators;
     window.closeDiscoverCreators = closeDiscoverCreators;
-    window._mcRerollGoal = rerollGoal;
+    window._mcRerollGoal         = rerollGoal;
 
     /* ── Boot ────────────────────────────────────────────────────────────── */
     init();

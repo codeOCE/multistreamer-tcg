@@ -73,53 +73,96 @@ pollForBattles();
 
 function buildCardEl(cardData) {
     const wrapper = document.createElement('div');
-    const mechName = (cardData.mechanic_name || '').toLowerCase();
+    const mechName = (cardData.mechanic_name || '').toLowerCase().replace(/[\s-]+/g, '_');
     const mechIcon = cardData.mechanic_icon || '';
+    const mechDisplayName = cardData.mechanic_display_name || cardData.mechanic_name || '';
     const hp = cardData.current_hp ?? cardData.defense ?? 0;
     const atk = cardData.attack ?? 0;
     const imgSrc = cardData.image_url
         || `https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(cardData.name || 'card')}`;
-
 
     const rarityClass = {
         common: 'rarity-common', uncommon: 'rarity-uncommon',
         rare: 'rarity-rare', epic: 'rarity-epic', legendary: 'rarity-legendary'
     }[(cardData.rarity || '').toLowerCase()] || 'rarity-common';
 
+    // Build trait pill(s) for below the card — supports main + genesis mechanic
+    const buildTraitPill = (name, icon, displayName) => {
+        if (!name && !icon) return '';
+        const cls = `card-trait-badge badge-${name || 'default'}`;
+        const iconHtml = icon ? `<span class="card-trait-icon">${mechanicBadgeIconInner(icon)}</span>` : '';
+        const label = displayName || name || '';
+        return `<div class="${cls}" title="${name}">${iconHtml}<span class="card-trait-label">${label}</span></div>`;
+    };
 
-    const badgeClass = mechName ? `badge-${mechName}` : '';
-    const iconInner = mechanicBadgeIconInner(mechIcon);
-    const badgeHtml = mechIcon
-        ? `<div class="mechanic-badge absolute top-2.5 right-2.5 w-9 h-9 rounded-full flex items-center justify-center text-lg z-20 ${badgeClass}" title="${mechName}">${iconInner}</div>`
-        : '';
+    const mainPill = buildTraitPill(mechName, mechIcon, mechDisplayName);
+    const genMechName = (cardData.genesis_mechanic_name || '').toLowerCase().replace(/[\s-]+/g, '_');
+    const genesisPill = buildTraitPill(genMechName, cardData.genesis_mechanic_icon || '', cardData.genesis_mechanic_display_name || cardData.genesis_mechanic_name || '');
+
+    const traitRow = (mainPill || genesisPill)
+        ? `<div class="card-trait-row">${mainPill}${genesisPill}</div>`
+        : '<div class="card-trait-row"></div>';
 
     wrapper.innerHTML = `
-        <div class="battle-card-wrapper relative w-40 flex-shrink-0" style="aspect-ratio:5/7">
-            <div class="battle-card relative w-full h-full rounded-xl overflow-hidden border-2 ${rarityClass} shadow-2xl">
+        <div class="battle-card-wrapper flex-shrink-0">
+            <div class="battle-card relative w-full rounded-xl overflow-hidden border-2 ${rarityClass} shadow-2xl">
                 <img class="card-img absolute inset-0 w-full h-full object-cover" src="${imgSrc}" alt="${cardData.name || ''}">
-                <div class="absolute inset-0" style="background:linear-gradient(to top,rgba(0,0,0,0.97) 0%,rgba(0,0,0,0.12) 55%,transparent 100%)"></div>
-                ${badgeHtml}
-                <div class="absolute top-2 left-2 right-12">
-                    <div class="card-name text-[11px] font-black text-white truncate" style="text-shadow:0 1px 4px rgba(0,0,0,1)">${cardData.name || ''}</div>
-                </div>
+                <div class="absolute inset-0" style="background:linear-gradient(to top,rgba(0,0,0,0.92) 0%,rgba(0,0,0,0.05) 50%,transparent 100%)"></div>
                 <div class="absolute bottom-0 left-0 right-0 p-2 flex justify-between items-center">
                     <div class="flex items-center gap-1 bg-blue-600/90 rounded px-2 py-0.5">
-                        <span class="text-[10px] font-black text-white">⚔</span>
-                        <span class="card-atk text-[12px] font-black text-white">${atk}</span>
+                        <span class="text-[11px] font-black text-white">⚔</span>
+                        <span class="card-atk text-[14px] font-black text-white">${atk}</span>
                     </div>
                     <div class="flex items-center gap-1 bg-red-600/90 rounded px-2 py-0.5">
-                        <span class="text-[10px] font-black text-white">❤</span>
-                        <span class="card-hp text-[12px] font-black text-white">${hp}</span>
+                        <span class="text-[11px] font-black text-white">❤</span>
+                        <span class="card-hp text-[14px] font-black text-white">${hp}</span>
                     </div>
                 </div>
             </div>
-            <!-- Popups moved outside overflow-hidden to prevent clipping -->
-            <div class="damage-popup absolute top-1/2 left-1/2 text-white font-black text-4xl opacity-0 pointer-events-none z-40 whitespace-nowrap" style="transform:translate(-50%,-50%); text-shadow: 0 0 15px rgba(255,0,0,0.9);"></div>
-            <div class="heal-popup absolute top-1/2 left-1/2 font-black text-4xl opacity-0 pointer-events-none z-40 whitespace-nowrap" style="transform:translate(-50%,-50%)"></div>
-            <div class="event-popup absolute top-1/2 left-1/2 font-black text-4xl opacity-0 pointer-events-none z-40 whitespace-nowrap" style="transform:translate(-50%,-50%)"></div>
+            <!-- Card info strip below the card -->
+            <div class="card-info-strip">
+                <div class="card-name">${cardData.name || ''}</div>
+                ${traitRow}
+            </div>
+            <!-- Popups sit at card centre, outside overflow-hidden -->
+            <div class="damage-popup absolute left-1/2 text-white font-black opacity-0 pointer-events-none z-40 whitespace-nowrap" style="top:40%;transform:translate(-50%,-50%);font-size:2.2rem;text-shadow:0 0 15px rgba(255,0,0,0.9);"></div>
+            <div class="heal-popup absolute left-1/2 font-black text-4xl opacity-0 pointer-events-none z-40 whitespace-nowrap" style="top:40%;transform:translate(-50%,-50%)"></div>
+            <div class="event-popup absolute left-1/2 font-black text-4xl opacity-0 pointer-events-none z-40 whitespace-nowrap" style="top:40%;transform:translate(-50%,-50%)"></div>
         </div>
     `;
     return wrapper.firstElementChild;
+}
+
+
+function addFrozenOverlay(cardEl) {
+    if (!cardEl || cardEl.querySelector('.card-frozen-overlay')) return;
+    cardEl.classList.add('card-is-frozen');
+    const overlay = document.createElement('div');
+    overlay.className = 'card-frozen-overlay';
+    overlay.innerHTML = `
+        <div class="cfo-ice-border"></div>
+        <div class="cfo-frost"></div>
+        <div class="cfo-crystals"></div>
+        <div class="cfo-cracks">
+            <div class="cfo-crack cfo-crack-1"></div>
+            <div class="cfo-crack cfo-crack-2"></div>
+            <div class="cfo-crack cfo-crack-3"></div>
+        </div>
+        <div class="cfo-particles">
+            <div class="cfo-particle"></div>
+            <div class="cfo-particle"></div>
+            <div class="cfo-particle"></div>
+            <div class="cfo-particle"></div>
+        </div>
+        <div class="cfo-status-tag">❄ Frozen</div>
+    `;
+    cardEl.appendChild(overlay);
+}
+
+function removeFrozenOverlay(cardEl) {
+    if (!cardEl) return;
+    cardEl.querySelector('.card-frozen-overlay')?.remove();
+    cardEl.classList.remove('card-is-frozen');
 }
 
 
@@ -195,35 +238,8 @@ async function showCoinFlip(firstAttacker, challengerName, targetName, challenge
 
 
 async function showTraitPopup(cardEl, emojiOrTextOrIconUrl, cssClass, ms = 1200, labelClass = '') {
-    if (!cardEl) return;
-    const popupEl = cardEl.querySelector('.event-popup');
-    if (!popupEl) return;
-
-    popupEl.textContent = '';
-    popupEl.innerHTML = '';
-    const raw = String(emojiOrTextOrIconUrl || '').trim();
-    if (raw.startsWith('/') || raw.startsWith('http://') || raw.startsWith('https://')) {
-        const safe = raw.replace(/"/g, '&quot;');
-        popupEl.innerHTML = `<img src="${safe}" alt="" class="trait-popup-icon" />`;
-    } else {
-        popupEl.textContent = emojiOrTextOrIconUrl;
-    }
-    popupEl.className = 'event-popup absolute top-1/2 left-1/2 font-black opacity-0 pointer-events-none z-30';
-    if (labelClass) popupEl.classList.add(labelClass);
-
-
-    void popupEl.offsetWidth;
-
-    popupEl.classList.add(cssClass);
-    popupEl.style.opacity = '1';
-
+    // Popups disabled — just wait out the duration so timing-dependent callers still work.
     await delay(ms);
-    popupEl.style.opacity = '0';
-
-    setTimeout(() => {
-        popupEl.classList.remove(cssClass);
-        if (labelClass) popupEl.classList.remove(labelClass);
-    }, 300);
 }
 
 
@@ -303,14 +319,6 @@ async function playBattleSequence(data) {
         if (board) board.style.opacity = '1';
 
 
-        if (roundBanner) {
-            roundBanner.textContent = `MATCH ROUND ${matchRound.round}`;
-            roundBanner.style.opacity = '1';
-            roundBanner.classList.add('visible');
-        }
-        await delay(1800);
-        if (roundBanner) { roundBanner.style.opacity = '0'; roundBanner.classList.remove('visible'); }
-        await delay(300);
 
 
         await showCoinFlip(
@@ -323,6 +331,109 @@ async function playBattleSequence(data) {
 
 
         for (const ex of matchRound.exchanges) {
+
+            if (ex.type === 'bounty_placed') {
+                const oppMap = ex.side === 'challenger' ? tCardsMap : cCardsMap;
+                const targetEl = ex.targetSlot != null ? oppMap.get(ex.targetSlot) : [...oppMap.values()][0];
+                if (targetEl) {
+                    const marker = document.createElement('div');
+                    marker.className = 'bounty-marker';
+                    marker.textContent = '🎯';
+                    targetEl.appendChild(marker);
+                    setTimeout(() => marker.remove(), 1800);
+                }
+                await delay(600);
+                continue;
+            }
+
+            if (ex.type === 'mirror_transform') {
+                const sideMap = ex.side === 'challenger' ? cCardsMap : tCardsMap;
+                const mirrorEl = ex.slot ? sideMap.get(ex.slot) : [...sideMap.values()][0];
+                if (mirrorEl) {
+                    const inner = mirrorEl.querySelector('.battle-card');
+
+                    // Start the whole-card brightness pulse.
+                    if (inner) {
+                        inner.classList.add('anim-mirror-card');
+                        setTimeout(() => inner.classList.remove('anim-mirror-card'), 800);
+                    }
+
+                    // Append the scan line — it will animate top → bottom over 750ms.
+                    const line = document.createElement('div');
+                    line.className = 'anim-mirror-line';
+                    if (inner) inner.appendChild(line);
+                    setTimeout(() => line.remove(), 800);
+
+                    // Wait until the line is roughly halfway down (~350ms) then swap
+                    // all card content so it looks like the line is revealing the new card.
+                    await delay(350);
+
+                    // --- Swap stats ---
+                    if (ex.newAttack !== undefined) {
+                        const atkEl = mirrorEl.querySelector('.card-atk');
+                        if (atkEl) atkEl.textContent = ex.newAttack;
+                    }
+                    if (ex.newDefense !== undefined) {
+                        const hpEl = mirrorEl.querySelector('.card-hp');
+                        if (hpEl) hpEl.textContent = ex.newDefense;
+                    }
+
+                    // --- Swap card image (wipes in behind the line) ---
+                    if (ex.newImageUrl) {
+                        const imgEl = mirrorEl.querySelector('.card-img');
+                        if (imgEl) {
+                            imgEl.src = ex.newImageUrl;
+                            imgEl.classList.add('anim-mirror-reveal');
+                            setTimeout(() => imgEl.classList.remove('anim-mirror-reveal'), 420);
+                        }
+                    }
+
+                    // --- Swap card name ---
+                    if (ex.newName) {
+                        const nameEl = mirrorEl.querySelector('.card-name');
+                        if (nameEl) {
+                            nameEl.textContent = ex.newName;
+                            nameEl.classList.add('anim-mirror-reveal');
+                            setTimeout(() => nameEl.classList.remove('anim-mirror-reveal'), 420);
+                        }
+                    }
+
+                    // --- Swap trait pill below the card ---
+                    const traitRow = mirrorEl.querySelector('.card-trait-row');
+                    if (traitRow) {
+                        const mechName = (ex.newMechanicName || '').toLowerCase().replace(/[\s-]+/g, '_');
+                        const mechIcon = ex.newMechanicIcon || '';
+                        const mechLabel = ex.newMechanicName || '';
+                        if (mechName || mechIcon) {
+                            const iconHtml = mechIcon ? `<span class="card-trait-icon">${mechanicBadgeIconInner(mechIcon)}</span>` : '';
+                            traitRow.innerHTML = `<div class="card-trait-badge badge-${mechName || 'default'}" title="${mechName}">${iconHtml}<span class="card-trait-label">${mechLabel}</span></div>`;
+                        } else {
+                            traitRow.innerHTML = '';
+                        }
+                    }
+
+                    // Let the line finish its sweep, then show the 🪞 popup.
+                    await delay(420);
+                    await showTraitPopup(mirrorEl, '🪞', 'anim-trait-pop', 700);
+                }
+                await delay(300);
+                continue;
+            }
+
+            if (ex.type === 'mimic_trigger') {
+                const mimicEl = (ex.side === 'challenger' ? cCardsMap : tCardsMap).get(ex.slot);
+                if (mimicEl) {
+                    mimicEl.classList.add('anim-mimic-morph');
+                    setTimeout(() => mimicEl.classList.remove('anim-mimic-morph'), 800);
+                    await showTraitPopup(mimicEl, '🪄', 'anim-trait-pop', 1200);
+                    const atkEl = mimicEl.querySelector('.card-atk');
+                    const hpEl = mimicEl.querySelector('.card-hp');
+                    if (atkEl && ex.attack !== undefined) atkEl.textContent = ex.attack;
+                    if (hpEl && ex.defense !== undefined) hpEl.textContent = ex.defense;
+                }
+                await delay(400);
+                continue;
+            }
 
             const cSlot = ex.challengerCard?.slot;
             const tSlot = ex.targetCard?.slot;
@@ -341,20 +452,28 @@ async function playBattleSequence(data) {
 
 
             const defCard = ex.side === 'challenger' ? ex.targetCard : ex.challengerCard;
-            if (defCard?.mechanic_name === 'guard') {
+            const defTraitNames = (defCard?.traits || []).map(t => (t.name || '').toLowerCase());
+            if (ex.defenderHasGuard || defTraitNames.includes('guard') || defCard?.mechanic_name?.toLowerCase() === 'guard') {
                 defenderEl.classList.add('ring-4', 'ring-yellow-300');
+                const shield = document.createElement('div');
+                shield.className = 'anim-guard-shield';
+                defenderEl.appendChild(shield);
+                setTimeout(() => shield.remove(), 1000);
                 showTraitPopup(defenderEl, '🛡️', 'anim-shield-flash', 900, 'floating-text-block');
             }
 
 
-            const rectA = attackerEl.getBoundingClientRect();
-            const rectD = defenderEl.getBoundingClientRect();
-            const dX = (rectD.left + rectD.width / 2) - (rectA.left + rectA.width / 2);
-            const dY = (rectD.top + rectD.height / 2) - (rectA.top + rectA.height / 2);
-            attackerEl.style.transition = 'transform 0.2s ease-in';
-
-            attackerEl.style.transform = `translate(${dX * 0.15}px, ${dY * 0.15}px) scale(1.05)`;
-            await delay(200);
+            if (!ex.skipped || (ex.skipped && ex.counterDamage > 0)) {
+                const rectA = attackerEl.getBoundingClientRect();
+                const rectD = defenderEl.getBoundingClientRect();
+                const dX = (rectD.left + rectD.width / 2) - (rectA.left + rectA.width / 2);
+                const dY = (rectD.top + rectD.height / 2) - (rectA.top + rectA.height / 2);
+                attackerEl.style.transition = 'transform 0.2s ease-in';
+                attackerEl.style.transform = `translate(${dX * 0.15}px, ${dY * 0.15}px) scale(1.05)`;
+                await delay(200);
+            } else {
+                await delay(120);
+            }
 
 
 
@@ -365,25 +484,31 @@ async function playBattleSequence(data) {
             const cDmgEl = cCardEl?.querySelector('.damage-popup');
             const tDmgEl = tCardEl?.querySelector('.damage-popup');
 
+            if (!ex.skipped) {
+                if (ex.side === 'challenger') {
+                    if (tDmgEl) { tDmgEl.textContent = `-${atkDmg}`; tDmgEl.style.opacity = '1'; }
+                    if (cDmgEl) { cDmgEl.textContent = `-${defDmg}`; cDmgEl.style.opacity = '1'; }
+                } else {
+                    if (cDmgEl) { cDmgEl.textContent = `-${atkDmg}`; cDmgEl.style.opacity = '1'; }
+                    if (tDmgEl) { tDmgEl.textContent = `-${defDmg}`; tDmgEl.style.opacity = '1'; }
+                }
 
-            if (ex.side === 'challenger') {
-                if (tDmgEl) { tDmgEl.textContent = `-${atkDmg}`; tDmgEl.style.opacity = '1'; }
-                if (cDmgEl) { cDmgEl.textContent = `-${defDmg}`; cDmgEl.style.opacity = '1'; }
+                cCardEl?.classList.add('anim-damage');
+                tCardEl?.classList.add('anim-damage');
+                setTimeout(() => {
+                    cCardEl?.classList.remove('anim-damage');
+                    tCardEl?.classList.remove('anim-damage');
+                }, 450);
+                await delay(250);
+            } else if (ex.counterDamage > 0) {
+                const initDmgEl = ex.side === 'challenger' ? cDmgEl : tDmgEl;
+                if (initDmgEl) { initDmgEl.textContent = `-${ex.counterDamage}`; initDmgEl.style.opacity = '1'; }
+                attackerEl?.classList.add('anim-damage');
+                setTimeout(() => attackerEl?.classList.remove('anim-damage'), 450);
+                await delay(250);
             } else {
-                if (cDmgEl) { cDmgEl.textContent = `-${atkDmg}`; cDmgEl.style.opacity = '1'; }
-                if (tDmgEl) { tDmgEl.textContent = `-${defDmg}`; tDmgEl.style.opacity = '1'; }
+                await delay(150);
             }
-
-            cCardEl?.classList.add('anim-damage');
-            tCardEl?.classList.add('anim-damage');
-
-
-            setTimeout(() => {
-                cCardEl?.classList.remove('anim-damage');
-                tCardEl?.classList.remove('anim-damage');
-            }, 450);
-
-            await delay(250);
 
 
             attackerEl.style.transition = 'transform 0.4s ease-out';
@@ -406,40 +531,163 @@ async function playBattleSequence(data) {
             if (!ex.targetSurvived) tCardEl?.classList.add('card-dead');
 
 
+            const resolveEvtEl = (side) => {
+                if (side === 'challenger') return cCardEl;
+                if (side === 'target') return tCardEl;
+                if (side === 'attacker') return attackerEl;
+                if (side === 'defender') return defenderEl;
+                return null;
+            };
+
+            const spawnOn = (el, cssClass, durationMs = 900) => {
+                if (!el) return;
+                const d = document.createElement('div');
+                d.className = cssClass;
+                el.appendChild(d);
+                setTimeout(() => d.remove(), durationMs);
+            };
+
+            const burstParticles = (el, cssClass, count = 8) => {
+                if (!el) return;
+                for (let i = 0; i < count; i++) {
+                    const f = document.createElement('div');
+                    f.className = cssClass;
+                    f.style.setProperty('--fx', `${(Math.random() * 2 - 1).toFixed(2)}`);
+                    f.style.setProperty('--fy', `${(Math.random() * -1 - 0.5).toFixed(2)}`);
+                    f.style.setProperty('--fr', `${(Math.random() * 2 - 1).toFixed(2)}`);
+                    f.style.animationDelay = `${(Math.random() * 0.15).toFixed(2)}s`;
+                    el.appendChild(f);
+                    setTimeout(() => f.remove(), 1100);
+                }
+            };
+
             for (const evt of (ex.events || [])) {
-                const isChallengerSide = evt.side === 'challenger' || evt.side === 'attacker';
-                const isTargetSide = evt.side === 'target' || evt.side === 'defender';
+                const evtEl = resolveEvtEl(evt.side);
 
-                if (evt.type === 'absorb_heal') {
-                    const healerEl = isChallengerSide ? cCardEl : tCardEl;
-                    await showTraitPopup(healerEl, '🩸', 'anim-trait-pop', 1400, 'floating-text-heal');
+                switch (evt.type) {
 
-                    const healHpEl = healerEl?.querySelector('.card-hp');
-                    if (healHpEl) {
-                        const afterCard = isChallengerSide ? ex.challengerCardAfter : ex.targetCardAfter;
-                        if (afterCard) healHpEl.textContent = Math.max(0, afterCard.current_hp);
+                    case 'rage_gain': {
+                        const rageEl = evt.cardSide === 'challenger' ? cCardEl
+                            : (evt.cardSide === 'target' ? tCardEl : evtEl);
+                        if (rageEl) {
+                            rageEl.classList.add('anim-rage');
+                            setTimeout(() => rageEl.classList.remove('anim-rage'), 900);
+                            showTraitPopup(rageEl, '😤', 'anim-trait-pop', 900, 'floating-text-rage');
+                        }
+                        break;
                     }
-                } else if (evt.type === 'revive' || evt.type === 'reanimate') {
-                    const reanimEl = isChallengerSide ? cCardEl : (isTargetSide ? tCardEl : null);
-                    if (reanimEl) {
-                        reanimEl.classList.remove('card-dead');
-                        await showTraitPopup(reanimEl, 'https://cdn.codeoce.com/traits/revive-icon.png', 'anim-trait-pop', 1400, 'floating-text-revive');
-                        const reHpEl = reanimEl.querySelector('.card-hp');
-                        if (reHpEl) reHpEl.textContent = '1';
+
+                    case 'freeze_applied': {
+                        const frostEl = evt.frostVictimSide === 'challenger' ? cCardEl
+                            : (evt.frostVictimSide === 'target' ? tCardEl : defenderEl);
+                        if (frostEl) {
+                            frostEl.classList.add('anim-freeze');
+                            setTimeout(() => frostEl.classList.remove('anim-freeze'), 1200);
+                            showTraitPopup(frostEl, '🧊', 'anim-trait-pop', 1200, 'floating-text-freeze');
+                            addFrozenOverlay(frostEl);
+                        }
+                        break;
                     }
-                } else if (evt.type === 'mimic_trigger') {
-                    const mimicEl = (evt.side === 'challenger') ? cCardsMap.get(evt.slot) : tCardsMap.get(evt.slot);
-                    if (mimicEl) {
 
-                        mimicEl.classList.add('anim-mimic-morph');
-                        setTimeout(() => mimicEl.classList.remove('anim-mimic-morph'), 800);
+                    case 'frostbite_applied': {
+                        const biteEl = evt.frostVictimSide === 'challenger' ? cCardEl
+                            : (evt.frostVictimSide === 'target' ? tCardEl : evtEl);
+                        if (biteEl) {
+                            burstParticles(biteEl, 'anim-frostbite-flake', 10);
+                            biteEl.classList.add('anim-freeze');
+                            setTimeout(() => biteEl.classList.remove('anim-freeze'), 800);
+                            showTraitPopup(biteEl, '❄️', 'anim-trait-pop', 900, 'floating-text-freeze');
+                            await delay(700);
+                        }
+                        break;
+                    }
 
-                        await showTraitPopup(mimicEl, '🪄', 'anim-trait-pop', 1200);
+                    case 'frozen_skip': {
+                        if (evtEl) {
+                            evtEl.classList.add('anim-frozen-skip');
+                            setTimeout(() => evtEl.classList.remove('anim-frozen-skip'), 700);
+                            showTraitPopup(evtEl, '🧊', 'anim-trait-pop', 800, 'floating-text-freeze');
+                            setTimeout(() => removeFrozenOverlay(evtEl), 800);
+                        }
+                        break;
+                    }
 
-                        const atkEl = mimicEl.querySelector('.card-atk');
-                        const hpEl = mimicEl.querySelector('.card-hp');
-                        if (atkEl) atkEl.textContent = evt.attack;
-                        if (hpEl) hpEl.textContent = evt.defense;
+                    case 'bounty_claimed': {
+                        if (evtEl) {
+                            burstParticles(evtEl, 'anim-bounty-coin', 10);
+                            showTraitPopup(evtEl, '💰', 'anim-trait-pop', 1100, 'floating-text-gold');
+                            await delay(700);
+                        }
+                        break;
+                    }
+
+                    case 'cleanse_trigger': {
+                        if (evtEl) {
+                            spawnOn(evtEl, 'anim-cleanse-ring', 1100);
+                            evtEl.classList.add('anim-cleanse-card');
+                            setTimeout(() => evtEl.classList.remove('anim-cleanse-card'), 900);
+                            showTraitPopup(evtEl, '✨', 'anim-trait-pop', 1000, 'floating-text-cleanse');
+                            removeFrozenOverlay(evtEl);
+                            await delay(700);
+                        }
+                        break;
+                    }
+
+                    case 'echo_trigger': {
+                        if (evtEl) {
+                            const ghost = document.createElement('div');
+                            ghost.className = 'anim-echo-ghost';
+                            evtEl.appendChild(ghost);
+                            setTimeout(() => ghost.remove(), 900);
+                            showTraitPopup(evtEl, '💨', 'anim-trait-pop', 900);
+                            await delay(600);
+                        }
+                        break;
+                    }
+
+                    case 'revive':
+                    case 'reanimate': {
+                        if (evtEl) {
+                            evtEl.classList.remove('card-dead');
+                            evtEl.classList.add('anim-revive');
+                            spawnOn(evtEl, 'anim-revive-light', 1800);
+                            spawnOn(evtEl, 'anim-revive-wings', 1600);
+                            setTimeout(() => evtEl.classList.remove('anim-revive'), 1800);
+                            await showTraitPopup(evtEl, '👼', 'anim-trait-pop', 1400, 'floating-text-revive');
+                            const reHpEl = evtEl.querySelector('.card-hp');
+                            if (reHpEl) reHpEl.textContent = '1';
+                        }
+                        break;
+                    }
+
+                    case 'absorb_gain':
+                    case 'absorb_heal': {
+                        if (evtEl) {
+                            evtEl.classList.add('anim-absorb-flash');
+                            spawnOn(evtEl, 'anim-absorb-drain', 1100);
+                            setTimeout(() => evtEl.classList.remove('anim-absorb-flash'), 600);
+                            showTraitPopup(evtEl, '🩸', 'anim-trait-pop', 1100, 'floating-text-rage');
+                            await delay(500);
+                            const afterCard = (evt.side === 'challenger' || (evt.side === 'attacker' && ex.side === 'challenger'))
+                                ? ex.challengerCardAfter : ex.targetCardAfter;
+                            const absorbHpEl = evtEl.querySelector('.card-hp');
+                            if (absorbHpEl && afterCard) absorbHpEl.textContent = Math.max(0, afterCard.current_hp);
+                        }
+                        break;
+                    }
+
+                    case 'mimic_trigger': {
+                        const mimicEl = (evt.side === 'challenger') ? cCardsMap.get(evt.slot) : tCardsMap.get(evt.slot);
+                        if (mimicEl) {
+                            mimicEl.classList.add('anim-mimic-morph');
+                            setTimeout(() => mimicEl.classList.remove('anim-mimic-morph'), 800);
+                            await showTraitPopup(mimicEl, '🪄', 'anim-trait-pop', 1200);
+                            const atkEl = mimicEl.querySelector('.card-atk');
+                            const hpEl = mimicEl.querySelector('.card-hp');
+                            if (atkEl && evt.attack !== undefined) atkEl.textContent = evt.attack;
+                            if (hpEl && evt.defense !== undefined) hpEl.textContent = evt.defense;
+                        }
+                        break;
                     }
                 }
             }
@@ -505,3 +753,6 @@ async function playBattleSequence(data) {
     if (stage) stage.classList.add('hidden');
     isAnimating = false;
 }
+
+window._arenaTest = playBattleSequence;
+window._arenaReset = () => { isAnimating = false; };

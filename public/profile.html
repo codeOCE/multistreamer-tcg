@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Castle TCG · Profile</title>
     <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
@@ -173,7 +173,7 @@
         #pf-avatar {
             width: 104px;
             height: 104px;
-            border-radius: 14px;
+            border-radius: 50%;
             object-fit: cover;
             border: 3px solid rgba(var(--void-accent-rgb),0.55);
             box-shadow:
@@ -446,7 +446,7 @@
             #pf-sections-panel { margin: 0 16px 18px; }
             #pf-banner { height: 160px; }
             #pf-avatar-block { margin-top: -10px; }
-            #pf-avatar { width: 86px; height: 86px; border-radius: 12px; }
+            #pf-avatar { width: 86px; height: 86px; border-radius: 50%; }
         }
 
         /* Sidebar */
@@ -564,7 +564,7 @@
 
         .pf-showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 48px 8px rgba(251,191,36,0.3),  0 20px 48px rgba(0,0,0,0.6); }
         .pf-showcase-slot[data-pos="center"][data-rarity="Epic"]      { box-shadow: 0 0 48px 8px rgba(168,85,247,0.28), 0 20px 48px rgba(0,0,0,0.6); }
-        .pf-showcase-slot[data-pos="center"][data-rarity="Rare"]      { box-shadow: 0 0 40px 4px rgba(59,130,246,0.25), 0 20px 48px rgba(0,0,0,0.6); }
+        .pf-showcase-slot[data-pos="center"][data-rarity="Rare"]      { box-shadow: 0 0 40px 4px rgba(63,170,255,0.25), 0 20px 48px rgba(0,0,0,0.6); }
 
         .pf-showcase-empty {
             width: 100%; height: 100%;
@@ -654,7 +654,7 @@
         .pf-trophy-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .pf-trophy-slot.legendary { border-color: rgba(251,191,36,0.4); box-shadow: 0 0 10px rgba(251,191,36,0.14); }
         .pf-trophy-slot.epic      { border-color: rgba(168,85,247,0.35); box-shadow: 0 0 10px rgba(168,85,247,0.12); }
-        .pf-trophy-slot.rare      { border-color: rgba(59,130,246,0.3);  box-shadow: 0 0 10px rgba(59,130,246,0.10); }
+        .pf-trophy-slot.rare      { border-color: rgba(63,170,255,0.3);  box-shadow: 0 0 10px rgba(63,170,255,0.10); }
         .pf-trophy-slot.empty { cursor: default; }
         .pf-trophy-slot.empty::after {
             content: '';
@@ -668,7 +668,7 @@
         }
         .pf-rarity-pip.legendary { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
         .pf-rarity-pip.epic      { background: #a855f7; box-shadow: 0 0 4px #a855f7; }
-        .pf-rarity-pip.rare      { background: #3b82f6; box-shadow: 0 0 4px #3b82f6; }
+        .pf-rarity-pip.rare      { background: #3faaff; box-shadow: 0 0 4px #3faaff; }
 
         /* ══════════════════════════════
            LATEST PACK PULL
@@ -1338,6 +1338,7 @@
         }
         @keyframes pf-spin { to { transform: rotate(360deg); } }
     </style>
+    <script src="/castle-prefs.js"></script>
 </head>
 <body class="bg-void-bg text-void-text antialiased">
     <div class="saas-bg-glow"></div>
@@ -1345,7 +1346,7 @@
 
     <!-- NAV -->
     <nav class="fixed top-0 left-0 right-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl pt-[env(safe-area-inset-top,0px)]" aria-label="Main">
-        <div class="max-w-[1520px] mx-auto px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
+        <div class="w-full px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
             <a href="/" class="flex items-center gap-2 group cursor-pointer">
                 <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
                     <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">

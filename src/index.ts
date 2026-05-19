@@ -2,22 +2,51 @@ import { createClient } from '@supabase/supabase-js';
 import { SignJWT, jwtVerify } from 'jose';
 import { Redis } from '@upstash/redis/cloudflare';
 import Stripe from 'stripe';
+import { containsProfanity, profanityError } from './profanity';
 
 // Type definitions
-interface LoginBody {
-  username: string;
-  password: string;
+
+/** Shared return shape for Helix API helper functions. */
+type HelixApiResult = { ok: boolean; status: number; data: any };
+
+/** Dashboard form body for creating/updating a Helix channel point reward. */
+interface HelixRewardInputBody {
+  title?: string;
+  cost?: number | string;
+  is_enabled?: boolean;
+  is_paused?: boolean;
+  is_user_input_required?: boolean;
+  prompt?: string;
+  background_color?: string;
+  is_max_per_stream_enabled?: boolean;
+  max_per_stream?: number | string;
+  is_max_per_user_per_stream_enabled?: boolean;
+  max_per_user_per_stream?: number | string;
+  is_global_cooldown_enabled?: boolean;
+  global_cooldown_seconds?: number | string;
+  should_redemptions_skip_request_queue?: boolean;
+  icon_image_url?: string;
+  image?: { url_1x?: string; url_2x?: string; url_4x?: string } | null;
+  clear_custom_image?: boolean;
 }
 
-interface CardBody {
-  id: string;
-  streamer_id?: string;
-  creator_id?: string;
-  name: string;
-  image_url: string;
-  rarity: string;
-  type?: string;
-  set_name?: string;
+/** Helix API request body (sent to Twitch). */
+interface HelixRewardApiBody {
+  title: string;
+  cost: number;
+  is_enabled: boolean;
+  is_user_input_required: boolean;
+  is_max_per_stream_enabled: boolean;
+  max_per_stream: number;
+  is_max_per_user_per_stream_enabled: boolean;
+  max_per_user_per_stream: number;
+  is_global_cooldown_enabled: boolean;
+  global_cooldown_seconds: number;
+  prompt?: string;
+  background_color?: string;
+  is_paused?: boolean;
+  should_redemptions_skip_request_queue?: boolean;
+  image?: { url_1x: string; url_2x: string; url_4x: string } | null;
 }
 
 interface GrantBody {
@@ -29,6 +58,8 @@ interface GrantBody {
 }
 const SESSION_COOKIE_NAME = '__Host-castle-session';
 const CSRF_COOKIE_NAME = 'castle_csrf_token';
+const SESSION_MAX_AGE_SEC = 2592000;          // 30 days
+const SESSION_RENEW_THRESHOLD_SEC = 1296000;  // renew when < 15 days remaining
 const GLOBAL_PACK_PRICE_CENTS = 500; // $5.00 for 5-card pack
 const BITS_PER_CARD = 100;
 
@@ -56,6 +87,22 @@ function helixRewardImageFromPublicUrl(url: string): { url_1x: string; url_2x: s
   return { url_1x: u, url_2x: u, url_4x: u };
 }
 
+const LEGACY_CREATOR_CDN_HOSTS = ['cdn.codeoce.com', 'cdn2.codeoce.com', 'cdn.creatorcastle.gg'];
+
+/** Hostnames allowed for CDN asset URLs (img-proxy, R2 public serving). */
+function getCreatorCdnHostnames(env: Env): string[] {
+  const hosts = new Set<string>(LEGACY_CREATOR_CDN_HOSTS);
+  const base = (env.CREATOR_CDN_BASE || '').trim();
+  if (base) {
+    try {
+      hosts.add(new URL(base).hostname);
+    } catch {
+      /* CREATOR_CDN_BASE is not a valid URL */
+    }
+  }
+  return [...hosts];
+}
+
 /** Public URL for an object stored under CARD_IMAGES (must match CREATOR_CDN_BASE in production). */
 function creatorCdnPublicUrl(env: Env, filePath: string): string {
   const base = (env.CREATOR_CDN_BASE || 'https://cdn.codeoce.com').replace(/\/$/, '');
@@ -63,7 +110,46 @@ function creatorCdnPublicUrl(env: Env, filePath: string): string {
   return `${base}/${path}`;
 }
 
-function applyHelixCustomRewardVisualFields(b: Record<string, any>, out: Record<string, any>): void {
+/** Resolve pack art for public APIs — prefers branding/{username}_pack.png for legacy broken upload paths. */
+function resolvePublicPackImageUrl(
+  streamer: { username?: string | null; pack_image_url?: string | null },
+  env?: Env
+): string | null {
+  const raw = typeof streamer.pack_image_url === 'string' ? streamer.pack_image_url.trim() : '';
+  const slug = String(streamer.username || '').trim().toLowerCase();
+  const cdnBase = (env?.CREATOR_CDN_BASE || 'https://cdn.codeoce.com').replace(/\/$/, '');
+
+  const isPlaceholder = (u: string) =>
+    !u ||
+    u === '/default_pack.png' ||
+    u.endsWith('/default_pack.png') ||
+    u.endsWith('/default-pack.png') ||
+    u.includes('/branding/default-pack');
+
+  if (raw && raw.includes('/branding/') && /^https?:\/\//i.test(raw) && !isPlaceholder(raw)) {
+    return raw;
+  }
+
+  // Legacy: cdn/{streamerUuid}/{file} (often 404) — use branded pack asset instead of card art
+  const legacyBroken =
+    raw &&
+    /^https?:\/\//i.test(raw) &&
+    /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^/]+$/i.test(raw) &&
+    !raw.includes('/card_images/') &&
+    !raw.includes('/branding/');
+
+  if (legacyBroken && slug) {
+    return `${cdnBase}/branding/${slug}_pack.png`;
+  }
+
+  if (raw && /^https?:\/\//i.test(raw) && !isPlaceholder(raw)) {
+    return raw;
+  }
+
+  return raw || null;
+}
+
+function applyHelixCustomRewardVisualFields(b: HelixRewardInputBody, out: HelixRewardApiBody): void {
   const bg = normalizeTwitchRewardBackgroundColor(b.background_color);
   if (bg) out.background_color = bg;
 
@@ -79,8 +165,8 @@ function applyHelixCustomRewardVisualFields(b: Record<string, any>, out: Record<
       (typeof b.icon_image_url === 'string' && b.icon_image_url.trim()) ||
       (b.image &&
         typeof b.image === 'object' &&
-        typeof (b.image as any).url_1x === 'string' &&
-        String((b.image as any).url_1x).trim()) ||
+        typeof b.image.url_1x === 'string' &&
+        String(b.image.url_1x).trim()) ||
       '';
     const img = helixRewardImageFromPublicUrl(url);
     if (img) out.image = img;
@@ -133,13 +219,13 @@ async function helixListCustomRewards(
   return Array.isArray(json.data) ? json.data : [];
 }
 
-function buildHelixCustomRewardBody(b: Record<string, any>): Record<string, any> {
+function buildHelixCustomRewardBody(b: HelixRewardInputBody): HelixRewardApiBody {
   const cost = Math.max(1, Math.min(2000000, parseInt(String(b.cost ?? 500), 10) || 500));
   const title = String(b.title || 'Reward').trim().slice(0, 45) || 'Reward';
   const mpsEnabled = !!b.is_max_per_stream_enabled;
   const mpuEnabled = !!b.is_max_per_user_per_stream_enabled;
   const gcdEnabled = !!b.is_global_cooldown_enabled;
-  const out: Record<string, any> = {
+  const out: HelixRewardApiBody = {
     title,
     cost,
     is_enabled: b.is_enabled !== false,
@@ -168,7 +254,7 @@ async function helixCreateCustomReward(
   broadcasterId: string,
   userAccessToken: string,
   body: Record<string, any>
-): Promise<{ ok: boolean; status: number; data: any }> {
+): Promise<HelixApiResult> {
   const twitchResp = await fetch(
     `https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${encodeURIComponent(broadcasterId)}`,
     {
@@ -191,7 +277,7 @@ async function helixUpdateCustomReward(
   rewardId: string,
   userAccessToken: string,
   body: Record<string, any>
-): Promise<{ ok: boolean; status: number; data: any }> {
+): Promise<HelixApiResult> {
   const u = new URL('https://api.twitch.tv/helix/channel_points/custom_rewards');
   u.searchParams.set('broadcaster_id', broadcasterId);
   u.searchParams.set('id', rewardId);
@@ -213,7 +299,7 @@ async function helixDeleteCustomReward(
   broadcasterId: string,
   rewardId: string,
   userAccessToken: string
-): Promise<{ ok: boolean; status: number; data: any }> {
+): Promise<HelixApiResult> {
   const u = new URL('https://api.twitch.tv/helix/channel_points/custom_rewards');
   u.searchParams.set('broadcaster_id', broadcasterId);
   u.searchParams.set('id', rewardId);
@@ -371,15 +457,21 @@ interface Env {
   KV_CACHE: any; // KVNamespace
   PACK_OPENING_SESSIONS: any; // DurableObjectNamespace
   OBS_QUEUE_SESSIONS: any; // DurableObjectNamespace — OBSQueueSession (push-based signal model)
+  ADMIN_PASSWORD?: string; // Beta gate signing key — when set, site is behind the coming-soon gate
+  // --- RATE LIMITING ---
+  RATE_LIMITER_BOOTSTRAP:  { limit(opts: { key: string }): Promise<{ success: boolean }> };
+  RATE_LIMITER_ADMIN_LOGIN:{ limit(opts: { key: string }): Promise<{ success: boolean }> };
+  RATE_LIMITER_ADMIN:      { limit(opts: { key: string }): Promise<{ success: boolean }> };
+  RATE_LIMITER_API:        { limit(opts: { key: string }): Promise<{ success: boolean }> };
 }
 
 function isDebugBootstrap(env: Env): boolean {
-  const v = String((env as any).DEBUG_BOOTSTRAP ?? '').trim().toLowerCase();
+  const v = String(env.DEBUG_BOOTSTRAP ?? '').trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
 }
 
 function isProdEnvironment(env: Env): boolean {
-  return String((env as any).ENVIRONMENT ?? '').toLowerCase() === 'production';
+  return String(env.ENVIRONMENT ?? '').toLowerCase() === 'production';
 }
 
 function shouldLogBootstrapVerbose(env: Env): boolean {
@@ -421,10 +513,10 @@ const COLLECTION_MAX_LIMIT = 2000;
 
 /** Columns needed for binder/collection UI (avoids select * on enriched_user_cards). */
 const ENRICHED_USER_CARDS_COLLECTION_SELECT =
-  'user_card_id, twitch_id, card_id, streamer_id, attack, defense, max_hp, current_hp, mechanic_id, genesis_mechanic_id, is_dead, revive_used, granted_by_streamer, is_obs_consumed, granted_at, created_at, trait_list, baked_image_url, name, rarity, image_url, foil_mask_url, type, description, card_number, template_id, streamer_username, brand_name, brand_emoji, brand_color_primary, brand_color_secondary, pack_image_url, set_name, set_code, mechanic_name, mechanic_display_name, mechanic_icon, mechanic_description, genesis_mechanic_name, genesis_mechanic_display_name, genesis_mechanic_icon, genesis_mechanic_description';
+  'user_card_id, twitch_id, card_id, streamer_id, attack, defense, max_hp, current_hp, mechanic_id, genesis_mechanic_id, is_dead, revive_used, granted_by_streamer, is_obs_consumed, granted_at, created_at, trait_list, baked_image_url, name, rarity, image_url, foil_mask_url, type, description, card_number, template_id, streamer_username, brand_name, brand_emoji, brand_color_primary, brand_color_secondary, pack_image_url, set_name, set_code, mechanic_name, mechanic_display_name, mechanic_icon, mechanic_description, genesis_mechanic_name, genesis_mechanic_display_name, genesis_mechanic_icon, genesis_mechanic_description, is_trading_eligible';
 
 // Columns needed for grant pool resolution — avoids pulling description, created_at, etc. on every card pool fetch
-const CARD_POOL_SELECT = 'id, name, rarity, image_url, set_id, streamer_id, attack, defense, template_id, auto_roll_traits, is_eligible';
+const CARD_POOL_SELECT = 'id, name, rarity, image_url, set_id, streamer_id, attack, defense, template_id, auto_roll_traits';
 
 // ─── Lazy Redis Singleton ────────────────────────────────────────────────────
 // Replaces ALL new Redis(...) calls. Allocated at most once per Worker
@@ -449,18 +541,20 @@ function getRedis(env: Env): Redis | null {
 const KV_MIN_TTL_SECONDS = 121;
 
 // Helper to wrap database queries in a cache check
-async function fetchWithCache(env: Env, redis: Redis | null, key: string, ttlSeconds: number, fetcher: () => Promise<any>, ctx?: any, opts?: { skipKv?: boolean }) {
+async function fetchWithCache<T = unknown>(env: Env, redis: Redis | null, key: string, ttlSeconds: number, fetcher: () => Promise<T>, ctx?: { waitUntil(promise: Promise<unknown>): void }, opts?: { skipKv?: boolean }): Promise<T> {
   const useKv = !opts?.skipKv && ttlSeconds >= KV_MIN_TTL_SECONDS;
 
   // 1. Layer 1: Edge KV Cache (Fastest) — skipped for short-lived data
-  if (useKv && env && (env as any).KV_CACHE) {
+  if (useKv && env && env.KV_CACHE) {
     try {
-      const kvVal = await (env as any).KV_CACHE.get(key);
+      const kvVal = await env.KV_CACHE.get(key);
       if (kvVal) {
         console.log(`[Cache/Hit] KV hit for ${key.slice(0, 32)}...`);
         return JSON.parse(kvVal);
       }
-    } catch {}
+    } catch (e) {
+      console.error(`[Cache/KV] Read error for ${key.slice(0, 32)}:`, e);
+    }
   }
 
   // 2. Layer 2: Redis Cache (Hot Backup)
@@ -471,16 +565,22 @@ async function fetchWithCache(env: Env, redis: Redis | null, key: string, ttlSec
         console.log(`[Cache/Hit] Redis hit for ${key.slice(0, 32)}...`);
         let finalVal = cached;
         if (typeof cached === 'string') {
-          try { finalVal = JSON.parse(cached); } catch {}
+          try {
+            finalVal = JSON.parse(cached);
+          } catch (e) {
+            console.error(`[Cache/Redis] JSON parse error for ${key.slice(0, 32)}:`, e);
+          }
         }
 
         // Backfill KV only for long-lived keys (avoids write-per-Redis-hit churn)
-        if (useKv && env && (env as any).KV_CACHE && ctx) {
-          ctx.waitUntil((env as any).KV_CACHE.put(key, JSON.stringify(finalVal), { expirationTtl: ttlSeconds }));
+        if (useKv && env && env.KV_CACHE && ctx) {
+          ctx.waitUntil(env.KV_CACHE.put(key, JSON.stringify(finalVal), { expirationTtl: ttlSeconds }));
         }
-        return finalVal;
+        return finalVal as T;
       }
-    } catch {}
+    } catch (e) {
+      console.error(`[Cache/Redis] Read error for ${key.slice(0, 32)}:`, e);
+    }
   }
 
   console.log(`[Cache/Miss] Layer 1+2 miss for ${key.slice(0, 32)}... calling fetcher`);
@@ -493,8 +593,8 @@ async function fetchWithCache(env: Env, redis: Redis | null, key: string, ttlSec
   if (ctx) {
     ctx.waitUntil((async () => {
       try {
-        if (useKv && env && (env as any).KV_CACHE) {
-          await (env as any).KV_CACHE.put(key, JSON.stringify(data), { expirationTtl: ttlSeconds });
+        if (useKv && env && env.KV_CACHE) {
+          await env.KV_CACHE.put(key, JSON.stringify(data), { expirationTtl: ttlSeconds });
         }
         if (redis) {
           await redis.set(key, JSON.stringify(data), { ex: ttlSeconds });
@@ -514,20 +614,20 @@ async function fetchWithCache(env: Env, redis: Redis | null, key: string, ttlSec
  * mutation that changes the collection (grant, consume, trade, accept).
  */
 async function invalidateCollectionEtag(env: Env, twitchId: string, streamerId?: string | null): Promise<void> {
-  if (!(env as any).KV_CACHE) return;
+  if (!env.KV_CACHE) return;
   const scopes = ['all', 'default'];
   if (streamerId) scopes.push(streamerId);
   await Promise.all(
     scopes.map(scope =>
-      (env as any).KV_CACHE.delete(`collection:etag:v1:${twitchId}:${scope}`).catch(() => {})
+      env.KV_CACHE.delete(`collection:etag:v1:${twitchId}:${scope}`).catch(() => {})
     )
   );
 }
 
 /** Specific helper to fetch achievements with multi-layer caching. */
-async function fetchAchievementsWithCache(env: Env, supabase: any, redis: Redis | null, twitchId: string, streamerId: string, customNames: any, ctx?: any) {
+async function fetchAchievementsWithCache(env: Env, supabase: any, redis: Redis | null, twitchId: string, streamerId: string, customNames: any, customEmojis?: any, ctx?: any) {
   const cacheKey = `achv:v1:${twitchId}:${streamerId}`;
-  
+
   return await fetchWithCache(env || {} as Env, redis, cacheKey, 600, async () => {
     const { data: allAchievements } = await supabase.from('achievements').select('*');
     const { data: userAchievements } = await supabase
@@ -540,9 +640,11 @@ async function fetchAchievementsWithCache(env: Env, supabase: any, redis: Redis 
 
     return allAchievements?.map((ach: any) => {
       const customKey = ACHIEVEMENT_ID_TO_CUSTOM_NAME_KEY[ach.id];
+      const customEmoji = customKey && customEmojis ? String(customEmojis[customKey] || '').trim() : '';
       return {
         ...ach,
         name: resolveAchievementDisplayName(ach.name, customKey, customNames),
+        icon: customEmoji || ach.icon,
         unlocked: unlockedIds.has(ach.id),
         unlocked_at: userAchievements?.find((ua: any) => ua.achievement_id === ach.id)?.unlocked_at
       };
@@ -633,6 +735,9 @@ function isAllowedShareImageUrl(u: URL, env: Env): boolean {
   if (supaHost && u.hostname === supaHost && u.pathname.includes('/storage/v1/object/')) return true;
   if (u.hostname.endsWith('.supabase.co') && u.pathname.includes('/storage/v1/object/')) return true;
 
+  // Legacy creator CDN hosts (already trusted for img-proxy)
+  if (LEGACY_CREATOR_CDN_HOSTS.includes(u.hostname)) return true;
+
   // Twitch avatar CDN (needed for binder share watermark)
   if (u.hostname === 'static-cdn.jtvnw.net' || u.hostname === 'cdn.twitch.tv') return true;
 
@@ -679,10 +784,6 @@ interface NotificationBody {
   ids: string[];
 }
 
-interface BypassBody {
-  code: string;
-}
-
 interface TradeOfferBody {
   target_code: string;
   sender_items: string[]; // array of user_card_ids
@@ -711,12 +812,6 @@ interface DustBuyBody {
   mechanic_id: string;
 }
 
-interface CardUploadBody {
-  name: string;
-  rarity: string;
-  image_url: string;
-  type?: string;
-}
 // --- SECURE CREATOR HELPERS ---
 
 
@@ -741,7 +836,7 @@ async function getUserFromSession(request: Request, env: Env, supabase: any) {
     const { data: user, error } = await supabase
       .from('users')
       .select(
-        'twitch_id, username, avatar_url, role, binder_layout, binder_theme, onboarding_collector_step, is_onboarding_complete, last_logout_at, kick_user_id, kick_access_token_encrypted, trade_code'
+        'twitch_id, username, avatar_url, role, binder_layout, binder_theme, onboarding_collector_step, is_onboarding_complete, last_logout_at, kick_user_id, kick_access_token_encrypted, trade_code, profile_settings'
       )
       .eq('twitch_id', tid)
       .single();
@@ -772,6 +867,94 @@ async function getUserFromSession(request: Request, env: Env, supabase: any) {
       console.error('[Auth] JWT verification failed:', e.message);
     }
   }
+}
+
+// Decode JWT payload without re-verifying the signature (safe after getUserFromSession already verified it).
+function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(b64));
+  } catch { return null; }
+}
+
+// If the session JWT has fewer than SESSION_RENEW_THRESHOLD_SEC seconds left, issue a new 30-day
+// token and return the Set-Cookie string.  Returns null when no renewal is needed.
+async function maybeRenewSession(request: Request, env: Env, user: any): Promise<string | null> {
+  const cookie = request.headers.get('Cookie') || '';
+  const token = cookie.match(/(?:^|; )session=([^;]*)/)?.[1];
+  if (!token) return null;
+  const payload = parseJwtPayload(token);
+  if (!payload?.exp) return null;
+  const remaining = (payload.exp as number) - Math.floor(Date.now() / 1000);
+  if (remaining > SESSION_RENEW_THRESHOLD_SEC) return null;
+
+  const newToken = await new SignJWT({
+    sub: String(user.twitch_id),
+    twitch_id: user.twitch_id,
+    username: user.username,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(String(user.twitch_id))
+    .setIssuedAt()
+    .setExpirationTime('30d')
+    .sign(new TextEncoder().encode(env.SESSION_SECRET));
+
+  const secure = request.url.startsWith('https') ? '; Secure' : '';
+  return `session=${newToken}; HttpOnly${secure}; SameSite=Lax; Path=/; Max-Age=${SESSION_MAX_AGE_SEC}`;
+}
+
+// ── UI Preference helpers ─────────────────────────────────────────────────
+/** Encodes ui_prefs object → compact URLSearchParams string for castle_prefs cookie. */
+function buildPrefCookieStr(prefs: Record<string, unknown>): string {
+  const p = new URLSearchParams();
+  p.set('lm', prefs.light_mode       ? '1' : '0');
+  p.set('rm', prefs.reduce_motion    ? '1' : '0');
+  p.set('na', prefs.no_animations    ? '1' : '0');
+  p.set('ps', prefs.photosensitivity ? '1' : '0');
+  p.set('fo', prefs.foil  === false  ? '0' : '1');
+  p.set('ti', prefs.tilt  === false  ? '0' : '1');
+  p.set('du', prefs.dupes === false  ? '0' : '1');
+  p.set('cs', typeof prefs.card_size === 'string' ? prefs.card_size : 'medium');
+  p.set('so', typeof prefs.sort      === 'string' ? prefs.sort      : 'newest');
+  return p.toString();
+}
+
+/** Parses castle_prefs cookie value → CSS class names to inject on <html>. */
+function parsePrefCookieToClasses(val: string): string[] {
+  const out: string[] = [];
+  try {
+    const p = new URLSearchParams(val);
+    if (p.get('lm') === '1') out.push('castle-light-mode');
+    if (p.get('rm') === '1') out.push('castle-reduce-motion');
+    if (p.get('na') === '1') out.push('castle-no-animations');
+    if (p.get('ps') === '1') out.push('castle-photosensitivity');
+    if (p.get('fo') === '0') out.push('castle-no-foil');
+    if (p.get('ti') === '0') out.push('castle-no-tilt');
+    if (p.get('du') === '0') out.push('castle-hide-dupes');
+    const cs = p.get('cs');
+    if (cs === 'small') out.push('castle-card-size-small');
+    if (cs === 'large') out.push('castle-card-size-large');
+  } catch (_) { /* ignore malformed cookie */ }
+  return out;
+}
+
+/**
+ * Applies castle_prefs cookie classes to an HTML response via HTMLRewriter.
+ * Returns the original response unchanged when no prefs cookie is present.
+ */
+function applyPrefClasses(htmlRes: Response, req: Request): Response {
+  const raw = (req.headers.get('Cookie') ?? '').match(/(?:^|; )castle_prefs=([^;]*)/)?.[1] ?? '';
+  if (!raw) return htmlRes;
+  const classes = parsePrefCookieToClasses(decodeURIComponent(raw));
+  if (classes.length === 0) return htmlRes;
+  return new HTMLRewriter()
+    .on('html', {
+      element(el) {
+        const existing = el.getAttribute('class') ?? '';
+        el.setAttribute('class', existing ? `${existing} ${classes.join(' ')}` : classes.join(' '));
+      }
+    })
+    .transform(htmlRes);
 }
 
 /** Result of Helix channels/followed — includes error when token is invalid or scope missing */
@@ -931,6 +1114,7 @@ const TWITCH_CREATOR_EXTRA_SCOPES = [
   'channel:manage:redemptions',
   'channel:read:redemptions',
   'channel:read:subscriptions',
+  'bits:read',
 ];
 
 function twitchScopesRequiredForCreator(isCreator: boolean): string[] {
@@ -1239,7 +1423,7 @@ async function resolveStreamerContextWithCache(
   if (!rawParam) return null;
 
   const cacheKey = `streamer:branding:v1:${rawParam.toLowerCase()}`;
-  const cached = await (env as any).KV_CACHE?.get(cacheKey);
+  const cached = await env.KV_CACHE?.get(cacheKey);
   if (cached) {
     console.log(`[Perf] Streamer context CACHE HIT for ${rawParam}`);
     return JSON.parse(cached);
@@ -1247,8 +1431,8 @@ async function resolveStreamerContextWithCache(
 
   console.log(`[Perf] Streamer context CACHE MISS for ${rawParam}`);
   const streamer = await resolveStreamerContext(request, supabase, url);
-  if (streamer && (env as any).KV_CACHE) {
-    ctx.waitUntil((env as any).KV_CACHE.put(cacheKey, JSON.stringify(streamer), { expirationTtl: 3600 })); // 1 hour
+  if (streamer && env.KV_CACHE) {
+    ctx.waitUntil(env.KV_CACHE.put(cacheKey, JSON.stringify(streamer), { expirationTtl: 3600 })); // 1 hour
   }
   return streamer;
 }
@@ -1363,7 +1547,7 @@ async function helixCreateEventSub(
   env: Env,
   appAccessToken: string,
   body: Record<string, unknown>
-): Promise<{ ok: boolean; status: number; data: any }> {
+): Promise<HelixApiResult> {
   const res = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',
     headers: {
@@ -1377,10 +1561,13 @@ async function helixCreateEventSub(
   return { ok: res.ok, status: res.status, data };
 }
 
+/** Subscription types that require a broadcaster user token (not an app token). */
+const EVENTSUB_REQUIRES_USER_TOKEN = new Set<string>([]);
+
 /** Register EventSub webhook subscriptions for a broadcaster (idempotent). Used by manual reconnect and creator OAuth callback. */
 async function ensureEventSubSubscriptionsForBroadcaster(
   env: Env,
-  opts: { broadcasterTwitchId: string; callbackOrigin: string }
+  opts: { broadcasterTwitchId: string; callbackOrigin: string; broadcasterUserToken?: string }
 ): Promise<{
   callbackUrl: string;
   created: string[];
@@ -1426,6 +1613,13 @@ async function ensureEventSubSubscriptionsForBroadcaster(
       continue;
     }
 
+    const needsUserToken = EVENTSUB_REQUIRES_USER_TOKEN.has(spec.type);
+    const tokenToUse = needsUserToken ? (opts.broadcasterUserToken || null) : appToken;
+    if (!tokenToUse) {
+      skipped.push(spec.type);
+      continue;
+    }
+
     const payload = {
       type: spec.type,
       version: spec.version,
@@ -1437,7 +1631,7 @@ async function ensureEventSubSubscriptionsForBroadcaster(
       },
     };
 
-    const result = await helixCreateEventSub(env, appToken, payload);
+    const result = await helixCreateEventSub(env, tokenToUse, payload);
 
     if (result.ok) {
       created.push(spec.type);
@@ -1461,6 +1655,7 @@ async function ensureEventSubSubscriptionsForBroadcaster(
       continue;
     }
 
+    console.error(`[EventSub] Failed to create ${spec.type} (HTTP ${result.status}): ${msgStr} | usedUserToken=${needsUserToken} tokenPresent=${!!tokenToUse}`);
     errors.push({ type: spec.type, message: msgStr || `HTTP ${result.status}` });
   }
 
@@ -2357,7 +2552,7 @@ async function rollTraitsForCard(
   secondaryId?: string | null
 ): Promise<string[]> {
   const traitList: string[] = [];
-  if (!card || !card.template_id || (card.auto_roll_traits === false)) return [];
+  if (!card || (card.auto_roll_traits === false)) return [];
 
   // 1 trait by default, 2 if genesis status detected
   const isGenesis = card.is_genesis || card.is_genesis_mint || !!secondaryId;
@@ -2455,9 +2650,15 @@ function runBattleEngine(
 
 
 /**
- * Simulates a single 3v3 round.
+ * Simulates a single 3v3 round (one combat round). See battle.md for rules.
  */
-function simulateMatchRound(roundNum: number, challenger: any, target: any, cDeck: any[], tDeck: any[]) {
+function simulateMatchRound(roundNum: number, _challenger: any, _target: any, cDeck: any[], tDeck: any[]) {
+  // Normalize trait names so 'Bounty Hunter', 'bounty-hunter', 'bounty_hunter', and 'BOUNTY HUNTER' all match.
+  // Necessary because a few deck-mapping paths fall back to mechanic.display_name when name is missing.
+  const normTrait = (s: any) => String(s || '').toLowerCase().replace(/[\s-]+/g, '_');
+  const hasTrait = (card: any, trait: string) =>
+    card.traits.some((t: any) => normTrait(t.name) === normTrait(trait));
+
   const mkState = (card: any, slot: number) => {
     const traits = [];
     if (card.mechanic_name) traits.push({ name: card.mechanic_name, icon: card.mechanic_icon });
@@ -2473,300 +2674,396 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
       attack: card.attack || 0,
       defense: card.defense || 0,
       max_defense: card.defense || 0,
-      slot, // 1=Left, 2=Middle, 3=Right
+      slot,
       alive: true,
       reviveUsed: false,
-      status_effects: [] as any[], // { type: 'freeze' | 'frostbite' | 'bounty', value?: number }
+      status_effects: [] as any[],
       oncePerCombatUsed: false,
+      echoChainsUsed: 0,
     };
   };
 
   const cCards = cDeck.map((c, i) => mkState(c, i + 1));
   const tCards = tDeck.map((c, i) => mkState(c, i + 1));
 
-  const recalculateMimics = (cards: any[], eventLog: any[], sideLabel: string) => {
-    cards.forEach(card => {
-      const hasMimic = card.traits.some((t: any) => t.name === 'mimic');
-      if (hasMimic && card.alive) {
-        const left = cards.find(c => c.slot === card.slot - 1 && c.alive);
-        const right = cards.find(c => c.slot === card.slot + 1 && c.alive);
-        let triggered = false;
-        if (left && (card.attack !== left.attack || card.defense !== left.defense)) {
-          card.attack = left.attack;
-          card.defense = left.defense;
-          triggered = true;
-        }
-        if (right && right.traits.length > 0) {
-          // Rule: Gains Mechanic from Slot 3 (Right)
-          // We'll append the right slot's first trait if not already present
-          const newTrait = right.traits[0];
-          if (!card.traits.some((t: any) => t.name === newTrait.name)) {
-            // In dual trait context, mimic keeps 'mimic' but adds the target trait
-            card.traits.push({ ...newTrait });
-            triggered = true;
-          }
-        }
-        if (triggered && typeof eventLog !== 'undefined' && eventLog) {
-          eventLog.push({
-            type: 'mimic_trigger',
-            side: sideLabel,
-            card: card.name,
-            slot: card.slot,
-            attack: card.attack,
-            defense: card.defense,
-            mechanic: card.traits.map((t: any) => t.name).join(', ')
-          });
-        }
-      }
-    });
-  };
-
-  recalculateMimics(cCards, [], 'challenger');
-  recalculateMimics(tCards, [], 'target');
-
-  // --- Start of Combat Logic (Mirror, Bounty Hunter) ---
-  const handleMirror = (cards: any[], opponents: any[], side: string) => {
-    cards.forEach(card => {
-      if (card.traits.some((t: any) => t.name.toLowerCase() === 'mirror')) {
-        const opp = opponents.find(o => o.slot === card.slot);
-        if (opp) {
-          card.attack = opp.attack;
-          card.defense = opp.defense;
-          card.max_defense = opp.max_defense;
-          card.traits = [...opp.traits];
-          exchanges.push({
-            type: 'mirror_transform',
-            side,
-            card: card.name,
-            targetCard: opp.name,
-          });
-        }
-      }
-    });
-  };
-
-  const applyInitialBounty = (cards: any[], opponents: any[], side: string) => {
-    cards.forEach(card => {
-      if (card.traits.some((t: any) => t.name.toLowerCase() === 'bounty hunter')) {
-        const aliveOpponents = opponents.filter(o => o.alive);
-        if (aliveOpponents.length > 0) {
-          const target = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
-          target.status_effects.push({ type: 'bounty' });
-          exchanges.push({
-            type: 'bounty_placed',
-            side,
-            card: card.name,
-            targetCard: target.name,
-          });
-        }
-      }
-    });
-  };
+  // DEBUG: log every card's resolved trait names so we can confirm they match the engine strings.
+  console.log('[BattleEngine] Challenger deck traits:',
+    cCards.map(c => `slot${c.slot}:${c.name} → [${c.traits.map((t: any) => t.name).join(', ') || 'none'}]`).join(' | ')
+  );
+  console.log('[BattleEngine] Target deck traits:',
+    tCards.map(c => `slot${c.slot}:${c.name} → [${c.traits.map((t: any) => t.name).join(', ') || 'none'}]`).join(' | ')
+  );
 
   const exchanges: any[] = [];
-  handleMirror(cCards, tCards, 'challenger');
-  handleMirror(tCards, cCards, 'target');
-  applyInitialBounty(cCards, tCards, 'challenger');
-  applyInitialBounty(tCards, cCards, 'target');
-  const coinFlip = Math.random() > 0.5 ? 'challenger' : 'target'; // Rule 1: Coin Flip
-  let attackerSide = coinFlip;
-  const MAX_EXCHANGES = 50;
   let exchangeCount = 0;
 
-  while (cCards.some(c => c.alive) && tCards.some(c => c.alive) && exchangeCount < MAX_EXCHANGES) {
-    exchangeCount++;
+  const snapshot = (c: any) => ({
+    ...c,
+    current_hp: c.defense,
+    max_hp: c.max_defense || c.base_defense,
+    traits: (c.traits || []).map((t: any) => ({ ...t })),
+    mechanic_name: c.traits.length > 0 ? c.traits[0].name : null,
+    mechanic_icon: c.traits.length > 0 ? c.traits[0].icon : '',
+  });
 
-    // 1. Determine Attacker and Defender
-    const attackers = attackerSide === 'challenger' ? cCards : tCards;
+  const cardSide = (card: any): 'challenger' | 'target' => (cCards.includes(card) ? 'challenger' : 'target');
+
+  /** Phase 1 — Bounties */
+  const applyInitialBounty = (cards: any[], opponents: any[], side: 'challenger' | 'target') => {
+    for (const card of cards) {
+      if (!hasTrait(card, 'bounty_hunter') || !card.alive) continue;
+      const aliveOpponents = opponents.filter(o => o.alive);
+      if (aliveOpponents.length === 0) continue;
+      const mark = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
+      mark.status_effects.push({ type: 'bounty' });
+      exchanges.push({
+        type: 'bounty_placed',
+        side,
+        card: card.name,
+        targetCard: mark.name,
+        targetSlot: mark.slot,
+      });
+    }
+  };
+
+  /** Mimic at start: copy traits from left neighbor if alive, else right */
+  const applyMimicStart = (cards: any[], side: 'challenger' | 'target') => {
+    for (const card of cards) {
+      if (!hasTrait(card, 'mimic') || !card.alive) continue;
+      const left = cards.find(c => c.slot === card.slot - 1 && c.alive);
+      const right = cards.find(c => c.slot === card.slot + 1 && c.alive);
+      const source = left || right;
+      if (!source) continue;
+      let triggered = false;
+      for (const trait of source.traits) {
+        const n = (trait.name || '').toLowerCase();
+        if (n === 'mimic') continue;
+        if (!card.traits.some((t: any) => (t.name || '').toLowerCase() === n)) {
+          card.traits.push({ ...trait });
+          triggered = true;
+        }
+      }
+      if (triggered) {
+        exchanges.push({
+          type: 'mimic_trigger',
+          side,
+          card: card.name,
+          slot: card.slot,
+          attack: card.attack,
+          defense: card.defense,
+          mechanic: card.traits.map((t: any) => t.name).join(', '),
+        });
+      }
+    }
+  };
+
+  /** Mirror at start: copy opposing lane (stats + traits + status + visual identity) */
+  const snapshotForMirror = (cards: any[]) =>
+    cards.map(c => ({
+      slot: c.slot,
+      name: c.name,
+      image_url: c.image_url,
+      attack: c.attack,
+      defense: c.defense,
+      max_defense: c.max_defense,
+      traits: (c.traits || []).map((t: any) => ({ ...t })),
+      status_effects: (c.status_effects || []).map((se: any) => ({ ...se })),
+      alive: c.alive,
+    }));
+
+  const handleMirror = (cards: any[], opponentsSnap: any[], side: 'challenger' | 'target') => {
+    for (const card of cards) {
+      if (!hasTrait(card, 'mirror') || !card.alive) continue;
+      const opp = opponentsSnap.find(o => o.slot === card.slot);
+      if (!opp) continue;
+      card.attack = opp.attack;
+      card.defense = opp.defense;
+      card.max_defense = opp.max_defense;
+      card.traits = opp.traits.map((t: any) => ({ ...t }));
+      card.status_effects = opp.status_effects.map((se: any) => ({ ...se }));
+      // Mirror also takes on the opposing card's visual identity so the arena can fully transform the card.
+      card.name = opp.name;
+      card.image_url = opp.image_url;
+      const newMech = (card.traits[0] || {}) as any;
+      exchanges.push({
+        type: 'mirror_transform',
+        side,
+        slot: card.slot,
+        card: card.name,
+        targetCard: opp.name,
+        newAttack: opp.attack,
+        newDefense: opp.defense,
+        newImageUrl: opp.image_url || '',
+        newName: opp.name || '',
+        newMechanicName: newMech.name || null,
+        newMechanicIcon: newMech.icon || '',
+      });
+    }
+  };
+
+  // Setup order per spec: Mimic → Mirror → Bounty.
+  // Mimic runs first so a Mimic that copies a Mirror trait can then be transformed by the Mirror phase.
+  // Mirror snapshots both sides before either fires so two opposing Mirrors swap correctly.
+  // Bounty runs last so it marks the actual final card identities after all transforms.
+  applyMimicStart(cCards, 'challenger');
+  applyMimicStart(tCards, 'target');
+
+  // Snapshot BOTH sides BEFORE any Mirror transforms so each side mirrors the
+  // *original* opposing card — not whatever the other side already mirrored to.
+  const tBeforeMirror = snapshotForMirror(tCards);
+  const cBeforeMirror = snapshotForMirror(cCards);
+  handleMirror(cCards, tBeforeMirror, 'challenger');
+  handleMirror(tCards, cBeforeMirror, 'target');
+
+  applyInitialBounty(cCards, tCards, 'challenger');
+  applyInitialBounty(tCards, cCards, 'target');
+
+  const coinFlip: 'challenger' | 'target' = Math.random() > 0.5 ? 'challenger' : 'target';
+  const teamOrder: ('challenger' | 'target')[] = [coinFlip, coinFlip === 'challenger' ? 'target' : 'challenger'];
+
+  const pickRandomTarget = (defenders: any[]) => {
+    const alive = defenders.filter(c => c.alive);
+    if (alive.length === 0) return null;
+    const guards = alive.filter((c: any) => hasTrait(c, 'guard'));
+    const pool = guards.length ? guards : alive;
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
+
+  const incomingDamage = (baseAtk: number, defender: any) => {
+    const stacks = defender.status_effects.filter((se: any) => se.type === 'frostbite').length;
+    return Math.floor(baseAtk * (1 + stacks * 0.1));
+  };
+
+  /** Frost: roll freeze, else roll frostbite (independent; may apply neither). `victim` takes the status (same as defender in normal hit). */
+  const rollFrostOnHit = (frostSource: any, victim: any, events: any[]) => {
+    if (!hasTrait(frostSource, 'frost')) return;
+    const victimSide = cardSide(victim);
+    if (Math.random() < 0.25) {
+      victim.status_effects.push({ type: 'freeze' });
+      events.push({
+        type: 'freeze_applied',
+        card: frostSource.name,
+        target: victim.name,
+        frostVictimSide: victimSide,
+      });
+    } else if (Math.random() < 0.35) {
+      victim.status_effects.push({ type: 'frostbite' });
+      events.push({
+        type: 'frostbite_applied',
+        card: frostSource.name,
+        target: victim.name,
+        frostVictimSide: victimSide,
+      });
+    }
+  };
+
+  const processDeaths = (allCards: any[], events: any[]) => {
+    for (const card of allCards) {
+      if (!card.alive || card.defense > 0) continue;
+      const canRevive =
+        card.traits.some((t: any) => {
+          const n = (t.name || '').toLowerCase();
+          return n === 'revive' || n === 'reanimate';
+        }) && !card.reviveUsed;
+      if (canRevive) {
+        card.defense = 1;
+        card.reviveUsed = true;
+        events.push({ type: 'revive', card: card.name, side: cardSide(card) });
+      } else {
+        card.defense = 0;
+        card.alive = false;
+        card.status_effects = card.status_effects.filter((se: any) => se.type !== 'bounty');
+        events.push({ type: 'death', card: card.name, side: cardSide(card) });
+      }
+    }
+  };
+
+  const runAttackInstance = (attacker: any, attackerSide: 'challenger' | 'target', fromEcho: boolean) => {
+    if (!attacker.alive) return;
+
     const defenders = attackerSide === 'challenger' ? tCards : cCards;
+    const freezeIdx = attacker.status_effects.findIndex((se: any) => se.type === 'freeze');
+    if (freezeIdx !== -1) {
+      attacker.status_effects.splice(freezeIdx, 1);
+      const defender = pickRandomTarget(defenders);
+      if (!defender) return;
 
-    // Rule 2 & 7: "If no card exists on the side (no living cards), combat ends"
-    const activeAttacker = attackers.find(c => c.alive); // Leftmost living
-    if (!activeAttacker) break;
+      const events: any[] = [{ type: 'frozen_skip', card: attacker.name, side: attackerSide }];
+      const defDmg = incomingDamage(defender.attack, attacker);
+      attacker.defense -= defDmg;
+      const atkTook = defDmg > 0;
 
-    // Rule 2: Targeting
-    let activeDefender = defenders.find((c: any) => c.alive && c.traits.some((t: any) => t.name === 'guard')); // Leftmost Guard
-    if (!activeDefender) break;
+      if (atkTook && hasTrait(attacker, 'rage')) {
+        attacker.attack += 1;
+        events.push({ type: 'rage_gain', card: attacker.name, side: cardSide(attacker) });
+      }
+      if (atkTook) rollFrostOnHit(defender, attacker, events);
 
-    const attackerLabel = attackerSide === 'challenger' ? 'attacker' : 'defender';
-    const defenderLabel = attackerSide === 'challenger' ? 'defender' : 'attacker';
+      const atkDead = attacker.defense <= 0;
 
-    const exchangeData: any = {
-      exchange: exchangeCount,
-      side: attackerSide,
-      challengerCard: null,
-      targetCard: null,
-      events: []
-    };
+      if (atkDead && defender.alive && hasTrait(defender, 'absorb')) {
+        const gain = Math.floor((attacker.max_defense || attacker.base_defense) * 0.25);
+        defender.defense += gain;
+        defender.max_defense += gain;
+        events.push({
+          type: 'absorb_gain',
+          amount: gain,
+          card: defender.name,
+          side: attackerSide === 'challenger' ? 'target' : 'challenger',
+        });
+      }
+      if (atkDead && defender.alive && hasTrait(defender, 'bounty_hunter') && attacker.status_effects.some((se: any) => se.type === 'bounty')) {
+        defender.attack += attacker.base_attack;
+        defender.defense += attacker.base_defense;
+        defender.max_defense += attacker.base_defense;
+        events.push({
+          type: 'bounty_claimed',
+          card: defender.name,
+          side: attackerSide === 'challenger' ? 'target' : 'challenger',
+        });
+      }
 
-    const cActive = attackers === cCards ? activeAttacker : activeDefender;
-    const tActive = attackers === tCards ? activeAttacker : activeDefender;
+      processDeaths([...cCards, ...tCards], events);
 
-    // --- Cleanse (Enemy +2/2, Remove Traits) ---
-    if (activeAttacker.traits.some((t: any) => t.name.toLowerCase() === 'cleanse') && !activeAttacker.oncePerCombatUsed) {
-      activeAttacker.oncePerCombatUsed = true;
-      activeDefender.attack += 2;
-      activeDefender.defense += 2;
-      activeDefender.max_defense += 2;
-      activeDefender.traits = []; // Remove traits
-      exchangeData.events.push({ type: 'cleanse_trigger', card: activeAttacker.name, target: activeDefender.name, side: attackerSide });
+      const cActive = attackerSide === 'challenger' ? attacker : defender;
+      const tActive = attackerSide === 'target' ? attacker : defender;
+
+      exchangeCount++;
+      exchanges.push({
+        exchange: exchangeCount,
+        side: attackerSide,
+        skipped: true,
+        echo: fromEcho,
+        counterDamage: defDmg,
+        challengerCard: snapshot(cActive),
+        targetCard: snapshot(tActive),
+        events,
+        challengerCardAfter: snapshot(cActive),
+        targetCardAfter: snapshot(tActive),
+        challengerSurvived: cActive.alive,
+        targetSurvived: tActive.alive,
+        defenderHasGuard: hasTrait(defender, 'guard'),
+      });
+      return;
     }
 
-    // Snapshot after damage
-    const snapshot = (c: any) => ({
-      ...c,
-      current_hp: c.defense,
-      max_hp: c.max_defense || c.base_defense,
-      // Compatibility for legacy arena.js
-      mechanic_name: c.traits.length > 0 ? c.traits[0].name : null,
-      mechanic_icon: c.traits.length > 0 ? c.traits[0].icon : '',
+    const defender = pickRandomTarget(defenders);
+    if (!defender) return;
+
+    const events: any[] = [];
+    if (hasTrait(attacker, 'cleanse') && !attacker.oncePerCombatUsed) {
+      attacker.oncePerCombatUsed = true;
+      defender.attack += 2;
+      defender.defense += 2;
+      defender.max_defense += 2;
+      defender.traits = [];
+      events.push({
+        type: 'cleanse_trigger',
+        card: attacker.name,
+        target: defender.name,
+        side: attackerSide,
+      });
+    }
+
+    const atkDmg = incomingDamage(attacker.attack, defender);
+    const defDmg = incomingDamage(defender.attack, attacker);
+
+    defender.defense -= atkDmg;
+    attacker.defense -= defDmg;
+
+    const defTook = atkDmg > 0;
+    const atkTook = defDmg > 0;
+
+    if (defTook) rollFrostOnHit(attacker, defender, events);
+
+    if (defTook && hasTrait(defender, 'rage')) {
+      defender.attack += 1;
+      events.push({ type: 'rage_gain', card: defender.name, side: cardSide(defender) });
+    }
+    if (atkTook && hasTrait(attacker, 'rage')) {
+      attacker.attack += 1;
+      events.push({ type: 'rage_gain', card: attacker.name, side: cardSide(attacker) });
+    }
+
+    const defDead = defender.defense <= 0;
+    const atkDead = attacker.defense <= 0;
+
+    if (defDead && attacker.alive && hasTrait(attacker, 'absorb')) {
+      const gain = Math.floor((defender.max_defense || defender.base_defense) * 0.25);
+      attacker.defense += gain;
+      attacker.max_defense += gain;
+      events.push({ type: 'absorb_gain', amount: gain, card: attacker.name, side: attackerSide });
+    }
+    if (atkDead && defender.alive && hasTrait(defender, 'absorb')) {
+      const gain = Math.floor((attacker.max_defense || attacker.base_defense) * 0.25);
+      defender.defense += gain;
+      defender.max_defense += gain;
+      events.push({
+        type: 'absorb_gain',
+        amount: gain,
+        card: defender.name,
+        side: attackerSide === 'challenger' ? 'target' : 'challenger',
+      });
+    }
+
+    if (defDead && attacker.alive && hasTrait(attacker, 'bounty_hunter') && defender.status_effects.some((se: any) => se.type === 'bounty')) {
+      attacker.attack += defender.base_attack;
+      attacker.defense += defender.base_defense;
+      attacker.max_defense += defender.base_defense;
+      events.push({ type: 'bounty_claimed', card: attacker.name, side: attackerSide });
+    }
+    if (atkDead && defender.alive && hasTrait(defender, 'bounty_hunter') && attacker.status_effects.some((se: any) => se.type === 'bounty')) {
+      defender.attack += attacker.base_attack;
+      defender.defense += attacker.base_defense;
+      defender.max_defense += attacker.base_defense;
+      events.push({
+        type: 'bounty_claimed',
+        card: defender.name,
+        side: attackerSide === 'challenger' ? 'target' : 'challenger',
+      });
+    }
+
+    let echoPending = false;
+    if (defDead && attacker.alive && attacker.defense > 0 && hasTrait(attacker, 'echo') && attacker.echoChainsUsed < 3) {
+      echoPending = true;
+      events.push({ type: 'echo_trigger', card: attacker.name, side: 'attacker' });
+    }
+
+    processDeaths([...cCards, ...tCards], events);
+
+    const cActive = attackerSide === 'challenger' ? attacker : defender;
+    const tActive = attackerSide === 'target' ? attacker : defender;
+
+    exchangeCount++;
+    exchanges.push({
+      exchange: exchangeCount,
+      side: attackerSide,
+      echo: fromEcho,
+      challengerCard: snapshot(cActive),
+      targetCard: snapshot(tActive),
+      events,
+      challengerCardAfter: snapshot(cActive),
+      targetCardAfter: snapshot(tActive),
+      challengerSurvived: cActive.alive,
+      targetSurvived: tActive.alive,
+      defenderHasGuard: hasTrait(defender, 'guard'),
     });
 
-    exchangeData.challengerCard = snapshot(cActive);
-    exchangeData.targetCard = snapshot(tActive);
+    if (echoPending && attacker.alive && attacker.defense > 0 && attacker.echoChainsUsed < 3) {
+      attacker.echoChainsUsed++;
+      runAttackInstance(attacker, attackerSide, true);
+    }
+  };
 
-    // Rule 3: Simultaneous Damage Exchange
-    const atkDmg = activeAttacker.attack;
-    const defDmg = activeDefender.attack;
-
-    console.log(`[BATTLE EX] #${exchangeCount}: ${attackerSide === 'challenger' ? 'Challenger' : 'Target'} Attacking!`);
-    console.log(`[BATTLE ATK] ${activeAttacker.name} (ATK: ${atkDmg}) -> ${activeDefender.name} (DEF: ${activeDefender.defense})`);
-    console.log(`[BATTLE DEF] ${activeDefender.name} (ATK: ${defDmg}) -> ${activeAttacker.name} (DEF: ${activeAttacker.defense})`);
-
-    const applyDamage = (attacker: any, defender: any, damage: number, eventSide: string) => {
-      // Rule 4: Freeze check
-      const freezeIdx = attacker.status_effects.findIndex((se: any) => se.type === 'freeze');
-      if (freezeIdx !== -1) {
-        attacker.status_effects.splice(freezeIdx, 1);
-        exchangeData.events.push({ type: 'frozen_skip', card: attacker.name, side: eventSide });
-        return 0;
-      }
-
-      // Rule: Frostbite damage increase
-      const frostbiteStacks = defender.status_effects.filter((se: any) => se.type === 'frostbite').length;
-      const finalDmg = Math.floor(damage * (1 + (frostbiteStacks * 0.1)));
-
-      defender.defense -= finalDmg;
-
-      // Rule: Rage (+1 ATK on dmg)
-      if (defender.traits.some((t: any) => t.name.toLowerCase() === 'rage')) {
-        defender.attack += 1;
-        exchangeData.events.push({ type: 'rage_gain', card: defender.name, side: eventSide === 'attacker' ? 'defender' : 'attacker' });
-      }
-
-      // Rule: Frost (Apply Freeze/Frostbite on hit)
-      if (attacker.traits.some((t: any) => t.name.toLowerCase() === 'frost')) {
-        const isFreeze = Math.random() > 0.5;
-        if (isFreeze) {
-          defender.status_effects.push({ type: 'freeze' });
-          exchangeData.events.push({ type: 'freeze_applied', card: attacker.name, target: defender.name, side: eventSide });
-        } else {
-          defender.status_effects.push({ type: 'frostbite' });
-          exchangeData.events.push({ type: 'frostbite_applied', card: attacker.name, target: defender.name, side: eventSide });
-        }
-      }
-
-      return finalDmg;
-    };
-
-    const finalAtkDmg = applyDamage(activeAttacker, activeDefender, atkDmg, attackerLabel);
-    const finalDefDmg = applyDamage(activeDefender, activeAttacker, defDmg, defenderLabel);
-
-    console.log(`[BATTLE RESULT] ${activeDefender.name} now has ${Math.max(0, activeDefender.defense)} DEF`);
-    console.log(`[BATTLE RESULT] ${activeAttacker.name} now has ${Math.max(0, activeAttacker.defense)} DEF`);
-
-    // --- On-Kill Logic (Bounty Hunter, Echo, Absorb) ---
-    const handleOnKill = (killer: any, victim: any, side: string) => {
-      if (killer.alive && !victim.alive) {
-        // Echo (Attack again)
-        if (killer.traits.some((t: any) => t.name.toLowerCase() === 'echo')) {
-          exchangeData.events.push({ type: 'echo_trigger', card: killer.name, side });
-          // In a simple system we just trigger another hit here
-          applyDamage(killer, victim, killer.attack, side); // Re-apply to a dead shell just for logic? No, find NEW target.
-          // For simplicity in this engine we'll just log it and perhaps the next round handles it
-          // OR we recurse slightly? Actually the turn alternates, so we'll just let it hit again if we can.
-          // Better: just do one extra damage instance to the next available defender
-          const nextDefender = side === 'attacker' ? defenders.find(c => c.alive) : attackers.find(c => c.alive);
-          if (nextDefender) {
-            applyDamage(killer, nextDefender, killer.attack, side);
-          }
-        }
-
-        // Bounty Hunter
-        if (killer.traits.some((t: any) => t.name.toLowerCase() === 'bounty hunter') && victim.status_effects.some((se: any) => se.type === 'bounty')) {
-          killer.attack += victim.base_attack;
-          killer.defense += victim.base_defense;
-          killer.max_defense += victim.base_defense;
-          exchangeData.events.push({ type: 'bounty_claimed', card: killer.name, side });
-        }
-
-        // Absorb (+25% victim max HP)
-        if (killer.traits.some((t: any) => t.name.toLowerCase() === 'absorb')) {
-          const gain = Math.floor(victim.max_defense * 0.25);
-          killer.defense += gain;
-          killer.max_defense += gain; // Absorb increases max HP
-          exchangeData.events.push({ type: 'absorb_gain', amount: gain, card: killer.name, side });
-        }
-      }
-    };
-
-    handleOnKill(activeAttacker, activeDefender, attackerLabel);
-    handleOnKill(activeDefender, activeAttacker, defenderLabel);
-
-    exchangeData.challengerCard = snapshot(cActive);
-    exchangeData.targetCard = snapshot(tActive);
-
-    // Rule 4: Death Check Phase
-    const processDeaths = (cards: any[], sideLabel: string) => {
-      cards.forEach(card => {
-        if (card.alive && card.defense <= 0) {
-          // 4.1 Revive
-          if (
-            card.traits.some((t: any) => t.name === 'revive' || t.name === 'reanimate') &&
-            !card.reviveUsed
-          ) {
-          card.defense = 1;
-            card.reviveUsed = true;
-            exchangeData.events.push({ type: 'revive', card: card.name, side: sideLabel });
-          } else {
-            // 4.2 Final Death
-            card.defense = 0;
-            card.alive = false;
-            exchangeData.events.push({ type: 'death', card: card.name, side: sideLabel });
-          }
-        }
-      });
-    };
-
-    processDeaths(defenders, defenderLabel);
-
-    // Rule 5: On-Kill Effects (Absorb)
-    const handleAbsorb = (killer: any, victim: any, side: string) => {
-      if (killer.alive && !victim.alive && killer.traits.some((t: any) => t.name.toLowerCase() === 'absorb')) {
-        const gain = Math.floor(victim.max_defense * 0.25);
-        killer.defense += gain;
-        killer.max_defense += gain; // Absorb increases max HP
-        exchangeData.events.push({ type: 'absorb_gain', amount: gain, card: killer.name, side });
-      }
-    };
-
-    handleAbsorb(activeAttacker, activeDefender, attackerLabel);
-    handleAbsorb(activeDefender, activeAttacker, defenderLabel);
-
-    // Rule 6: Passive Recalculation (Mimic)
-    recalculateMimics(cCards, exchangeData.events, 'challenger');
-    recalculateMimics(tCards, exchangeData.events, 'target');
-
-    // Final snapshots for round results
-    exchangeData.challengerCardAfter = snapshot(cActive);
-    exchangeData.targetCardAfter = snapshot(tActive);
-    exchangeData.challengerSurvived = cActive.alive;
-    exchangeData.targetSurvived = tActive.alive;
-
-    exchanges.push(exchangeData);
-
-    // Rule 7: Turn Alternation
-    attackerSide = attackerSide === 'challenger' ? 'target' : 'challenger';
+  for (const side of teamOrder) {
+    if (!cCards.some(c => c.alive) || !tCards.some(c => c.alive)) break;
+    const team = side === 'challenger' ? cCards : tCards;
+    for (let slot = 1; slot <= 3; slot++) {
+      if (!cCards.some(c => c.alive) || !tCards.some(c => c.alive)) break;
+      const attacker = team.find(c => c.slot === slot && c.alive);
+      if (!attacker) continue;
+      runAttackInstance(attacker, side, false);
+    }
   }
 
   const cAlive = cCards.filter(c => c.alive).length;
@@ -2774,9 +3071,9 @@ function simulateMatchRound(roundNum: number, challenger: any, target: any, cDec
 
   return {
     round: roundNum,
-    firstAttacker: coinFlip, // Who won the coin flip this round
-    winner: cAlive > tAlive ? 'challenger' : (tAlive > cAlive ? 'target' : 'draw'),
-    exchanges
+    firstAttacker: coinFlip,
+    winner: cAlive > tAlive ? 'challenger' : tAlive > cAlive ? 'target' : 'draw',
+    exchanges,
   };
 }
 
@@ -2869,10 +3166,25 @@ async function executeBattleFromWebhook(
     if (!targetDeckRow) {
       const { data: randDecks } = await supabase
         .from('user_saved_decks')
-        .select('*, users!inner(username, avatar_url)')
-        .not('slot_1', 'is', null)
-        .not('slot_2', 'is', null)
-        .not('slot_3', 'is', null)
+        .select(`
+          twitch_id,
+          slot_1:slot_1_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id,
+            mechanic:mechanic_id(name, display_name, icon),
+            genesis_mechanic:genesis_mechanic_id(name, display_name, icon),
+            card:card_id(name, image_url, rarity)),
+          slot_2:slot_2_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id,
+            mechanic:mechanic_id(name, display_name, icon),
+            genesis_mechanic:genesis_mechanic_id(name, display_name, icon),
+            card:card_id(name, image_url, rarity)),
+          slot_3:slot_3_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id,
+            mechanic:mechanic_id(name, display_name, icon),
+            genesis_mechanic:genesis_mechanic_id(name, display_name, icon),
+            card:card_id(name, image_url, rarity)),
+          users!inner(username, avatar_url)
+        `)
+        .not('slot_1_card_id', 'is', null)
+        .not('slot_2_card_id', 'is', null)
+        .not('slot_3_card_id', 'is', null)
         .neq('twitch_id', challengerTwitchId)
         .eq('streamer_id', streamer.id)
         .limit(10);
@@ -2886,11 +3198,12 @@ async function executeBattleFromWebhook(
       }
     }
 
-    // Fallback: bot deck from global user_cards pool
+    // Fallback: bot deck scoped to this streamer's card pool
     if (!targetDeckRow) {
       const { data: globalPool } = await supabase
         .from('user_cards')
         .select('*, card:cards(*), mechanic:mechanics(*)')
+        .eq('streamer_id', streamer.id)
         .limit(100);
       const pool = globalPool || [];
       const getRand = () => pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
@@ -2942,6 +3255,7 @@ async function executeBattleFromWebhook(
       challenger_name: challengerName,
       target_name: opponentName,
       winner_id: battle_data.winner === 'challenger' ? challengerTwitchId : (battle_data.winner === 'target' ? opponentId : null),
+      loser_id: battle_data.winner === 'challenger' ? opponentId : (battle_data.winner === 'target' ? challengerTwitchId : null),
       battle_data,
       completed_at: new Date().toISOString(),
       status: 'completed',
@@ -2994,6 +3308,8 @@ type GrantPoolRequestCache = {
 type GrantRandomCardOptions = {
   forcedCardId?: string;
   forcedRarity?: string;
+  /** Restricts the random draw to cards in this set only (used for promo pack codes). */
+  forcedSetId?: string;
   isSilent?: boolean;
   /** When true, skip checkAndUnlockAchievements (caller should sync once after bulk). */
   skipAchievementCheck?: boolean;
@@ -3028,6 +3344,9 @@ type BulkGrantPickState = {
   grantPoolRequestCache: GrantPoolRequestCache;
   rarityWeights: Record<string, number>;
   activeSetIds: string[];
+  redis?: Redis | null;
+  env?: Env;
+  ctx?: any;
 };
 
 async function loadBulkGrantRarityWeights(
@@ -3081,10 +3400,29 @@ async function ensureBulkRarityPool(
   supabase: any,
   creatorId: string,
   selectedRarity: string,
-  reqCache: GrantPoolRequestCache
+  reqCache: GrantPoolRequestCache,
+  redis?: Redis | null,
+  env?: Env,
+  ctx?: any
 ): Promise<any[]> {
   const rarityKey = `${creatorId}:${selectedRarity.toLowerCase()}`;
   if (reqCache.rarityPools.has(rarityKey)) return reqCache.rarityPools.get(rarityKey)!;
+
+  // Check Redis before hitting the DB — card pools are stable within a stream event.
+  if (redis) {
+    const redisKey = `card_pool:${creatorId}:${selectedRarity.toLowerCase()}`;
+    try {
+      const cached = await redis.get(redisKey);
+      if (cached != null) {
+        const rows: any[] = typeof cached === 'string' ? JSON.parse(cached) : (cached as any[]);
+        reqCache.rarityPools.set(rarityKey, rows);
+        return rows;
+      }
+    } catch (e) {
+      console.error('[Grant] Redis card pool read error:', e);
+    }
+  }
+
   const { data, error } = await supabase
     .from('cards')
     .select(CARD_POOL_SELECT)
@@ -3105,6 +3443,14 @@ async function ensureBulkRarityPool(
   }
   const rows = data ?? [];
   reqCache.rarityPools.set(rarityKey, rows);
+
+  // Backfill Redis so subsequent Worker invocations share the pool (5-min TTL).
+  if (redis && rows.length > 0) {
+    const redisKey = `card_pool:${creatorId}:${selectedRarity.toLowerCase()}`;
+    const writePromise = redis.set(redisKey, JSON.stringify(rows), { ex: 300 }).catch(() => {});
+    if (ctx) ctx.waitUntil(writePromise); else await writePromise;
+  }
+
   return rows;
 }
 
@@ -3129,7 +3475,7 @@ async function pickOneRandomCardBulk(
       }
     }
   }
-  const allCardsInRarity = await ensureBulkRarityPool(supabase, creatorId, selectedRarity, grantPoolRequestCache);
+  const allCardsInRarity = await ensureBulkRarityPool(supabase, creatorId, selectedRarity, grantPoolRequestCache, state.redis, state.env, state.ctx);
   const pool = (allCardsInRarity || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
   if (!pool || pool.length === 0) {
     if (forcedRarity) {
@@ -3206,6 +3552,9 @@ async function creatorBulkPickRandomCards(
     grantPoolRequestCache,
     rarityWeights,
     activeSetIds,
+    redis,
+    env,
+    ctx,
   };
   const picks: any[] = [];
   for (let i = 0; i < count; i++) {
@@ -3728,6 +4077,8 @@ async function grantRandomCard(
 
       // A card is eligible if it has no set OR its set is active (or always active)
       let pool = (allCardsInRarity || []).filter((c: any) => !c.set_id || activeSetIds.includes(c.set_id));
+      // Promo pack: restrict to the specific set chosen by the creator
+      if (options.forcedSetId) pool = pool.filter((c: any) => c.set_id === options.forcedSetId);
 
       if (!pool || pool.length === 0) {
         console.log(`[Grant] Pool empty for ${selectedRarity} (Streamer: ${creatorId})`);
@@ -4096,9 +4447,9 @@ async function sendBotNotification(env: Env, streamer: any, message: string) {
 
 // Security Response Helper
 function secureResponse(
-  data: any,
+  data: unknown,
   status: number,
-  corsHeaders: any,
+  corsHeaders: Record<string, string>,
   isError: boolean = false,
   extraHeaders?: Record<string, string>
 ): Response {
@@ -4129,9 +4480,9 @@ function failHtmlResponse(title: string, message: string, status: number = 500):
       <style>
         body { background: #050706; color: #fcfaf7; font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
         .card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 3rem; border-radius: 2rem; max-width: 500px; text-align: center; backdrop-filter: blur(20px); }
-        h1 { font-size: 3rem; margin: 0 0 1rem; color: #00f2fe; italic: true; }
+        h1 { font-size: 3rem; margin: 0 0 1rem; color: #3faaff; italic: true; }
         p { color: #4a5568; line-height: 1.6; }
-        .btn { display: inline-block; margin-top: 2rem; padding: 1rem 2rem; background: #00f2fe; color: #050706; text-decoration: none; border-radius: 1rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.8rem; }
+        .btn { display: inline-block; margin-top: 2rem; padding: 1rem 2rem; background: #3faaff; color: #050706; text-decoration: none; border-radius: 1rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.8rem; }
       </style>
     </head>
     <body>
@@ -4199,47 +4550,17 @@ async function logSystem(
   }
 }
 
-// Rate limiting - Redis-backed global sliding window (works across all CF edge nodes)
-// Falls back to KV_CACHE when Redis is unavailable, then fails open only for non-admin routes.
 async function checkRateLimit(
-  ip: string,
-  limit: number = 60,
-  redis: Redis | null,
-  opts?: { failClosedOnRedisError?: boolean; kv?: any }
+  limiter: { limit(opts: { key: string }): Promise<{ success: boolean }> },
+  key: string,
+  opts?: { failClosed?: boolean }
 ): Promise<boolean> {
-  const windowSeconds = 60;
-  const key = `rl:${ip}:${Math.floor(Date.now() / (windowSeconds * 1000))}`;
-
-  // Primary: Upstash Redis (global across all edge nodes)
-  if (redis) {
-    try {
-      const count = await redis.incr(key);
-      if (count === 1) {
-        await redis.expire(key, windowSeconds * 2);
-      }
-      return count <= limit;
-    } catch (e) {
-      console.error('[Redis] Rate limit check failed:', e);
-    }
+  try {
+    const { success } = await limiter.limit({ key });
+    return success;
+  } catch {
+    return opts?.failClosed ? false : true;
   }
-
-  // Fallback: Cloudflare KV (per-edge, not globally consistent, but better than nothing)
-  if (opts?.kv) {
-    try {
-      const kvKey = `rl2:${key}`;
-      const raw = await opts.kv.get(kvKey);
-      const count = (raw ? parseInt(raw, 10) : 0) + 1;
-      await opts.kv.put(kvKey, String(count), { expirationTtl: windowSeconds * 2 });
-      return count <= limit;
-    } catch (e) {
-      console.error('[KV] Rate limit fallback failed:', e);
-    }
-  }
-
-  // Hard fail-closed for routes that opt in (admin login)
-  if (opts?.failClosedOnRedisError) return false;
-
-  return true; // Fail open for normal routes
 }
 
 /** Legacy defaults from migration 003 — treated as "no override" so achievements.name (seeded) is shown. */
@@ -4777,6 +5098,8 @@ async function fetchMarketListings(
   sort: string,
   search: string,
   trait: string,
+  rarity: string,
+  setName: string,
   page: number,
   limit: number
 ): Promise<{ listings: any[]; total: number; has_more: boolean; page: number }> {
@@ -4796,7 +5119,7 @@ async function fetchMarketListings(
   const userCardIds = [...new Set((listingRows as any[]).map((r: any) => r.user_card_id).filter(Boolean))];
   const { data: cardRows, error: cardsError } = await sb
     .from('enriched_user_cards')
-    .select('user_card_id, name, rarity, image_url, baked_image_url, template_id, trait_list, streamer_id')
+    .select('user_card_id, name, rarity, image_url, baked_image_url, template_id, trait_list, streamer_id, set_name')
     .in('user_card_id', userCardIds);
   if (cardsError) throw cardsError;
 
@@ -4811,13 +5134,16 @@ async function fetchMarketListings(
   }).filter(Boolean);
 
   if (search) hydrated = hydrated.filter((l: any) => String(l.card?.name || '').toLowerCase().includes(search));
+  // trait_list stores raw mechanic UUIDs — compare by ID directly
   if (trait) hydrated = hydrated.filter((l: any) => {
     const list = Array.isArray(l.card?.trait_list) ? l.card.trait_list : [];
     return list.some((e: any) => {
-      if (typeof e === 'string') return e.toLowerCase() === trait;
-      return String(e?.name || '').toLowerCase() === trait || String(e?.display_name || '').toLowerCase() === trait;
+      const id = typeof e === 'string' ? e : String(e?.id || '');
+      return id.toLowerCase() === trait;
     });
   });
+  if (rarity) hydrated = hydrated.filter((l: any) => String(l.card?.rarity || '').toLowerCase() === rarity);
+  if (setName) hydrated = hydrated.filter((l: any) => String(l.card?.set_name || '').toLowerCase() === setName);
 
   if (sort === 'rarity_high' || sort === 'rarity_low') {
     hydrated.sort((a: any, b: any) => {
@@ -4933,11 +5259,47 @@ async function incrementGoalProgress(supabase: any, twitchId: string, counterKey
 
 // ── End Daily Goals helpers ────────────────────────────────────────────────
 
+async function verifyBetaToken(token: string, secret: string): Promise<boolean> {
+  const dot = token.indexOf('.');
+  if (dot === -1) return false;
+  const ts = token.slice(0, dot);
+  const sigB64 = token.slice(dot + 1);
+  const timestamp = parseInt(ts, 10);
+  if (isNaN(timestamp)) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (now - timestamp > 30 * 24 * 3600) return false;
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+    );
+    const sigBytes = Uint8Array.from(atob(sigB64), (c: string) => c.charCodeAt(0));
+    return await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(ts));
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
     const path = url.pathname.replace(/\/$/, '') || '/';
+
+    // ── BETA GATE ─────────────────────────────────────────────────────────────
+    // When ADMIN_PASSWORD is set, only requests carrying a valid signed
+    // castle_access cookie are allowed through. Everything else is redirected
+    // to creatorcastle.gg (the coming-soon page). Third-party webhook callers
+    // and OBS browser sources are exempt since they have no browser cookie.
+    const BETA_GATE_EXEMPT = ['/api/twitch', '/api/kick', '/api/stripe/webhook', '/obs-overlay', '/queue-control'];
+    if (env.ADMIN_PASSWORD && !BETA_GATE_EXEMPT.some(p => path.startsWith(p))) {
+      const cookieHeader = request.headers.get('Cookie') || '';
+      const betaToken = cookieHeader.match(/(?:^|;\s*)castle_access=([^;]+)/)?.[1] ?? '';
+      if (!betaToken || !(await verifyBetaToken(betaToken, env.ADMIN_PASSWORD))) {
+        return Response.redirect('https://creatorcastle.gg', 302);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ── STATIC ASSET SHORT-CIRCUIT ────────────────────────────────────────────
     // Serve public/ files directly via the ASSETS binding before any Worker
@@ -5009,16 +5371,17 @@ export default {
 
     // --- R2 ASSET SERVING ---
     // Specifically serving traits, core icons, and now card_images from the unified bucket.
-    const isCdnRequest = url.hostname === 'cdn.codeoce.com' || path.startsWith('/traits') || path.startsWith('/core') || path.startsWith('/card_images');
+    const isCdnRequest = getCreatorCdnHostnames(env).includes(url.hostname) || path.startsWith('/traits') || path.startsWith('/core') || path.startsWith('/card_images');
     if (isCdnRequest && method === 'GET') {
       const key = url.pathname.replace(/^\//, '');
       try {
         const object = await env.CARD_IMAGES.get(key);
         if (object !== null) {
-          const headers = new Headers(corsHeaders);
+          const headers = new Headers();
           object.writeHttpMetadata(headers);
           headers.set('etag', object.httpEtag);
           headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+          headers.set('Access-Control-Allow-Origin', '*');
           return new Response(object.body, { headers });
         }
       } catch (e: any) {
@@ -5034,6 +5397,7 @@ export default {
     const cacheablePaths = [
       '/api/v2/bootstrap', '/api/mechanics', '/api/leaderboard', '/api/stats',
       '/api/cards/count', '/api/public/catalog', '/api/public/streamer',
+      '/api/public/collection-page', // aggregate endpoint — replaces 4 parallel fetches
       '/api/public/binder',   // public binder views — 60s shared edge cache
     ];
     const isCacheable = method === 'GET' && cacheablePaths.some(p => path.startsWith(p));
@@ -5070,7 +5434,7 @@ export default {
     // Generic Rate Limiting for Public/Expensive Routes (50 requests per minute per IP)
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
     if (path.startsWith('/api/onboarding') || path === '/api/bootstrap') {
-      if (!await checkRateLimit(ip, 50, sharedRedis, { kv: (env as any).KV_CACHE ?? null })) {
+      if (!await checkRateLimit(env.RATE_LIMITER_BOOTSTRAP, ip)) {
         return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
           status: 429,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -5158,6 +5522,10 @@ export default {
             return { user: u, streamer: target, teamRole: null as 'moderator' | 'editor' | null };
           }
 
+          if (isEnvPlatformAdmin(env, u.twitch_id)) {
+            return { user: u, streamer: target, teamRole: 'editor' as 'moderator' | 'editor' | null };
+          }
+
           const tr = await getStreamerTeamRole(sbase, u.twitch_id, target.id);
           if (!tr) throw new Error("Forbidden: Not a team member for this channel");
 
@@ -5234,6 +5602,31 @@ export default {
       console.log(`[CORS] Origin: ${origin || 'none'}, Allowed: ${isAllowedOrigin}, Final: ${corsHeaders['Access-Control-Allow-Origin']}`);
       const cookieHeader = request.headers.get('Cookie') || '';
       console.log(`[Cookies] ${cookieHeader ? 'Header present (' + cookieHeader.split(';').length + ' items)' : 'Header missing'}`);
+
+      if (path === '/api/public/waitlist') {
+        const publicCors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+        if (method === 'OPTIONS') return new Response(null, { status: 204, headers: publicCors });
+        if (method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: publicCors });
+        try {
+          const body: any = await request.json().catch(() => ({}));
+          const email = String(body.email || '').trim().toLowerCase();
+          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return new Response(JSON.stringify({ error: 'Invalid email' }), { status: 400, headers: { ...publicCors, 'Content-Type': 'application/json' } });
+          }
+          const { error } = await supabase
+            .from('waitlist_emails')
+            .insert({ email })
+            .select()
+            .maybeSingle();
+          if (error && error.code !== '23505') {
+            console.error('[Waitlist]', error);
+            return new Response(JSON.stringify({ error: 'Failed to save email' }), { status: 500, headers: { ...publicCors, 'Content-Type': 'application/json' } });
+          }
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...publicCors, 'Content-Type': 'application/json' } });
+        } catch (e: any) {
+          return new Response(JSON.stringify({ error: 'Server error' }), { status: 500, headers: { ...publicCors, 'Content-Type': 'application/json' } });
+        }
+      }
 
       if (method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -5510,8 +5903,8 @@ export default {
               },
             },
             metadata: { ...baseMeta, platform_held: 'false' },
-            success_url: `${getBaseUrl(request, env)}/binder/${streamer.username}?payment=success`,
-            cancel_url: `${getBaseUrl(request, env)}/binder/${streamer.username}?payment=cancel`,
+            success_url: `${getBaseUrl(request, env)}/${streamer.username}?payment=success`,
+            cancel_url: `${getBaseUrl(request, env)}/${streamer.username}?payment=cancel`,
           });
         } else {
           session = await stripe.checkout.sessions.create({
@@ -5543,8 +5936,8 @@ export default {
               platform_held: 'true',
               seller_amount_cents: String(streamerShare),
             },
-            success_url: `${getBaseUrl(request, env)}/binder/${streamer.username}?payment=success`,
-            cancel_url: `${getBaseUrl(request, env)}/binder/${streamer.username}?payment=cancel`,
+            success_url: `${getBaseUrl(request, env)}/${streamer.username}?payment=success`,
+            cancel_url: `${getBaseUrl(request, env)}/${streamer.username}?payment=cancel`,
           });
         }
 
@@ -5575,14 +5968,13 @@ export default {
         if (!imgUrl) {
           return new Response('Missing ?url=', { status: 400 });
         }
-        const allowedHosts = ['cdn.codeoce.com', 'cdn2.codeoce.com'];
         let parsedUrl: URL;
         try {
           parsedUrl = new URL(imgUrl);
         } catch {
           return new Response('Invalid URL', { status: 400 });
         }
-        if (!allowedHosts.includes(parsedUrl.hostname)) {
+        if (!getCreatorCdnHostnames(env).includes(parsedUrl.hostname)) {
           return new Response('Forbidden host', { status: 403 });
         }
         try {
@@ -5635,6 +6027,19 @@ export default {
           const quantity = parseInt(metadata.quantity || '5', 10);
           const platformHeld = metadata.platform_held === 'true';
           const sellerAmount = parseInt(metadata.seller_amount_cents || '0', 10);
+
+          // Per-set customization one-time purchase (platform-only, no card grant)
+          if (metadata.type === 'set_customization' && metadata.streamer_id) {
+            const { error: custErr } = await supabase
+              .from('streamers')
+              .update({ has_set_customization: true })
+              .eq('id', metadata.streamer_id);
+            if (custErr) {
+              console.error('[Stripe Webhook] set_customization unlock failed:', custErr.message);
+            } else {
+              console.log(`[Stripe Webhook] Per-set customization unlocked for streamer ${metadata.streamer_id}`);
+            }
+          }
 
           if (userId && streamerId) {
             console.log(`[Stripe Webhook] Payment completed for ${userName} (${userId}). Granting ${quantity} cards for streamer ${streamerId}.`);
@@ -5911,14 +6316,15 @@ export default {
 
 
 
-      // Rate limiting (Redis-backed — global across all Cloudflare edge nodes)
+      // Rate limiting — Cloudflare native binding (atomic, globally consistent, no KV/Redis)
       const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
       const isAdminRoute = path.startsWith('/api/admin');
       const isAdminLogin = method === 'POST' && path === '/api/admin/login';
-      const rateLimit = isAdminLogin ? 10 : isAdminRoute ? 600 : 300;
-      const kv = (env as any).KV_CACHE ?? null;
+      const limiter = isAdminLogin ? env.RATE_LIMITER_ADMIN_LOGIN
+                    : isAdminRoute ? env.RATE_LIMITER_ADMIN
+                    : env.RATE_LIMITER_API;
 
-      if (!await checkRateLimit(clientIP, rateLimit, sharedRedis, { kv, failClosedOnRedisError: isAdminLogin })) {
+      if (!await checkRateLimit(limiter, clientIP, { failClosed: isAdminLogin })) {
         return new Response(JSON.stringify({ error: 'Too many requests. Please slow down.' }), {
           status: 429,
           headers: { ...corsHeaders, 'Retry-After': '60' }
@@ -6385,7 +6791,7 @@ export default {
             user ? (async () => {
               const cacheKey = `auth:health:v2:${user.twitch_id}`;
               const tHealth0 = Date.now();
-              const cached = await (env as any).KV_CACHE?.get(cacheKey);
+              const cached = await env.KV_CACHE?.get(cacheKey);
               if (cached) {
                 console.log(`[Bootstrap/Perf] Auth health CACHE HIT in ${Date.now() - tHealth0}ms`);
                 return JSON.parse(cached);
@@ -6400,18 +6806,19 @@ export default {
               };
               console.log(`[Bootstrap/Perf] Auth health compute took ${Date.now() - tCompute0}ms`);
               
-              if (ctx && (env as any).KV_CACHE) {
-                ctx.waitUntil((env as any).KV_CACHE.put(cacheKey, JSON.stringify(status), { expirationTtl: 300 })); // 5 min cache
+              if (ctx && env.KV_CACHE) {
+                ctx.waitUntil(env.KV_CACHE.put(cacheKey, JSON.stringify(status), { expirationTtl: 300 })); // 5 min cache
               }
               return status;
             })() : Promise.resolve(null),
             user ? fetchAchievementsWithCache(
-              env, 
-              supabase, 
-              sharedRedis, 
-              user.twitch_id, 
-              streamer.id, 
-              streamer.achievement_names || {}, 
+              env,
+              supabase,
+              sharedRedis,
+              user.twitch_id,
+              streamer.id,
+              streamer.achievement_names || {},
+              streamer.achievement_emojis || {},
               ctx
             ) : Promise.resolve([])
           ]);
@@ -6499,7 +6906,34 @@ export default {
             ? url.searchParams.get('inspect') 
             : user?.twitch_id;
 
-          // 2. Parallelize: Master RPC + User Collection Page 1 + Hydrated Achievements
+          // 2. Fetch team memberships + platform flags (not in RPC)
+          let v2TeamMemberships: any[] = [];
+          let v2PlatformStaffRole: string | null = null;
+          let v2IsPlatformAdmin = false;
+          if (user?.twitch_id) {
+            v2IsPlatformAdmin = isEnvPlatformAdmin(env, user.twitch_id);
+            const { data: psRow } = await supabase
+              .from('platform_staff')
+              .select('role')
+              .eq('twitch_id', user.twitch_id)
+              .maybeSingle();
+            v2PlatformStaffRole = psRow?.role || null;
+            const { data: tmRows } = await supabase
+              .from('streamer_team_members')
+              .select('streamer_id, role')
+              .eq('member_twitch_id', user.twitch_id);
+            if (tmRows?.length) {
+              const ids = [...new Set(tmRows.map((t: any) => t.streamer_id))];
+              const { data: sm } = await supabase
+                .from('streamers')
+                .select('id, brand_name, display_name, username, avatar_url')
+                .in('id', ids);
+              const byId = new Map((sm || []).map((s: any) => [s.id, s]));
+              v2TeamMemberships = tmRows.map((t: any) => ({ ...t, streamer: byId.get(t.streamer_id) }));
+            }
+          }
+
+          // 3. Parallelize: Master RPC + User Collection Page 1 + Hydrated Achievements
           const [rpcRes, collectionRes, hydratedAchievements] = await Promise.all([
             supabase.rpc('get_bootstrap_data_v4', {
               p_user_twitch_id: targetTwitchId || null,
@@ -6519,6 +6953,7 @@ export default {
               user.twitch_id,
               streamer?.id || 'all',
               (streamer as any)?.achievement_names || {},
+              (streamer as any)?.achievement_emojis || {},
               ctx
             ) : Promise.resolve([])
           ]);
@@ -6572,8 +7007,16 @@ export default {
             return c;
           });
 
+          const v2IsAdmin = v2IsPlatformAdmin || !!rpc.creator_data?.stats || !!v2PlatformStaffRole;
           const bootstrapBody = {
-            user: user ? { ...user, is_creator: !!rpc.creator_data?.stats } : null,
+            user: user ? {
+              ...user,
+              is_creator: !!rpc.creator_data?.stats,
+              is_admin: v2IsAdmin,
+              is_platform_admin: v2IsPlatformAdmin,
+              platform_staff_role: v2PlatformStaffRole,
+              team_memberships: v2TeamMemberships,
+            } : null,
             streamer: streamer,
             stats: {
               total: rpc.page_stats?.total_cards || 0,
@@ -6587,6 +7030,10 @@ export default {
             leaderboard: rpc.leaderboard || [],
             bootstrap_lite: bootstrapLite,
             csrf_token: csrfTokenV2,
+            ui_prefs: ((user as any)?.profile_settings as any)?.ui_prefs ?? {},
+            regional_prefs: ((user as any)?.profile_settings as any)?.regional ?? {},
+            privacy_prefs: ((user as any)?.profile_settings as any)?.privacy ?? {},
+            notification_prefs: ((user as any)?.profile_settings as any)?.notification_prefs ?? {},
             timing: {
               total_ms: Date.now() - bootT0
             }
@@ -6597,8 +7044,19 @@ export default {
             'X-Response-Version': 'V2',
             'Set-Cookie': `csrf=${csrfTokenV2}${secureFlagBoot}; SameSite=Lax; Path=/`
           });
+          // Cache the clean response (no user-specific session cookie).
           if (cache && cacheKeyUrl) {
             ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+          }
+          // Append a renewed session cookie when the JWT is within the 15-day renewal window.
+          // Done after caching so the session cookie is never stored in the edge cache.
+          if (user) {
+            const renewalCookie = await maybeRenewSession(request, env, user);
+            if (renewalCookie) {
+              const hdrs = new Headers(response.headers);
+              hdrs.append('Set-Cookie', renewalCookie);
+              return new Response(response.body, { status: response.status, headers: hdrs });
+            }
           }
           return response;
         } catch (e: any) {
@@ -6783,6 +7241,104 @@ export default {
 
       // --- ONBOARDING ENDPOINTS ---
 
+      if (method === 'GET' && path === '/api/creator/check-slug') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        const slug = String(url.searchParams.get('slug') || '').trim().toLowerCase();
+        if (!/^[a-z0-9][a-z0-9_-]{1,29}$/.test(slug)) {
+          return secureResponse({ available: false, reason: 'invalid' }, 200, corsHeaders);
+        }
+        const { data: conflict } = await supabase
+          .from('streamers').select('twitch_id').ilike('username', slug).maybeSingle();
+        const available = !conflict || conflict.twitch_id === user.twitch_id;
+        return secureResponse({ available }, 200, corsHeaders);
+      }
+
+      if (method === 'POST' && path === '/api/creator/claim-slug') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+
+        const body = await request.json() as { slug?: string };
+        const raw = String(body.slug || '').trim().toLowerCase();
+
+        if (!/^[a-z0-9][a-z0-9_-]{1,29}$/.test(raw)) {
+          return secureResponse('Invalid slug format', 400, corsHeaders, true);
+        }
+
+        // Must contain the user's Kick username so they can't impersonate someone else
+        const { data: streamer } = await supabase
+          .from('streamers')
+          .select('twitch_id, username, kick_username')
+          .eq('twitch_id', user.twitch_id)
+          .maybeSingle();
+
+        if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
+
+        const kickName = String(streamer.kick_username || '').toLowerCase();
+        if (!kickName || !raw.includes(kickName)) {
+          return secureResponse(`Slug must contain your Kick username (${kickName})`, 400, corsHeaders, true);
+        }
+
+        const { data: conflict } = await supabase
+          .from('streamers')
+          .select('twitch_id')
+          .ilike('username', raw)
+          .maybeSingle();
+
+        if (conflict && conflict.twitch_id !== user.twitch_id) {
+          return secureResponse('That URL is already taken', 409, corsHeaders, true);
+        }
+
+        const { error: updateErr } = await supabase
+          .from('streamers')
+          .update({ username: raw, castle_code: raw })
+          .eq('twitch_id', user.twitch_id);
+        if (!updateErr) {
+          await supabase.from('users').update({ trade_code: raw }).eq('twitch_id', user.twitch_id);
+        }
+
+        if (updateErr) return secureResponse(updateErr.message, 500, corsHeaders, true);
+
+        // Invalidate streamer context cache
+        if (env.KV_CACHE) {
+          await Promise.all([
+            env.KV_CACHE.delete(`streamer:branding:v1:${streamer.username}`),
+            env.KV_CACHE.delete(`streamer:branding:v1:${raw}`),
+          ]);
+        }
+
+        return secureResponse({ ok: true, username: raw }, 200, corsHeaders);
+      }
+
+      if (method === 'POST' && path === '/api/onboarding/referral') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        const body = await request.json() as { code?: string };
+        const code = String(body.code || '').trim().toLowerCase();
+        if (!code) return secureResponse({ ok: true }, 200, corsHeaders); // blank = skip
+
+        const { data: referrer } = await supabase
+          .from('streamers')
+          .select('id, username, castle_code')
+          .ilike('castle_code', code)
+          .maybeSingle();
+
+        if (!referrer) return secureResponse('Referral code not found', 404, corsHeaders, true);
+
+        // Don't let a creator refer themselves
+        const { data: self } = await supabase
+          .from('streamers').select('id').eq('twitch_id', user.twitch_id).maybeSingle();
+        if (self?.id === referrer.id) return secureResponse('Cannot use your own code', 400, corsHeaders, true);
+
+        const { error } = await supabase
+          .from('streamers')
+          .update({ referred_by_castle_code: referrer.castle_code })
+          .eq('twitch_id', user.twitch_id);
+
+        if (error) return secureResponse(error.message, 500, corsHeaders, true);
+        return secureResponse({ ok: true, referrer: referrer.username }, 200, corsHeaders);
+      }
+
       if (path === '/api/onboarding/status') {
         const user = await getUserFromSession(request, env, supabase);
         if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
@@ -6935,6 +7491,8 @@ export default {
 
         const body = await request.json() as any;
         if (!body.brand_name) return secureResponse('Brand name required', 400, corsHeaders, true);
+        if (containsProfanity(body.brand_name)) return profanityError();
+        if (body.brand_tagline && containsProfanity(body.brand_tagline)) return profanityError();
 
         // Fetch existing streamer to check for token
         const { data: existing } = await supabase
@@ -7200,6 +7758,353 @@ export default {
         }
       }
 
+      // Save UI preferences (light-mode, reduce-motion, foil, tilt, card-size, etc.)
+      if (method === 'PATCH' && path === '/api/user/ui-prefs') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        try {
+          const body = await request.json() as Record<string, unknown>;
+          const ALLOWED = ['light_mode','reduce_motion','no_animations','photosensitivity','foil','tilt','dupes','card_size','sort'];
+          const sanitized: Record<string, unknown> = {};
+          for (const k of ALLOWED) { if (k in body) sanitized[k] = body[k]; }
+          if (Object.keys(sanitized).length === 0) {
+            return secureResponse('No valid keys provided', 400, corsHeaders, true);
+          }
+          const existing = ((user as any).profile_settings as Record<string, unknown>) || {};
+          const merged: Record<string, unknown> = {
+            ...existing,
+            ui_prefs: { ...((existing.ui_prefs as Record<string, unknown>) || {}), ...sanitized }
+          };
+          const { error: dbErr } = await supabase
+            .from('users')
+            .update({ profile_settings: merged })
+            .eq('twitch_id', (user as any).twitch_id);
+          if (dbErr) throw dbErr;
+          const isHttpsPref = request.url.startsWith('https');
+          const sfPref = isHttpsPref ? '; Secure' : '';
+          const cookieVal = buildPrefCookieStr(merged.ui_prefs as Record<string, unknown>);
+          const baseResp = secureResponse({ success: true, ui_prefs: merged.ui_prefs }, 200, corsHeaders);
+          const hdrs = new Headers(baseResp.headers);
+          hdrs.append('Set-Cookie', `castle_prefs=${cookieVal}; SameSite=Lax; Path=/; Max-Age=31536000${sfPref}`);
+          return new Response(baseResp.body, { status: baseResp.status, headers: hdrs });
+        } catch (e: any) {
+          return secureResponse(e.message || 'Update failed', 500, corsHeaders, true);
+        }
+      }
+
+      if (method === 'PATCH' && path === '/api/user/regional-prefs') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        try {
+          const body = await request.json() as Record<string, unknown>;
+          const ALLOWED_TZ = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [];
+          const ALLOWED_CURRENCIES = ['usd','eur','gbp','cad','aud','jpy','brl','mxn','sek','nok','dkk','chf','nzd','sgd','krw','inr','rub','zar','try','pln'];
+          const ALLOWED_LANGUAGES = ['en','es','pt','fr','de','ja','ko','zh'];
+          const sanitized: Record<string, unknown> = {};
+          if (typeof body.timezone === 'string' && (ALLOWED_TZ.length === 0 || ALLOWED_TZ.includes(body.timezone))) {
+            sanitized.timezone = body.timezone;
+          }
+          if (typeof body.currency === 'string' && ALLOWED_CURRENCIES.includes(body.currency.toLowerCase())) {
+            sanitized.currency = body.currency.toLowerCase();
+          }
+          if (typeof body.language === 'string' && ALLOWED_LANGUAGES.includes(body.language.toLowerCase())) {
+            sanitized.language = body.language.toLowerCase();
+          }
+          if (Object.keys(sanitized).length === 0) {
+            return secureResponse('No valid keys provided', 400, corsHeaders, true);
+          }
+          const existing = ((user as any).profile_settings as Record<string, unknown>) || {};
+          const merged: Record<string, unknown> = {
+            ...existing,
+            regional: { ...((existing.regional as Record<string, unknown>) || {}), ...sanitized }
+          };
+          const { error: dbErr } = await supabase
+            .from('users')
+            .update({ profile_settings: merged })
+            .eq('twitch_id', (user as any).twitch_id);
+          if (dbErr) throw dbErr;
+          return secureResponse({ success: true, regional_prefs: merged.regional }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message || 'Update failed', 500, corsHeaders, true);
+        }
+      }
+
+      if (method === 'PATCH' && path === '/api/user/privacy') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        try {
+          const body = (await request.json()) as Record<string, unknown>;
+          const BOOL_KEYS = ['profile_public', 'collection_public', 'show_on_leaderboard', 'wishlist_public', 'trade_code_public'];
+          const sanitized: Record<string, unknown> = {};
+          for (const k of BOOL_KEYS) {
+            if (typeof body[k] === 'boolean') sanitized[k] = body[k];
+          }
+          if (Object.keys(sanitized).length === 0) {
+            return secureResponse('No valid keys provided', 400, corsHeaders, true);
+          }
+          const existing = ((user as any).profile_settings as Record<string, unknown>) || {};
+          const merged: Record<string, unknown> = {
+            ...existing,
+            privacy: { ...((existing.privacy as Record<string, unknown>) || {}), ...sanitized }
+          };
+          const { error: dbErr } = await supabase
+            .from('users')
+            .update({ profile_settings: merged })
+            .eq('twitch_id', (user as any).twitch_id);
+          if (dbErr) throw dbErr;
+          return secureResponse({ success: true, privacy_prefs: merged.privacy }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message || 'Update failed', 500, corsHeaders, true);
+        }
+      }
+
+      if (method === 'PATCH' && path === '/api/user/notification-prefs') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        try {
+          const body = (await request.json()) as Record<string, unknown>;
+          const BOOL_KEYS = ['card_drops', 'trades', 'achievements'];
+          const sanitized: Record<string, unknown> = {};
+          for (const k of BOOL_KEYS) {
+            if (typeof body[k] === 'boolean') sanitized[k] = body[k];
+          }
+          if (Object.keys(sanitized).length === 0) {
+            return secureResponse('No valid keys provided', 400, corsHeaders, true);
+          }
+          const existing = ((user as any).profile_settings as Record<string, unknown>) || {};
+          const merged: Record<string, unknown> = {
+            ...existing,
+            notification_prefs: { ...((existing.notification_prefs as Record<string, unknown>) || {}), ...sanitized }
+          };
+          const { error: dbErr } = await supabase
+            .from('users')
+            .update({ profile_settings: merged })
+            .eq('twitch_id', (user as any).twitch_id);
+          if (dbErr) throw dbErr;
+          return secureResponse({ success: true, notification_prefs: merged.notification_prefs }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message || 'Update failed', 500, corsHeaders, true);
+        }
+      }
+
+      // Promo / gift code redemption — grants a specific card
+      if (method === 'POST' && path === '/api/redeem/code') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        try {
+          const body = (await request.json()) as Record<string, unknown>;
+          const raw = typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
+          if (!raw || raw.length > 64) {
+            return secureResponse('Invalid code', 400, corsHeaders, true);
+          }
+
+          const { data: promo, error: promoErr } = await supabase
+            .from('promo_codes')
+            .select('id, card_id, set_id, reward_type, streamer_id, max_uses, uses, expires_at, is_active, cards(name, rarity), streamer_sets(name)')
+            .eq('code', raw)
+            .maybeSingle();
+
+          if (promoErr) throw promoErr;
+          if (!promo) return secureResponse('Code not found or invalid', 404, corsHeaders, true);
+          if (!promo.is_active) return secureResponse('This code is no longer active', 410, corsHeaders, true);
+          if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+            return secureResponse('This code has expired', 410, corsHeaders, true);
+          }
+          if (promo.max_uses !== null && promo.uses >= promo.max_uses) {
+            return secureResponse('This code has reached its usage limit', 410, corsHeaders, true);
+          }
+
+          // One-per-user check
+          const { data: existing } = await supabase
+            .from('promo_code_redemptions')
+            .select('id')
+            .eq('code_id', promo.id)
+            .eq('twitch_id', (user as any).twitch_id)
+            .maybeSingle();
+          if (existing) return secureResponse('You have already redeemed this code', 409, corsHeaders, true);
+
+          // Record redemption first — unique constraint catches any race
+          const { error: redeemErr } = await supabase
+            .from('promo_code_redemptions')
+            .insert({ code_id: promo.id, twitch_id: (user as any).twitch_id });
+          if (redeemErr) {
+            if (redeemErr.code === '23505') return secureResponse('You have already redeemed this code', 409, corsHeaders, true);
+            throw redeemErr;
+          }
+          await supabase.from('promo_codes').update({ uses: promo.uses + 1 }).eq('id', promo.id);
+
+          const rewardType = (promo as any).reward_type || 'card';
+          const isPackReward = rewardType === 'pack';
+          const PACK_SIZE = 5;
+
+          if (isPackReward) {
+            const setName = (promo as any).streamer_sets?.name || 'a set';
+            const grantOpts = {
+              packSource: 'promo_code',
+              forcedSetId: promo.set_id || undefined,
+              preferSupabaseOverRedis: true,
+            };
+            let granted = 0;
+            for (let i = 0; i < PACK_SIZE; i++) {
+              const r = await grantRandomCard(
+                supabase,
+                (user as any).twitch_id,
+                (user as any).username || '',
+                promo.streamer_id,
+                i === 0 ? `You redeemed a promo code and received a pack from ${setName}!` : null,
+                env,
+                grantOpts,
+                ctx
+              );
+              if (r) granted++;
+            }
+            if (granted === 0) {
+              await supabase.from('promo_code_redemptions').delete().eq('code_id', promo.id).eq('twitch_id', (user as any).twitch_id).catch(() => {});
+              await supabase.from('promo_codes').update({ uses: promo.uses }).eq('id', promo.id).catch(() => {});
+              return secureResponse('Could not grant the pack — the set may have no cards. Please contact support.', 500, corsHeaders, true);
+            }
+            return secureResponse({ success: true, message: `You received ${granted} card${granted !== 1 ? 's' : ''} from the ${setName} pack!`, cards_granted: granted }, 200, corsHeaders);
+          }
+
+          const cardName = (promo.cards as any)?.name || 'a card';
+          const result = await grantRandomCard(
+            supabase,
+            (user as any).twitch_id,
+            (user as any).username || '',
+            promo.streamer_id,
+            `You redeemed a promo code and received ${cardName}!`,
+            env,
+            { forcedCardId: promo.card_id, packSource: 'promo_code' },
+            ctx
+          );
+
+          if (!result) {
+            await supabase.from('promo_code_redemptions').delete().eq('code_id', promo.id).eq('twitch_id', (user as any).twitch_id).catch(() => {});
+            await supabase.from('promo_codes').update({ uses: promo.uses }).eq('id', promo.id).catch(() => {});
+            return secureResponse('Could not grant the card — it may be inactive. Please contact support.', 500, corsHeaders, true);
+          }
+          return secureResponse({ success: true, message: `You received ${cardName}!`, card_name: cardName }, 200, corsHeaders);
+        } catch (e: any) {
+          console.error('[Redeem] Error:', e?.message || e);
+          return secureResponse(e.message || 'Redemption failed', 500, corsHeaders, true);
+        }
+      }
+
+      // Creator: list promo codes for their channel
+      if (method === 'GET' && path === '/api/creator/promo-codes') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const { data: codes, error } = await supabase
+            .from('promo_codes')
+            .select('id, code, card_id, set_id, reward_type, max_uses, uses, expires_at, is_active, created_at, cards(name, rarity, image_url), streamer_sets(name)')
+            .eq('streamer_id', streamer.id)
+            .order('created_at', { ascending: false });
+          if (error) throw error;
+          return secureResponse(codes || [], 200, corsHeaders);
+        } catch (e: any) {
+          if (e.message === 'Unauthorized') return secureResponse('Unauthorized', 401, corsHeaders, true);
+          if (e.message?.startsWith('Forbidden')) return secureResponse(e.message, 403, corsHeaders, true);
+          console.error('[PromoCreator] GET error:', e?.message || e);
+          return secureResponse('Server error', 500, corsHeaders, true);
+        }
+      }
+
+      // Creator: create a new promo code (auto-generated unique code)
+      if (method === 'POST' && path === '/api/creator/promo-codes') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const body = (await request.json()) as Record<string, unknown>;
+
+          const reward_type = typeof body.reward_type === 'string' && body.reward_type === 'pack' ? 'pack' : 'card';
+          let card_id: string | null = null;
+          let set_id: string | null = null;
+
+          if (reward_type === 'card') {
+            card_id = typeof body.card_id === 'string' ? body.card_id.trim() : '';
+            if (!card_id) return secureResponse('card_id is required for card reward', 400, corsHeaders, true);
+            const { data: card, error: cardErr } = await supabase
+              .from('cards')
+              .select('id, name')
+              .eq('id', card_id)
+              .eq('streamer_id', streamer.id)
+              .maybeSingle();
+            if (cardErr) throw cardErr;
+            if (!card) return secureResponse('Card not found or does not belong to your channel', 404, corsHeaders, true);
+          } else {
+            // Pack: set_id is required
+            const rawSetId = typeof body.set_id === 'string' ? body.set_id.trim() : '';
+            if (!rawSetId) return secureResponse('set_id is required for pack reward', 400, corsHeaders, true);
+            const { data: setRow, error: setErr } = await supabase
+              .from('streamer_sets')
+              .select('id, name')
+              .eq('id', rawSetId)
+              .eq('streamer_id', streamer.id)
+              .maybeSingle();
+            if (setErr) throw setErr;
+            if (!setRow) return secureResponse('Set not found or does not belong to your channel', 404, corsHeaders, true);
+            set_id = rawSetId;
+          }
+
+          const max_uses = body.max_uses != null ? (Number(body.max_uses) > 0 ? Number(body.max_uses) : null) : null;
+          const expires_at = typeof body.expires_at === 'string' && body.expires_at ? body.expires_at : null;
+
+          // Generate unique code — charset excludes I/O/0/1 to avoid confusion
+          const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+          function genCode(len: number): string {
+            let out = '';
+            const arr = new Uint8Array(len);
+            crypto.getRandomValues(arr);
+            for (let i = 0; i < len; i++) out += CHARSET[arr[i] % CHARSET.length];
+            return out;
+          }
+
+          let code: string | null = null;
+          for (let attempt = 0; attempt < 10; attempt++) {
+            const candidate = genCode(8);
+            const { data: clash } = await supabase.from('promo_codes').select('id').eq('code', candidate).maybeSingle();
+            if (!clash) { code = candidate; break; }
+          }
+          if (!code) return secureResponse('Could not generate a unique code — please try again', 500, corsHeaders, true);
+
+          const { data: created, error: insErr } = await supabase
+            .from('promo_codes')
+            .insert({ code, card_id, set_id, streamer_id: streamer.id, reward_type, max_uses, expires_at, is_active: true })
+            .select('id, code, card_id, set_id, reward_type, max_uses, uses, expires_at, is_active, created_at, cards(name, rarity, image_url), streamer_sets(name)')
+            .single();
+          if (insErr) throw insErr;
+          return secureResponse(created, 201, corsHeaders);
+        } catch (e: any) {
+          if (e.message === 'Unauthorized') return secureResponse('Unauthorized', 401, corsHeaders, true);
+          if (e.message?.startsWith('Forbidden')) return secureResponse(e.message, 403, corsHeaders, true);
+          console.error('[PromoCreator] POST error:', e?.message || e);
+          return secureResponse('Server error', 500, corsHeaders, true);
+        }
+      }
+
+      // Creator: deactivate (soft-delete) a promo code
+      if (method === 'DELETE' && path.startsWith('/api/creator/promo-codes/')) {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const codeId = path.slice('/api/creator/promo-codes/'.length);
+          const { data: existing, error: fetchErr } = await supabase
+            .from('promo_codes')
+            .select('id')
+            .eq('id', codeId)
+            .eq('streamer_id', streamer.id)
+            .maybeSingle();
+          if (fetchErr) throw fetchErr;
+          if (!existing) return secureResponse('Code not found', 404, corsHeaders, true);
+          const { error: updErr } = await supabase.from('promo_codes').update({ is_active: false }).eq('id', codeId);
+          if (updErr) throw updErr;
+          return secureResponse({ success: true }, 200, corsHeaders);
+        } catch (e: any) {
+          if (e.message === 'Unauthorized') return secureResponse('Unauthorized', 401, corsHeaders, true);
+          if (e.message?.startsWith('Forbidden')) return secureResponse(e.message, 403, corsHeaders, true);
+          console.error('[PromoCreator] DELETE error:', e?.message || e);
+          return secureResponse('Server error', 500, corsHeaders, true);
+        }
+      }
+
       // Viewer: block future card grants from specific streamer channels
       if (method === 'GET' && path === '/api/user/blocked-streamers') {
         const user = await getUserFromSession(request, env, supabase);
@@ -7381,6 +8286,13 @@ export default {
             .maybeSingle();
           if (userErr) { console.error('[PublicProfile] user query error:', userErr); return secureResponse('Internal error', 500, corsHeaders, true); }
           if (!userRow) return secureResponse('Profile not found', 404, corsHeaders, true);
+
+          // Privacy enforcement
+          const profilePrivacy = ((userRow.profile_settings as any)?.privacy) || {};
+          const isProfileOwner = !!(viewerSession && viewerSession.twitch_id === userRow.twitch_id);
+          if (!isProfileOwner && profilePrivacy.profile_public === false) {
+            return secureResponse({ private: true, username: userRow.username, avatar_url: userRow.avatar_url }, 200, { ...corsHeaders, 'Cache-Control': 'no-store' });
+          }
 
           // 2. Check if creator
           const { data: streamerRow } = await supabase
@@ -7598,18 +8510,22 @@ export default {
             image_url: c.image_url, streamer_username: c.streamer_username, brand_name: c.brand_name
           }));
 
+          const hideCollection = !isProfileOwner && profilePrivacy.collection_public === false;
+          const hideWishlist   = !isProfileOwner && profilePrivacy.wishlist_public === false;
+          const hideTradeCode  = !isProfileOwner && profilePrivacy.trade_code_public === false;
+
           const payload = {
             user: {
               username: userRow.username,
               display_name: userRow.username,
               avatar_url: userRow.avatar_url,
-              trade_code: userRow.trade_code,
+              trade_code: hideTradeCode ? null : userRow.trade_code,
               member_since: userRow.created_at,
               is_creator: isCreator,
               profile_layout: userRow.profile_layout,
               profile_sections: userRow.profile_sections,
               featured_card_ids: userRow.featured_card_ids,
-              wishlist_items: userRow.wishlist_items,
+              wishlist_items: hideWishlist ? [] : userRow.wishlist_items,
               profile_pinned_achievements: userRow.profile_pinned_achievements,
               bio: userRow.profile_bio || '',
               trades_public: userRow.trades_public ?? false,
@@ -7617,19 +8533,17 @@ export default {
               profile_settings: userRow.profile_settings ?? {},
             },
             stats: {
-              total_cards: totalCards,
-              unique_streamers: uniqueStreamers,
-              legendary_count: legendaryCount,
-              epic_count: epicCount,
-              rare_count: rareCount,
+              total_cards: hideCollection ? 0 : totalCards,
+              unique_streamers: hideCollection ? 0 : uniqueStreamers,
+              legendary_count: hideCollection ? 0 : legendaryCount,
+              epic_count: hideCollection ? 0 : epicCount,
+              rare_count: hideCollection ? 0 : rareCount,
               battles_won: battlesWon,
               battles_lost: battlesLost,
-              trades_completed: tradesCompleted,
-              packs_opened: packsOpened,
-              sets_completed: completedSets,
-              // XP formula: common=1pt, rare=3pt, epic=6pt, legendary=15pt, goal_xp additive
-              // Level = floor(sqrt(xp / 10)), capped at 100 for display
-              level: Math.min(100, Math.floor(Math.sqrt(
+              trades_completed: hideCollection ? 0 : tradesCompleted,
+              packs_opened: hideCollection ? 0 : packsOpened,
+              sets_completed: hideCollection ? 0 : completedSets,
+              level: hideCollection ? 0 : Math.min(100, Math.floor(Math.sqrt(
                 (totalCards - legendaryCount - epicCount - rareCount) * 1 +
                 rareCount * 3 +
                 epicCount * 6 +
@@ -7637,12 +8551,12 @@ export default {
                 (userRow.goal_xp ?? 0)
               ) / Math.sqrt(10))),
             },
-            showcase_cards: finalShowcase,
-            trophy_cards: trophyCards,
-            latest_cards: latestCards,
+            showcase_cards: hideCollection ? [] : finalShowcase,
+            trophy_cards: hideCollection ? [] : trophyCards,
+            latest_cards: hideCollection ? [] : latestCards,
             achievements: unlockedAchievements,
-            supported_creators: supportedCreators,
-            set_breakdown: setBreakdown,
+            supported_creators: hideCollection ? [] : supportedCreators,
+            set_breakdown: hideCollection ? [] : setBreakdown,
           };
           return secureResponse(payload, 200, { ...corsHeaders, 'Cache-Control': 'public, max-age=60, stale-while-revalidate=120' });
         } catch (e: any) {
@@ -7671,11 +8585,11 @@ export default {
           if (typeof body.trades_public === 'boolean') updateData.trades_public = body.trades_public;
           if (body.settings && typeof body.settings === 'object') {
             const allowedModes = ['carousel', 'grid'];
-            const settings: Record<string, any> = {};
             if (typeof body.settings.showcase_mode === 'string' && allowedModes.includes(body.settings.showcase_mode)) {
-              settings.showcase_mode = body.settings.showcase_mode;
+              // Merge into existing profile_settings to preserve ui_prefs and other keys
+              const existingSettings = ((user as any).profile_settings as Record<string, unknown>) || {};
+              updateData.profile_settings = { ...existingSettings, showcase_mode: body.settings.showcase_mode };
             }
-            if (Object.keys(settings).length > 0) updateData.profile_settings = settings;
           }
           if (Array.isArray(body.sidebar_widgets)) {
             updateData.profile_sidebar_widgets = body.sidebar_widgets
@@ -7878,6 +8792,7 @@ export default {
         try {
           const body = await request.json() as any;
           const bio = String(body.bio || '').trim().slice(0, 120);
+          if (containsProfanity(bio)) return profanityError();
           const { error } = await supabase
             .from('users')
             .update({ profile_bio: bio })
@@ -7911,6 +8826,106 @@ export default {
       }
 
       // 2c. Custom Binders
+      // GET /api/binders/share?token=<uuid> — public, no auth required
+      if (method === 'GET' && path === '/api/binders/share') {
+        try {
+          const token = url.searchParams.get('token');
+          if (!token) return secureResponse('token required', 400, corsHeaders, true);
+
+          const { data: binder, error: bErr } = await supabase
+            .from('user_binders')
+            .select('id, name, user_id, user_binder_cards(user_card_id, sort_order)')
+            .eq('share_token', token)
+            .eq('is_public', true)
+            .single();
+
+          if (bErr || !binder) return secureResponse('Binder not found or not public', 404, corsHeaders, true);
+
+          const { data: owner } = await supabase
+            .from('users')
+            .select('username, avatar_url')
+            .eq('twitch_id', (binder as any).user_id)
+            .maybeSingle();
+
+          const cardIds = ((binder as any).user_binder_cards || []).map((bc: any) => bc.user_card_id);
+          let cards: any[] = [];
+          if (cardIds.length > 0) {
+            const { data: cardData } = await supabase
+              .from('enriched_user_cards')
+              .select('user_card_id, name, rarity, image_url, template_id, baked_image_url, created_at')
+              .in('user_card_id', cardIds);
+            cards = (cardData || []).map((c: any) => ({ ...c, instanceId: c.user_card_id }));
+          }
+
+          return secureResponse(
+            { binder: { id: (binder as any).id, name: (binder as any).name }, owner: owner || null, cards },
+            200, corsHeaders
+          );
+        } catch (e: any) {
+          return secureResponse(e?.message || 'Failed to load shared binder', 500, corsHeaders, true);
+        }
+      }
+
+      // GET /api/public/binders?streamer=<slug> — all public binders for a streamer
+      if (method === 'GET' && path === '/api/public/binders') {
+        try {
+          const streamer = await resolveStreamerContextWithCache(request, env, ctx, supabase, url);
+          if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
+
+          const { data: binders, error: bErr } = await supabase
+            .from('user_binders')
+            .select('id, name, user_id, share_token, user_binder_cards(user_card_id, sort_order)')
+            .eq('streamer_id', streamer.id)
+            .eq('is_public', true)
+            .not('share_token', 'is', null)
+            .order('updated_at', { ascending: false });
+
+          if (bErr) return secureResponse('Failed to load binders', 500, corsHeaders, true);
+
+          const rows = binders || [];
+
+          // Gather unique owner twitch_ids and preview card IDs
+          const ownerIds = [...new Set(rows.map((b: any) => b.user_id).filter(Boolean))];
+          const allCardIds: string[] = [];
+          const binderCardMap: Record<string, string[]> = {};
+          rows.forEach((b: any) => {
+            const sorted = ((b.user_binder_cards || []) as any[])
+              .sort((a: any, z: any) => (a.sort_order ?? 999) - (z.sort_order ?? 999))
+              .slice(0, 4)
+              .map((bc: any) => bc.user_card_id);
+            binderCardMap[b.id] = sorted;
+            sorted.forEach((id: string) => { if (!allCardIds.includes(id)) allCardIds.push(id); });
+          });
+
+          const [ownerResults, cardResults] = await Promise.all([
+            ownerIds.length > 0
+              ? supabase.from('users').select('twitch_id, username, display_name, avatar_url').in('twitch_id', ownerIds)
+              : Promise.resolve({ data: [] }),
+            allCardIds.length > 0
+              ? supabase.from('enriched_user_cards').select('user_card_id, image_url, baked_image_url').in('user_card_id', allCardIds)
+              : Promise.resolve({ data: [] }),
+          ]);
+
+          const ownerMap: Record<string, any> = {};
+          ((ownerResults as any).data || []).forEach((u: any) => { ownerMap[u.twitch_id] = u; });
+          const cardMap: Record<string, any> = {};
+          ((cardResults as any).data || []).forEach((c: any) => { cardMap[c.user_card_id] = c; });
+
+          const result = rows.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            share_token: b.share_token,
+            card_count: (b.user_binder_cards || []).length,
+            owner: ownerMap[b.user_id] || null,
+            preview_cards: (binderCardMap[b.id] || []).map((id: string) => cardMap[id]).filter(Boolean),
+          }));
+
+          return secureResponse({ binders: result }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e?.message || 'Failed to load binders', 500, corsHeaders, true);
+        }
+      }
+
       if (method === 'GET' && path === '/api/binders') {
         try {
           const user = await getUserFromSession(request, env, supabase);
@@ -7952,6 +8967,7 @@ export default {
         try {
           const { name } = await request.json() as { name: string };
           if (!name) return secureResponse('Name is required', 400, corsHeaders, true);
+          if (containsProfanity(name)) return profanityError();
 
           const streamer = await resolveStreamerContext(request, supabase, url);
           if (!streamer) return secureResponse('Streamer context not found', 404, corsHeaders, true);
@@ -7974,15 +8990,21 @@ export default {
         if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
 
         try {
-          const { id, name } = await request.json() as { id: string, name: string };
-          if (!id || !name) return secureResponse('ID and name required', 400, corsHeaders, true);
+          const { id, name, is_public } = await request.json() as { id: string, name?: string, is_public?: boolean };
+          if (!id) return secureResponse('ID required', 400, corsHeaders, true);
+          if (name === undefined && is_public === undefined) return secureResponse('Nothing to update', 400, corsHeaders, true);
+          if (name && containsProfanity(name)) return profanityError();
 
           const streamer = await resolveStreamerContext(request, supabase, url);
           if (!streamer) return secureResponse('Streamer context not found', 404, corsHeaders, true);
 
+          const updates: Record<string, any> = {};
+          if (name !== undefined) updates.name = name;
+          if (is_public !== undefined) updates.is_public = is_public;
+
           const { error } = await supabase
             .from('user_binders')
-            .update({ name })
+            .update(updates)
             .eq('id', id)
             .eq('user_id', user.twitch_id)
             .eq('streamer_id', streamer.id);
@@ -7990,7 +9012,7 @@ export default {
           if (error) throw error;
           return secureResponse({ success: true }, 200, corsHeaders);
         } catch (e: any) {
-          return secureResponse(e.message || 'Failed to rename binder', 500, corsHeaders, true);
+          return secureResponse(e.message || 'Failed to update binder', 500, corsHeaders, true);
         }
       }
 
@@ -8857,6 +9879,23 @@ export default {
 
       // --- ADMIN ROUTES ---
 
+      if (method === 'GET' && path === '/api/admin/streamer-lookup') {
+        try {
+          await checkAdmin(request);
+          const q = (url.searchParams.get('q') || '').trim();
+          if (!q) throw new Error('q required');
+          const { data: rows, error } = await supabase
+            .from('streamers')
+            .select('id, username, display_name, avatar_url')
+            .ilike('username', q)
+            .limit(5);
+          if (error) throw error;
+          return secureResponse(rows || [], 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 400, corsHeaders, true);
+        }
+      }
+
       // 1. Add Card
       if (method === 'POST' && path === '/api/admin/cards') {
         try {
@@ -9133,7 +10172,18 @@ export default {
             return secureResponse([], 200, corsHeaders); // Return empty on error instead of 500
           }
 
-          return secureResponse(notifications || [], 200, corsHeaders);
+          // Filter by user's notification prefs (all default to enabled)
+          const nPrefs = ((user as any).profile_settings as any)?.notification_prefs || {};
+          const disabledTypes = new Set<string>();
+          if (nPrefs.card_drops === false) disabledTypes.add('card_drop');
+          if (nPrefs.trades === false) { ['trade_request','trade_offered','trade_completed','trade_rejected'].forEach(t => disabledTypes.add(t)); }
+          if (nPrefs.achievements === false) disabledTypes.add('achievement_unlock');
+
+          const filtered = disabledTypes.size > 0
+            ? (notifications || []).filter((n: any) => !disabledTypes.has(n.type))
+            : (notifications || []);
+
+          return secureResponse(filtered, 200, corsHeaders);
         } catch (e: any) {
           console.error('[Notifications] Exception:', e);
           return secureResponse([], 200, corsHeaders); // Return empty on error
@@ -9758,14 +10808,14 @@ export default {
 
           const affiliateReqs = {
             cards_uploaded: { required: 25, current: uploaded, met: uploaded >= 25 },
-            unique_collectors: { required: 5, current: uniqueCollectors, met: uniqueCollectors >= 5 },
+            unique_collectors: { required: 15, current: uniqueCollectors, met: uniqueCollectors >= 15 },
             qualifying_months: { required: 2, current: affiliateConsec, met: affiliateConsec >= 2, threshold: 150 },
           };
           const affiliateEligible = Object.values(affiliateReqs).every(r => r.met);
 
           const partnerReqs = {
             cards_uploaded: { required: 75, current: uploaded, met: uploaded >= 75 },
-            unique_collectors: { required: 20, current: uniqueCollectors, met: uniqueCollectors >= 20 },
+            unique_collectors: { required: 30, current: uniqueCollectors, met: uniqueCollectors >= 30 },
             qualifying_months: { required: 3, current: partnerConsec, met: partnerConsec >= 3, threshold: 500 },
           };
           const partnerEligible = affiliateEligible && Object.values(partnerReqs).every(r => r.met);
@@ -9826,6 +10876,7 @@ export default {
 
           return secureResponse({
             current_tier: currentTier,
+            battles_enabled: streamer.battles_enabled ?? true,
             cards_uploaded: uploaded,
             unique_collectors: uniqueCollectors,
             referral_count: refs,
@@ -10053,12 +11104,21 @@ export default {
           // Handle branding settings (support both old nested format and new flat format)
           if (b.settings && b.settings.branding) {
             const branding = b.settings.branding;
-            if (branding.tagline !== undefined) updateData.brand_tagline = branding.tagline;
+            if (branding.tagline !== undefined) {
+              if (containsProfanity(branding.tagline)) return profanityError();
+              updateData.brand_tagline = branding.tagline;
+            }
           }
 
           // Direct branding fields (new format)
-          if (b.brand_name !== undefined) updateData.brand_name = b.brand_name;
-          if (b.brand_tagline !== undefined) updateData.brand_tagline = b.brand_tagline;
+          if (b.brand_name !== undefined) {
+            if (containsProfanity(b.brand_name)) return profanityError();
+            updateData.brand_name = b.brand_name;
+          }
+          if (b.brand_tagline !== undefined) {
+            if (containsProfanity(b.brand_tagline)) return profanityError();
+            updateData.brand_tagline = b.brand_tagline;
+          }
           // brand_logo_url column may not exist in all deployments; skip if not in schema
           if (b.brand_banner_url !== undefined) updateData.brand_banner_url = b.brand_banner_url;
 
@@ -10075,12 +11135,26 @@ export default {
           if (b.twitch_battle_reward_id !== undefined) updateData.twitch_battle_reward_id = b.twitch_battle_reward_id;
 
           // Battle/Trading Toggles
-          if (b.battles_enabled !== undefined) updateData.battles_enabled = b.battles_enabled;
+          if (b.battles_enabled !== undefined) {
+            if (b.battles_enabled === true) {
+              const { count: cardCount } = await supabase
+                .from('cards')
+                .select('*', { count: 'exact', head: true })
+                .eq('streamer_id', streamer.id);
+              if ((cardCount || 0) < 15) {
+                return secureResponse('You need at least 15 unique cards uploaded to enable battles.', 400, corsHeaders, true);
+              }
+            }
+            updateData.battles_enabled = b.battles_enabled;
+          }
           if (b.trading_enabled !== undefined) updateData.trading_enabled = b.trading_enabled;
           if (b.binder_color !== undefined) updateData.binder_color = b.binder_color;
           if (b.collection_methods !== undefined) updateData.collection_methods = b.collection_methods;
           if (b.social_links !== undefined) updateData.social_links = b.social_links;
           if (b.achievement_names !== undefined) updateData.achievement_names = b.achievement_names;
+          if (b.achievement_emojis !== undefined) updateData.achievement_emojis = b.achievement_emojis;
+          if (b.promotion_placements !== undefined) updateData.promotion_placements = b.promotion_placements;
+          if (b.promoted_card_ids !== undefined) updateData.promoted_card_ids = (Array.isArray(b.promoted_card_ids) ? b.promoted_card_ids.slice(0, 3) : []);
 
           const streamerCdnUrlFields = [
             'pack_image_url',
@@ -10107,9 +11181,11 @@ export default {
           // types (e.g. channel.cheer for bits) are subscribed for this broadcaster.
           if (b.collection_methods !== undefined && streamer.twitch_id) {
             const origin = new URL(request.url).origin;
+            const userToken = await getBroadcasterTwitchHelixAccessToken(supabase, env, streamer.twitch_id).catch(() => null);
             const resubTask = ensureEventSubSubscriptionsForBroadcaster(env, {
               broadcasterTwitchId: String(streamer.twitch_id),
               callbackOrigin: origin,
+              broadcasterUserToken: userToken || undefined,
             }).catch((e: any) =>
               console.error('[Settings] EventSub re-register after collection_methods save failed:', e?.message || e)
             );
@@ -10886,6 +11962,9 @@ export default {
           const { streamer, teamRole } = await checkCreator(request, supabase);
           assertTeamCanEditCatalog(teamRole);
           const b = await request.json() as any;
+
+          if (b.name && containsProfanity(b.name)) return profanityError();
+          if (b.description && containsProfanity(b.description)) return profanityError();
 
           // Validate set_id if provided
           if (b.set_id) {
@@ -11795,8 +12874,10 @@ export default {
             (typeof body.callback_base === 'string' && body.callback_base.trim()) || requestOrigin;
           const normalizedBase = normalizeWebhookCallbackUrl(callbackBase.trim());
 
+          const reconnectUserToken = await getBroadcasterTwitchHelixAccessToken(supabase, env, streamer.twitch_id).catch(() => null);
           const es = await ensureEventSubSubscriptionsForBroadcaster(env, {
             broadcasterTwitchId: String(streamer.twitch_id),
+            broadcasterUserToken: reconnectUserToken || undefined,
             callbackOrigin: normalizedBase,
           });
 
@@ -12123,6 +13204,9 @@ export default {
             return secureResponse('Card not found or access denied', 404, corsHeaders, true);
           }
 
+          if (b.name && containsProfanity(b.name)) return profanityError();
+          if (b.description && containsProfanity(b.description)) return profanityError();
+
           if (b.image_url) {
             await deleteReplacedCdnObject(env, existingCard.image_url, b.image_url);
           }
@@ -12447,6 +13531,9 @@ export default {
           assertTeamCanEditCatalog(teamRole);
           const b = await request.json() as any;
 
+          if (b.name && containsProfanity(b.name)) return profanityError();
+          if (b.description && containsProfanity(b.description)) return profanityError();
+
           // streamer_sets has UUID id with default, but we should only set it if provided
           const setData: any = {
             streamer_id: streamer.id,
@@ -12460,6 +13547,9 @@ export default {
           if (b.id) setData.id = b.id;
           if (b.icon_url) setData.icon_url = b.icon_url;
           if (b.pack_image_url !== undefined) setData.pack_image_url = b.pack_image_url;
+          if (b.pack_design_url !== undefined) setData.pack_design_url = b.pack_design_url;
+          if (b.pack_foil_color !== undefined) setData.pack_foil_color = b.pack_foil_color;
+          if (b.card_back_url !== undefined) setData.card_back_url = b.card_back_url;
           if (b.release_date) setData.release_date = b.release_date;
           if (b.end_date) setData.end_date = b.end_date;
           if (b.is_active !== undefined) setData.is_active = b.is_active;
@@ -12473,6 +13563,41 @@ export default {
         }
       }
 
+      // Creator: One-time purchase to unlock per-set customization (platform collects)
+      if (method === 'POST' && path === '/api/creator/purchase/set-customization') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          if (streamer.has_set_customization) {
+            return secureResponse({ already_purchased: true }, 200, corsHeaders);
+          }
+          const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-04-10' as any });
+          const origin = new URL(request.url).origin;
+          const session = await stripe.checkout.sessions.create({
+            mode: 'payment',
+            line_items: [{
+              price_data: {
+                currency: 'usd',
+                product_data: {
+                  name: 'Per-Set Customization',
+                  description: 'Custom pack art and card backs for each set — one-time unlock',
+                },
+                unit_amount: 999,
+              },
+              quantity: 1,
+            }],
+            metadata: {
+              type: 'set_customization',
+              streamer_id: streamer.id,
+            },
+            success_url: `${origin}/dashboard?section=card-studio&tab=sets&customization=unlocked`,
+            cancel_url: `${origin}/dashboard?section=card-studio&tab=sets`,
+          });
+          return secureResponse({ url: session.url }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 400, corsHeaders, true);
+        }
+      }
+
       // Creator: Update own set
       if (method === 'PUT' && path.startsWith('/api/creator/sets/')) {
         try {
@@ -12480,6 +13605,9 @@ export default {
           assertTeamCanEditCatalog(teamRole);
           const setId = path.split('/').pop();
           const b = await request.json() as any;
+
+          if (b.name && containsProfanity(b.name)) return profanityError();
+          if (b.description && containsProfanity(b.description)) return profanityError();
 
           // Verify ownership
           const { data: existingSet, error: checkErr } = await supabase
@@ -12499,6 +13627,9 @@ export default {
           if (b.description !== undefined) updateData.description = b.description;
           if (b.icon_url !== undefined) updateData.icon_url = b.icon_url;
           if (b.pack_image_url !== undefined) updateData.pack_image_url = b.pack_image_url;
+          if (b.pack_design_url !== undefined) updateData.pack_design_url = b.pack_design_url;
+          if (b.pack_foil_color !== undefined) updateData.pack_foil_color = b.pack_foil_color;
+          if (b.card_back_url !== undefined) updateData.card_back_url = b.card_back_url;
           if (b.release_date !== undefined) updateData.release_date = b.release_date;
           if (b.end_date !== undefined) updateData.end_date = b.end_date;
           if (b.is_active !== undefined) updateData.is_active = b.is_active;
@@ -12804,16 +13935,104 @@ export default {
             brand_emoji:          (streamer as any).brand_emoji     ?? null,
             brand_color_primary:  (streamer as any).brand_color_primary   ?? null,
             brand_color_secondary:(streamer as any).brand_color_secondary ?? null,
+            binder_color:         (streamer as any).binder_color         ?? null,
             avatar_url:           (streamer as any).avatar_url      ?? null,
             is_live:              (streamer as any).is_live         ?? false,
             kick_username:        (streamer as any).kick_username   ?? null,
             twitter:              (streamer as any).twitter         ?? null,
             youtube:              (streamer as any).youtube         ?? null,
             discord:              (streamer as any).discord         ?? null,
-            pack_image_url:       (streamer as any).pack_image_url  ?? null,
+            pack_image_url:       resolvePublicPackImageUrl(streamer as any, env) ?? null,
           };
 
           const response = secureResponse(pub, 200, corsHeaders);
+          if (cache && cacheKeyUrl) {
+            ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
+          }
+          return response;
+        } catch (e: any) {
+          return secureResponse(e.message, 500, corsHeaders, true);
+        }
+      }
+
+      // Aggregate collection-page endpoint — composes streamer + catalog + sets + leaderboard
+      // in one round trip so the /{username} page fires a single fetch instead of four.
+      if (method === 'GET' && path === '/api/public/collection-page') {
+        try {
+          const streamer = await resolveStreamerContextWithCache(request, env, ctx, supabase, url);
+          if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
+
+          const [
+            [{ data: cardsData, error: cardsErr }, { data: setsData }],
+            leaderboardData,
+          ] = await Promise.all([
+            Promise.all([
+              supabase
+                .from('cards')
+                .select('id, name, image_url, rarity, type, description, card_number, set_id')
+                .eq('streamer_id', streamer.id)
+                .order('rarity', { ascending: false })
+                .order('card_number', { ascending: true, nullsFirst: false }),
+              supabase
+                .from('streamer_sets')
+                .select('*')
+                .eq('streamer_id', streamer.id)
+                .order('release_date', { ascending: false }),
+            ]),
+            fetchWithCache(
+              env,
+              sharedRedis,
+              `leaderboard:${streamer.id}`,
+              60,
+              async () => {
+                const { data, error } = await supabase.rpc('get_leaderboard_top100', { p_streamer_id: streamer.id });
+                if (error) throw error;
+                return data || [];
+              },
+              ctx
+            ),
+          ]);
+
+          if (cardsErr) throw cardsErr;
+
+          const setMap: Record<string, any> = {};
+          (setsData || []).forEach((s: any) => { setMap[s.id] = s; });
+
+          const catalog = (cardsData || []).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            image_url: c.image_url,
+            rarity: c.rarity,
+            type: c.type,
+            description: c.description,
+            card_number: c.card_number,
+            set_id: c.set_id,
+            set_name: setMap[c.set_id]?.name || null,
+            set_code: setMap[c.set_id]?.code || null,
+            set_image_url: setMap[c.set_id]?.image_url || null,
+          }));
+
+          const pub = {
+            id:                    streamer.id,
+            username:              streamer.username,
+            display_name:          (streamer as any).display_name          ?? null,
+            brand_name:            (streamer as any).brand_name             ?? null,
+            brand_tagline:         (streamer as any).brand_tagline          ?? null,
+            brand_emoji:           (streamer as any).brand_emoji            ?? null,
+            brand_color_primary:   (streamer as any).brand_color_primary    ?? null,
+            brand_color_secondary: (streamer as any).brand_color_secondary  ?? null,
+            binder_color:          (streamer as any).binder_color           ?? null,
+            avatar_url:            (streamer as any).avatar_url             ?? null,
+            is_live:               (streamer as any).is_live                ?? false,
+            kick_username:         (streamer as any).kick_username          ?? null,
+            twitter:               (streamer as any).twitter                ?? null,
+            youtube:               (streamer as any).youtube                ?? null,
+            discord:               (streamer as any).discord                ?? null,
+            pack_image_url:        resolvePublicPackImageUrl(streamer as any, env) ?? null,
+          };
+
+          const payload = { streamer: pub, catalog, sets: setsData || [], leaderboard: leaderboardData || [] };
+          const response = secureResponse(payload, 200, corsHeaders);
           if (cache && cacheKeyUrl) {
             ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
           }
@@ -12839,7 +14058,7 @@ export default {
 
           const { data, error } = await supabase
             .from('pack_sessions')
-            .select('id, streamer_id, user_card_ids, source, created_at')
+            .select('id, streamer_id, user_card_ids, source, created_at, streamers(username, pack_image_url, brand_name, display_name, brand_color_primary, pack_foil_color)')
             .eq('twitch_id', sessionUser.twitch_id)
             .is('opened_at', null)
             .order('created_at', { ascending: true });
@@ -12853,16 +14072,26 @@ export default {
               code: (error as any).code,
             }, 200, corsHeaders);
           }
+
+          // Normalize PostgREST FK join: rename 'streamers' -> 'streamer' for frontend compatibility
+          const packs = (data ?? []).map((p: any) => {
+            const { streamers, ...rest } = p;
+            const streamer = streamers
+              ? { ...streamers, pack_image_url: resolvePublicPackImageUrl({ ...streamers, username: streamers.username }, env) }
+              : null;
+            return { ...rest, streamer };
+          });
+
           if (url.searchParams.get('debug') === '1') {
             return secureResponse({
               __debug: true,
               twitch_id_used: sessionUser.twitch_id,
               supabase_key_role: supabaseKeyRole,
-              count: data?.length ?? 0,
-              packs: data ?? [],
+              count: packs.length,
+              packs,
             }, 200, corsHeaders);
           }
-          return secureResponse(data ?? [], 200, corsHeaders);
+          return secureResponse(packs, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse({ __debug: true, exception: e?.message }, 200, corsHeaders);
         }
@@ -12922,14 +14151,18 @@ export default {
           // Fetch streamer config for pack art
           const { data: streamerRow } = await supabase
             .from('streamers')
-            .select('pack_image_url, pack_open_sound_url, pack_foil_color, brand_name, brand_color_primary')
+            .select('username, pack_image_url, pack_open_sound_url, pack_foil_color, brand_name, brand_color_primary')
             .eq('id', pack.streamer_id)
             .maybeSingle();
+
+          const streamerOut = streamerRow
+            ? { ...streamerRow, pack_image_url: resolvePublicPackImageUrl(streamerRow, env) }
+            : {};
 
           return secureResponse({
             pack_id: packId,
             source: pack.source,
-            streamer: streamerRow ?? {},
+            streamer: streamerOut,
             cards: (cardRows ?? []).map((uc: any) => ({
               user_card_id: uc.user_card_id,
               id: uc.card_id,
@@ -13582,7 +14815,7 @@ export default {
         const etagKvKey = `collection:etag:v1:${targetTwitchId}:${etagScope}`;
 
         // ETag conditional check — KV lookup only (~1ms), no Supabase if unchanged
-        const storedEtag = await (env as any).KV_CACHE?.get(etagKvKey).catch(() => null);
+        const storedEtag = await env.KV_CACHE?.get(etagKvKey).catch(() => null);
         const clientEtag = request.headers.get('If-None-Match');
         if (storedEtag && clientEtag === storedEtag) {
           return new Response(null, {
@@ -13609,19 +14842,29 @@ export default {
           query = query.eq('streamer_id', streamer.id);
         }
 
-        const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+        const [{ data, error }, { data: favRows }] = await Promise.all([
+          query.order('created_at', { ascending: false }).limit(limit),
+          supabase
+            .from('user_card_favourites')
+            .select('card_id')
+            .eq('user_id', targetTwitchId),
+        ]);
 
         if (error) {
           console.error('DB Error:', error.message);
           return secureResponse(error.message, 500, corsHeaders, true);
         }
 
-        const responseData = data || [];
+        const favouriteCardIds = new Set((favRows || []).map((r: any) => String(r.card_id)));
+        const responseData = (data || []).map((c: any) => ({
+          ...c,
+          is_favourite: favouriteCardIds.has(String(c.card_id)),
+        }));
 
         // Compute and persist ETag: row count + latest created_at
         const newEtag = `"${responseData.length}-${responseData[0]?.created_at ?? '0'}"`;
         ctx.waitUntil(
-          (env as any).KV_CACHE?.put(etagKvKey, newEtag, { expirationTtl: 300 }).catch(() => {})
+          env.KV_CACHE?.put(etagKvKey, newEtag, { expirationTtl: 300 }).catch(() => {})
         );
 
         return secureResponse(responseData, 200, corsHeaders, false, {
@@ -13654,6 +14897,68 @@ export default {
           ctx.waitUntil(cache.put(cacheKeyUrl, response.clone()).catch(() => {}));
         }
         return response;
+      }
+
+      // --- CARD FAVOURITES ---
+
+      // POST /api/cards/:card_id/favourite  — mark a card definition as favourite for the current user
+      if (method === 'POST' && /^\/api\/cards\/([^/]+)\/favourite$/.test(path)) {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse({ error: 'Unauthorized' }, 401, corsHeaders, true);
+        const cardId = path.split('/')[3];
+        const { error } = await supabase
+          .from('user_card_favourites')
+          .upsert({ user_id: user.twitch_id, card_id: cardId }, { onConflict: 'user_id,card_id' });
+        if (error) return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        return secureResponse({ favourited: true }, 200, corsHeaders);
+      }
+
+      // DELETE /api/cards/:card_id/favourite  — unmark a card definition as favourite
+      if (method === 'DELETE' && /^\/api\/cards\/([^/]+)\/favourite$/.test(path)) {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse({ error: 'Unauthorized' }, 401, corsHeaders, true);
+        const cardId = path.split('/')[3];
+        const { error } = await supabase
+          .from('user_card_favourites')
+          .delete()
+          .eq('user_id', user.twitch_id)
+          .eq('card_id', cardId);
+        if (error) return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        return secureResponse({ favourited: false }, 200, corsHeaders);
+      }
+
+      // POST /api/cards/:id/report — submit a report for a card
+      if (method === 'POST' && /^\/api\/cards\/([^/]+)\/report$/.test(path)) {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse({ error: 'Unauthorized' }, 401, corsHeaders, true);
+        const cardId = path.match(/^\/api\/cards\/([^/]+)\/report$/)![1];
+        const body = await request.json() as any;
+        const VALID_REASONS = ['inappropriate_content','offensive_hateful','wrong_information','spam_duplicate','other'];
+        if (!body.reason || !VALID_REASONS.includes(body.reason)) {
+          return secureResponse({ error: 'Invalid reason' }, 400, corsHeaders, true);
+        }
+        const { error } = await supabase.from('card_reports').insert({
+          card_id: cardId,
+          reporter_id: user.twitch_id,
+          reason: body.reason,
+        });
+        if (error) {
+          if (error.code === '23505') return secureResponse({ error: 'Already reported' }, 409, corsHeaders, true);
+          return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        }
+        return secureResponse({ success: true }, 200, corsHeaders);
+      }
+
+      // GET /api/collection/favourites  — list card_ids the current user has favourited
+      if (method === 'GET' && path === '/api/collection/favourites') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse({ error: 'Unauthorized' }, 401, corsHeaders, true);
+        const { data, error } = await supabase
+          .from('user_card_favourites')
+          .select('card_id')
+          .eq('user_id', user.twitch_id);
+        if (error) return secureResponse({ error: error.message }, 500, corsHeaders, true);
+        return secureResponse({ card_ids: (data || []).map((r: any) => r.card_id) }, 200, corsHeaders);
       }
 
       // --- BATTLE SYSTEM API ---
@@ -13772,10 +15077,11 @@ export default {
 
         console.log(`[BATTLE ACCEPT] Users ready: Challenger=${challengerUser?.username}, Target=${targetUser.username}`);
 
-        // 3. Fetch 3 random cards for Challenger & Target from THIS streamer's collection
+        // 3. Fetch cards for Challenger & Target from THIS streamer's collection
+        const DECK_FIELDS = 'id, name, image_url, attack, defense, max_hp, mechanic_name, mechanic_icon, genesis_mechanic_name, genesis_mechanic_icon';
         const [cDeck, tDeck] = await Promise.all([
-          supabase.from('enriched_user_cards').select('name, image_url, attack, defense').eq('twitch_id', battle.challenger_id).eq('streamer_id', streamer.id).limit(100),
-          supabase.from('enriched_user_cards').select('name, image_url, attack, defense').eq('twitch_id', targetUser.twitch_id).eq('streamer_id', streamer.id).limit(100)
+          supabase.from('enriched_user_cards').select(DECK_FIELDS).eq('twitch_id', battle.challenger_id).eq('streamer_id', streamer.id).limit(100),
+          supabase.from('enriched_user_cards').select(DECK_FIELDS).eq('twitch_id', targetUser.twitch_id).eq('streamer_id', streamer.id).limit(100)
         ]);
 
         if (!cDeck.data || !tDeck.data || cDeck.data.length < 3 || tDeck.data.length < 3) {
@@ -13783,94 +15089,47 @@ export default {
           return new Response(`Battle cancelled: Someone doesn't have enough cards.`, { status: 200 });
         }
 
-        const mapCard = (c: any) => ({
+        // Shuffle, pick 3, map to engine format
+        const shuffle = (arr: any[]) => arr.sort(() => 0.5 - Math.random());
+        const mapEngineCard = (c: any, slot: number) => ({
+          id: c.id,
           name: c.name,
-          image_url: c.image_url,
+          image_url: c.image_url || '',
+          mechanic_name: c.mechanic_name || null,
+          mechanic_icon: c.mechanic_icon || '',
+          genesis_mechanic_name: c.genesis_mechanic_name || null,
+          genesis_mechanic_icon: c.genesis_mechanic_icon || '',
           attack: c.attack || 0,
-          defense: c.defense || 0
+          defense: c.defense || 0,
+          max_hp: c.max_hp || c.defense || 0,
+          slot,
         });
 
-        // Shuffle and pick 3
-        const shuffle = (arr: any[]) => arr.sort(() => 0.5 - Math.random());
-        const challengerCards = shuffle(cDeck.data).slice(0, 3).map(mapCard);
-        const targetCards = shuffle(tDeck.data).slice(0, 3).map(mapCard);
+        const challengerDeck = shuffle(cDeck.data).slice(0, 3).map(mapEngineCard);
+        const targetDeck    = shuffle(tDeck.data).slice(0, 3).map(mapEngineCard);
 
-        let challengerWins = 0;
-        let targetWins = 0;
-        const rounds: string[] = [];
-        const battleDataRounds: any[] = [];
+        // 4. Run trait-aware battle engine
+        const battleData = runBattleEngine(
+          { name: battle.challenger_name, avatar: challengerUser?.avatar_url || null, twitch_id: battle.challenger_id },
+          { name: targetUser.username, avatar: targetUser.avatar_url || null, twitch_id: targetUser.twitch_id },
+          challengerDeck,
+          targetDeck
+        );
 
-        // 4. Combat Logic (Hearthstone style simultaneous strike)
-        for (let i = 0; i < 3; i++) {
-          const cCard = challengerCards[i];
-          const tCard = targetCards[i];
-
-          const cAtk = cCard.attack || 0;
-          const cDef = cCard.defense || 0;
-          const tAtk = tCard.attack || 0;
-          const tDef = tCard.defense || 0;
-
-          const cRemainingHealth = cDef - tAtk;
-          const tRemainingHealth = tDef - cAtk;
-
-          const cSurvived = cRemainingHealth > 0;
-          const tSurvived = tRemainingHealth > 0;
-
-          if (cSurvived && !tSurvived) challengerWins++;
-          else if (tSurvived && !cSurvived) targetWins++;
-          // If both die or both survive, it's a draw for that round (no points)
-
-          // Format short summary for round: [C1] vs [T1] = [Winner]
-          if (cSurvived && !tSurvived) (rounds as any[]).push(`${cCard.name} beat ${tCard.name}`);
-          else if (tSurvived && !cSurvived) (rounds as any[]).push(`${tCard.name} beat ${cCard.name}`);
-          else (rounds as any[]).push(`${cCard.name} tied ${tCard.name}`);
-
-          (battleDataRounds as any[]).push({
-            round: i + 1,
-            challengerCard: cCard,
-            targetCard: tCard,
-            challengerDamageTaken: tAtk,
-            targetDamageTaken: cAtk,
-            challengerSurvived: cSurvived,
-            targetSurvived: tSurvived,
-            winner: (cSurvived && !tSurvived) ? 'challenger' : ((tSurvived && !cSurvived) ? 'target' : 'draw')
-          });
-        }
-
-        let resultMsg = "";
-        let overallWinner = 'draw';
-        if (challengerWins > targetWins) {
-          resultMsg = `@${battle.challenger_name} WINS ${challengerWins}-${targetWins}!`;
-          overallWinner = 'challenger';
-        } else if (targetWins > challengerWins) {
-          resultMsg = `@${battle.target_name} WINS ${targetWins}-${challengerWins}!`;
-          overallWinner = 'target';
-        } else {
-          resultMsg = `It's a TIE ${challengerWins}-${targetWins}!`;
-        }
-
-        const battleData = {
-          challenger: {
-            id: battle.challenger_id,
-            name: battle.challenger_name,
-            avatar: challengerUser?.avatar_url,
-            wins: challengerWins
-          },
-          target: {
-            id: targetUser.twitch_id,
-            name: battle.target_name,
-            avatar: targetUser?.avatar_url,
-            wins: targetWins
-          },
-          rounds: battleDataRounds,
-          winner: overallWinner
-        };
+        const overallWinner = battleData.winner;
+        const resultMsg = overallWinner === 'challenger'
+          ? `@${battle.challenger_name} WINS!`
+          : overallWinner === 'target'
+          ? `@${battle.target_name} WINS!`
+          : `It's a DRAW!`;
 
         // 5. Update battle status and save battle_data
         await supabase.from('battles').update({
           status: 'completed',
           completed_at: new Date().toISOString(),
-          battle_data: battleData
+          battle_data: battleData,
+          winner_id: overallWinner === 'challenger' ? battle.challenger_id : (overallWinner === 'target' ? targetUser.twitch_id : null),
+          loser_id: overallWinner === 'challenger' ? targetUser.twitch_id : (overallWinner === 'target' ? battle.challenger_id : null),
         }).eq('id', battle.id);
 
         // 6. Update Stats
@@ -13880,16 +15139,15 @@ export default {
         };
         await Promise.all([initStats(battle.challenger_id, battle.challenger_name), initStats(targetUser.twitch_id, battle.target_name)]);
 
-        if (challengerWins > targetWins) {
+        if (overallWinner === 'challenger') {
           await supabase.rpc('increment_battle_stats', { p_winner_id: battle.challenger_id, p_loser_id: targetUser.twitch_id, p_streamer_id: streamer.id });
-        } else if (targetWins > challengerWins) {
+        } else if (overallWinner === 'target') {
           await supabase.rpc('increment_battle_stats', { p_winner_id: targetUser.twitch_id, p_loser_id: battle.challenger_id, p_streamer_id: streamer.id });
         } else {
-          // Draw logic
           await supabase.rpc('increment_battle_draws', { p_user1_id: battle.challenger_id, p_user2_id: targetUser.twitch_id, p_streamer_id: streamer.id });
         }
 
-        const summary = `💥 BATTLE! ${resultMsg} (${rounds.join(' | ')})`;
+        const summary = `💥 BATTLE! ${resultMsg}`;
         return new Response(summary, { status: 200 });
       }
 
@@ -13916,21 +15174,23 @@ export default {
         return new Response(`🏆 @${username} Battle Record (@${streamer.username}): ${data.wins}W - ${data.losses}L - ${data.draws}D. (Win Rate: ${data.win_rate}%)`, { status: 200 });
       }
 
-      // Latest Battle Data for OBS
+      // Latest Battle Data for OBS — must filter by streamer so multi-streamer setups
+      // don't bleed each other's battles onto the wrong overlay.
       if (method === 'GET' && path === '/api/public/battle/latest') {
+        const streamer = await resolveStreamerContext(request, supabase, url);
+        if (!streamer) return new Response(JSON.stringify(null), { status: 200, headers: corsHeaders });
+
         const { data, error } = await supabase
           .from('battles')
-          .select('id, battle_data, completed_at')
-          .eq('status', 'completed')
+          .select('id, battle_data, completed_at, challenger_name, target_name, winner_id')
+          .eq('streamer_id', streamer.id)
           .not('battle_data', 'is', null)
           .order('completed_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
         if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
-        if (!data) return new Response(JSON.stringify(null), { status: 200, headers: corsHeaders });
-
-        return new Response(JSON.stringify(data), { status: 200, headers: corsHeaders });
+        return new Response(JSON.stringify(data || null), { status: 200, headers: corsHeaders });
       }
 
 
@@ -13998,7 +15258,7 @@ export default {
           const streamer = await resolveStreamerContext(request, supabase, url);
           if (!streamer) return secureResponse('Streamer not found', 404, corsHeaders, true);
 
-          const leaderboard = await fetchWithCache(
+          const rawLeaderboard: any[] = await fetchWithCache(
             env,
             sharedRedis,
             `leaderboard:${streamer.id}`,
@@ -14010,6 +15270,28 @@ export default {
             },
             ctx
           );
+
+          // Post-filter users who opted out of leaderboards
+          let leaderboard = rawLeaderboard;
+          if (Array.isArray(rawLeaderboard) && rawLeaderboard.length > 0) {
+            const twitchIds = rawLeaderboard.map((r: any) => r.twitch_id).filter(Boolean);
+            if (twitchIds.length > 0) {
+              const { data: privRows } = await supabase
+                .from('users')
+                .select('twitch_id, profile_settings')
+                .in('twitch_id', twitchIds);
+              if (Array.isArray(privRows) && privRows.length > 0) {
+                const optedOut = new Set(
+                  privRows
+                    .filter((r: any) => (r.profile_settings as any)?.privacy?.show_on_leaderboard === false)
+                    .map((r: any) => r.twitch_id)
+                );
+                if (optedOut.size > 0) {
+                  leaderboard = rawLeaderboard.filter((r: any) => !optedOut.has(r.twitch_id));
+                }
+              }
+            }
+          }
 
           const response = secureResponse(leaderboard, 200, corsHeaders);
           if (cache && cacheKeyUrl) {
@@ -14032,8 +15314,9 @@ export default {
 
         const twitchId = user.twitch_id;
         const customNames = streamer.achievement_names || {};
+        const customEmojis = streamer.achievement_emojis || {};
 
-        const result = await fetchAchievementsWithCache(env, supabase, sharedRedis, twitchId, streamer.id, customNames, ctx);
+        const result = await fetchAchievementsWithCache(env, supabase, sharedRedis, twitchId, streamer.id, customNames, customEmojis, ctx);
 
         // Auto-sync: If they have 0 achievements but cards, trigger a sync in the background
         if (Array.isArray(result) && result.filter(a => a.unlocked).length === 0) {
@@ -14416,11 +15699,11 @@ export default {
           await ensureKickEventSubscriptions(tokenData.access_token);
 
           // Clear health cache on success
-          if (ctx && (env as any).KV_CACHE) {
-            ctx.waitUntil((env as any).KV_CACHE.delete(`auth:health:v2:${targetTwitchId}`));
+          if (ctx && env.KV_CACHE) {
+            ctx.waitUntil(env.KV_CACHE.delete(`auth:health:v2:${targetTwitchId}`));
           }
 
-          const destBase = role === 'creator' ? `${originKick}/dashboard.html` : `${originKick}/hub`;
+          const destBase = role === 'creator' ? `${originKick}/dashboard.html` : `${originKick}/my-collection`;
           const destLink = destBase + (destBase.includes('?') ? '&' : '?') + 'kick=linked';
           const hdrsLink = new Headers();
           hdrsLink.set('Location', destLink);
@@ -14486,24 +15769,41 @@ export default {
         );
 
         // Clear health cache
-        if (ctx && (env as any).KV_CACHE) {
-          ctx.waitUntil((env as any).KV_CACHE.delete(`auth:health:v2:${finalTwitchId}`));
+        if (ctx && env.KV_CACHE) {
+          ctx.waitUntil(env.KV_CACHE.delete(`auth:health:v2:${finalTwitchId}`));
         }
         if (userErrKick) console.error('[Kick/Callback] users upsert:', userErrKick);
 
         if (role === 'creator') {
-          const slugKick = `kick${ku.user_id}`;
-          const { error: seKick } = await supabase.from('streamers').upsert(
-            {
+          const { data: existingStreamer } = await supabase
+            .from('streamers')
+            .select('twitch_id')
+            .eq('twitch_id', canonicalId)
+            .maybeSingle();
+
+          if (existingStreamer) {
+            const { error: seKick } = await supabase.from('streamers')
+              .update({ display_name: displayName, avatar_url: avatarUrl, brand_name: displayName, kick_username: displayName })
+              .eq('twitch_id', canonicalId);
+            if (seKick) console.error('[Kick/Callback] streamers update:', seKick);
+          } else {
+            const slugBase = displayName.toLowerCase().replace(/[^a-z0-9_-]/g, '') || `kick${ku.user_id}`;
+            const { data: conflict } = await supabase.from('streamers').select('twitch_id').ilike('username', slugBase).maybeSingle();
+            const slug = conflict ? `${slugBase}_kick` : slugBase;
+            const { error: seKick } = await supabase.from('streamers').insert({
               twitch_id: canonicalId,
-              username: slugKick.toLowerCase(),
+              username: slug,
+              castle_code: slug,
               display_name: displayName,
               avatar_url: avatarUrl,
               brand_name: displayName,
-            },
-            { onConflict: 'twitch_id' }
-          );
-          if (seKick) console.error('[Kick/Callback] streamers upsert:', seKick);
+              kick_username: displayName,
+            });
+            if (!seKick) {
+              await supabase.from('users').update({ trade_code: slug }).eq('twitch_id', canonicalId);
+            }
+            if (seKick) console.error('[Kick/Callback] streamers insert:', seKick);
+          }
           await ensureKickEventSubscriptions(tokenData.access_token);
         }
 
@@ -14551,11 +15851,11 @@ export default {
           .setProtectedHeader({ alg: 'HS256' })
           .setSubject(canonicalId)
           .setIssuedAt()
-          .setExpirationTime('7d')
+          .setExpirationTime('30d')
           .sign(new TextEncoder().encode(env.SESSION_SECRET));
 
         const requestOriginKick = new URL(request.url).origin;
-        let destinationKick = role === 'creator' ? `${requestOriginKick}/dashboard` : `${requestOriginKick}/hub`;
+        let destinationKick = role === 'creator' ? `${requestOriginKick}/dashboard` : `${requestOriginKick}/my-collection`;
         if (role === 'creator') {
           if (!streamerKick || !streamerKick.is_active) {
             destinationKick = `${requestOriginKick}/onboarding?role=creator`;
@@ -14563,7 +15863,7 @@ export default {
         } else {
           const { data: dbUserKick } = await supabase
             .from('users')
-            .select('is_onboarding_complete')
+            .select('is_onboarding_complete, profile_settings')
             .eq('twitch_id', canonicalId)
             .maybeSingle();
           if (!dbUserKick || dbUserKick.is_onboarding_complete === false) {
@@ -14571,16 +15871,18 @@ export default {
           }
         }
 
+        let kickLoginUiPrefs: Record<string, unknown> = (dbUserKick as any)?.profile_settings?.ui_prefs || {};
+        if (role === 'creator' || !dbUserKick) {
+          try {
+            const { data: pRowKick } = await supabase.from('users').select('profile_settings').eq('twitch_id', canonicalId).maybeSingle();
+            kickLoginUiPrefs = (pRowKick as any)?.profile_settings?.ui_prefs || {};
+          } catch (_) {}
+        }
         const hdrsKick = new Headers();
         hdrsKick.set('Location', destinationKick);
-        hdrsKick.append(
-          'Set-Cookie',
-          `session=${sessionTokenKick}; HttpOnly${secureFlagKickCb}; SameSite=Lax; Path=/; Max-Age=604800`
-        );
-        hdrsKick.append(
-          'Set-Cookie',
-          `kick_pkce_verifier=; Path=/; Max-Age=0; HttpOnly${secureFlagKickCb}; SameSite=Lax`
-        );
+        hdrsKick.append('Set-Cookie', `session=${sessionTokenKick}; HttpOnly${secureFlagKickCb}; SameSite=Lax; Path=/; Max-Age=${SESSION_MAX_AGE_SEC}`);
+        hdrsKick.append('Set-Cookie', `castle_prefs=${buildPrefCookieStr(kickLoginUiPrefs)}; SameSite=Lax; Path=/; Max-Age=31536000${secureFlagKickCb}`);
+        hdrsKick.append('Set-Cookie', `kick_pkce_verifier=; Path=/; Max-Age=0; HttpOnly${secureFlagKickCb}; SameSite=Lax`);
         return new Response(null, { status: 302, headers: hdrsKick });
       }
 
@@ -14673,16 +15975,36 @@ export default {
 
         // 1b. Provision Streamer record if Creator role
         if (role === 'creator') {
-          const { error: streamerErr } = await supabase.from('streamers').upsert({
+          const { data: existingTwitchStreamer } = await supabase
+            .from('streamers').select('twitch_id').eq('twitch_id', user.id).maybeSingle();
+
+          const twitchSlugBase = user.display_name.toLowerCase().replace(/[^a-z0-9_-]/g, '') || `twitch${user.id}`;
+          let twitchSlug = twitchSlugBase;
+          if (!existingTwitchStreamer) {
+            const { data: slugConflict } = await supabase
+              .from('streamers').select('twitch_id').ilike('username', twitchSlugBase).maybeSingle();
+            if (slugConflict) twitchSlug = twitchSlugBase + '_twitch';
+          }
+
+          const streamerPayload: Record<string, unknown> = {
             twitch_id: user.id,
-            username: user.display_name.toLowerCase(),
             display_name: user.display_name,
             avatar_url: user.profile_image_url,
             brand_name: user.display_name,
             twitch_access_token_encrypted: encryptedAccess,
             twitch_refresh_token_encrypted: encryptedRefresh,
             twitch_token_scope: tokenScope
-          }, { onConflict: 'twitch_id' });
+          };
+          if (!existingTwitchStreamer) {
+            streamerPayload.username = twitchSlug;
+            streamerPayload.castle_code = twitchSlug;
+            // Also stamp trade_code on the users row so the nav dropdown shows the slug
+            await supabase.from('users').update({ trade_code: twitchSlug }).eq('twitch_id', user.id);
+          }
+
+          const { error: streamerErr } = await supabase.from('streamers').upsert(
+            streamerPayload, { onConflict: 'twitch_id' }
+          );
           if (streamerErr) {
             console.error("[Auth/Callback] Streamers Upsert Error:", streamerErr);
           } else {
@@ -14692,6 +16014,7 @@ export default {
                 const es = await ensureEventSubSubscriptionsForBroadcaster(env, {
                   broadcasterTwitchId: String(user.id),
                   callbackOrigin: origin,
+                  broadcasterUserToken: tokenData.access_token,
                 });
                 if (es.skippedReason === 'bad_webhook_secret') {
                   console.warn('[Auth/Callback] EventSub auto-register skipped: TWITCH_WEBHOOK_SECRET length invalid');
@@ -14702,7 +16025,7 @@ export default {
                     supabase,
                     es.errors.length ? 'warn' : 'info',
                     'webhook',
-                    `EventSub auto (creator login): created ${es.created.length}, skipped ${es.skipped.length}, errors ${es.errors.length}`,
+                    `EventSub auto (creator login): created ${es.created.length}, skipped ${es.skipped.length}, errors ${es.errors.length}${es.errors.length ? ' — ' + es.errors.map(e => `${e.type}: ${e.message}`).join('; ') : ''}`,
                     sRow.id,
                     { created: es.created, skipped: es.skipped, errors: es.errors, callbackUrl: es.callbackUrl }
                   );
@@ -14750,14 +16073,20 @@ export default {
           await supabase.from('user_cards').insert(toInsert);
 
           // Create pack sessions so the newly-linked user can open their earned cards.
-          const pendingSessionRows = toInsert
-            .filter((r: any) => !r.is_obs_consumed)
-            .map((r: any) => ({
-              twitch_id: user.id,
-              streamer_id: r.streamer_id,
-              user_card_ids: [r.id],
-              source: 'pending_claim',
-            }));
+          // Group by streamer so all pending cards from one streamer open as a single pack.
+          const pendingByStreamer = new Map<string, string[]>();
+          for (const r of toInsert) {
+            if (r.is_obs_consumed) continue;
+            const sid = r.streamer_id as string;
+            if (!pendingByStreamer.has(sid)) pendingByStreamer.set(sid, []);
+            pendingByStreamer.get(sid)!.push(r.id);
+          }
+          const pendingSessionRows = Array.from(pendingByStreamer.entries()).map(([sid, ids]) => ({
+            twitch_id: user.id,
+            streamer_id: sid,
+            user_card_ids: ids,
+            source: 'pending_claim',
+          }));
           if (pendingSessionRows.length > 0) {
             supabase.from('pack_sessions').insert(pendingSessionRows)
               .then(() => {}).catch((e: any) => console.warn('[Auth/Callback] pack_sessions insert:', e?.message));
@@ -14788,7 +16117,7 @@ export default {
           .setProtectedHeader({ alg: 'HS256' })
           .setSubject(user.id.toString())
           .setIssuedAt()
-          .setExpirationTime('7d')
+          .setExpirationTime('30d')
           .sign(new TextEncoder().encode(env.SESSION_SECRET));
 
         console.log(`[Auth/Callback] Token generated for ${user.display_name} (ID: ${user.id})`);
@@ -14801,20 +16130,22 @@ export default {
         const requestOrigin = new URL(request.url).origin;
         console.log(`[Auth/Callback] User authenticated: ${user.display_name} (${user.id}), Role: ${role}`);
 
-        // Default to hub for viewers, or dashboard for creators
-        let destination = role === 'creator' ? `${requestOrigin}/dashboard` : `${requestOrigin}/hub`;
+        // Default to my-collection for viewers, or dashboard for creators
+        let destination = role === 'creator' ? `${requestOrigin}/dashboard` : `${requestOrigin}/my-collection`;
         
+        let dbUser: any = null;
         if (role === 'creator') {
           if (!streamer || !streamer.is_active) {
             destination = `${requestOrigin}/onboarding?role=creator`;
           }
         } else {
           // Check if collector onboarding is complete
-          const { data: dbUser } = await supabase
+          const { data: fetchedDbUser } = await supabase
             .from('users')
-            .select('is_onboarding_complete')
+            .select('is_onboarding_complete, profile_settings')
             .eq('twitch_id', user.id)
             .maybeSingle();
+          dbUser = fetchedDbUser;
 
           // Only force onboarding if it is explicitly false
           if (!dbUser || dbUser.is_onboarding_complete === false) {
@@ -14828,13 +16159,19 @@ export default {
 
         console.log(`[Auth/Callback] Redirecting to: ${destination}`);
 
-        return new Response(null, {
-          status: 302,
-          headers: {
-            'Location': destination,
-            'Set-Cookie': `session=${sessionToken}; HttpOnly${secureFlag}; SameSite=Lax; Path=/; Max-Age=604800`
-          }
-        });
+        // For creators dbUser is not fetched above; do a lightweight prefs lookup
+        let loginUiPrefs: Record<string, unknown> = dbUser?.profile_settings?.ui_prefs || {};
+        if (role === 'creator' || !dbUser) {
+          try {
+            const { data: pRow } = await supabase.from('users').select('profile_settings').eq('twitch_id', user.id).maybeSingle();
+            loginUiPrefs = (pRow as any)?.profile_settings?.ui_prefs || {};
+          } catch (_) {}
+        }
+        const twitchLoginHdrs = new Headers();
+        twitchLoginHdrs.set('Location', destination);
+        twitchLoginHdrs.append('Set-Cookie', `session=${sessionToken}; HttpOnly${secureFlag}; SameSite=Lax; Path=/; Max-Age=${SESSION_MAX_AGE_SEC}`);
+        twitchLoginHdrs.append('Set-Cookie', `castle_prefs=${buildPrefCookieStr(loginUiPrefs)}; SameSite=Lax; Path=/; Max-Age=31536000${secureFlag}`);
+        return new Response(null, { status: 302, headers: twitchLoginHdrs });
       }
 
       // --- OBS OVERLAY API ---
@@ -14892,16 +16229,19 @@ export default {
         return streamer;
       }
 
+      /** Read ?streamer=&token= from the current request URL and verify via verifyOBSToken. */
+      const requireOBSToken = () =>
+        verifyOBSToken(url.searchParams.get('streamer') || '', url.searchParams.get('token') || '');
+      /** Standard 403 for invalid OBS token (keeps the hot path compact). */
+      const obsTokenDenied = () =>
+        new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+
       // ── OBS INIT — validates token, returns Supabase Realtime config (replaces polling) ──
       // obs.html calls this once on load, then opens a Supabase Realtime WebSocket directly.
       // This eliminates the 500ms /api/obs/signal polling interval entirely.
       if (method === 'GET' && path === '/api/obs/init') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) {
-          return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
-        }
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
 
         // Fetch full config for initial branding
         const { data: fullStreamer } = await supabase
@@ -14931,10 +16271,8 @@ export default {
       // obs.html connects here via WebSocket. The OBSQueueSession DO broadcasts
       // pause/skip signals immediately to all connected overlays for a streamer.
       if (path === '/api/obs/ws') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
 
         if (!env.OBS_QUEUE_SESSIONS) {
           return new Response(JSON.stringify({ error: 'OBS_QUEUE_SESSIONS DO not configured' }), { status: 503, headers: corsHeaders });
@@ -14949,10 +16287,8 @@ export default {
       // Clients that haven't upgraded to WebSocket still work; skip signal
       // is cleared in the DO atomically.
       if (method === 'GET' && path === '/api/obs/signal') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
 
         // Read state from DO (~0.1ms) — no Supabase query
         if (env.OBS_QUEUE_SESSIONS) {
@@ -14993,10 +16329,8 @@ export default {
 
       // GET /api/obs/queue-ctl — list pending + consumed items
       if (method === 'GET' && path === '/api/obs/queue-ctl') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
 
         // Fetch full streamer record for obs_settings + pause state
         const { data: fullStreamer } = await supabase.from('streamers').select('obs_settings, obs_paused').eq('id', streamer.id).maybeSingle();
@@ -15022,10 +16356,8 @@ export default {
 
       // POST /api/obs/queue-ctl/skip
       if (method === 'POST' && path === '/api/obs/queue-ctl/skip') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
         const body = await request.json().catch(() => ({})) as any;
         if (!body.id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400, headers: corsHeaders });
         const { error } = await supabase.from('user_cards').update({ is_obs_consumed: true }).eq('id', body.id).eq('streamer_id', streamer.id);
@@ -15035,10 +16367,8 @@ export default {
 
       // POST /api/obs/queue-ctl/replay
       if (method === 'POST' && path === '/api/obs/queue-ctl/replay') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
         const body = await request.json().catch(() => ({})) as any;
         if (!body.id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400, headers: corsHeaders });
         const { error } = await supabase.from('user_cards').update({ is_obs_consumed: false, created_at: new Date().toISOString() }).eq('id', body.id).eq('streamer_id', streamer.id);
@@ -15048,10 +16378,8 @@ export default {
 
       // POST /api/obs/queue-ctl/clear
       if (method === 'POST' && path === '/api/obs/queue-ctl/clear') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
         const { error } = await supabase.from('user_cards').update({ is_obs_consumed: true }).eq('streamer_id', streamer.id).eq('is_obs_consumed', false);
         if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
         return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
@@ -15059,10 +16387,8 @@ export default {
 
       // POST /api/obs/queue-ctl/settings
       if (method === 'POST' && path === '/api/obs/queue-ctl/settings') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
         const body = await request.json().catch(() => ({})) as any;
         if (!body.obs_settings?.show_rarities) return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400, headers: corsHeaders });
         const validRarities = ['common', 'rare', 'epic', 'legendary'];
@@ -15086,10 +16412,8 @@ export default {
 
       // POST /api/obs/queue-ctl/pause — freeze the queue (overlay gets null from /next)
       if (method === 'POST' && path === '/api/obs/queue-ctl/pause') {
-        const streamerParam = url.searchParams.get('streamer');
-        const tokenParam    = url.searchParams.get('token');
-        const streamer = await verifyOBSToken(streamerParam || '', tokenParam || '');
-        if (!streamer) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 403, headers: corsHeaders });
+        const streamer = await requireOBSToken();
+        if (!streamer) return obsTokenDenied();
         const { error } = await supabase.from('streamers').update({ obs_paused: true }).eq('id', streamer.id);
         if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
         pushObsSignal(streamer.id, { paused: true });
@@ -15777,11 +17101,24 @@ export default {
           const { data: opponentDeck } = await supabase
             .from('user_saved_decks')
             .select(`
-              *, users!inner(username, avatar_url)
+              twitch_id,
+              slot_1:slot_1_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id,
+                mechanic:mechanic_id(name, display_name, icon),
+                genesis_mechanic:genesis_mechanic_id(name, display_name, icon),
+                card:card_id(name, image_url, rarity)),
+              slot_2:slot_2_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id,
+                mechanic:mechanic_id(name, display_name, icon),
+                genesis_mechanic:genesis_mechanic_id(name, display_name, icon),
+                card:card_id(name, image_url, rarity)),
+              slot_3:slot_3_card_id (id, attack, defense, max_hp, mechanic_id, genesis_mechanic_id,
+                mechanic:mechanic_id(name, display_name, icon),
+                genesis_mechanic:genesis_mechanic_id(name, display_name, icon),
+                card:card_id(name, image_url, rarity)),
+              users!inner(username, avatar_url)
             `)
-            .not('slot_1', 'is', null)
-            .not('slot_2', 'is', null)
-            .not('slot_3', 'is', null)
+            .not('slot_1_card_id', 'is', null)
+            .not('slot_2_card_id', 'is', null)
+            .not('slot_3_card_id', 'is', null)
             .neq('twitch_id', user.twitch_id)
             .eq('streamer_id', streamer.id)
             .limit(10);
@@ -15913,6 +17250,7 @@ export default {
             challenger_name: user.username,
             target_name: opponent.username,
             winner_id: battle_data.winner === 'challenger' ? user.twitch_id : (battle_data.winner === 'target' ? opponent.id : null),
+            loser_id: battle_data.winner === 'challenger' ? opponent.id : (battle_data.winner === 'target' ? user.twitch_id : null),
             battle_data,
             completed_at: new Date().toISOString(),
             status: 'completed'
@@ -15958,8 +17296,9 @@ export default {
 
           const serveHtml = async (file: string) => {
             const r = await env.ASSETS.fetch(new Request(`${url.origin}/${file}`));
-            if (r.ok) return new Response(r.body, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', ...corsHeaders } });
-            return null;
+            if (!r.ok) return null;
+            const out = applyPrefClasses(r, request);
+            return new Response(out.body, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', ...corsHeaders } });
           };
 
           const redirectTo = (dest: string) =>
@@ -15999,7 +17338,7 @@ export default {
           if (AUTH_REQUIRED.has(path) || CREATOR_ONLY.has(path)) {
             const s = await guardSession();
             if (!s) return redirectTo(`/login?next=${encodeURIComponent(path)}`);
-            if (!s.user.is_onboarding_complete) return redirectTo('/onboarding');
+            if (!s.user.is_onboarding_complete) return redirectTo(s.isCreator ? '/onboarding?role=creator' : '/onboarding?role=collector');
             if (CREATOR_ONLY.has(path) && !s.isCreator) return redirectTo('/my-collection');
           }
 
@@ -16016,17 +17355,53 @@ export default {
           // /trading → trading centre (bare path)
           if (path === '/trading') { const res = await serveHtml('trading.html'); if (res) return res; }
 
-          // /testbinder → binder page (no streamer context)
-          if (path === '/testbinder') { const res = await serveHtml('testbinder.html'); if (res) return res; }
+          // /magic-dust → magic dust forge
+          if (path === '/magic-dust') { const res = await serveHtml('magic-dust.html'); if (res) return res; }
+
+          // /coming-soon → coming soon page
+          if (path === '/coming-soon') { const res = await serveHtml('coming-soon.html'); if (res) return res; }
+
+          // /hub, /binder, /binders → redirect to my-collection
+          if (path === '/hub' || path === '/binder' || path === '/binders') return redirectTo('/my-collection');
+
+          // /arena-test → battle animation test harness
+          if (path === '/arena-test') { const res = await serveHtml('arena-test.html'); if (res) return res; }
 
           // /{streamer}/trading → trading centre (streamer-scoped)
           if (/^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}\/trading$/.test(path)) {
             const res = await serveHtml('trading.html'); if (res) return res;
           }
 
-          // /{streamer}/testbinder → binder page (streamer-scoped)
-          if (/^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}\/testbinder$/.test(path)) {
+          // /{streamer}/binders → binder list page
+          if (/^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}\/binders$/.test(path)) {
+            const res = await serveHtml('streamer-binders.html'); if (res) return res;
+          }
+
+          // /{streamer}/binder → test binder page
+          if (/^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}\/binder$/.test(path)) {
             const res = await serveHtml('testbinder.html'); if (res) return res;
+          }
+
+          // /binder/{streamer} and /binders/{streamer} → redirect to streamer collection
+          // (battle.js previously generated links in this reversed format)
+          if (/^\/binders?\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}$/.test(path)) {
+            const slug = path.split('/')[2];
+            return redirectTo(`/${slug}`);
+          }
+
+          // /{streamer}/leaderboard → leaderboard page (streamer-scoped)
+          if (/^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}\/leaderboard$/.test(path)) {
+            const res = await serveHtml('leaderboard.html'); if (res) return res;
+          }
+
+          // /{streamer}/battle → battle page (streamer-scoped)
+          if (/^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}\/battle$/.test(path)) {
+            const res = await serveHtml('battle.html'); if (res) return res;
+          }
+
+          // /{streamer}/magic-dust → magic dust forge (streamer-scoped)
+          if (/^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}\/magic-dust$/.test(path)) {
+            const res = await serveHtml('magic-dust.html'); if (res) return res;
           }
 
           // /profile/:username → public profile page
@@ -16044,9 +17419,7 @@ export default {
             '/privacy',
             '/terms',
             '/cookies',
-            '/hub',
-            '/binder',
-            '/testbinder',
+            '/arena-test',
             '/404',
             '/my-collection',
             '/battle',
@@ -16059,11 +17432,15 @@ export default {
             '/logout',
             '/auth',
             '/trading',
+            '/coming-soon',
+            '/binder',
+            '/binders',
           ]);
           if (!KNOWN_SPA_PATHS.has(path) && /^\/[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}$/.test(path)) {
             const collectionRes = await env.ASSETS.fetch(new Request(`${url.origin}/collection.html`));
             if (collectionRes.ok) {
-              return new Response(collectionRes.body, {
+              const out = applyPrefClasses(collectionRes, request);
+              return new Response(out.body, {
                 status: 200,
                 headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Debug': 'collection-block', ...corsHeaders }
               });
@@ -16079,7 +17456,8 @@ export default {
         if (!path.includes('.') && path !== '/obs-overlay' && path !== '/queue-control') {
           const indexRes = await env.ASSETS.fetch(new Request(`${url.origin}/index.html`));
           if (indexRes.ok) {
-            return new Response(indexRes.body, {
+            const out = applyPrefClasses(indexRes, request);
+            return new Response(out.body, {
               status: 200,
               headers: { 'Content-Type': 'text/html', 'X-Debug': 'index-fallback', ...corsHeaders }
             });
@@ -16164,6 +17542,8 @@ export default {
         const sort    = url.searchParams.get('sort') || 'recent';
         const search  = (url.searchParams.get('search') || '').toLowerCase();
         const trait   = (url.searchParams.get('trait') || '').toLowerCase();
+        const rarity  = (url.searchParams.get('rarity') || '').toLowerCase();
+        const setName = (url.searchParams.get('set_name') || '').toLowerCase();
         const mineOnly = url.searchParams.get('mine') === '1';
 
         const user = mineOnly ? await getUserFromSession(request, env, supabase) : null;
@@ -16171,10 +17551,10 @@ export default {
 
         // Public listings are cacheable; mine=1 is real-time user-specific
         if (!mineOnly) {
-          const marketKvKey = `market:v1:${streamerId}:${page}:${sort}:${search}:${trait}`;
+          const marketKvKey = `market:v1:${streamerId}:${page}:${sort}:${search}:${trait}:${rarity}:${setName}`;
           try {
             const cached = await fetchWithCache(env, sharedRedis, marketKvKey, 15, async () => {
-              return await fetchMarketListings(supabase, streamerId, null, sort, search, trait, page, limit);
+              return await fetchMarketListings(supabase, streamerId, null, sort, search, trait, rarity, setName, page, limit);
             }, ctx);
             return secureResponse(cached, 200, corsHeaders, false, {
               'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=30',
@@ -16186,7 +17566,7 @@ export default {
 
         // mine=1 — real-time, user-specific
         try {
-          const result = await fetchMarketListings(supabase, streamerId, user!.twitch_id, sort, search, trait, page, limit);
+          const result = await fetchMarketListings(supabase, streamerId, user!.twitch_id, sort, search, trait, rarity, setName, page, limit);
           return secureResponse(result, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message || 'Failed to load listings', 500, corsHeaders, true);
@@ -16567,6 +17947,9 @@ export class PackOpeningSession {
  * One DO instance per streamer (idFromName(streamerId)).
  * Replaces the Supabase polling pattern: 7,200 DB queries/hr → 0 per active streamer.
  */
+type OBSState = { paused: boolean; skip: boolean };
+const OBS_STATE_DEFAULT: OBSState = { paused: false, skip: false };
+
 export class OBSQueueSession {
   state: DurableObjectState;
   env: Env;
@@ -16598,7 +17981,7 @@ export class OBSQueueSession {
       server.addEventListener('error', () => this.sockets.delete(server));
 
       // Send current state immediately on connect so overlay is in sync
-      const current = await this.state.storage.get<any>('state') ?? { paused: false, skip: false };
+      const current = await this.state.storage.get<OBSState>('state') ?? OBS_STATE_DEFAULT;
       server.send(JSON.stringify({ type: 'state', ...current }));
 
       return new Response(null, { status: 101, webSocket: client });
@@ -16607,7 +17990,7 @@ export class OBSQueueSession {
     // ── Signal push from Worker ───────────────────────────────────────────────
     if (path === '/signal' && request.method === 'POST') {
       const signal = await request.json() as { paused?: boolean; skip?: boolean };
-      const current = await this.state.storage.get<any>('state') ?? { paused: false, skip: false };
+      const current = await this.state.storage.get<OBSState>('state') ?? OBS_STATE_DEFAULT;
       const updated = { ...current, ...signal };
       await this.state.storage.put('state', updated);
 
@@ -16625,7 +18008,7 @@ export class OBSQueueSession {
 
     // ── State poll (poll-fallback path) ───────────────────────────────────────
     if (path === '/state' && request.method === 'GET') {
-      const state = await this.state.storage.get<any>('state') ?? { paused: false, skip: false };
+      const state = await this.state.storage.get<OBSState>('state') ?? OBS_STATE_DEFAULT;
       return new Response(JSON.stringify(state), {
         headers: { 'Content-Type': 'application/json' },
       });
@@ -16633,7 +18016,7 @@ export class OBSQueueSession {
 
     // ── Clear skip signal (consumed by poll client) ───────────────────────────
     if (path === '/clear-skip' && request.method === 'POST') {
-      const current = await this.state.storage.get<any>('state') ?? { paused: false, skip: false };
+      const current = await this.state.storage.get<OBSState>('state') ?? OBS_STATE_DEFAULT;
       await this.state.storage.put('state', { ...current, skip: false });
       return new Response('OK', { status: 200 });
     }

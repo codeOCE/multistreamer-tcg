@@ -2,23 +2,23 @@
     
     --void-bg: #05070a;
     --void-bg-alt: #0a0c10;
-    --void-accent: #00f2fe;
-    --void-accent-rgb: 0, 242, 254;
-    --void-accent-alt: #3498db;
+    --void-accent: #3faaff;
+    --void-accent-rgb: 63, 170, 255;
+    --void-accent-alt: #3faaff;
     --void-text: #fcfaf7;
     --void-muted: #64748b;
-    --void-border: rgba(0, 242, 254, 0.1);
+    --void-border: rgba(63, 170, 255, 0.1);
     --void-glass: rgba(10, 12, 16, 0.85);
 
     
     --rarity-common: #94a3b8;
-    --rarity-rare: #3b82f6;
+    --rarity-rare: #3faaff;
     --rarity-epic: #a855f7;
     --rarity-legendary: #fbbf24;
 
     /** Grant-source semantics: Twitch Bits = yellow; Castle website / checkout = brand blue (matches --void-accent) */
     --source-twitch-bits: #facc15;
-    --source-castle-site: #00f2fe;
+    --source-castle-site: #3faaff;
 
     
     --ease-tactical: cubic-bezier(0.19, 1, 0.22, 1);
@@ -88,7 +88,7 @@ select {
     -moz-appearance: none;
     appearance: none;
     background-color: rgba(5, 7, 10, 0.75) !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300f2fe' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233faaff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
     background-repeat: no-repeat !important;
     background-position: right 0.75rem center !important;
     background-size: 0.9rem !important;
@@ -199,7 +199,7 @@ select option {
     top: calc(100% + 4px);
     left: 0;
     min-width: 100%;
-    max-height: 12rem;
+    max-height: 17rem;
     overflow-y: auto;
     background: rgba(5, 7, 10, 0.97);
     border: 1.5px solid rgba(var(--void-accent-rgb), 0.3);
@@ -241,6 +241,69 @@ select option {
 }
 .void-dropdown-option:last-child {
     border-radius: 0 0 0.5rem 0.5rem;
+}
+.void-dropdown-option:focus {
+    outline: none;
+    background: rgba(var(--void-accent-rgb), 0.12);
+    color: var(--void-accent);
+}
+.void-dropdown-option.selected {
+    color: var(--void-accent);
+}
+.void-dropdown-search-wrap {
+    position: sticky;
+    top: 0;
+    padding: 7px 7px 4px;
+    background: rgba(5, 7, 10, 0.97);
+    z-index: 1;
+}
+.void-dropdown-search {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(var(--void-accent-rgb), 0.22);
+    border-radius: 6px;
+    color: var(--void-text);
+    font-family: inherit;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 5px 9px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.void-dropdown-search:focus {
+    border-color: rgba(var(--void-accent-rgb), 0.6);
+    box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb), 0.08);
+}
+.void-dropdown-search::placeholder {
+    color: rgba(255, 255, 255, 0.22);
+    font-weight: 500;
+}
+.void-dropdown-options {
+    overflow: hidden;
+}
+.void-dropdown-no-results {
+    padding: 10px 14px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.28);
+    text-align: center;
+    letter-spacing: 0.04em;
+}
+.castle-light-mode .void-dropdown-search-wrap {
+    background: rgba(255, 255, 255, 0.97);
+}
+.castle-light-mode .void-dropdown-search {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(var(--void-accent-rgb), 0.3);
+    color: #0f172a;
+}
+.castle-light-mode .void-dropdown-search::placeholder {
+    color: rgba(0, 0, 0, 0.3);
+}
+.castle-light-mode .void-dropdown-no-results {
+    color: rgba(0, 0, 0, 0.35);
 }
 
 
@@ -402,6 +465,230 @@ select option {
     animation: none !important;
 }
 
+/* castle-no-foil: hide holographic foil sitewide */
+.castle-no-foil .holo-layer,
+.castle-no-foil .holo-shine,
+.castle-no-foil .holo-layer--card-detail,
+.castle-no-foil .holo-shine--card-detail {
+    display: none !important;
+}
+.castle-no-foil .card-detail-flip-scene canvas {
+    display: none !important;
+}
+
+/* castle-no-tilt: freeze 3D tilt in card detail */
+.castle-no-tilt .card-detail-tilt-wrap {
+    transform: none !important;
+    pointer-events: none;
+}
+
+/* castle-no-animations: kill every animation and transition */
+.castle-no-animations *,
+.castle-no-animations *::before,
+.castle-no-animations *::after {
+    animation: none !important;
+    transition: none !important;
+}
+.castle-no-animations .holo-layer,
+.castle-no-animations .holo-shine,
+.castle-no-animations .holo-layer--card-detail,
+.castle-no-animations .holo-shine--card-detail,
+.castle-no-animations .card-detail-flip-scene canvas {
+    display: none !important;
+}
+
+/* castle-photosensitivity: comprehensive epilepsy/flash safety */
+.castle-photosensitivity .holo-layer,
+.castle-photosensitivity .holo-shine,
+.castle-photosensitivity .holo-layer--card-detail,
+.castle-photosensitivity .holo-shine--card-detail,
+.castle-photosensitivity .card-detail-flip-scene canvas {
+    display: none !important;
+}
+.castle-photosensitivity .card-detail-tilt-wrap {
+    transform: none !important;
+    pointer-events: none;
+}
+.castle-photosensitivity *,
+.castle-photosensitivity *::before,
+.castle-photosensitivity *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+}
+
+/* castle-light-mode: light colour scheme */
+.castle-light-mode {
+    --void-bg: #f8fafc;
+    --void-bg-alt: #f1f5f9;
+    --void-text: #0f172a;
+    --void-muted: #64748b;
+    --void-glass: rgba(248, 250, 252, 0.9);
+    color-scheme: light;
+}
+.castle-light-mode body {
+    background-color: var(--void-bg);
+    color: var(--void-text);
+}
+.castle-light-mode .saas-bg-glow {
+    background:
+        radial-gradient(circle at 10% 20%, rgba(63, 170, 255, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(63, 170, 255, 0.03) 0%, transparent 40%),
+        var(--void-bg) !important;
+}
+
+/* ── Text ── */
+/* Global: convert all hardcoded-white text to dark */
+.castle-light-mode .text-white { color: #0f172a !important; }
+/* Restore white on intentionally coloured/dark button backgrounds */
+.castle-light-mode .bg-red-600.text-white,
+.castle-light-mode .bg-red-600 .text-white  { color: #ffffff !important; }
+.castle-light-mode .bg-\[\#9146FF\].text-white,
+.castle-light-mode .bg-\[\#9146FF\] .text-white { color: #ffffff !important; }
+/* Semi-transparent white text variants → dark equivalents */
+.castle-light-mode [class*="text-white\/"] { color: #0f172a !important; }
+/* text-void-text already uses the CSS variable, but ensure inheritance */
+.castle-light-mode .text-void-text { color: var(--void-text) !important; }
+
+/* ── Borders ── */
+.castle-light-mode .border-white\/5  { border-color: rgba(0, 0, 0, 0.06) !important; }
+.castle-light-mode .border-white\/10 { border-color: rgba(0, 0, 0, 0.10) !important; }
+.castle-light-mode .border-white\/15 { border-color: rgba(0, 0, 0, 0.15) !important; }
+.castle-light-mode .border-white\/20 { border-color: rgba(0, 0, 0, 0.18) !important; }
+
+/* ── Backgrounds ── */
+/* Nav */
+.castle-light-mode nav {
+    background-color: rgba(248, 250, 252, 0.88) !important;
+    border-color: rgba(0, 0, 0, 0.08) !important;
+}
+/* Glass panels */
+.castle-light-mode .glass-panel {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+    border-color: rgba(0, 0, 0, 0.08) !important;
+}
+/* Dark semi-transparent surfaces → light equivalents */
+.castle-light-mode .bg-black\/25 { background-color: rgba(0, 0, 0, 0.04) !important; }
+.castle-light-mode .bg-black\/30 { background-color: rgba(0, 0, 0, 0.05) !important; }
+.castle-light-mode .bg-black\/40 { background-color: rgba(0, 0, 0, 0.05) !important; }
+.castle-light-mode .bg-black\/60 { background-color: rgba(0, 0, 0, 0.06) !important; }
+/* White-on-dark surfaces → subtle tint on light */
+.castle-light-mode .bg-white\/5,
+.castle-light-mode .bg-white\/\[0\.02\],
+.castle-light-mode .bg-white\/\[0\.03\],
+.castle-light-mode .bg-white\/\[0\.04\],
+.castle-light-mode .bg-white\/\[0\.05\],
+.castle-light-mode .bg-white\/\[0\.06\],
+.castle-light-mode .bg-white\/\[0\.07\],
+.castle-light-mode .bg-white\/\[0\.08\],
+.castle-light-mode .bg-white\/\[0\.12\] { background-color: rgba(0, 0, 0, 0.04) !important; }
+.castle-light-mode .bg-white\/10       { background-color: rgba(0, 0, 0, 0.07) !important; }
+/* bg-void-bg and bg-void-bg/40 */
+.castle-light-mode .bg-void-bg   { background-color: var(--void-bg) !important; }
+.castle-light-mode .bg-void-bg\/40 { background-color: rgba(248, 250, 252, 0.4) !important; }
+/* Hardcoded dark */
+.castle-light-mode .bg-zinc-950  { background-color: #f1f5f9 !important; }
+
+/* ── Logo ── */
+.castle-light-mode .brand-castle-mark {
+    filter: brightness(0) saturate(100%);
+}
+
+/* ── Nav user-menu trigger ── */
+.castle-light-mode #nav-user-menu-trigger {
+    border-color: rgba(0, 0, 0, 0.12) !important;
+    background-color: rgba(0, 0, 0, 0.04) !important;
+}
+.castle-light-mode #nav-user-menu-trigger:hover {
+    background-color: rgba(0, 0, 0, 0.07) !important;
+    border-color: rgba(0, 0, 0, 0.18) !important;
+}
+.castle-light-mode #nav-avatar,
+.castle-light-mode #nav-user-menu-avatar { border-color: rgba(0, 0, 0, 0.12) !important; }
+
+/* ── Nav dropdown panel ── */
+.castle-light-mode #nav-user-menu {
+    background-color: #ffffff !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+.castle-light-mode #nav-user-team-panel { background-color: #f1f5f9 !important; }
+#nav-user-menu-castle-code { text-transform: uppercase; }
+.castle-light-mode #nav-user-menu-castle-code { color: #0f172a !important; }
+.castle-light-mode #nav-user-menu-copy-code {
+    background-color: rgba(0, 0, 0, 0.05) !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ── Inputs & selects ── */
+.castle-light-mode input[type="text"],
+.castle-light-mode input[type="search"],
+.castle-light-mode input[type="email"] {
+    background-color: rgba(0, 0, 0, 0.04) !important;
+    border-color: rgba(0, 0, 0, 0.15) !important;
+    color: #0f172a !important;
+}
+.castle-light-mode input::placeholder { color: rgba(15, 23, 42, 0.35) !important; }
+.castle-light-mode select {
+    background-color: rgba(0, 0, 0, 0.04) !important;
+    border-color: rgba(0, 0, 0, 0.15) !important;
+    color: #0f172a !important;
+}
+
+/* ── Toggles ── */
+.castle-light-mode .pref-toggle[aria-checked="false"] {
+    background-color: rgba(0, 0, 0, 0.12) !important;
+    border-color: rgba(0, 0, 0, 0.18) !important;
+}
+.castle-light-mode .pref-toggle[aria-checked="false"] span {
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
+}
+.castle-light-mode .pref-toggle[aria-checked="true"] span { background-color: #ffffff !important; }
+
+/* ── Tab bar ── */
+.castle-light-mode [role="tablist"] > div {
+    background-color: rgba(0, 0, 0, 0.05) !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+}
+.castle-light-mode .profile-settings-tab { color: rgba(15, 23, 42, 0.5) !important; }
+.castle-light-mode .profile-settings-tab:hover { color: #0f172a !important; }
+.castle-light-mode .profile-settings-tab.border-void-accent { color: #0f172a !important; }
+
+/* ── Buttons (custom CSS classes — not caught by .text-white Tailwind override) ── */
+.castle-light-mode .saas-button { color: #0f172a !important; }
+.castle-light-mode .saas-button-secondary {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #0f172a !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
+}
+.castle-light-mode .saas-button-secondary:hover {
+    background: rgba(0, 0, 0, 0.08) !important;
+    border-color: rgba(0, 0, 0, 0.18) !important;
+}
+
+/* ── Toast ── */
+.castle-light-mode .toast-void {
+    background: rgba(255, 255, 255, 0.96) !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 16px rgba(var(--void-accent-rgb), 0.06) !important;
+}
+
+/* card size: binder grid overrides */
+html.castle-card-size-small .binder-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+    gap: 0.625rem !important;
+}
+html.castle-card-size-large .binder-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+    gap: 2rem !important;
+}
+
+/* castle-hide-dupes: suppress duplicate count badge (used when castle_pref_dupes is off) */
+html.castle-hide-dupes .binder-dupe-badge {
+    display: none !important;
+}
+
 
 /* Card detail: reactive holofoil (Pocket-like) — pause idle shimmer while dragging; follow pointer */
 .card-detail-flip-scene.is-card-tilting .holo-layer--card-detail {
@@ -508,6 +795,29 @@ select option {
     line-height: 1;
 }
 
+.card-report-reason-opt {
+    display: block;
+    cursor: pointer;
+}
+.card-report-reason-label {
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1.5px solid rgba(255,255,255,0.07);
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.5);
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.card-report-reason-opt input:checked + .card-report-reason-label {
+    border-color: #ef4444;
+    color: #f87171;
+    background: rgba(239,68,68,0.08);
+}
+.card-report-reason-opt:hover .card-report-reason-label {
+    border-color: rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.75);
+}
+
 .card-detail-trait-list {
     display: flex;
     flex-direction: column;
@@ -529,8 +839,8 @@ select option {
     background: rgba(255,255,255,0.06);
 }
 .card-detail-variant-group--active {
-    background: rgba(0,242,254,0.08);
-    outline: 1px solid rgba(0,242,254,0.25);
+    background: rgba(63,170,255,0.08);
+    outline: 1px solid rgba(63,170,255,0.25);
 }
 
 .card-detail-variant-boxes {
@@ -768,6 +1078,7 @@ select option {
     position: relative;
     overflow: hidden;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    margin-bottom: 1.5rem;
 }
 
 
@@ -1512,7 +1823,7 @@ select option {
     -moz-appearance: none;
     appearance: none;
     background-color: rgba(5, 7, 10, 0.8) !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300f2fe' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233faaff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
     background-repeat: no-repeat !important;
     background-position: right 0.5rem center !important;
     background-size: 0.75rem !important;
@@ -1973,13 +2284,13 @@ select option {
 
 @keyframes dust-balance-pulse {
     0% {
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(0, 242, 254, 0);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(63, 170, 255, 0);
     }
     40% {
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px 12px rgba(0, 242, 254, 0.5);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px 12px rgba(63, 170, 255, 0.5);
     }
     100% {
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(0, 242, 254, 0);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(63, 170, 255, 0);
     }
 }
 

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        :root {
+            --page-accent: var(--void-accent);
+            --page-accent-rgb: var(--void-accent-rgb);
+        }
+
+        body::before { opacity: 0.06; }
+
+        .hidden { display: none !important; }
+
+        /* ── Loading / Not found ── */
+        #lb-loading {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        .lb-spinner {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(var(--page-accent-rgb), 0.2);
+            border-top-color: rgba(var(--page-accent-rgb), 0.8);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #lb-not-found {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            text-align: center;
+            padding: 40px;
+        }
+
+        /* ── Fade-in ── */
+        @keyframes lb-rise {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .lb-rise   { animation: lb-rise 0.5s var(--ease-premium, cubic-bezier(0.16,1,0.3,1)) both; }
+        .lb-rise-1 { animation-delay: 0.04s; }
+        .lb-rise-2 { animation-delay: 0.10s; }
+        .lb-rise-3 { animation-delay: 0.18s; }
+
+        /* ── Page wrapper ── */
+        #lb-main {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: clamp(88px, 12vw, 112px) clamp(16px, 4vw, 48px) 80px;
+        }
+
+        /* ── Hero ── */
+        #lb-hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 6px;
+            margin-bottom: 32px;
+        }
+        #lb-eyebrow {
+            font-size: 0.6rem;
+            font-weight: 800;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+        }
+        #lb-creator-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(2.4rem, 7vw, 4.5rem);
+            line-height: 0.9;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            color: var(--void-text);
+        }
+        #lb-subtitle {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 300;
+            font-size: clamp(0.7rem, 1.5vw, 0.9rem);
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-top: 4px;
+        }
+
+        /* ── Tab switcher ── */
+        #lb-tabs {
+            display: flex;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px;
+            padding: 4px;
+            gap: 4px;
+            margin-bottom: 24px;
+        }
+        .lb-tab-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lb-tab-btn:hover {
+            color: var(--void-text);
+            background: rgba(255,255,255,0.04);
+        }
+        .lb-tab-btn.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            background: rgba(var(--page-accent-rgb), 0.1);
+        }
+        .lb-tab-btn i { font-size: 0.85rem; }
+
+        /* ── Board panel ── */
+        #lb-board {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        #lb-board-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        #lb-board-title {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+        }
+        #lb-board-count {
+            font-size: 0.55rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* ── Rows ── */
+        #lb-list { padding: 8px 0; }
+
+        .lb-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            transition: background 0.15s;
+        }
+        .lb-row:hover { background: rgba(255,255,255,0.025); }
+        .lb-row.lb-row-me {
+            background: rgba(var(--page-accent-rgb), 0.06);
+        }
+
+        .lb-rank {
+            font-size: 0.65rem;
+            font-weight: 800;
+            color: var(--void-muted);
+            width: 28px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .lb-rank-1 { color: #fbbf24; font-size: 0.9rem; }
+        .lb-rank-2 { color: #94a3b8; font-size: 0.85rem; }
+        .lb-rank-3 { color: #d97706; font-size: 0.85rem; }
+
+        .lb-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .lb-avatar-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(var(--page-accent-rgb), 0.12);
+            color: rgba(var(--page-accent-rgb), 0.9);
+            font-size: 0.6rem;
+            font-weight: 800;
+        }
+
+        .lb-name {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--void-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .lb-row.lb-row-me .lb-name {
+            color: rgba(var(--page-accent-rgb), 1);
+        }
+
+        .lb-score {
+            font-size: 0.65rem;
+            font-weight: 800;
+            color: var(--void-muted);
+            letter-spacing: 0.05em;
+            flex-shrink: 0;
+            text-align: right;
+        }
+        .lb-score-val {
+            font-size: 0.85rem;
+            color: var(--void-text);
+            display: block;
+        }
+
+        /* ── Empty / no data ── */
+        .lb-empty {
+            text-align: center;
+            padding: 40px 20px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* ── Divider between top-3 and rest ── */
+        .lb-tier-divider {
+            height: 1px;
+            margin: 4px 20px;
+            background: rgba(255,255,255,0.04);
+        }
+
+        /* ── "You" badge ── */
+        .lb-you-badge {
+            font-size: 0.45rem;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.9);
+            background: rgba(var(--page-accent-rgb), 0.12);
+            border: 1px solid rgba(var(--page-accent-rgb), 0.25);
+            border-radius: 6px;
+            padding: 2px 6px;
+            flex-shrink: 0;
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow" id="lb-bg-glow"></div>
+
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
+        <div class="w-full px-8 h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 group cursor-pointer">
+                <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+            </a>
+            <div class="flex items-center gap-3">
+                <div id="nav-user-preview" class="hidden items-center">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Collector</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
+                            </span>
+                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors"></i>
+                        </button>
+                        <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
+                                            <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                        <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="bx bx-log-out w-4 text-center"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Loading state -->
+    <div id="lb-loading">
+        <div class="lb-spinner"></div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading Leaderboard</p>
+    </div>
+
+    <!-- Not found state -->
+    <div id="lb-not-found" class="hidden">
+        <p class="text-7xl font-black opacity-10">?</p>
+        <h1 class="text-2xl font-black uppercase tracking-widest">Creator Not Found</h1>
+        <p class="text-void-muted text-sm">This creator doesn't exist or hasn't set up Castle TCG yet.</p>
+        <a href="/" class="saas-button rounded-xl px-6 py-3 text-xs mt-4">Back to Castle</a>
+    </div>
+
+    <!-- Main content -->
+    <div id="lb-main" class="hidden">
+
+        <!-- Hero -->
+        <div id="lb-hero" class="lb-rise lb-rise-1">
+            <p id="lb-eyebrow">Leaderboard</p>
+            <h1 id="lb-creator-name">---</h1>
+            <p id="lb-subtitle">Community Rankings</p>
+        </div>
+
+        <!-- Tab switcher -->
+        <div id="lb-tabs" class="lb-rise lb-rise-2">
+            <button class="lb-tab-btn active" id="lb-tab-collection" onclick="window._lbSetTab('collection')">
+                <i class="bx bx-book-alt"></i>
+                Collection
+            </button>
+            <button class="lb-tab-btn" id="lb-tab-battles" onclick="window._lbSetTab('battles')">
+                <i class="bx bxs-bolt"></i>
+                Battles
+            </button>
+        </div>
+
+        <!-- Board panel -->
+        <div id="lb-board" class="lb-rise lb-rise-3">
+            <div id="lb-board-header">
+                <span id="lb-board-title">Collection Leaderboard</span>
+                <span id="lb-board-count"></span>
+            </div>
+            <div id="lb-list"></div>
+        </div>
+
+    </div>
+
+    <script src="/nav-user-menu.js"></script>
+    <script src="/streamer-nav.js"></script>
+    <script src="/leaderboard.js"></script>
+</body>
+</html>

@@ -1,29 +1,29 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Castle TCG | Collect. Trade. Flex.</title>
-    <meta name="description" content="Castle TCG is the ultimate digital collectible platform for streamers and fans. Collect unique cards from your favorite creators, trade with the community, and flex your collection.">
-    <meta name="keywords" content="TCG, Streamer, Twitch, Collectibles, Trading Cards, Digital Assets, Gaming">
+    <meta name="description" content="Castle TCG is the ultimate digital collectible platform for creators and fans. Collect unique cards from your favorite creators, trade with the community, and flex your collection.">
+    <meta name="keywords" content="TCG, Creator, Twitch, Collectibles, Trading Cards, Digital Assets, Gaming">
 
     <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
     
     
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://multistreamer-tcg.codeoce.workers.dev/">
+    <meta property="og:url" content="https://tcg.creatorcastle.gg/">
     <meta property="og:title" content="Castle TCG | Collect. Trade. Flex.">
-    <meta property="og:description" content="The ultimate digital collectible platform for streamers and fans.">
-    <meta property="og:image" content="https://multistreamer-tcg.codeoce.workers.dev/social-preview.png">
+    <meta property="og:description" content="The ultimate digital collectible platform for creators and fans.">
+    <meta property="og:image" content="https://tcg.creatorcastle.gg/social-preview.png">
 
     
     <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://multistreamer-tcg.codeoce.workers.dev/">
+    <meta property="twitter:url" content="https://tcg.creatorcastle.gg/">
     <meta property="twitter:title" content="Castle TCG | Collect. Trade. Flex.">
-    <meta property="twitter:description" content="The ultimate digital collectible platform for streamers and fans.">
-    <meta property="twitter:image" content="https://multistreamer-tcg.codeoce.workers.dev/social-preview.png">
+    <meta property="twitter:description" content="The ultimate digital collectible platform for creators and fans.">
+    <meta property="twitter:image" content="https://tcg.creatorcastle.gg/social-preview.png">
 
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,15 +33,23 @@
         rel="stylesheet">
 
     
-    <link rel="preconnect" href="https://multistreamer-tcg.codeoce.workers.dev">
-    <link rel="dns-prefetch" href="https://multistreamer-tcg.codeoce.workers.dev">
+    <link rel="preconnect" href="https://tcg.creatorcastle.gg">
+    <link rel="dns-prefetch" href="https://tcg.creatorcastle.gg">
 
     
     <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/tailwind-built.css">
 
-    </head>
+        <script src="/castle-prefs.js"></script>
+    <style>
+        body.login-page #central-nav,
+        body.login-page #landing-mode-toggle,
+        body.login-page #nav-user-preview,
+        body.login-page #login-nav-btn { display: none !important; }
+        body.login-page #login-auth-summary { display: none !important; }
+    </style>
+</head>
 
 <body class="bg-void-bg text-void-text antialiased selection:bg-void-accent/30">
     <div class="saas-bg-glow"></div>
@@ -52,7 +60,7 @@
 
         
         <nav id="app-navbar" class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-            <div class="max-w-[1400px] mx-auto px-8 h-20 flex items-center justify-between">
+            <div class="w-full px-8 h-20 flex items-center justify-between">
                 <div class="flex items-center gap-2 group cursor-pointer" onclick="window.location.href='/'">
                     <div
                         class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
@@ -63,19 +71,6 @@
                             class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span
                                 class="text-void-accent">TCG</span></span>
                     </div>
-                </div>
-
-                
-                <div id="landing-mode-toggle" class="relative flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md ml-4">
-                    <button onclick="setLandingMode('viewer')" id="mode-viewer-btn"
-                        class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
-                        I am a Viewer
-                    </button>
-                    <button onclick="setLandingMode('streamer')" id="mode-streamer-btn"
-                        class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
-                        I am a Streamer
-                    </button>
-                    <div id="mode-indicator" class="absolute h-[calc(100%-8px)] rounded-xl bg-void-accent/20 transition-all duration-500 ease-premium"></div>
                 </div>
 
                 
@@ -101,13 +96,21 @@
                         class="hidden nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-accent transition-all rounded-2xl border-none outline-none">
                         Dashboard
                     </button>
-                    <button onclick="window.location.href='/hub'" id="nav-hub-btn"
-                        class="nav-tab px-8 py-2.5 text-[10px] font-black uppercase tracking-widest text-void-muted transition-all rounded-2xl border-none outline-none">
-                        Hub
-                    </button>
+
                 </div>
 
-                <div class="flex items-center gap-6">
+                <div class="flex items-center gap-4">
+                    <div id="landing-mode-toggle" class="relative flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md">
+                        <button onclick="setLandingMode('viewer')" id="mode-viewer-btn"
+                            class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
+                            I am a Viewer
+                        </button>
+                        <button onclick="setLandingMode('streamer')" id="mode-streamer-btn"
+                            class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-xl border-none outline-none z-10 relative">
+                            I am a Creator
+                        </button>
+                        <div id="mode-indicator" class="absolute h-[calc(100%-8px)] rounded-xl bg-void-accent/20 transition-all duration-500 ease-premium"></div>
+                    </div>
                     <div id="nav-user-preview" class="hidden items-center gap-4">
                         <span id="nav-username" class="hidden">---</span>
                         <span id="nav-user-role" class="hidden">Collector</span>
@@ -117,11 +120,9 @@
                                 aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
                                 <span class="relative inline-block">
                                     <img id="nav-avatar" src="" alt=""
-                                        class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
-                                    <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"
-                                        aria-hidden="true"></span>
+                                        class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
                                 </span>
-                                <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"
+                                <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "
                                     aria-hidden="true"></i>
                             </button>
                             <div id="nav-user-menu"
@@ -199,7 +200,7 @@
                 </h1>
 
                 <p id="hero-subtitle" class="text-lg md:text-xl text-void-muted font-medium max-w-xl leading-relaxed">
-                    Castle TCG is where streamers and fans collect together. Discover unique cards from your favorite
+                    Castle TCG is where creators and fans collect together. Discover unique cards from your favorite
                     creators and trade with the community to complete your collection.
                 </p>
 
@@ -220,43 +221,43 @@
                 style="animation-delay: 0.4s; mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);">
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-6 absolute inset-0 p-8">
                     
-                    <div class="flex flex-col gap-6 animate-float-up">
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png">
-                        </div>
+                    <div class="flex flex-col animate-float-up">
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh4/131_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/141_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/142_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/205_hires.png"></div>
                     </div>
-                    
-                    <div class="flex flex-col gap-6 animate-float-down">
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png">
-                        </div>
+
+                    <div class="flex flex-col animate-float-down">
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/142_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/205_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh4/131_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/141_hires.png"></div>
                     </div>
-                    
-                    <div class="hidden md:flex flex-col gap-6 animate-float-up">
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png">
-                        </div>
-                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png">
-                        </div>
+
+                    <div class="hidden md:flex flex-col animate-float-up">
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/141_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/142_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh1/205_hires.png"></div>
+                        <div class="floating-card-item"><img src="https://images.pokemontcg.io/swsh4/131_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swshp/SWSH068_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/141_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/142_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh1/205_hires.png"></div>
+                        <div class="floating-card-item" aria-hidden="true"><img src="https://images.pokemontcg.io/swsh4/131_hires.png"></div>
                     </div>
                 </div>
             </div>
@@ -277,10 +278,10 @@
                 <div class="p-10 glass-panel rounded-3xl group hover:bg-void-accent/5 transition-all">
                     <div
                         class="w-14 h-14 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent mb-8 group-hover:scale-110 group-hover:bg-void-accent group-hover:text-void-bg transition-all duration-500">
-                        <i id="step-1-icon" class="bx bxs-link text-xl"></i>
+                        <i id="step-1-icon" class="bx bx-link text-xl"></i>
                     </div>
-                    <h3 id="step-1-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">01. Connect Twitch</h3>
-                    <p id="step-1-desc" class="text-void-muted leading-relaxed font-medium text-sm">Join the community by linking your Twitch account to start your collecting journey.</p>
+                    <h3 id="step-1-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">01. Connect Platforms</h3>
+                    <p id="step-1-desc" class="text-void-muted leading-relaxed font-medium text-sm">Join the community by linking your account to start your collecting journey.</p>
                 </div>
 
                 
@@ -290,7 +291,7 @@
                         <i id="step-2-icon" class="bx bxs-layer text-xl"></i>
                     </div>
                     <h3 id="step-2-title" class="text-xl font-black text-void-text uppercase italic tracking-tight mb-4">02. Collect Cards</h3>
-                    <p id="step-2-desc" class="text-void-muted leading-relaxed font-medium text-sm">Support your favorite streamers and earn rare cards through drops and rewards.</p>
+                    <p id="step-2-desc" class="text-void-muted leading-relaxed font-medium text-sm">Support your favorite creators and earn rare cards through drops and rewards.</p>
                 </div>
 
                 
@@ -333,7 +334,7 @@
 
                 
                 <div class="flex gap-6 items-center">
-                    <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
+                    <a href="https://x.com/creatorcastlegg" target="_blank" rel="noopener" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
                             class="bx bxl-twitter text-lg"></i></a>
                     <a href="#" class="text-void-muted hover:text-void-accent transition-all duration-300"><i
                             class="bx bxl-discord text-lg"></i></a>
@@ -347,34 +348,40 @@
         <section id="login-view" class="hidden relative min-h-screen pt-28 pb-24 px-6 max-w-[1400px] mx-auto">
             <div class="max-w-lg mx-auto glass-panel rounded-3xl p-8 md:p-10 border border-white/10">
                 <div class="flex items-center gap-4 mb-6">
-                    <div class="w-12 h-12 rounded-2xl bg-[#9146FF]/15 flex items-center justify-center text-[#9146FF]">
-                        <i class="bx bxl-twitch text-xl"></i>
+                    <div class="w-12 h-12 rounded-2xl bg-void-accent/10 flex items-center justify-center text-void-accent">
+                        <i class="bx bx-link text-xl"></i>
                     </div>
                     <div>
                         <h1 class="text-2xl font-black uppercase italic tracking-tight text-void-text leading-tight">Sign in</h1>
-                        <p class="text-[10px] text-void-muted uppercase tracking-widest font-bold">Twitch or Kick · returning users</p>
+                        <p class="text-[10px] text-void-muted uppercase tracking-widest font-bold">Platforms · returning users</p>
                     </div>
                 </div>
                 <p id="login-auth-summary" class="text-sm text-void-muted mb-6 min-h-[3rem]">Checking your session…</p>
                 <div id="login-signin-actions" class="space-y-3">
                     <a id="login-btn-viewer" href="/auth/twitch?role=viewer" data-castle-oauth
-                        class="block w-full text-center saas-button py-4 rounded-xl text-[11px] font-black uppercase tracking-widest">Sign in with Twitch · Collector</a>
+                        class="flex items-center justify-center gap-2.5 w-full py-4 rounded-xl text-[11px] font-black uppercase tracking-widest bg-[#9146FF] hover:bg-[#7d3bdd] text-white transition-colors">
+                        <i class="bx bxl-twitch text-[32px] shrink-0"></i>
+                        <span>Sign in with Twitch · Collector</span>
+                    </a>
                     <a id="login-btn-creator" href="/auth/twitch?role=creator" data-castle-oauth
-                        class="block w-full text-center saas-button saas-button-secondary py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border border-white/10">Sign in with Twitch · Streamer</a>
+                        class="flex items-center justify-center gap-2.5 w-full py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border border-[#9146FF]/40 bg-[#9146FF]/10 text-[#c9a0ff] hover:bg-[#9146FF]/20 transition-colors">
+                        <i class="bx bxl-twitch text-[32px] shrink-0"></i>
+                        <span>Sign in with Twitch · Creator</span>
+                    </a>
                     <a id="login-btn-kick-viewer" href="/auth/kick?role=viewer" data-castle-oauth
                         class="flex items-center justify-center gap-2.5 w-full py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border border-[#53FC18]/35 bg-[#53FC18]/10 text-[#b8f5c0] hover:bg-[#53FC18]/18 transition-colors">
-                        <img src="/kick-mark.svg" alt="" width="22" height="22" class="w-[22px] h-[22px] shrink-0" />
+                        <img src="/kick-mark.svg" alt="" width="14" height="14" class="w-[14px] h-[14px] shrink-0" />
                         <span>Sign in with Kick · Collector</span>
                     </a>
                     <a id="login-btn-kick-creator" href="/auth/kick?role=creator" data-castle-oauth
                         class="flex items-center justify-center gap-2.5 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest border border-white/10 bg-white/[0.04] text-void-muted hover:text-void-text hover:border-white/20 transition-colors">
-                        <img src="/kick-mark.svg" alt="" width="20" height="20" class="w-5 h-5 shrink-0 opacity-90" />
-                        <span>Sign in with Kick · Streamer</span>
+                        <img src="/kick-mark.svg" alt="" width="14" height="14" class="w-[14px] h-[14px] shrink-0 opacity-90" />
+                        <span>Sign in with Kick · Creator</span>
                     </a>
                 </div>
                 <div id="login-signedin-actions" class="hidden space-y-3 mt-2">
                     <button type="button" id="login-continue-hub"
-                        class="w-full saas-button py-4 rounded-xl text-[11px] font-black uppercase tracking-widest">Continue to Hub</button>
+                        class="w-full saas-button py-4 rounded-xl text-[11px] font-black uppercase tracking-widest">My Collection</button>
                     <button type="button" id="login-continue-dash"
                         class="hidden w-full saas-button saas-button-secondary py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border border-white/10">Creator dashboard</button>
                     <button type="button" id="login-reauth-btn"

@@ -1,0 +1,932 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arena Test Harness</title>
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/arena.css">
+    <!-- html2canvas for live frame capture -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        #test-panel {
+            position: fixed; right: 0; top: 0; bottom: 0; width: 190px;
+            background: rgba(4,4,10,0.92); border-left: 1px solid rgba(255,255,255,0.08);
+            z-index: 9999; display: flex; flex-direction: column; gap: 3px;
+            padding: 14px 10px; overflow-y: auto; font-family: 'Inter', sans-serif;
+            backdrop-filter: blur(8px);
+        }
+        #test-panel .panel-title {
+            font-size: 8px; font-weight: 900; letter-spacing: 0.35em;
+            text-transform: uppercase; color: rgba(255,255,255,0.3); margin-bottom: 8px;
+        }
+        .tbtn {
+            display: block; width: 100%; padding: 8px 10px;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 9px; color: white; font-size: 10px; font-weight: 700;
+            text-align: left; cursor: pointer; transition: background 0.12s, border-color 0.12s;
+            font-family: 'Inter', sans-serif;
+        }
+        .tbtn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); }
+        .tbtn:active { background: rgba(255,255,255,0.18); }
+        .tbtn.full  { border-color: rgba(139,92,246,0.35); color: #a78bfa; }
+        .tbtn.full:hover { background: rgba(139,92,246,0.12); }
+        .tbtn.save  { border-color: rgba(251,191,36,0.35); color: #fbbf24; }
+        .tbtn.save:hover { background: rgba(251,191,36,0.10); }
+        .tbtn.save:disabled { opacity: 0.45; cursor: not-allowed; }
+        .tsep { height: 1px; background: rgba(255,255,255,0.07); margin: 5px 0; }
+        #status { font-size: 9px; color: rgba(255,255,255,0.3); text-align: center; padding-top: 6px; }
+        #gif-progress {
+            display: none; font-size: 8px; color: #fbbf24; text-align: center;
+            padding: 4px 0; letter-spacing: 0.04em; line-height: 1.4;
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+
+<body class="bg-transparent text-white overflow-hidden" style="font-family:'Inter',sans-serif">
+
+    <div id="arena-idle" class="absolute inset-0 flex items-center justify-center">
+        <div class="idle-pulse ease text-white/15 text-sm font-bold uppercase tracking-[0.3em]">
+            ● Pick a scenario
+        </div>
+    </div>
+
+    <div id="arena-stage" class="absolute inset-0 hidden pointer-events-none">
+
+        <div id="vs-screen" class="absolute inset-0 vs-bg flex items-center justify-center z-50 opacity-0"
+            style="transition:opacity 0.5s">
+            <div class="vs-slash-line"></div>
+            <div class="flex items-center gap-0 w-full max-w-3xl px-8">
+                <div id="vs-challenger" class="flex-1 flex flex-col items-center"
+                    style="opacity:0;transform:translateX(-80px);transition:all 0.55s cubic-bezier(0.175,0.885,0.32,1.275)">
+                    <div class="vs-avatar-wrap mb-3">
+                        <div class="vs-ring vs-ring-blue"></div>
+                        <img id="vs-c-avatar" src="" class="vs-avatar" crossorigin="anonymous">
+                    </div>
+                    <div id="vs-c-name" class="vs-player-name text-void-accent">PLAYER 1</div>
+                    <div class="vs-role-label text-void-accent/50">CHALLENGER</div>
+                </div>
+                <div id="vs-logo" class="vs-badge"
+                    style="opacity:0;transform:scale(0.4);transition:all 0.4s cubic-bezier(0.175,0.885,0.32,1.4) 0.3s">VS</div>
+                <div id="vs-target" class="flex-1 flex flex-col items-center"
+                    style="opacity:0;transform:translateX(80px);transition:all 0.55s cubic-bezier(0.175,0.885,0.32,1.275)">
+                    <div class="vs-avatar-wrap mb-3">
+                        <div class="vs-ring vs-ring-red"></div>
+                        <img id="vs-t-avatar" src="" class="vs-avatar" crossorigin="anonymous">
+                    </div>
+                    <div id="vs-t-name" class="vs-player-name text-red-300">PLAYER 2</div>
+                    <div class="vs-role-label text-red-500/50">OPPONENT</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="battle-board" class="absolute inset-0 flex flex-col opacity-0" style="transition:opacity 0.6s">
+            <div class="arena-glow-red"></div>
+            <div class="arena-glow-blue"></div>
+
+            <div class="flex flex-col items-center"
+                style="position:absolute;bottom:50%;left:0;right:0;padding-bottom:6px;">
+                <div id="target-cards" class="flex gap-4 justify-center mb-2"></div>
+                <div class="player-bar player-bar-red">
+                    <img id="board-t-avatar" src="" class="player-avatar border-red-400" crossorigin="anonymous">
+                    <div class="player-bar-name text-red-100" id="board-t-name">Player 2</div>
+                    <div id="target-match-score" class="flex gap-1 ml-1">
+                        <div class="score-dot score-dot-red"></div>
+                        <div class="score-dot score-dot-red"></div>
+                        <div class="score-dot score-dot-red"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="battlefield-strip">
+                <div class="bf-line"></div>
+            </div>
+
+            <div class="flex flex-col items-center" style="position:absolute;top:50%;left:0;right:0;padding-top:6px;">
+                <div class="player-bar player-bar-blue mb-2">
+                    <img id="board-c-avatar" src="" class="player-avatar border-void-accent/40" crossorigin="anonymous">
+                    <div class="player-bar-name text-void-accent/90" id="board-c-name">Player 1</div>
+                    <div id="challenger-match-score" class="flex gap-1 ml-1">
+                        <div class="score-dot score-dot-blue"></div>
+                        <div class="score-dot score-dot-blue"></div>
+                        <div class="score-dot score-dot-blue"></div>
+                    </div>
+                </div>
+                <div id="challenger-cards" class="flex gap-4 justify-center"></div>
+            </div>
+        </div>
+
+
+        <div id="winner-banner" class="absolute inset-0 z-50 flex flex-col items-center justify-center hidden"
+            style="background:rgba(0,0,0,0.92);opacity:0;transition:opacity 0.7s">
+            <div class="winner-label">VICTORY</div>
+            <div class="winner-av-wrap">
+                <div class="winner-av-ring"></div>
+                <img id="winner-avatar" src="" class="winner-avatar" crossorigin="anonymous">
+            </div>
+            <div id="winner-name" class="winner-name">WINNER</div>
+            <div id="winner-score" class="winner-score">0 – 0</div>
+        </div>
+    </div>
+
+    <!-- Test Control Panel -->
+    <div id="test-panel">
+        <div class="panel-title">Arena Test</div>
+        <button class="tbtn full" onclick="runMyDeck()">⚔ My Deck vs Bot</button>
+        <div class="tsep"></div>
+        <button class="tbtn" onclick="run('rage')">😤 Rage</button>
+        <button class="tbtn" onclick="run('frost')">🧊 Frost + Freeze</button>
+        <button class="tbtn" onclick="run('frostbite')">❄️ Frostbite</button>
+        <button class="tbtn" onclick="run('bounty')">🎯 Bounty Claim</button>
+        <button class="tbtn" onclick="run('mirror')">🪞 Mirror</button>
+        <button class="tbtn" onclick="run('cleanse')">✨ Cleanse</button>
+        <button class="tbtn" onclick="run('echo')">💨 Echo</button>
+        <button class="tbtn" onclick="run('revive')">👼 Revive</button>
+        <button class="tbtn" onclick="run('absorb')">🩸 Absorb</button>
+        <button class="tbtn" onclick="run('guard')">🛡️ Guard</button>
+        <button class="tbtn" onclick="run('mimic')">🪄 Mimic</button>
+        <div class="tsep"></div>
+        <button class="tbtn full" onclick="run('full')">All Traits Demo</button>
+        <div class="tsep"></div>
+        <button id="save-btn" class="tbtn save" onclick="saveLastBattle()" disabled>⬇ Save Last Battle</button>
+        <div id="gif-progress"></div>
+        <div id="status">idle</div>
+    </div>
+
+    <!-- Block live polling so real battles don't interrupt -->
+    <script>
+        const _origFetch = window.fetch;
+        window.fetch = (...args) => {
+            if (typeof args[0] === 'string' && args[0].includes('/api/public/battle/latest'))
+                return Promise.resolve(new Response('null', { status: 200 }));
+            return _origFetch(...args);
+        };
+    </script>
+
+    <script src="/arena.js"></script>
+
+    <script>
+        // ── helpers ────────────────────────────────────────────────────────────
+        const seed = n => `https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(n)}`;
+
+        function mk(slot, name, atk, def, mech, icon) {
+            return {
+                id: slot, slot, name,
+                attack: atk, defense: def, max_hp: def, current_hp: def,
+                mechanic_name: mech || null, mechanic_icon: icon || '',
+                image_url: seed(name), rarity: 'rare'
+            };
+        }
+
+        function players(cName, tName) {
+            return {
+                challenger: { name: cName, avatar: null, matchWins: 1 },
+                target: { name: tName, avatar: null, matchWins: 0 }
+            };
+        }
+
+        function battle(cDeck, tDeck, exchanges, extraPlayers) {
+            const p = extraPlayers || players('BlueTeam', 'RedTeam');
+            return {
+                winner: 'challenger', ...p,
+                initialChallengerDeck: cDeck,
+                initialTargetDeck: tDeck,
+                matchRounds: [{ round: 1, firstAttacker: 'challenger', winner: 'challenger', exchanges }]
+            };
+        }
+
+        // exchange shorthand: (side, cCard, tCard, cAfterHp, tAfterHp, cSurv, tSurv, events)
+        function ex(side, cCard, tCard, cAHp, tAHp, cSurv, tSurv, events) {
+            return {
+                side, challengerCard: cCard, targetCard: tCard,
+                challengerCardAfter: { current_hp: cAHp },
+                targetCardAfter: { current_hp: tAHp },
+                challengerSurvived: cSurv, targetSurvived: tSurv,
+                events: events || []
+            };
+        }
+
+        // ── scenarios ──────────────────────────────────────────────────────────
+        const SCENARIOS = {
+
+            rage: () => {
+                const c1 = mk(1, 'Rage Warrior', 12, 30, 'rage', '😤');
+                const t1 = mk(1, 'Target Grunt', 10, 25);
+                const cDeck = [c1, mk(2,'C-Archer',8,22), mk(3,'C-Mage',6,18)];
+                const tDeck = [t1, mk(2,'T-Brute',9,20), mk(3,'T-Healer',5,28)];
+                return battle(cDeck, tDeck, [
+                    ex('challenger', c1, t1, 30, 13, true, true,
+                        [{ type: 'rage_gain', cardSide: 'target' }]),
+                    ex('target',     c1, t1, 20,  1, true, true,
+                        [{ type: 'rage_gain', cardSide: 'challenger' }]),
+                    ex('challenger', c1, t1, 20,  0, true, false, []),
+                ]);
+            },
+
+            frost: () => {
+                const c1 = mk(1, 'Frost Mage', 11, 28, 'frost', '🧊');
+                const t1 = mk(1, 'Target Brute', 12, 30);
+                const cDeck = [c1, mk(2,'C-Knight',9,25), mk(3,'C-Scout',7,20)];
+                const tDeck = [t1, mk(2,'T-Mage',8,22), mk(3,'T-Rogue',6,18)];
+                return battle(cDeck, tDeck, [
+                    // Frost attacks, freeze is applied to defender
+                    ex('challenger', c1, t1, 28, 17, true, true,
+                        [{ type: 'freeze_applied', frostVictimSide: 'target' }]),
+                    ex('target', c1, t1, 28, 11, true, true,
+                        [{ type: 'frostbite_applied', frostVictimSide: 'target' }, { type: 'frozen_skip', side: 'target' }]),
+                    ex('challenger', c1, t1, 28,  0, true, false, []),
+                ]);
+            },
+
+            frostbite: () => {
+                const c1 = mk(1, 'Frost Archer', 10, 25, 'frost', '🧊');
+                const t1 = mk(1, 'Frozen Victim', 11, 30);
+                const cDeck = [c1, mk(2,'C-Guard',8,24), mk(3,'C-Witch',6,20)];
+                const tDeck = [t1, mk(2,'T-Brawler',9,22), mk(3,'T-Cleric',5,26)];
+                return battle(cDeck, tDeck, [
+                    ex('challenger', c1, t1, 25, 15, true, true,
+                        [{ type: 'freeze_applied', frostVictimSide: 'target' }]),
+                    ex('target', c1, t1, 25,  8, true, true,
+                        [{ type: 'frostbite_applied', frostVictimSide: 'target' }, { type: 'frozen_skip', side: 'target' }]),
+                    ex('target', c1, t1, 25,  2, true, true,
+                        [{ type: 'frostbite_applied', frostVictimSide: 'target' }]),
+                    ex('challenger', c1, t1, 25,  0, true, false, []),
+                ]);
+            },
+
+            bounty: () => {
+                const c1 = mk(1, 'Bounty Hunter', 13, 28, 'bounty', '🎯');
+                const t1 = mk(1, 'Wanted Man', 9, 24);
+                const cDeck = [c1, mk(2,'C-Ranger',8,22), mk(3,'C-Rogue',7,19)];
+                const tDeck = [t1, mk(2,'T-Bandit',10,20), mk(3,'T-Thug',6,17)];
+                return battle(cDeck, tDeck, [
+                    { type: 'bounty_placed', side: 'challenger', targetSlot: 1, targetCard: t1.name },
+                    // Normal exchange
+                    ex('challenger', c1, t1, 28, 11, true, true, []),
+                    // Bounty claimed when target is killed
+                    ex('target', c1, t1, 19, 0, true, false,
+                        [{ type: 'bounty_claimed', side: 'defender' }]),
+                ]);
+            },
+
+            mirror: () => {
+                const c1 = mk(1, 'Mirror Mage', 8, 25, 'mirror', '🪞');
+                const t1 = mk(1, 'Target Brute', 14, 30);
+                const cDeck = [c1, mk(2,'C-Cleric',7,22), mk(3,'C-Scout',9,19)];
+                const tDeck = [t1, mk(2,'T-Knight',11,26), mk(3,'T-Archer',8,20)];
+                return battle(cDeck, tDeck, [
+                    // Mirror scans and copies opponent slot-1 — full visual identity
+                    { type: 'mirror_transform', side: 'challenger', slot: 1,
+                      newAttack: t1.attack, newDefense: t1.defense,
+                      newImageUrl: t1.image_url, newName: t1.name,
+                      newMechanicName: t1.mechanic_name || null,
+                      newMechanicIcon: t1.mechanic_icon || '' },
+                    // Now fight with mirrored stats
+                    ex('challenger', {...c1, attack: 14}, t1, 25, 11, true, true, []),
+                    ex('target',     {...c1, attack: 14}, t1, 11,  0, true, false, []),
+                ]);
+            },
+
+            cleanse: () => {
+                const c1 = mk(1, 'Paladin', 10, 28, 'cleanse', '✨');
+                const t1 = mk(1, 'Dark Warrior', 11, 25);
+                const cDeck = [c1, mk(2,'C-Bard',8,22), mk(3,'C-Monk',7,20)];
+                const tDeck = [t1, mk(2,'T-Necro',9,21), mk(3,'T-Shade',6,18)];
+                return battle(cDeck, tDeck, [
+                    ex('challenger', c1, t1, 28, 14, true, true,
+                        [{ type: 'cleanse_trigger', side: 'attacker' }]),
+                    ex('target', c1, t1, 17, 3, true, true, []),
+                    ex('challenger', c1, t1, 17, 0, true, false,
+                        [{ type: 'cleanse_trigger', side: 'attacker' }]),
+                ]);
+            },
+
+            echo: () => {
+                const c1 = mk(1, 'Echo Spirit', 9, 24, 'echo', '💨');
+                const t1 = mk(1, 'Target Golem', 10, 30);
+                const cDeck = [c1, mk(2,'C-Wisp',7,21), mk(3,'C-Ghost',8,19)];
+                const tDeck = [t1, mk(2,'T-Stone',11,28), mk(3,'T-Clay',9,22)];
+                return battle(cDeck, tDeck, [
+                    // Echo: attack fires, then an afterimage attack follows
+                    ex('challenger', c1, t1, 24, 12, true, true,
+                        [{ type: 'echo_trigger', side: 'attacker' }]),
+                    ex('target', c1, t1, 15,  3, true, true, []),
+                    ex('challenger', c1, t1, 15,  0, true, false,
+                        [{ type: 'echo_trigger', side: 'attacker' }]),
+                ]);
+            },
+
+            revive: () => {
+                const c1 = mk(1, 'Slayer', 14, 26);
+                const t1 = mk(1, 'Phoenix', 10, 22, 'revive', '👼');
+                const cDeck = [c1, mk(2,'C-Blade',11,24), mk(3,'C-Hawk',9,20)];
+                const tDeck = [t1, mk(2,'T-Crow',8,21), mk(3,'T-Ember',7,18)];
+                return battle(cDeck, tDeck, [
+                    // Phoenix dies but revives
+                    ex('challenger', c1, t1, 26,  0, true, false,
+                        [{ type: 'reanimate', side: 'defender' }]),
+                    // Phoenix is alive again with 1 HP — fights on
+                    ex('target', c1, t1, 12,  1, true, true, []),
+                    // Finally goes down
+                    ex('challenger', c1, t1, 12,  0, true, false, []),
+                ]);
+            },
+
+            absorb: () => {
+                const c1 = mk(1, 'Vampire', 12, 20, 'absorb', '🩸');
+                const t1 = mk(1, 'Victim', 8, 18);
+                const cDeck = [c1, mk(2,'C-Bat',9,18), mk(3,'C-Shade',7,16)];
+                const tDeck = [t1, mk(2,'T-Peasant',6,15), mk(3,'T-Guard',10,22)];
+                return battle(cDeck, tDeck, [
+                    // Attacker hits, target weakened
+                    ex('challenger', c1, t1, 20,  6, true, true, []),
+                    // Vampire kills and absorbs HP
+                    ex('challenger', c1, t1, 27,  0, true, false,
+                        [{ type: 'absorb_gain', side: 'attacker' }]),
+                ]);
+            },
+
+            guard: () => {
+                const c1 = mk(1, 'Attacker', 12, 26);
+                const t1 = mk(1, 'Guardian', 9, 32, 'guard', '🛡️');
+                const cDeck = [c1, mk(2,'C-Rogue',10,22), mk(3,'C-Mage',8,18)];
+                const tDeck = [t1, mk(2,'T-Knight',11,28), mk(3,'T-Archer',7,20)];
+                return battle(cDeck, tDeck, [
+                    // Each time challenger attacks, guardian shows shield
+                    ex('challenger', c1, t1, 26, 20, true, true, []),
+                    ex('target',     c1, t1, 17, 20, true, true, []),
+                    ex('challenger', c1, t1, 17,  8, true, true, []),
+                    ex('target',     c1, t1,  5,  8, true, true, []),
+                    ex('challenger', c1, t1,  5,  0, true, false, []),
+                ]);
+            },
+
+            mimic: () => {
+                const c1 = mk(1, 'Mimic', 4, 22, 'mimic', '🪄');
+                const t1 = mk(1, 'Powerhouse', 16, 28);
+                const cDeck = [c1, mk(2,'C-Clone',5,20), mk(3,'C-Copy',6,19)];
+                const tDeck = [t1, mk(2,'T-Titan',14,26), mk(3,'T-Golem',12,30)];
+                return battle(cDeck, tDeck, [
+                    // Mimic copies neighbour stats
+                    ex('challenger', c1, t1, 22,  12, true, true,
+                        [{ type: 'mimic_trigger', side: 'challenger', slot: 1, attack: 16, defense: 28 }]),
+                    // Mimic now has 16 atk
+                    ex('target',     {...c1, attack: 16}, t1, 22,  0, true, false, []),
+                ]);
+            },
+
+            full: () => {
+                const c1 = mk(1, 'Hero',   12, 30, 'rage',   '😤');
+                const c2 = mk(2, 'Frost',  10, 25, 'frost',  '🧊');
+                const c3 = mk(3, 'Mimic',   5, 20, 'mimic',  '🪄');
+                const t1 = mk(1, 'Villain', 11, 28, 'guard',  '🛡️');
+                const t2 = mk(2, 'Phoenix',  9, 22, 'revive', '👼');
+                const t3 = mk(3, 'Vampire',  8, 24, 'absorb', '🩸');
+                const cDeck = [c1, c2, c3];
+                const tDeck = [t1, t2, t3];
+                return battle(cDeck, tDeck, [
+                    { type: 'mirror_transform', side: 'challenger', slot: 1,
+                      newAttack: t1.attack, newDefense: t1.defense,
+                      newImageUrl: t1.image_url, newName: t1.name,
+                      newMechanicName: t1.mechanic_name, newMechanicIcon: t1.mechanic_icon },
+                    { type: 'bounty_placed', side: 'challenger', targetSlot: 1, targetCard: t1.name },
+                    ex('challenger', c1, t1, 30, 16, true, true,
+                        [{ type: 'rage_gain', cardSide: 'target' }]),
+                    ex('target', c2, t2, 25, 10, true, true,
+                        [{ type: 'freeze_applied', frostVictimSide: 'target' }]),
+                    ex('challenger', c2, t2, 25,  3, true, true,
+                        [{ type: 'frostbite_applied', frostVictimSide: 'challenger' }, { type: 'frozen_skip', side: 'challenger' }]),
+                    ex('challenger', c1, t1, 30,  0, true, false,
+                        [{ type: 'bounty_claimed', side: 'attacker' }]),
+                    ex('target', c3, t3, 14, 24, true, true,
+                        [{ type: 'mimic_trigger', side: 'challenger', slot: 3, attack: 8, defense: 24 }]),
+                    ex('challenger', c2, t2, 18,  0, true, false,
+                        [{ type: 'reanimate', side: 'defender' }]),
+                    ex('target', c3, t3, 14,  0, true, false,
+                        [{ type: 'absorb_gain', side: 'attacker' }]),
+                    ex('challenger', c2, t2, 18,  1, true, true,
+                        [{ type: 'cleanse_trigger', side: 'attacker' }]),
+                    ex('challenger', c2, t2, 18,  0, true, false,
+                        [{ type: 'echo_trigger', side: 'attacker' }]),
+                ]);
+            },
+        };
+
+        // ── My Deck vs Bot ─────────────────────────────────────────────────────
+        const _streamer = new URLSearchParams(location.search).get('streamer');
+        const _q = _streamer ? `?streamer=${encodeURIComponent(_streamer)}` : '';
+
+        async function runMyDeck() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'loading deck...';
+            try {
+                const [bsRes, deckRes, colRes] = await Promise.all([
+                    fetch(`/api/v2/bootstrap${_q}`, { credentials: 'include' }),
+                    fetch(`/api/battle/saved-decks${_q}`, { credentials: 'include' }),
+                    fetch(`/api/collection${_q}`, { credentials: 'include' }),
+                ]);
+
+                if (!bsRes.ok) { statusEl.textContent = 'not logged in'; return; }
+                if (!deckRes.ok) { statusEl.textContent = `deck api error (need ?streamer=)`; return; }
+
+                const bs = await bsRes.json();
+                const deckData = await deckRes.json();
+                const colData = colRes.ok ? await colRes.json() : [];
+
+                const user = bs.user || {};
+                const decks = deckData.decks || [];
+                const activeDeck = decks.find(d => d.is_active) || decks[0];
+                if (!activeDeck) { statusEl.textContent = 'no deck saved — build one first'; return; }
+
+                function slotToCard(s, slotNum) {
+                    if (!s) return null;
+                    return {
+                        id: s.id, slot: slotNum,
+                        name: s.card?.name || 'Unknown',
+                        image_url: s.card?.image_url || `https://api.dicebear.com/9.x/identicon/svg?seed=slot${slotNum}`,
+                        rarity: s.card?.rarity || 'common',
+                        attack: s.attack || 0,
+                        defense: s.defense || s.max_hp || 10,
+                        max_hp: s.max_hp || s.defense || 10,
+                        current_hp: s.defense || s.max_hp || 10,
+                        mechanic_name: s.mechanic?.name || null,
+                        mechanic_icon: s.mechanic?.icon || '',
+                        genesis_mechanic_name: s.genesis_mechanic?.name || null,
+                        genesis_mechanic_icon: s.genesis_mechanic?.icon || '',
+                    };
+                }
+
+                const cDeck = [
+                    slotToCard(activeDeck.slot_1, 1),
+                    slotToCard(activeDeck.slot_2, 2),
+                    slotToCard(activeDeck.slot_3, 3),
+                ].filter(Boolean);
+                if (!cDeck.length) { statusEl.textContent = 'deck is empty'; return; }
+
+                // Build bot deck from user's collection
+                const rawCol = Array.isArray(colData) ? colData : (colData.cards || colData.collection || []);
+                const myIds = new Set(cDeck.map(c => c.id).filter(Boolean));
+                const botPool = rawCol.filter(c => !myIds.has(c.id ?? c.user_card_id));
+                const pool = botPool.length >= 3 ? botPool : rawCol;
+                const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
+                while (shuffled.length < 3) shuffled.push(null);
+
+                function colToCard(c, slotNum) {
+                    if (!c) return mk(slotNum, `Bot ${slotNum}`, 5 + slotNum, 12 + slotNum * 2);
+                    const mech = c.mechanic || (c.mechanic_name ? { name: c.mechanic_name, icon: c.mechanic_icon || '' } : null);
+                    const gen = c.genesis_mechanic || (c.genesis_mechanic_name ? { name: c.genesis_mechanic_name, icon: c.genesis_mechanic_icon || '' } : null);
+                    return {
+                        id: c.id ?? c.user_card_id, slot: slotNum,
+                        name: c.card?.name || c.card_name || c.name || `Bot ${slotNum}`,
+                        image_url: c.card?.image_url || c.image_url || `https://api.dicebear.com/9.x/identicon/svg?seed=bot${slotNum}`,
+                        rarity: c.card?.rarity || c.rarity || 'common',
+                        attack: c.attack ?? 5,
+                        defense: c.defense ?? 12,
+                        max_hp: c.max_hp || c.defense || 12,
+                        current_hp: c.defense ?? 12,
+                        mechanic_name: mech?.name || null,
+                        mechanic_icon: mech?.icon || '',
+                        genesis_mechanic_name: gen?.name || null,
+                        genesis_mechanic_icon: gen?.icon || '',
+                    };
+                }
+
+                const tDeck = shuffled.map((c, i) => colToCard(c, i + 1));
+
+                // Simple combat simulation with trait event hooks
+                const cs = cDeck.map(c => ({ ...c, hp: c.defense, _revived: false, _hasBounty: false }));
+                const ts = tDeck.map(c => ({ ...c, hp: c.defense, _revived: false, _hasBounty: false }));
+                const exchanges = [];
+                const alive = cards => cards.filter(c => c.hp > 0);
+                const mech = c => (c.mechanic_name || '').toLowerCase();
+
+                // ── Pre-combat phase: Mimic → Mirror → Bounty ────────────────
+                // Mimic: copy mechanic from left/right neighbor
+                [[cs, 'challenger'], [ts, 'target']].forEach(([cards, side]) => {
+                    for (const card of cards) {
+                        if (mech(card) !== 'mimic') continue;
+                        const left  = cards.find(c => c.slot === card.slot - 1 && c.hp > 0);
+                        const right = cards.find(c => c.slot === card.slot + 1 && c.hp > 0);
+                        const src = left || right;
+                        if (!src || !src.mechanic_name || mech(src) === 'mimic') continue;
+                        card.mechanic_name = src.mechanic_name;
+                        card.mechanic_icon = src.mechanic_icon;
+                        exchanges.push({ type: 'mimic_trigger', side, slot: card.slot, attack: card.attack, defense: card.defense });
+                    }
+                });
+
+                // Mirror: snapshot opponents first, then copy (so two facing mirrors swap correctly)
+                const csSnap = cs.map(c => ({ ...c }));
+                const tsSnap = ts.map(c => ({ ...c }));
+                [[cs, tsSnap, 'challenger'], [ts, csSnap, 'target']].forEach(([cards, oppSnap, side]) => {
+                    for (const card of cards) {
+                        if (mech(card) !== 'mirror') continue;
+                        const opp = oppSnap.find(o => o.slot === card.slot && o.hp > 0);
+                        if (!opp) continue;
+                        card.attack        = opp.attack;
+                        card.hp            = opp.defense;
+                        card.defense       = opp.defense;
+                        card.mechanic_name = opp.mechanic_name;
+                        card.mechanic_icon = opp.mechanic_icon;
+                        card.name          = opp.name;
+                        card.image_url     = opp.image_url;
+                        exchanges.push({
+                            type: 'mirror_transform', side, slot: card.slot,
+                            newAttack: opp.attack, newDefense: opp.defense,
+                            newImageUrl: opp.image_url || '',
+                            newName: opp.name || '',
+                            newMechanicName: opp.mechanic_name || null,
+                            newMechanicIcon: opp.mechanic_icon || '',
+                        });
+                    }
+                });
+
+                // Bounty Hunter: mark a random enemy after transforms
+                [[cs, ts, 'challenger'], [ts, cs, 'target']].forEach(([atts, defs, side]) => {
+                    for (const att of atts) {
+                        if (mech(att) !== 'bounty_hunter') continue;
+                        const pool = alive(defs);
+                        if (!pool.length) continue;
+                        const mark = pool[Math.floor(Math.random() * pool.length)];
+                        mark._hasBounty = true;
+                        exchanges.push({ type: 'bounty_placed', side, targetSlot: mark.slot });
+                    }
+                });
+                // ─────────────────────────────────────────────────────────────
+
+                let turn = 'challenger', safety = 30;
+
+                while (safety-- > 0) {
+                    const aPool = turn === 'challenger' ? cs : ts;
+                    const dPool = turn === 'challenger' ? ts : cs;
+                    const aAlive = alive(aPool), dAlive = alive(dPool);
+                    if (!aAlive.length || !dAlive.length) break;
+
+                    const att = aAlive[0];
+                    // Guard cards must be targeted first (same as real engine pickRandomTarget)
+                    const guards = dAlive.filter(c => (c.mechanic_name || '').toLowerCase() === 'guard');
+                    const def = guards.length ? guards[0] : dAlive[0];
+                    const atkDmg = att.attack || 0;
+                    const defDmg = def.attack || 0;
+                    def.hp = Math.max(0, def.hp - atkDmg);
+                    att.hp = Math.max(0, att.hp - defDmg);
+
+                    const attSide = turn, defSide = turn === 'challenger' ? 'target' : 'challenger';
+                    const attMech = (att.mechanic_name || '').toLowerCase();
+                    const defMech = (def.mechanic_name || '').toLowerCase();
+                    const events = [];
+
+                    if (attMech === 'rage' && defDmg > 0)  events.push({ type: 'rage_gain', cardSide: attSide });
+                    if (defMech === 'rage' && atkDmg > 0)  events.push({ type: 'rage_gain', cardSide: defSide });
+                    if (attMech === 'frost' && Math.random() < 0.5)
+                        events.push({ type: 'freeze_applied', frostVictimSide: defSide });
+                    if (def.hp <= 0 && !def._revived && defMech === 'revive') {
+                        def._revived = true; def.hp = 1;
+                        events.push({ type: 'reanimate', side: defSide });
+                    }
+                    if (att.hp <= 0 && !att._revived && attMech === 'revive') {
+                        att._revived = true; att.hp = 1;
+                        events.push({ type: 'reanimate', side: attSide });
+                    }
+                    if (def.hp <= 0 && attMech === 'absorb')          events.push({ type: 'absorb_gain', side: attSide });
+                    if (att.hp <= 0 && defMech === 'absorb')          events.push({ type: 'absorb_gain', side: defSide });
+                    if (def.hp <= 0 && attMech === 'echo')            events.push({ type: 'echo_trigger', side: 'attacker' });
+                    if (attMech === 'cleanse')                        events.push({ type: 'cleanse_trigger', side: 'attacker' });
+                    if (def.hp <= 0 && attMech === 'bounty_hunter' && def._hasBounty) events.push({ type: 'bounty_claimed', side: attSide });
+                    if (att.hp <= 0 && defMech === 'bounty_hunter' && att._hasBounty) events.push({ type: 'bounty_claimed', side: defSide });
+
+                    const cCard = turn === 'challenger' ? att : def;
+                    const tCard = turn === 'challenger' ? def : att;
+                    exchanges.push({
+                        side: turn,
+                        challengerCard: { slot: cCard.slot, attack: cCard.attack, mechanic_name: cCard.mechanic_name },
+                        targetCard:     { slot: tCard.slot, attack: tCard.attack, mechanic_name: tCard.mechanic_name },
+                        challengerCardAfter: { current_hp: cCard.hp },
+                        targetCardAfter:     { current_hp: tCard.hp },
+                        challengerSurvived: cCard.hp > 0,
+                        targetSurvived:     tCard.hp > 0,
+                        events,
+                    });
+                    turn = turn === 'challenger' ? 'target' : 'challenger';
+                }
+
+                const cAlive = alive(cs).length, tAlive = alive(ts).length;
+                const winner = cAlive > tAlive ? 'challenger' : tAlive > cAlive ? 'target' : 'draw';
+
+                const battleData = {
+                    winner,
+                    challenger: {
+                        name: user.username || user.display_name || 'You',
+                        avatar: user.avatar_url || null,
+                        matchWins: winner === 'challenger' ? 1 : 0,
+                    },
+                    target: {
+                        name: 'Bot Master',
+                        avatar: 'https://api.dicebear.com/9.x/bottts/svg?seed=BotMaster',
+                        matchWins: winner === 'target' ? 1 : 0,
+                    },
+                    initialChallengerDeck: cDeck,
+                    initialTargetDeck: tDeck,
+                    matchRounds: [{ round: 1, firstAttacker: 'challenger', winner, exchanges }],
+                };
+
+                _runWithCapture('your deck vs bot', battleData);
+            } catch (e) {
+                statusEl.textContent = 'error: ' + e.message;
+                console.error('[runMyDeck]', e);
+            }
+        }
+
+        // ── runner ─────────────────────────────────────────────────────────────
+        let lastBattleData   = null;
+        let lastBattleFrames = []; // [{canvas, t}] — captured during the live battle
+
+        function _resetStage() {
+            window._arenaReset();
+            const wb = document.getElementById('winner-banner');
+            if (wb) { wb.style.opacity = '0'; wb.classList.add('hidden'); }
+            document.getElementById('arena-stage')?.classList.add('hidden');
+            document.getElementById('arena-idle')?.classList.add('hidden');
+        }
+
+        function _afterBattle(data) {
+            lastBattleData = data;
+            const btn = document.getElementById('save-btn');
+            if (btn) btn.disabled = false;
+        }
+
+        // Capture html2canvas snapshots in the background while the battle plays.
+        // Snapshots fire in parallel (don't await each one) so html2canvas latency
+        // doesn't slow the visible animation. Stops when stopFlag.done is true.
+        // Lower scale = much faster html2canvas → more frames per second of battle.
+        async function _captureBattle(stopFlag) {
+            const stageEl = document.getElementById('arena-stage');
+            if (!window.html2canvas) { console.warn('[capture] html2canvas not loaded'); return []; }
+
+            const CAPTURE_MS = 60;   // attempt a snapshot every 60ms
+            const SCALE      = 0.6;  // 0.6× → ~2.5× faster html2canvas
+            const startT = performance.now();
+            const pending = [];
+
+            const tick = () => {
+                if (stopFlag.done) return;
+                if (stageEl.offsetWidth > 0 && stageEl.offsetHeight > 0) {
+                    const t = performance.now() - startT;
+                    const p = html2canvas(stageEl, {
+                        useCORS: true, allowTaint: true,
+                        backgroundColor: '#000000',
+                        scale: SCALE, logging: false,
+                        imageTimeout: 0,
+                    }).then(c => ({ canvas: c, t })).catch(() => null);
+                    pending.push(p);
+                }
+                setTimeout(tick, CAPTURE_MS);
+            };
+            tick();
+
+            while (!stopFlag.done) await new Promise(r => setTimeout(r, 50));
+
+            const settled = await Promise.all(pending);
+            return settled
+                .filter(f => f && f.canvas && f.canvas.width > 0 && f.canvas.height > 0)
+                .sort((a, b) => a.t - b.t);
+        }
+
+        async function _runWithCapture(label, data) {
+            const statusEl = document.getElementById('status');
+            const btn      = document.getElementById('save-btn');
+            if (!window._arenaTest) { statusEl.textContent = 'arena.js not ready'; return; }
+
+            _resetStage();
+            lastBattleFrames = [];
+            if (btn) btn.disabled = true;
+            statusEl.textContent = label + '...';
+
+            const stopFlag = { done: false };
+            const captureP = _captureBattle(stopFlag);
+
+            try {
+                await window._arenaTest(data);
+            } catch (e) {
+                statusEl.textContent = 'error (see console)';
+                console.error(e);
+            }
+
+            // Tail so the winner banner is in the captured frames
+            await new Promise(r => setTimeout(r, 1200));
+            stopFlag.done = true;
+            lastBattleFrames = await captureP;
+            console.log('[capture] stored', lastBattleFrames.length, 'frames');
+
+            statusEl.textContent = `done — ${lastBattleFrames.length} frames captured`;
+            _afterBattle(data);
+        }
+
+        function run(name) {
+            const data = SCENARIOS[name]();
+            _runWithCapture(name, data);
+        }
+
+        // ── Inline GIF encoder — no external deps, no workers ─────────────────
+        const _gif = (() => {
+            const tick = () => new Promise(r => setTimeout(r, 0));
+
+            // Reduce each channel to 6 bits, count most common colours, return 256-entry palette
+            function buildPalette(pixels) {
+                const freq = new Map();
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const k = ((pixels[i] >> 2) << 12) | ((pixels[i+1] >> 2) << 6) | (pixels[i+2] >> 2);
+                    freq.set(k, (freq.get(k) || 0) + 1);
+                }
+                const pal = [...freq].sort((a, b) => b[1] - a[1]).slice(0, 256)
+                    .map(([k]) => [((k >> 12) & 63) << 2, ((k >> 6) & 63) << 2, (k & 63) << 2]);
+                while (pal.length < 256) pal.push([0, 0, 0]);
+                return pal;
+            }
+
+            // Map each pixel to nearest palette index (with per-frame cache)
+            function pixelIndices(pixels, pal) {
+                const cache = new Map();
+                const out = new Uint8Array(pixels.length >> 2);
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
+                    const k = (r << 16) | (g << 8) | b;
+                    let idx = cache.get(k);
+                    if (idx === undefined) {
+                        let best = 0, d = Infinity;
+                        for (let j = 0; j < pal.length; j++) {
+                            const dr = r-pal[j][0], dg = g-pal[j][1], db = b-pal[j][2];
+                            const dist = dr*dr + dg*dg + db*db;
+                            if (dist < d) { d = dist; best = j; }
+                            if (d === 0) break;
+                        }
+                        cache.set(k, idx = best);
+                    }
+                    out[i >> 2] = idx;
+                }
+                return out;
+            }
+
+            // Standard GIF LZW encoder
+            function lzwEncode(indices) {
+                const clear = 256, eoi = 257;
+                let codeSize = 9, next = 258, max = 512;
+                const tbl = new Map();
+                const reset = () => { tbl.clear(); codeSize = 9; next = 258; max = 512; };
+
+                const bytes = [];
+                let acc = 0, bits = 0;
+                const emit = code => {
+                    acc |= code << bits; bits += codeSize;
+                    while (bits >= 8) { bytes.push(acc & 0xFF); acc >>>= 8; bits -= 8; }
+                };
+
+                emit(clear);
+                let prefix = indices[0];
+                for (let i = 1; i < indices.length; i++) {
+                    const px = indices[i];
+                    const key = (prefix << 8) | px;
+                    const e = tbl.get(key);
+                    if (e !== undefined) { prefix = e; continue; }
+                    emit(prefix);
+                    if (next < 4096) {
+                        tbl.set(key, next++);
+                        if (next > max && codeSize < 12) { codeSize++; max <<= 1; }
+                    } else { emit(clear); reset(); }
+                    prefix = px;
+                }
+                emit(prefix); emit(eoi);
+                if (bits > 0) bytes.push(acc & 0xFF);
+                return bytes;
+            }
+
+            // Write GIF89a binary and return Uint8Array
+            async function encode(frames, w, h, delayMs, onProgress) {
+                const o = [];
+                const b  = v  => o.push(v & 0xFF);
+                const w2 = v  => { b(v & 0xFF); b((v >> 8) & 0xFF); };
+                const bs = arr => arr.forEach(x => b(x));
+                const str = s => { for (let i = 0; i < s.length; i++) b(s.charCodeAt(i)); };
+
+                // Build global palette from first frame
+                const ctx0 = frames[0].getContext('2d');
+                const px0  = ctx0.getImageData(0, 0, w, h).data;
+                const pal  = buildPalette(px0);
+
+                // Header + Logical Screen Descriptor
+                str('GIF89a');
+                w2(w); w2(h);
+                b(0xF7); b(0); b(0); // global CT, 256 colors
+                pal.forEach(([r, g, bv]) => { b(r); b(g); b(bv); });
+
+                // Netscape loop extension (infinite)
+                bs([0x21, 0xFF, 0x0B]);
+                str('NETSCAPE2.0');
+                bs([0x03, 0x01, 0x00, 0x00, 0x00]);
+
+                // delayMs may be a single number or an array of per-frame ms values.
+                // GIF stores delay in centiseconds (1 cs = 10 ms), min 2 cs.
+                const getCs = i => {
+                    const d = Array.isArray(delayMs) ? delayMs[i] : delayMs;
+                    return Math.max(2, Math.round((d || 100) / 10));
+                };
+
+                for (let fi = 0; fi < frames.length; fi++) {
+                    onProgress && onProgress(fi, frames.length);
+                    await tick(); // yield so progress text paints
+
+                    const ctx = frames[fi].getContext('2d');
+                    const px  = ctx.getImageData(0, 0, w, h).data;
+                    const idx = pixelIndices(px, pal);
+                    const lzw = lzwEncode(idx);
+
+                    // Graphic Control Extension — per-frame delay
+                    bs([0x21, 0xF9, 0x04, 0x04]);
+                    w2(getCs(fi));
+                    bs([0x00, 0x00]);
+
+                    // Image Descriptor
+                    b(0x2C); w2(0); w2(0); w2(w); w2(h); b(0x00);
+
+                    // LZW data in ≤255-byte sub-blocks
+                    b(0x08); // min code size
+                    for (let i = 0; i < lzw.length; i += 255) {
+                        const chunk = lzw.slice(i, i + 255);
+                        b(chunk.length); bs(chunk);
+                    }
+                    b(0x00); // block terminator
+                }
+
+                b(0x3B); // GIF trailer
+                return new Uint8Array(o);
+            }
+
+            return { encode };
+        })();
+
+        // ── GIF save — instant, encodes frames captured during the live battle ─
+        async function saveLastBattle() {
+            const btn        = document.getElementById('save-btn');
+            const statusEl   = document.getElementById('status');
+            const progressEl = document.getElementById('gif-progress');
+
+            progressEl.style.display = 'block';
+
+            if (!lastBattleFrames || lastBattleFrames.length === 0) {
+                progressEl.textContent = 'No frames captured';
+                setTimeout(() => { progressEl.style.display = 'none'; }, 2500);
+                return;
+            }
+
+            btn.disabled = true;
+
+            // Use first frame's dimensions and only keep matching ones
+            const w = lastBattleFrames[0].canvas.width;
+            const h = lastBattleFrames[0].canvas.height;
+            const goodFrames = lastBattleFrames.filter(f => f.canvas.width === w && f.canvas.height === h);
+
+            // Per-frame delays from real timestamps — fixes pacing jitter so each
+            // snapshot is shown for exactly as long as the battle was in that
+            // state, regardless of how unevenly html2canvas was able to capture.
+            const perFrameDelay = [];
+            for (let i = 0; i < goodFrames.length; i++) {
+                if (i + 1 < goodFrames.length) {
+                    perFrameDelay.push(Math.max(20, goodFrames[i + 1].t - goodFrames[i].t));
+                } else {
+                    perFrameDelay.push(perFrameDelay[perFrameDelay.length - 1] || 100);
+                }
+            }
+
+            try {
+                const bytes = await _gif.encode(
+                    goodFrames.map(f => f.canvas), w, h, perFrameDelay,
+                    (i, total) => { progressEl.textContent = `Encoding… ${i + 1}/${total}`; }
+                );
+
+                const blob  = new Blob([bytes], { type: 'image/gif' });
+                const url   = URL.createObjectURL(blob);
+                const a     = document.createElement('a');
+                const cName = lastBattleData?.challenger?.name || 'challenger';
+                const tName = lastBattleData?.target?.name    || 'target';
+                a.href      = url;
+                a.download  = `battle_${cName}_vs_${tName}.gif`.replace(/[^a-z0-9._-]/gi, '_');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                progressEl.textContent = `✓ Saved ${goodFrames.length} frames (${Math.round(blob.size / 1024)} KB)`;
+                setTimeout(() => { progressEl.style.display = 'none'; }, 3000);
+                statusEl.textContent = 'done — pick next';
+            } catch (e) {
+                console.error('[GIF encode]', e);
+                progressEl.textContent = 'Encoding failed: ' + e.message;
+            }
+            btn.disabled = false;
+        }
+    </script>
+
+</body>
+</html>

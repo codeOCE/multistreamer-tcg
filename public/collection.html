@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Castle TCG</title>
 
@@ -231,7 +231,7 @@
         /* Rarity glow on center */
         .showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 50px 8px rgba(251,191,36,0.35), 0 24px 48px rgba(0,0,0,0.6); }
         .showcase-slot[data-pos="center"][data-rarity="Epic"]      { box-shadow: 0 0 50px 8px rgba(168,85,247,0.35), 0 24px 48px rgba(0,0,0,0.6); }
-        .showcase-slot[data-pos="center"][data-rarity="Rare"]      { box-shadow: 0 0 50px 8px rgba(59,130,246,0.3), 0 24px 48px rgba(0,0,0,0.6); }
+        .showcase-slot[data-pos="center"][data-rarity="Rare"]      { box-shadow: 0 0 50px 8px rgba(63,170,255,0.3), 0 24px 48px rgba(0,0,0,0.6); }
         .showcase-slot[data-pos="center"] .showcase-glow {
             position: absolute;
             inset: 0;
@@ -557,8 +557,8 @@
         .cp-card.rarity-Legendary:hover::after { border-color: rgba(251,191,36,0.7); box-shadow: 0 0 20px rgba(251,191,36,0.2); }
         .cp-card.rarity-Epic::after { border-color: rgba(168,85,247,0.3); }
         .cp-card.rarity-Epic:hover::after { border-color: rgba(168,85,247,0.7); box-shadow: 0 0 20px rgba(168,85,247,0.2); }
-        .cp-card.rarity-Rare::after { border-color: rgba(59,130,246,0.25); }
-        .cp-card.rarity-Rare:hover::after { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 20px rgba(59,130,246,0.15); }
+        .cp-card.rarity-Rare::after { border-color: rgba(63,170,255,0.25); }
+        .cp-card.rarity-Rare:hover::after { border-color: rgba(63,170,255,0.6); box-shadow: 0 0 20px rgba(63,170,255,0.15); }
 
         /* Lock overlay icon */
         .cp-card.locked .lock-icon {
@@ -589,7 +589,7 @@
         }
         .rarity-pip-Legendary { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
         .rarity-pip-Epic { background: #a855f7; box-shadow: 0 0 6px #a855f7; }
-        .rarity-pip-Rare { background: #3b82f6; box-shadow: 0 0 6px #3b82f6; }
+        .rarity-pip-Rare { background: #3faaff; box-shadow: 0 0 6px #3faaff; }
         .rarity-pip-Common { background: #64748b; }
 
         /* Card number badge */
@@ -848,6 +848,7 @@
             border-radius: 50%;
         }
     </style>
+    <script src="/castle-prefs.js"></script>
 </head>
 
 <body class="bg-void-bg text-void-text antialiased">
@@ -855,7 +856,7 @@
 
     <!-- Navbar -->
     <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-        <div class="max-w-[1520px] mx-auto px-8 h-20 flex items-center justify-between">
+        <div class="w-full px-8 h-20 flex items-center justify-between">
             <a href="/" class="flex items-center gap-2 group cursor-pointer">
                 <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
                     <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
@@ -876,10 +877,9 @@
                             class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
                             aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
                             <span class="relative inline-block">
-                                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
-                                <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
                             </span>
-                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
                         </button>
                         <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
                             <div class="border-b border-white/5">
@@ -1097,6 +1097,7 @@
     </div>
 
     <script src="/nav-user-menu.js"></script>
+    <script src="/streamer-nav.js"></script>
     <script src="/collection.js"></script>
 </body>
 </html>

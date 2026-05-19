@@ -298,6 +298,7 @@ async function initStudio() {
 
     if (existingCard?.layer_data) {
         await _csInitFromJson(existingCard.layer_data);
+        if (existingCard?.image_url) await _csEnsureCardArtFromImageUrl(existingCard.image_url);
     } else {
         _csInitCanvas(existingCard?.image_url || null);
     }
@@ -1572,6 +1573,60 @@ function _csInitCanvas(bgImageUrl) {
         _csPushHistory(); _csRenderLayerList();
     }
     csTool('select');
+}
+
+function _csImageUrlBasename(url) {
+    if (!url || typeof url !== 'string') return '';
+    try {
+        const path = url.split('?')[0].split('#')[0];
+        return decodeURIComponent(path.split('/').pop() || '');
+    } catch {
+        return url.split('?')[0].split('/').pop() || '';
+    }
+}
+
+function _csLayerUsesImageUrl(layer, imageUrl) {
+    const base = _csImageUrlBasename(imageUrl);
+    if (!base) return false;
+    const srcs = [layer?.data?.originalUrl];
+    if (typeof layer?.getSrc === 'function') srcs.push(layer.getSrc());
+    return srcs.some(u => {
+        if (!u || typeof u !== 'string') return false;
+        let raw = u;
+        if (raw.includes('/api/img-proxy')) {
+            try {
+                const q = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : '';
+                raw = new URLSearchParams(q).get('url') || raw;
+            } catch { /* keep raw */ }
+        }
+        return _csImageUrlBasename(raw) === base;
+    });
+}
+
+/** If saved layer_data is missing the card's canonical art, add it from image_url. */
+async function _csEnsureCardArtFromImageUrl(imageUrl) {
+    if (!imageUrl || !_csCanvas) return;
+    const artLayers = _csCanvas.getObjects().filter(o =>
+        o.type === 'image' &&
+        !o.data?.isFrameLayer && !o.data?.isTraitZone && !o.data?.isTraitPreview && !o.data?.isRarityStamp
+    );
+    if (artLayers.some(o => _csLayerUsesImageUrl(o, imageUrl))) return;
+
+    const htmlImg = await _csLoadSafeImage(imageUrl);
+    if (!htmlImg) return;
+    const fi = new fabric.Image(htmlImg);
+    const scale = Math.max(CS_W / htmlImg.naturalWidth, CS_H / htmlImg.naturalHeight);
+    fi.set({
+        left: CS_W / 2, top: CS_H / 2,
+        originX: 'center', originY: 'center',
+        scaleX: scale, scaleY: scale,
+    });
+    fi.data = { layerName: 'Background', layerType: 'image', originalUrl: imageUrl };
+    _csCanvas.add(fi);
+    _csCanvas.sendToBack(fi);
+    _csCanvas.renderAll();
+    _csPushHistory();
+    _csRenderLayerList();
 }
 
 async function _csInitFromJson(layerDataJson) {

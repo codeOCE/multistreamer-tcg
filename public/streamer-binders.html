@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binders · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        .hidden { display: none !important; }
+
+        /* streamer-nav.js elements use hidden md:flex — restore display on desktop */
+        @media (min-width: 768px) {
+            #streamer-nav-links { display: flex !important; }
+            #streamer-nav-identity { display: flex !important; }
+            #streamer-nav-left { display: flex !important; }
+        }
+
+        /* ── Page layout ── */
+        #sb-root { min-height: 100vh; padding-top: 80px; }
+
+        /* ── Two-column body ── */
+        #sb-body {
+            display: flex;
+            gap: 32px;
+            align-items: flex-start;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 28px 24px 80px;
+        }
+
+        #sb-main { flex: 1; min-width: 0; }
+
+        /* ── Section headers ── */
+        .sb-section-hd {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .sb-section-title {
+            font-size: 0.52rem;
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* ── Binder grid ── */
+        .sb-binder-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 28px 24px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 900px) {
+            .sb-binder-grid { grid-template-columns: repeat(3, 1fr); gap: 22px 16px; }
+            #sb-body { gap: 24px; }
+        }
+
+        @media (max-width: 560px) {
+            .sb-binder-grid { grid-template-columns: repeat(2, 1fr); gap: 16px 10px; }
+            #sb-page-header { padding: 20px 16px 0; }
+            #sb-body { padding: 20px 16px 60px; }
+        }
+
+        /* ── Binder tile ── */
+        .binder-tile {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            position: relative;
+        }
+
+        .binder-book {
+            position: relative;
+            aspect-ratio: 3/4;
+            background: rgb(var(--binder-accent-rgb));
+            border-radius: 5px 14px 14px 5px;
+            overflow: hidden;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s;
+            box-shadow:
+                -4px 0 10px rgba(0, 0, 0, 0.45),
+                0 8px 28px rgba(0, 0, 0, 0.5),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
+        .binder-tile:hover .binder-book {
+            transform: translateY(-8px) scale(1.025);
+            box-shadow:
+                -4px 0 10px rgba(0, 0, 0, 0.45),
+                0 28px 64px rgba(0, 0, 0, 0.7),
+                0 0 40px rgba(var(--binder-accent-rgb), 0.25),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+        }
+
+        .binder-book--empty {
+            background: transparent !important;
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 5px 14px 14px 5px;
+            box-shadow: none !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.25s, background 0.25s;
+        }
+
+        .binder-tile:hover .binder-book--empty {
+            border-color: rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.02) !important;
+            transform: none;
+            box-shadow: none !important;
+        }
+
+        .binder-spine-strip {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 18px;
+            background: rgba(0, 0, 0, 0.32);
+            z-index: 2;
+            box-shadow: inset -3px 0 6px rgba(0, 0, 0, 0.4), 2px 0 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .binder-face {
+            position: absolute;
+            left: 18px; right: 0; top: 0; bottom: 0;
+        }
+
+        .binder-weave {
+            position: absolute;
+            inset: 0;
+            background-image:
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 3px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 3px);
+        }
+
+        .binder-sheen {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg,
+                rgba(255,255,255,0.11) 0%,
+                rgba(255,255,255,0.03) 30%,
+                transparent 55%,
+                rgba(0,0,0,0.1) 100%);
+        }
+
+        .binder-stitch {
+            position: absolute;
+            inset: 9px 11px 9px 5px;
+            border: 1.5px dashed rgba(255, 255, 255, 0.13);
+            border-radius: 2px 10px 10px 2px;
+            pointer-events: none;
+        }
+
+        .binder-zipper {
+            position: absolute;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 9px; height: 18px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 0 0 5px 5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: none;
+            z-index: 4;
+        }
+
+        .binder-zipper::after {
+            content: '';
+            position: absolute;
+            top: 6px; left: 50%;
+            transform: translateX(-50%);
+            width: 4px; height: 4px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .binder-etched {
+            position: absolute;
+            left: 0; right: 0;
+            bottom: 20%;
+            padding: 0 16px;
+            text-align: center;
+        }
+
+        .binder-etch-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(0.6rem, 1.8vw, 0.9rem);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .binder-etch-handle {
+            font-size: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+
+        .binder-avatar {
+            position: absolute;
+            top: 42%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: clamp(36px, 36%, 68px);
+            height: auto;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            z-index: 5;
+        }
+
+        .binder-card-count {
+            position: absolute;
+            bottom: 13px; right: 14px;
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .binder-label { padding: 0 4px; }
+
+        .binder-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 0.78rem;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+        }
+
+        .binder-meta {
+            font-size: 0.58rem;
+            font-weight: 600;
+            color: var(--void-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 2px;
+        }
+
+        .binder-meta .accent-dot {
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            background: rgb(var(--binder-accent-rgb));
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        /* ── Achievements panel ── */
+        #sb-achievements-panel {
+            width: 220px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 96px;
+            align-self: flex-start;
+            max-height: calc(100vh - 110px);
+            overflow-y: auto;
+            scrollbar-width: none;
+        }
+        #sb-achievements-panel::-webkit-scrollbar { display: none; }
+
+        @media (max-width: 1040px) { #sb-achievements-panel { display: none; } }
+
+        #sb-achievements-list { display: flex; flex-direction: column; gap: 6px; }
+
+        .sb-ach-card {
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            background: rgba(10, 12, 16, 0.6);
+            padding: 10px;
+            display: flex;
+            gap: 9px;
+            align-items: flex-start;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .sb-ach-card.unlocked {
+            border-color: rgba(var(--void-accent-rgb), 0.2);
+            background: rgba(var(--void-accent-rgb), 0.04);
+        }
+
+        .sb-ach-card.locked { opacity: 0.45; }
+
+        .sb-ach-icon {
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            border: 1px solid rgba(var(--void-accent-rgb), 0.3);
+            background: rgba(var(--void-accent-rgb), 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+
+        .sb-ach-card.locked .sb-ach-icon {
+            border-color: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            filter: grayscale(1);
+        }
+
+        .sb-ach-body { min-width: 0; flex: 1; }
+
+        .sb-ach-title {
+            font-size: 0.54rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--void-text);
+            line-height: 1.3;
+        }
+
+        .sb-ach-meta {
+            margin-top: 2px;
+            font-size: 0.46rem;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        .sb-ach-card.unlocked .sb-ach-meta { color: rgba(var(--void-accent-rgb), 0.7); }
+
+        .sb-ach-bar-track {
+            margin-top: 6px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .sb-ach-bar-fill {
+            height: 100%;
+            background: rgba(var(--void-accent-rgb), 0.7);
+            border-radius: 2px;
+            transition: width 0.4s ease;
+        }
+
+        /* drag ghost */
+        .sb-sort-ghost { opacity: 0.35; }
+
+        /* draggable cursor on the grid */
+        #sb-all-grid { cursor: grab; }
+        #sb-all-grid:active { cursor: grabbing; }
+
+        /* ── Loading / auth states ── */
+        #sb-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 16px;
+        }
+
+        .sb-spinner {
+            width: 32px; height: 32px;
+            border: 2px solid rgba(var(--void-accent-rgb), 0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #sb-signin {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 20px;
+            text-align: center;
+            padding: 40px;
+        }
+
+        #sb-signin h1 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 1.8rem;
+            text-transform: uppercase;
+            letter-spacing: -0.03em;
+        }
+
+        #sb-signin p {
+            font-size: 0.7rem;
+            color: var(--void-muted);
+            max-width: 340px;
+            line-height: 1.6;
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow"></div>
+
+    <!-- Nav -->
+    <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
+        <div class="w-full px-8 h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 group cursor-pointer">
+                <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+            </a>
+            <div class="flex items-center gap-3">
+                <div id="nav-user-preview" class="hidden items-center">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Collector</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
+                            </span>
+                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors"></i>
+                        </button>
+                        <div id="nav-user-menu"
+                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                            role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt=""
+                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
+                                            <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap"
+                                        class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron"
+                                            class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel"
+                                    class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                        <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="fa-solid fa-gear text-void-muted w-4 text-center shrink-0"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="fa-solid fa-right-from-bracket w-4 text-center"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Loading -->
+    <div id="sb-loading">
+        <div class="sb-spinner"></div>
+        <p style="font-size:0.6rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--void-muted)">Loading binders…</p>
+    </div>
+
+    <!-- Not signed in -->
+    <div id="sb-signin" class="hidden">
+        <div style="font-size:4rem;opacity:0.08"><i class="fa-solid fa-book-open"></i></div>
+        <h1>Sign In to View</h1>
+        <p>Sign in to see your binders, favourites, and card collection for this creator.</p>
+        <a href="/" class="saas-button rounded-xl px-8 py-3 text-[0.65rem] mt-2">
+            <i class="fa-brands fa-twitch mr-2"></i>Sign In with Twitch
+        </a>
+    </div>
+
+    <!-- Main content -->
+    <div id="sb-root" class="hidden">
+
+        <!-- Body: main + achievements sidebar -->
+        <div id="sb-body">
+            <div id="sb-main">
+
+                <!-- Empty state -->
+                <div id="sb-empty" class="hidden" style="text-align:center;padding:80px 20px">
+                    <div style="font-size:3.5rem;opacity:0.07;margin-bottom:16px"><i class="fa-solid fa-layer-group"></i></div>
+                    <h2 style="font-family:'Outfit',sans-serif;font-weight:900;font-size:1.1rem;text-transform:uppercase;letter-spacing:-0.01em">No cards yet</h2>
+                    <p style="font-size:0.65rem;color:var(--void-muted);margin-top:6px;max-width:260px;margin-left:auto;margin-right:auto;line-height:1.6">Earn cards from this stream to start filling your binders.</p>
+                    <a id="sb-empty-link" href="#" style="display:inline-block;margin-top:20px;padding:9px 20px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:var(--void-text);font-size:0.62rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none">Open Binder Page</a>
+                </div>
+
+                <!-- Flat binder grid (drag to reorder) -->
+                <div id="sb-all-grid" class="sb-binder-grid"></div>
+
+            </div>
+
+            <!-- Achievements sidebar -->
+            <div id="sb-achievements-panel">
+                <div class="sb-section-hd">
+                    <div class="sb-section-title">Achievements</div>
+                </div>
+                <div id="sb-achievements-list"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/nav-user-menu.js"></script>
+    <script src="/castle-nav.js"></script>
+    <script src="/streamer-nav.js"></script>
+    <script src="/streamer-binders.js"></script>
+</body>
+
+</html>

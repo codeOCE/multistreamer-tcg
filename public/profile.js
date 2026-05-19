@@ -98,7 +98,7 @@
     const RARITY_COLOR = {
         legendary: '#fbbf24',
         epic: '#a855f7',
-        rare: '#3b82f6',
+        rare: '#3faaff',
         common: '#64748b',
     };
     function rarityColor(r) { return RARITY_COLOR[(r || '').toLowerCase()] || RARITY_COLOR.common; }
@@ -544,7 +544,7 @@
         const tiers = [
             { label: 'Legendary', count: leg,    color: '#fbbf24' },
             { label: 'Epic',      count: epic,   color: '#a855f7' },
-            { label: 'Rare',      count: rare,   color: '#3b82f6' },
+            { label: 'Rare',      count: rare,   color: '#3faaff' },
             { label: 'Common',    count: common, color: '#64748b' },
         ];
         wrap.innerHTML = tiers.map(t => `

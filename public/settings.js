@@ -91,6 +91,10 @@
             }
 
             if (bs.csrf_token) window.csrfToken = bs.csrf_token;
+            if (bs.ui_prefs) window.castleUiPrefs = bs.ui_prefs;
+            if (bs.regional_prefs) window.castleRegionalPrefs = bs.regional_prefs;
+            if (bs.privacy_prefs) window.castlePrivacyPrefs = bs.privacy_prefs;
+            if (bs.notification_prefs) window.castleNotificationPrefs = bs.notification_prefs;
 
             window.currentUser = {
                 twitch_id: u.twitch_id,
@@ -106,12 +110,12 @@
             applyNavChrome();
             if (window.castleNav) castleNav.autoInit();
 
-            if (typeof window.populateProfileView === 'function') {
-                await window.populateProfileView();
-            }
-
             document.getElementById('st-loading')?.classList.add('hidden');
             document.getElementById('st-main')?.classList.remove('hidden');
+
+            if (typeof window.populateProfileView === 'function') {
+                void window.populateProfileView();
+            }
         } catch (err) {
             console.error('[Settings] Init error:', err);
             document.getElementById('st-loading')?.classList.add('hidden');

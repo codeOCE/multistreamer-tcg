@@ -1,0 +1,543 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Castle TCG | Gates Are Closed</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --void-bg: #05070a;
+            --void-bg-alt: #0a0c10;
+            --void-accent: #3faaff;
+            --void-accent-rgb: 63, 170, 255;
+            --void-text: #fcfaf7;
+            --void-muted: #64748b;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--void-bg);
+            color: var(--void-text);
+            font-family: 'Inter', sans-serif;
+            min-height: 100svh;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(rgba(18, 20, 24, 0) 50%, rgba(0, 0, 0, 0.05) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0.1;
+        }
+
+        .bg-glow {
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% 100%, rgba(var(--void-accent-rgb), 0.07) 0%, transparent 70%),
+                radial-gradient(circle at 20% 10%, rgba(var(--void-accent-rgb), 0.04) 0%, transparent 40%),
+                radial-gradient(circle at 80% 15%, rgba(var(--void-accent-rgb), 0.03) 0%, transparent 40%),
+                var(--void-bg);
+            z-index: -1;
+        }
+
+        .particles {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            border-radius: 50%;
+            background: rgba(var(--void-accent-rgb), 0.5);
+            animation: float-up linear infinite;
+        }
+
+        @keyframes float-up {
+            0%   { transform: translateY(0) translateX(0); opacity: 0; }
+            10%  { opacity: 1; }
+            90%  { opacity: 0.4; }
+            100% { transform: translateY(-100vh) translateX(var(--drift)); opacity: 0; }
+        }
+
+        .container {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            width: 100%;
+            max-width: 600px;
+            padding: 0 24px;
+        }
+
+        .castle-wrap {
+            width: 100%;
+            max-width: 480px;
+            position: relative;
+            margin-bottom: -2px;
+        }
+
+        .mist {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140%;
+            height: 80px;
+            background: radial-gradient(ellipse 80% 100% at 50% 100%, rgba(var(--void-accent-rgb), 0.12) 0%, transparent 70%);
+            filter: blur(8px);
+            pointer-events: none;
+            animation: mist-pulse 6s ease-in-out infinite;
+        }
+
+        @keyframes mist-pulse {
+            0%, 100% { opacity: 0.7; transform: translateX(-50%) scaleX(1); }
+            50%       { opacity: 1;   transform: translateX(-50%) scaleX(1.06); }
+        }
+
+        .portcullis-group {
+            animation: portcullis-drop 1.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+            transform-origin: top center;
+        }
+
+        @keyframes portcullis-drop {
+            0%   { transform: translateY(-60px); opacity: 0; }
+            60%  { transform: translateY(4px);   opacity: 1; }
+            80%  { transform: translateY(-2px); }
+            100% { transform: translateY(0);     opacity: 1; }
+        }
+
+        .gate-glow {
+            animation: gate-glow-pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes gate-glow-pulse {
+            0%, 100% { opacity: 0.25; }
+            50%       { opacity: 0.55; }
+        }
+
+        .text-block {
+            text-align: center;
+            width: 100%;
+            background: rgba(10, 12, 16, 0.75);
+            border: 1px solid rgba(var(--void-accent-rgb), 0.12);
+            border-top: 1px solid rgba(var(--void-accent-rgb), 0.08);
+            border-radius: 0 0 20px 20px;
+            padding: 28px 36px 36px;
+            backdrop-filter: blur(20px);
+            animation: fade-up 1s 0.4s both ease;
+        }
+
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .panel-brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .brand-icon {
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 2px;
+        }
+
+        .brand-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            color: var(--void-text);
+        }
+
+        .brand-name em {
+            color: var(--void-accent);
+            font-style: normal;
+        }
+
+        .eyebrow {
+            font-family: 'Outfit', sans-serif;
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--void-accent);
+            margin-bottom: 10px;
+            opacity: 0.7;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: clamp(1.6rem, 5vw, 2.4rem);
+            font-weight: 900;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            margin-bottom: 14px;
+            color: var(--void-text);
+        }
+
+        h1 span {
+            color: var(--void-accent);
+        }
+
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--void-muted);
+            line-height: 1.65;
+            max-width: 380px;
+            margin: 0 auto 24px;
+        }
+
+        .divider {
+            width: 48px;
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(var(--void-accent-rgb), 0.4), transparent);
+            margin: 0 auto 22px;
+        }
+
+        .signup-form {
+            display: flex;
+            gap: 8px;
+            max-width: 400px;
+            margin: 0 auto 20px;
+        }
+
+        .signup-input {
+            flex: 1;
+            background: rgba(5, 7, 10, 0.7);
+            border: 1.5px solid rgba(var(--void-accent-rgb), 0.2);
+            border-radius: 12px;
+            color: var(--void-text);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.8rem;
+            padding: 11px 16px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            min-width: 0;
+        }
+
+        .signup-input::placeholder {
+            color: var(--void-muted);
+            opacity: 0.7;
+        }
+
+        .signup-input:focus {
+            border-color: rgba(var(--void-accent-rgb), 0.55);
+            box-shadow: 0 0 0 3px rgba(var(--void-accent-rgb), 0.08);
+        }
+
+        .signup-btn {
+            background: rgba(var(--void-accent-rgb), 0.15);
+            border: 1.5px solid rgba(var(--void-accent-rgb), 0.35);
+            border-radius: 12px;
+            color: var(--void-accent);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 11px 18px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .signup-btn:hover {
+            background: rgba(var(--void-accent-rgb), 0.25);
+            border-color: rgba(var(--void-accent-rgb), 0.6);
+            box-shadow: 0 0 16px rgba(var(--void-accent-rgb), 0.15);
+        }
+
+        .signup-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .signup-note {
+            font-size: 0.7rem;
+            color: var(--void-muted);
+            margin-bottom: 24px;
+            opacity: 0.6;
+        }
+
+        .signup-success {
+            display: none;
+            font-size: 0.82rem;
+            color: var(--void-accent);
+            font-weight: 600;
+            margin-bottom: 24px;
+            padding: 10px 16px;
+            background: rgba(var(--void-accent-rgb), 0.07);
+            border: 1px solid rgba(var(--void-accent-rgb), 0.2);
+            border-radius: 10px;
+        }
+
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <div class="particles" id="particles"></div>
+
+    <div class="container">
+        <div class="castle-wrap">
+            <svg viewBox="0 0 480 320" xmlns="http://www.w3.org/2000/svg" fill="none" style="width:100%;display:block;">
+                <defs>
+                    <linearGradient id="stone-grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#1a2030"/>
+                        <stop offset="100%" stop-color="#0d1018"/>
+                    </linearGradient>
+                    <linearGradient id="tower-grad" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="#0f1520"/>
+                        <stop offset="40%" stop-color="#1a2235"/>
+                        <stop offset="100%" stop-color="#0b1018"/>
+                    </linearGradient>
+                    <radialGradient id="gate-glow-grad" cx="50%" cy="80%" r="60%">
+                        <stop offset="0%" stop-color="#3faaff" stop-opacity="0.35"/>
+                        <stop offset="100%" stop-color="#3faaff" stop-opacity="0"/>
+                    </radialGradient>
+                    <radialGradient id="mist-grad" cx="50%" cy="100%" r="60%">
+                        <stop offset="0%" stop-color="#3faaff" stop-opacity="0.18"/>
+                        <stop offset="100%" stop-color="#3faaff" stop-opacity="0"/>
+                    </radialGradient>
+                    <clipPath id="gate-clip">
+                        <path d="M192 180 Q192 155 240 155 Q288 155 288 180 L288 280 L192 280 Z"/>
+                    </clipPath>
+                    <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+                        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    </filter>
+                </defs>
+
+                <rect x="0" y="290" width="480" height="30" fill="#0a0d12"/>
+                <rect x="60" y="285" width="360" height="10" rx="2" fill="#0f1520"/>
+
+                <rect x="60" y="200" width="110" height="90" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="310" y="200" width="110" height="90" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <line x1="60" y1="230" x2="170" y2="230" stroke="#141a28" stroke-width="1"/>
+                <line x1="60" y1="255" x2="170" y2="255" stroke="#141a28" stroke-width="1"/>
+                <line x1="80" y1="200" x2="80" y2="285" stroke="#141a28" stroke-width="0.5"/>
+                <line x1="110" y1="200" x2="110" y2="285" stroke="#141a28" stroke-width="0.5"/>
+                <line x1="140" y1="200" x2="140" y2="285" stroke="#141a28" stroke-width="0.5"/>
+                <line x1="310" y1="230" x2="420" y2="230" stroke="#141a28" stroke-width="1"/>
+                <line x1="310" y1="255" x2="420" y2="255" stroke="#141a28" stroke-width="1"/>
+                <line x1="330" y1="200" x2="330" y2="285" stroke="#141a28" stroke-width="0.5"/>
+                <line x1="360" y1="200" x2="360" y2="285" stroke="#141a28" stroke-width="0.5"/>
+                <line x1="395" y1="200" x2="395" y2="285" stroke="#141a28" stroke-width="0.5"/>
+
+                <rect x="60"  y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="83"  y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="106" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="129" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="152" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="310" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="333" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="356" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="379" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="402" y="188" width="16" height="18" rx="1" fill="url(#stone-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+
+                <rect x="30" y="100" width="80" height="195" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <line x1="30" y1="140" x2="110" y2="140" stroke="#131928" stroke-width="1"/>
+                <line x1="30" y1="175" x2="110" y2="175" stroke="#131928" stroke-width="1"/>
+                <line x1="30" y1="210" x2="110" y2="210" stroke="#131928" stroke-width="1"/>
+                <line x1="30" y1="245" x2="110" y2="245" stroke="#131928" stroke-width="1"/>
+                <line x1="30" y1="270" x2="110" y2="270" stroke="#131928" stroke-width="1"/>
+                <line x1="50" y1="100" x2="50" y2="295" stroke="#131928" stroke-width="0.5"/>
+                <line x1="70" y1="100" x2="70" y2="295" stroke="#131928" stroke-width="0.5"/>
+                <line x1="90" y1="100" x2="90" y2="295" stroke="#131928" stroke-width="0.5"/>
+                <rect x="62" y="155" width="6" height="24" rx="3" fill="#050709"/>
+                <rect x="56" y="163" width="18" height="6" rx="1" fill="#050709"/>
+                <rect x="58" y="220" width="14" height="18" rx="2" fill="#050709"/>
+                <rect x="58" y="220" width="14" height="18" rx="2" fill="rgba(63,170,255,0.1)"/>
+                <rect x="30"  y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="51"  y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="72"  y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="93"  y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+
+                <rect x="370" y="100" width="80" height="195" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <line x1="370" y1="140" x2="450" y2="140" stroke="#131928" stroke-width="1"/>
+                <line x1="370" y1="175" x2="450" y2="175" stroke="#131928" stroke-width="1"/>
+                <line x1="370" y1="210" x2="450" y2="210" stroke="#131928" stroke-width="1"/>
+                <line x1="370" y1="245" x2="450" y2="245" stroke="#131928" stroke-width="1"/>
+                <line x1="370" y1="270" x2="450" y2="270" stroke="#131928" stroke-width="1"/>
+                <line x1="390" y1="100" x2="390" y2="295" stroke="#131928" stroke-width="0.5"/>
+                <line x1="410" y1="100" x2="410" y2="295" stroke="#131928" stroke-width="0.5"/>
+                <line x1="430" y1="100" x2="430" y2="295" stroke="#131928" stroke-width="0.5"/>
+                <rect x="412" y="155" width="6" height="24" rx="3" fill="#050709"/>
+                <rect x="406" y="163" width="18" height="6" rx="1" fill="#050709"/>
+                <rect x="408" y="220" width="14" height="18" rx="2" fill="#050709"/>
+                <rect x="408" y="220" width="14" height="18" rx="2" fill="rgba(63,170,255,0.1)"/>
+                <rect x="370" y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="391" y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="412" y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="433" y="85"  width="14" height="22" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+
+                <rect x="165" y="130" width="150" height="160" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <line x1="165" y1="165" x2="315" y2="165" stroke="#131928" stroke-width="1"/>
+                <line x1="165" y1="195" x2="315" y2="195" stroke="#131928" stroke-width="1"/>
+                <line x1="165" y1="225" x2="315" y2="225" stroke="#131928" stroke-width="1"/>
+                <line x1="165" y1="255" x2="315" y2="255" stroke="#131928" stroke-width="1"/>
+                <line x1="195" y1="130" x2="195" y2="290" stroke="#131928" stroke-width="0.5"/>
+                <line x1="225" y1="130" x2="225" y2="290" stroke="#131928" stroke-width="0.5"/>
+                <line x1="255" y1="130" x2="255" y2="290" stroke="#131928" stroke-width="0.5"/>
+                <line x1="285" y1="130" x2="285" y2="290" stroke="#131928" stroke-width="0.5"/>
+                <rect x="178" y="148" width="5" height="20" rx="2.5" fill="#050709"/>
+                <rect x="174" y="155" width="13" height="5" rx="1" fill="#050709"/>
+                <rect x="297" y="148" width="5" height="20" rx="2.5" fill="#050709"/>
+                <rect x="293" y="155" width="13" height="5" rx="1" fill="#050709"/>
+                <rect x="165" y="112" width="16" height="24" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="188" y="112" width="16" height="24" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="211" y="112" width="16" height="24" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="234" y="112" width="16" height="24" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="257" y="112" width="16" height="24" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="280" y="112" width="16" height="24" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+                <rect x="299" y="112" width="16" height="24" rx="1" fill="url(#tower-grad)" stroke="#1e2a40" stroke-width="0.5"/>
+
+                <path d="M190 285 L190 195 Q190 155 240 155 Q290 155 290 195 L290 285 Z" fill="#030508"/>
+                <path d="M193 285 L193 197 Q193 160 240 160 Q287 160 287 197 L287 285 Z" fill="url(#gate-glow-grad)" class="gate-glow"/>
+                <path d="M188 290 L188 195 Q188 150 240 150 Q292 150 292 195 L292 290"
+                      fill="none" stroke="#1e2a40" stroke-width="3"/>
+                <path d="M193 285 L193 197 Q193 160 240 160 Q287 160 287 197 L287 285"
+                      fill="none" stroke="rgba(63,170,255,0.3)" stroke-width="1.5" filter="url(#glow-blue)"/>
+
+                <g class="portcullis-group" clip-path="url(#gate-clip)">
+                    <rect x="200" y="155" width="5" height="135" rx="2.5" fill="#1a2540" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="216" y="155" width="5" height="135" rx="2.5" fill="#1a2540" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="232" y="155" width="5" height="135" rx="2.5" fill="#1a2540" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="248" y="155" width="5" height="135" rx="2.5" fill="#1a2540" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="264" y="155" width="5" height="135" rx="2.5" fill="#1a2540" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="275" y="155" width="5" height="135" rx="2.5" fill="#1a2540" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="198" y="175" width="84" height="4" rx="2" fill="#1e2d4a" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="198" y="200" width="84" height="4" rx="2" fill="#1e2d4a" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="198" y="225" width="84" height="4" rx="2" fill="#1e2d4a" stroke="#253550" stroke-width="0.5"/>
+                    <rect x="198" y="250" width="84" height="4" rx="2" fill="#1e2d4a" stroke="#253550" stroke-width="0.5"/>
+                    <polygon points="202,290 204,280 206,290" fill="#1a2540"/>
+                    <polygon points="218,290 220,280 222,290" fill="#1a2540"/>
+                    <polygon points="234,290 236,280 238,290" fill="#1a2540"/>
+                    <polygon points="250,290 252,280 254,290" fill="#1a2540"/>
+                    <polygon points="266,290 268,280 270,290" fill="#1a2540"/>
+                    <polygon points="277,290 279,280 281,290" fill="#1a2540"/>
+                    <rect x="198" y="155" width="84" height="3" rx="1.5" fill="rgba(63,170,255,0.2)"/>
+                </g>
+
+                <line x1="240" y1="112" x2="240" y2="60" stroke="#1e2a40" stroke-width="1.5"/>
+                <polygon points="240,62 272,72 240,82" fill="#1a2a4a" stroke="rgba(63,170,255,0.35)" stroke-width="0.5"/>
+
+                <ellipse cx="240" cy="292" rx="230" ry="22" fill="url(#mist-grad)"/>
+                <rect x="0" y="294" width="480" height="26" fill="url(#mist-grad)" opacity="0.5"/>
+            </svg>
+            <div class="mist"></div>
+        </div>
+
+        <div class="text-block">
+            <div class="panel-brand">
+                <div class="brand-icon">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="Castle TCG" width="26" height="26" style="object-fit:contain;display:block;">
+                </div>
+                <span class="brand-name">Creator <em>Castle</em></span>
+            </div>
+
+            <div class="eyebrow">Coming Soon</div>
+            <h1>The Gates Are <span>Closed</span></h1>
+            <div class="divider"></div>
+            <p class="subtitle">Something great is being built within these walls. Drop your email and we will let you know the moment the gates open.</p>
+
+            <form class="signup-form" id="signup-form" novalidate>
+                <input
+                    type="email"
+                    class="signup-input"
+                    id="signup-email"
+                    placeholder="your@email.com"
+                    autocomplete="email"
+                    required
+                >
+                <button type="submit" class="signup-btn" id="signup-btn">Notify me</button>
+            </form>
+            <div class="signup-success" id="signup-success">You are on the list. We will ring the bells when we are ready.</div>
+            <p class="signup-note">No spam. Just one message when we launch.</p>
+
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('particles');
+        for (let i = 0; i < 28; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            const size = 1 + Math.random() * 2.5;
+            p.style.cssText = `
+                left: ${Math.random() * 100}%;
+                bottom: -10px;
+                width: ${size}px;
+                height: ${size}px;
+                animation-delay: ${Math.random() * 12}s;
+                animation-duration: ${8 + Math.random() * 14}s;
+                --drift: ${(Math.random() - 0.5) * 80}px;
+                opacity: 0;
+            `;
+            container.appendChild(p);
+        }
+
+        document.getElementById('signup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('signup-email').value.trim();
+            if (!email) return;
+
+            const btn = document.getElementById('signup-btn');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            try {
+                const res = await fetch('/api/waitlist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email }),
+                });
+                if (!res.ok) throw new Error('failed');
+            } catch {
+                btn.disabled = false;
+                btn.textContent = 'Notify me';
+                return;
+            }
+
+            document.getElementById('signup-form').style.display = 'none';
+            document.querySelector('.signup-note').style.display = 'none';
+            document.getElementById('signup-success').style.display = 'block';
+        });
+    </script>
+</body>
+</html>

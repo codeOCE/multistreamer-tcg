@@ -5,7 +5,7 @@
  * Override: <meta name="castle-public-url" content="https://your-domain.com">
  */
 (function (w) {
-  var DEFAULT_PRODUCTION_ORIGIN = 'https://multistreamer-tcg.codeoce.workers.dev';
+  var DEFAULT_PRODUCTION_ORIGIN = 'https://tcg.creatorcastle.gg';
 
   function readMetaPublicUrl() {
     try {

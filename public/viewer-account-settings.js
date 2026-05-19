@@ -54,7 +54,7 @@
 
     function setViewerProfileTab(tab) {
         const base =
-            'profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border';
+            'profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border';
         const active = 'border-void-accent text-void-text bg-void-accent/10';
         const inactive =
             'border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]';
@@ -65,10 +65,12 @@
         });
         const panels = {
             channels: document.getElementById('profile-panel-channels'),
-            connections: document.getElementById('profile-panel-connections'),
             transactions: document.getElementById('profile-panel-transactions'),
             security: document.getElementById('profile-panel-security'),
-            personalise: document.getElementById('profile-panel-personalise')
+            accessibility: document.getElementById('profile-panel-accessibility'),
+            notifications: document.getElementById('profile-panel-notifications'),
+            upgrade: document.getElementById('profile-panel-upgrade'),
+            redeem: document.getElementById('profile-panel-redeem'),
         };
         Object.entries(panels).forEach(([k, el]) => {
             if (!el) return;
@@ -101,6 +103,9 @@
 
         document.getElementById('viewer-block-streamer-btn')?.addEventListener('click', () => {
             void addViewerStreamerBlock();
+        });
+        document.getElementById('viewer-block-streamer-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') void addViewerStreamerBlock();
         });
 
         document.getElementById('viewer-open-delete-account-modal')?.addEventListener('click', () => {
@@ -136,7 +141,18 @@
             void disconnectCastlePlatform(platform);
         });
 
+        document.getElementById('redeem-code-btn')?.addEventListener('click', () => {
+            void submitRedeemCode();
+        });
+        document.getElementById('redeem-code-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') void submitRedeemCode();
+        });
+
         initPersonalisationPrefs();
+        initRegionalPrefs();
+        initPrivacyPrefs();
+        initNotificationPrefs();
+        initAllVoidDropdowns();
     }
 
     async function disconnectCastlePlatform(platform) {
@@ -330,7 +346,6 @@
                 const s = m.streamer || m;
                 const name = s.brand_name || s.display_name || s.username || 'Channel';
                 const role = (m.role || m.team_role || 'team').toString();
-                const uname = s.username || '';
                 const avatar = s.avatar_url || s.brand_logo_url || '/assets/default-avatar.png';
                 return `
                 <div class="flex items-center justify-between gap-4 py-3 px-4 rounded-xl border border-white/5 bg-black/30 hover:border-white/10 transition-colors">
@@ -341,7 +356,7 @@
                             <div class="text-[9px] font-black uppercase tracking-[0.2em] text-void-muted">${escapeHTML(role)}</div>
                         </div>
                     </div>
-                    ${uname ? `<a href="/binder/${encodeURIComponent(uname)}" class="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-void-accent border border-void-accent/25 bg-void-accent/5 hover:bg-void-accent/15 shrink-0 transition-colors">Open</a>` : ''}
+
                 </div>`;
             })
             .join('');
@@ -468,9 +483,64 @@
         }
     }
 
+    async function submitRedeemCode() {
+        const input = document.getElementById('redeem-code-input');
+        const resultEl = document.getElementById('redeem-result');
+        const raw = (input && input.value) ? input.value.trim().toUpperCase() : '';
+        if (!raw) {
+            if (typeof showToast === 'function') showToast('Enter a redeem code.', 'error');
+            return;
+        }
+        if (!csrfVal()) await ensureCsrfToken();
+        try {
+            const res = await fetch(`${backendBase()}/api/redeem/code`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfVal() },
+                body: JSON.stringify({ code: raw })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data && data.error ? data.error : 'Invalid or expired code.';
+                if (typeof showToast === 'function') showToast(String(msg), 'error');
+                if (resultEl) {
+                    resultEl.className = 'text-xs text-red-400/90 py-2';
+                    resultEl.textContent = String(msg);
+                }
+                return;
+            }
+            if (input) input.value = '';
+            const reward = data.reward || data.message || 'Code redeemed successfully!';
+            if (typeof showToast === 'function') showToast(String(reward), 'success');
+            if (resultEl) {
+                resultEl.className = 'text-xs text-emerald-400/90 py-2';
+                resultEl.textContent = String(reward);
+            }
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('Network error', 'error');
+        }
+    }
+
     async function populateProfileView() {
         const u = typeof currentUser !== 'undefined' ? currentUser : window.currentUser;
         if (!u) return;
+
+        // Hydrate prefs from server bootstrap (cross-device sync).
+        // window.castleUiPrefs is set by settings.js / app.js after bootstrap resolves.
+        const serverPrefs = window.castleUiPrefs || null;
+        if (serverPrefs && typeof serverPrefs === 'object' && Object.keys(serverPrefs).length > 0) {
+            hydrateLocalStorageFromUiPrefs(serverPrefs);
+            setCastlePrefsCookie(serverPrefs);
+            // Re-apply classes in case early-apply IIFE used stale/empty localStorage
+            applyLightMode(getPref('castle_pref_light_mode', false));
+            applyReduceMotion(getPref('castle_pref_reduce_motion', false));
+            applyNoAnimations(getPref('castle_pref_no_animations', false));
+            applyPhotosensitivity(getPref('castle_pref_photosensitivity', false));
+            applyFoil(getPref('castle_pref_foil', true));
+            applyTilt(getPref('castle_pref_tilt', true));
+            applyDupes(getPref('castle_pref_dupes', true));
+        }
+
         initViewerProfileSettingsOnce();
         setViewerProfileTab('channels');
 
@@ -496,23 +566,23 @@
             }
         }
 
-        try {
-            const res = await fetch(`${backendBase()}/api/trade/code`, { credentials: 'include' });
-            if (res.ok) {
-                const d = await res.json();
-                const c = document.getElementById('viewer-settings-castle-code');
-                if (c) c.textContent = d.trade_code || '—';
-            }
-        } catch (e) { /* ignore */ }
-
         const upgradeCard = document.getElementById('viewer-settings-upgrade-card');
-        if (upgradeCard) {
-            upgradeCard.classList.toggle('hidden', !!u.is_creator);
-        }
+        const alreadyCreator = document.getElementById('viewer-settings-already-creator');
+        if (upgradeCard) upgradeCard.classList.toggle('hidden', !!u.is_creator);
+        if (alreadyCreator) alreadyCreator.classList.toggle('hidden', !u.is_creator);
 
-        await renderViewerSettingsConnections();
         renderViewerTeamList();
-        await loadViewerBlockedStreamers();
+
+        const [tradeData] = await Promise.all([
+            fetch(`${backendBase()}/api/trade/code`, { credentials: 'include' })
+                .then(r => r.ok ? r.json() : null).catch(() => null),
+            renderViewerSettingsConnections(),
+            loadViewerBlockedStreamers()
+        ]);
+        if (tradeData) {
+            const c = document.getElementById('viewer-settings-castle-code');
+            if (c) c.textContent = tradeData.trade_code || '—';
+        }
     }
 
     /** Creator Channel Points: configure on the creator dashboard (modal lives there). */
@@ -520,11 +590,88 @@
         window.location.href = '/dashboard';
     }
 
+    // ── Preference server-sync helpers ───────────────────────────────────────
+
+    // Maps localStorage keys → server-side ui_prefs keys
+    const PREF_SERVER_KEY = {
+        castle_pref_light_mode:       'light_mode',
+        castle_pref_reduce_motion:    'reduce_motion',
+        castle_pref_no_animations:    'no_animations',
+        castle_pref_photosensitivity: 'photosensitivity',
+        castle_pref_foil:             'foil',
+        castle_pref_tilt:             'tilt',
+        castle_pref_dupes:            'dupes',
+        castle_pref_sort:             'sort',
+    };
+
+    function buildClientPrefCookie(p) {
+        const q = new URLSearchParams();
+        q.set('lm', p.light_mode        ? '1' : '0');
+        q.set('rm', p.reduce_motion     ? '1' : '0');
+        q.set('na', p.no_animations     ? '1' : '0');
+        q.set('ps', p.photosensitivity  ? '1' : '0');
+        q.set('fo', p.foil  === false   ? '0' : '1');
+        q.set('ti', p.tilt  === false   ? '0' : '1');
+        q.set('du', p.dupes === false   ? '0' : '1');
+        q.set('so', p.sort      || 'newest');
+        return q.toString();
+    }
+
+    function setCastlePrefsCookie(uiPrefs) {
+        try {
+            const val = buildClientPrefCookie(uiPrefs);
+            document.cookie = `castle_prefs=${encodeURIComponent(val)}; path=/; max-age=${365 * 86400}; SameSite=Lax`;
+        } catch (_) {}
+    }
+
+    function hydrateLocalStorageFromUiPrefs(uiPrefs) {
+        if (!uiPrefs || typeof uiPrefs !== 'object') return;
+        try {
+            if ('light_mode'       in uiPrefs) setPref('castle_pref_light_mode',       uiPrefs.light_mode);
+            if ('reduce_motion'    in uiPrefs) setPref('castle_pref_reduce_motion',     uiPrefs.reduce_motion);
+            if ('no_animations'    in uiPrefs) setPref('castle_pref_no_animations',     uiPrefs.no_animations);
+            if ('photosensitivity' in uiPrefs) setPref('castle_pref_photosensitivity',  uiPrefs.photosensitivity);
+            if ('foil'             in uiPrefs) setPref('castle_pref_foil',              uiPrefs.foil !== false);
+            if ('tilt'             in uiPrefs) setPref('castle_pref_tilt',              uiPrefs.tilt !== false);
+            if ('dupes'            in uiPrefs) setPref('castle_pref_dupes',             uiPrefs.dupes !== false);
+            if ('sort'             in uiPrefs) setPref('castle_pref_sort',              uiPrefs.sort);
+        } catch (_) {}
+    }
+
+    let _prefSaveTimer = null;
+    let _pendingPrefUpdates = {};
+
+    function scheduleServerPrefSave(serverKey, value) {
+        if (!serverKey) return;
+        _pendingPrefUpdates[serverKey] = value;
+        clearTimeout(_prefSaveTimer);
+        _prefSaveTimer = setTimeout(async () => {
+            const updates = Object.assign({}, _pendingPrefUpdates);
+            _pendingPrefUpdates = {};
+            try {
+                const b = backendBase();
+                if (!b) return;
+                if (!window.csrfToken) await ensureCsrfToken();
+                const res = await fetch(`${b}/api/user/ui-prefs`, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfVal() },
+                    body: JSON.stringify(updates)
+                });
+                if (res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    if (data.ui_prefs) setCastlePrefsCookie(data.ui_prefs);
+                }
+            } catch (e) {
+                console.warn('[prefs] Server save failed (prefs still in localStorage):', e);
+            }
+        }, 800);
+    }
+
     /**
-     * Personalisation preferences — stored in localStorage.
+     * Personalisation preferences — stored in localStorage + synced to DB.
      * Keys: castle_pref_foil, castle_pref_tilt, castle_pref_dupes (bool, default true)
      *       castle_pref_reduce_motion (bool, default false)
-     *       castle_pref_card_size ('small'|'medium'|'large', default 'medium')
      *       castle_pref_sort ('newest'|'oldest'|'rarity'|'name', default 'newest')
      */
     function getPref(key, defaultVal) {
@@ -543,6 +690,40 @@
 
     function applyReduceMotion(enabled) {
         document.documentElement.classList.toggle('castle-reduce-motion', !!enabled);
+    }
+
+    function applyLightMode(enabled) {
+        document.documentElement.classList.toggle('castle-light-mode', !!enabled);
+    }
+
+    function applyNoAnimations(enabled) {
+        document.documentElement.classList.toggle('castle-no-animations', !!enabled);
+    }
+
+    function applyPhotosensitivity(enabled) {
+        document.documentElement.classList.toggle('castle-photosensitivity', !!enabled);
+        if (enabled) {
+            setPref('castle_pref_foil', false);
+            setPref('castle_pref_tilt', false);
+            syncToggleUI(document.getElementById('pref-toggle-foil'), false);
+            syncToggleUI(document.getElementById('pref-toggle-tilt'), false);
+            applyFoil(false);
+            applyTilt(false);
+            window.dispatchEvent(new CustomEvent('castle:pref-change', { detail: { key: 'castle_pref_foil', value: false } }));
+            window.dispatchEvent(new CustomEvent('castle:pref-change', { detail: { key: 'castle_pref_tilt', value: false } }));
+        }
+    }
+
+    function applyFoil(enabled) {
+        document.documentElement.classList.toggle('castle-no-foil', !enabled);
+    }
+
+    function applyTilt(enabled) {
+        document.documentElement.classList.toggle('castle-no-tilt', !enabled);
+    }
+
+    function applyDupes(enabled) {
+        document.documentElement.classList.toggle('castle-hide-dupes', !enabled);
     }
 
     function flashSavedNotice() {
@@ -568,37 +749,332 @@
         }
     }
 
-    function syncCardSizeUI(size) {
-        document.querySelectorAll('.pref-card-size-btn').forEach((btn) => {
-            const active = btn.getAttribute('data-pref-card-size') === size;
-            btn.classList.toggle('bg-void-accent/15', active);
-            btn.classList.toggle('text-void-accent', active);
-            btn.classList.toggle('border', active);
-            btn.classList.toggle('border-void-accent/30', active);
-            btn.classList.toggle('text-void-muted', !active);
+    function syncVoidDropdownMenu(container) {
+        const native = container.querySelector('.void-dropdown-native');
+        const label = container.querySelector('.void-dropdown-label');
+        const optionsEl = container.querySelector('.void-dropdown-options');
+        const target = optionsEl || container.querySelector('.void-dropdown-menu');
+        if (!native || !target) return;
+        target.innerHTML = Array.from(native.options).map(opt =>
+            `<div class="void-dropdown-option${native.value === opt.value ? ' selected' : ''}" role="option" tabindex="-1" data-value="${opt.value.replace(/"/g, '&quot;')}">${opt.text}</div>`
+        ).join('');
+        target.querySelectorAll('.void-dropdown-option').forEach(opt => {
+            opt.onclick = e => {
+                e.stopPropagation();
+                native.value = opt.dataset.value;
+                if (label) label.textContent = opt.textContent;
+                const menu = container.querySelector('.void-dropdown-menu');
+                if (menu) { menu.hidden = true; menu.setAttribute('aria-hidden', 'true'); }
+                container.querySelector('.void-dropdown-trigger').setAttribute('aria-expanded', 'false');
+                container.classList.remove('void-dropdown-open');
+                native.dispatchEvent(new Event('change', { bubbles: true }));
+            };
         });
+        const sel = native.options[native.selectedIndex];
+        if (sel && label) label.textContent = sel.text;
+    }
+
+    function initVoidDropdown(container) {
+        if (container.dataset.voidDropdownInit === 'true') return;
+        container.dataset.voidDropdownInit = 'true';
+        const native = container.querySelector('.void-dropdown-native');
+        const trigger = container.querySelector('.void-dropdown-trigger');
+        const menu = container.querySelector('.void-dropdown-menu');
+        if (!native || !trigger || !menu) return;
+
+        // Build search + options structure inside the menu
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'void-dropdown-search-wrap';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'void-dropdown-search';
+        searchInput.placeholder = 'Search…';
+        searchInput.setAttribute('autocomplete', 'off');
+        searchWrap.appendChild(searchInput);
+
+        const optionsEl = document.createElement('div');
+        optionsEl.className = 'void-dropdown-options';
+
+        const noResults = document.createElement('div');
+        noResults.className = 'void-dropdown-no-results';
+        noResults.textContent = 'No results';
+        noResults.hidden = true;
+
+        menu.appendChild(searchWrap);
+        menu.appendChild(optionsEl);
+        menu.appendChild(noResults);
+        syncVoidDropdownMenu(container);
+
+        function filterOptions(q) {
+            const query = q.toLowerCase().trim();
+            let visible = 0;
+            optionsEl.querySelectorAll('.void-dropdown-option').forEach(opt => {
+                const show = !query || opt.textContent.toLowerCase().includes(query);
+                opt.hidden = !show;
+                if (show) visible++;
+            });
+            noResults.hidden = visible > 0;
+        }
+
+        searchInput.addEventListener('input', () => filterOptions(searchInput.value));
+        searchInput.addEventListener('click', e => e.stopPropagation());
+        searchInput.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { close(); return; }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                optionsEl.querySelector('.void-dropdown-option:not([hidden])')?.focus();
+            }
+        });
+        optionsEl.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { close(); return; }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const opts = Array.from(optionsEl.querySelectorAll('.void-dropdown-option:not([hidden])'));
+                const idx = opts.indexOf(document.activeElement);
+                if (e.key === 'ArrowDown') (opts[idx + 1] || opts[0])?.focus();
+                else if (idx > 0) opts[idx - 1].focus();
+                else searchInput.focus();
+            }
+        });
+
+        const open = () => {
+            syncVoidDropdownMenu(container);
+            searchInput.value = '';
+            filterOptions('');
+            menu.hidden = false;
+            menu.setAttribute('aria-hidden', 'false');
+            trigger.setAttribute('aria-expanded', 'true');
+            container.classList.add('void-dropdown-open');
+            requestAnimationFrame(() => searchInput.focus());
+        };
+        const close = () => {
+            menu.hidden = true;
+            menu.setAttribute('aria-hidden', 'true');
+            trigger.setAttribute('aria-expanded', 'false');
+            container.classList.remove('void-dropdown-open');
+        };
+        trigger.onclick = e => {
+            e.stopPropagation();
+            if (menu.hidden) {
+                open();
+                const handler = ev => {
+                    if (!container.contains(ev.target)) {
+                        close();
+                        document.removeEventListener('click', handler);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', handler), 0);
+            } else {
+                close();
+            }
+        };
+        native.addEventListener('change', () => {
+            const sel = native.options[native.selectedIndex];
+            const label = container.querySelector('.void-dropdown-label');
+            if (sel && label) label.textContent = sel.text;
+        });
+    }
+
+    function initAllVoidDropdowns() {
+        document.querySelectorAll('.void-dropdown').forEach(el => {
+            if (!el.dataset.voidDropdownInit) initVoidDropdown(el);
+        });
+    }
+
+    function autoDetectTimezone() {
+        try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) { return 'UTC'; }
+    }
+
+    function getUtcOffset(tz) {
+        try {
+            const parts = new Intl.DateTimeFormat('en', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+            const raw = parts.find(p => p.type === 'timeZoneName')?.value || '';
+            const converted = raw.replace(/^GMT/, 'UTC');
+            return converted === 'UTC' ? 'UTC+0' : converted;
+        } catch (_) { return ''; }
+    }
+
+    function enrichTimezoneOptions(sel) {
+        Array.from(sel.options).forEach(opt => {
+            const offset = getUtcOffset(opt.value);
+            if (offset) opt.text = opt.text + ' — ' + offset;
+        });
+    }
+
+    async function saveNotificationPref(key, value) {
+        try {
+            const b = backendBase();
+            if (!b) return;
+            if (!window.csrfToken) await ensureCsrfToken();
+            const res = await fetch(`${b}/api/user/notification-prefs`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfVal() },
+                body: JSON.stringify({ [key]: value })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            console.warn('[notifications] Server save failed:', e);
+            showToast('Failed to save notification setting', 'error');
+        }
+    }
+
+    function initNotificationPrefs() {
+        const saved = window.castleNotificationPrefs || {};
+        const KEYS = ['card_drops', 'trades', 'achievements'];
+        const ID_MAP = {
+            card_drops:   'notif-toggle-card-drops',
+            trades:       'notif-toggle-trades',
+            achievements: 'notif-toggle-achievements',
+        };
+
+        for (const key of KEYS) {
+            const on = key in saved ? !!saved[key] : true;
+            const btn = document.getElementById(ID_MAP[key]);
+            syncToggleUI(btn, on);
+        }
+
+        document.querySelectorAll('.notification-toggle').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-notif-key');
+                if (!key) return;
+                const currentOn = btn.getAttribute('aria-checked') === 'true';
+                const newOn = !currentOn;
+                syncToggleUI(btn, newOn);
+                flashSavedNotice();
+                saveNotificationPref(key, newOn);
+            });
+        });
+    }
+
+    async function savePrivacyPref(key, value) {
+        try {
+            const b = backendBase();
+            if (!b) return;
+            if (!window.csrfToken) await ensureCsrfToken();
+            const res = await fetch(`${b}/api/user/privacy`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfVal() },
+                body: JSON.stringify({ [key]: value })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            console.warn('[privacy] Server save failed:', e);
+            showToast('Failed to save privacy setting', 'error');
+        }
+    }
+
+    function initPrivacyPrefs() {
+        const saved = window.castlePrivacyPrefs || {};
+
+        // All keys default to true (open by default)
+        const KEYS = ['profile_public', 'collection_public', 'show_on_leaderboard', 'wishlist_public', 'trade_code_public'];
+        const ID_MAP = {
+            profile_public:       'privacy-toggle-profile-public',
+            collection_public:    'privacy-toggle-collection-public',
+            show_on_leaderboard:  'privacy-toggle-show-on-leaderboard',
+            wishlist_public:      'privacy-toggle-wishlist-public',
+            trade_code_public:    'privacy-toggle-trade-code-public',
+        };
+
+        for (const key of KEYS) {
+            const on = key in saved ? !!saved[key] : true;
+            const btn = document.getElementById(ID_MAP[key]);
+            syncToggleUI(btn, on);
+        }
+
+        document.querySelectorAll('.privacy-toggle').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-privacy-key');
+                if (!key) return;
+                const currentOn = btn.getAttribute('aria-checked') === 'true';
+                const newOn = !currentOn;
+                syncToggleUI(btn, newOn);
+                flashSavedNotice();
+                savePrivacyPref(key, newOn);
+            });
+        });
+    }
+
+    async function saveRegionalPref(key, value) {
+        try {
+            const b = backendBase();
+            if (!b) return;
+            if (!window.csrfToken) await ensureCsrfToken();
+            await fetch(`${b}/api/user/regional-prefs`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfVal() },
+                body: JSON.stringify({ [key]: value })
+            });
+        } catch (e) {
+            console.warn('[regional] Server save failed:', e);
+        }
+    }
+
+    function initRegionalPrefs() {
+        const saved = window.castleRegionalPrefs || {};
+
+        const tzSel = document.getElementById('regional-timezone');
+        const langSel = document.getElementById('regional-language');
+        const currSel = document.getElementById('regional-currency');
+
+        if (tzSel) {
+            enrichTimezoneOptions(tzSel);
+            const tz = saved.timezone || autoDetectTimezone();
+            const opt = tzSel.querySelector(`option[value="${CSS.escape ? CSS.escape(tz) : tz}"]`);
+            if (opt) tzSel.value = tz;
+            else {
+                const o = document.createElement('option');
+                o.value = tz;
+                const offset = getUtcOffset(tz);
+                o.textContent = tz + (offset ? ' — ' + offset : '');
+                tzSel.appendChild(o);
+                tzSel.value = tz;
+            }
+            tzSel.addEventListener('change', () => saveRegionalPref('timezone', tzSel.value));
+        }
+
+        if (langSel) {
+            if (saved.language) langSel.value = saved.language;
+            langSel.addEventListener('change', () => saveRegionalPref('language', langSel.value));
+        }
+
+        if (currSel) {
+            if (saved.currency) currSel.value = saved.currency;
+            currSel.addEventListener('change', () => saveRegionalPref('currency', currSel.value));
+        }
     }
 
     function initPersonalisationPrefs() {
         // Load stored values (with sensible defaults)
-        const foilOn      = getPref('castle_pref_foil', true);
-        const tiltOn      = getPref('castle_pref_tilt', true);
-        const dupesOn     = getPref('castle_pref_dupes', true);
-        const reduceOn    = getPref('castle_pref_reduce_motion', false);
-        const cardSize    = getPref('castle_pref_card_size', 'medium');
-        const sortDefault = getPref('castle_pref_sort', 'newest');
+        const foilOn          = getPref('castle_pref_foil', true);
+        const tiltOn          = getPref('castle_pref_tilt', true);
+        const dupesOn         = getPref('castle_pref_dupes', true);
+        const reduceOn        = getPref('castle_pref_reduce_motion', false);
+        const noAnimOn        = getPref('castle_pref_no_animations', false);
+        const photosensOn     = getPref('castle_pref_photosensitivity', false);
+        const lightModeOn     = getPref('castle_pref_light_mode', false);
+        const sortDefault     = getPref('castle_pref_sort', 'newest');
 
-        // Apply reduce-motion immediately
+        // Apply document-level classes immediately
         applyReduceMotion(reduceOn);
+        applyNoAnimations(noAnimOn);
+        applyLightMode(lightModeOn);
+        applyPhotosensitivity(photosensOn);
+        applyFoil(foilOn);
+        applyTilt(tiltOn);
+        applyDupes(dupesOn);
 
         // Sync toggle UIs
         syncToggleUI(document.getElementById('pref-toggle-foil'), foilOn);
         syncToggleUI(document.getElementById('pref-toggle-tilt'), tiltOn);
         syncToggleUI(document.getElementById('pref-toggle-dupes'), dupesOn);
         syncToggleUI(document.getElementById('pref-toggle-reduce-motion'), reduceOn);
-
-        // Sync card-size buttons
-        syncCardSizeUI(cardSize);
+        syncToggleUI(document.getElementById('pref-toggle-no-animations'), noAnimOn);
+        syncToggleUI(document.getElementById('pref-toggle-photosensitivity'), photosensOn);
+        syncToggleUI(document.getElementById('pref-toggle-light-mode'), lightModeOn);
 
         // Sync sort select
         const sortSel = document.getElementById('pref-default-sort');
@@ -613,20 +1089,15 @@
                 syncToggleUI(btn, newOn);
                 setPref(key, newOn);
                 if (key === 'castle_pref_reduce_motion') applyReduceMotion(newOn);
+                if (key === 'castle_pref_no_animations') applyNoAnimations(newOn);
+                if (key === 'castle_pref_light_mode') applyLightMode(newOn);
+                if (key === 'castle_pref_photosensitivity') applyPhotosensitivity(newOn);
+                if (key === 'castle_pref_foil') applyFoil(newOn);
+                if (key === 'castle_pref_tilt') applyTilt(newOn);
+                if (key === 'castle_pref_dupes') applyDupes(newOn);
                 flashSavedNotice();
-                // Dispatch event so rest of app can react
+                scheduleServerPrefSave(PREF_SERVER_KEY[key], newOn);
                 window.dispatchEvent(new CustomEvent('castle:pref-change', { detail: { key, value: newOn } }));
-            });
-        });
-
-        // Wire card-size buttons
-        document.querySelectorAll('.pref-card-size-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const size = btn.getAttribute('data-pref-card-size');
-                syncCardSizeUI(size);
-                setPref('castle_pref_card_size', size);
-                flashSavedNotice();
-                window.dispatchEvent(new CustomEvent('castle:pref-change', { detail: { key: 'castle_pref_card_size', value: size } }));
             });
         });
 
@@ -635,17 +1106,29 @@
             sortSel.addEventListener('change', () => {
                 setPref('castle_pref_sort', sortSel.value);
                 flashSavedNotice();
+                scheduleServerPrefSave('sort', sortSel.value);
                 window.dispatchEvent(new CustomEvent('castle:pref-change', { detail: { key: 'castle_pref_sort', value: sortSel.value } }));
             });
         }
     }
 
-    // Apply reduce-motion on every page load from localStorage (before DOMContentLoaded)
-    (function applyReduceMotionEarly() {
+    // Apply document-level classes early from localStorage to avoid flash
+    (function applyPrefsEarly() {
         try {
-            if (localStorage.getItem('castle_pref_reduce_motion') === 'true') {
+            if (localStorage.getItem('castle_pref_reduce_motion') === 'true')
                 document.documentElement.classList.add('castle-reduce-motion');
-            }
+            if (localStorage.getItem('castle_pref_no_animations') === 'true')
+                document.documentElement.classList.add('castle-no-animations');
+            if (localStorage.getItem('castle_pref_light_mode') === 'true')
+                document.documentElement.classList.add('castle-light-mode');
+            if (localStorage.getItem('castle_pref_photosensitivity') === 'true')
+                document.documentElement.classList.add('castle-photosensitivity');
+            if (localStorage.getItem('castle_pref_foil') === 'false')
+                document.documentElement.classList.add('castle-no-foil');
+            if (localStorage.getItem('castle_pref_tilt') === 'false')
+                document.documentElement.classList.add('castle-no-tilt');
+            if (localStorage.getItem('castle_pref_dupes') === 'false')
+                document.documentElement.classList.add('castle-hide-dupes');
         } catch (_) { /* ignore */ }
     })();
 
@@ -661,4 +1144,13 @@
     window.openTwitchSettingsFromAccountPage = openTwitchSettingsFromAccountPage;
     window.initPersonalisationPrefs = initPersonalisationPrefs;
     window.getPref = getPref;
+    window.setCastlePrefsCookie = setCastlePrefsCookie;
+    window.hydrateLocalStorageFromUiPrefs = hydrateLocalStorageFromUiPrefs;
+    window.submitRedeemCode = submitRedeemCode;
+    window.applyLightMode = applyLightMode;
+    window.applyNoAnimations = applyNoAnimations;
+    window.applyPhotosensitivity = applyPhotosensitivity;
+    window.applyFoil = applyFoil;
+    window.applyTilt = applyTilt;
+    window.applyDupes = applyDupes;
 })();

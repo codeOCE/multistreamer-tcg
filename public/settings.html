@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="castle-public-url" content="https://multistreamer-tcg.codeoce.workers.dev">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Account settings · Castle TCG</title>
     <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
@@ -73,6 +73,7 @@
             padding-top: calc(5rem + env(safe-area-inset-top, 0px) + 1.25rem);
         }
     </style>
+    <script src="/castle-prefs.js"></script>
 </head>
 
 <body class="bg-void-bg text-void-text antialiased">
@@ -81,7 +82,7 @@
 
     <nav class="fixed top-0 left-0 right-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl pt-[env(safe-area-inset-top,0px)]"
         aria-label="Main">
-        <div class="max-w-[1520px] mx-auto px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
+        <div class="w-full px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
             <a href="/" class="flex items-center gap-2 group cursor-pointer">
                 <div
                     class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
@@ -102,12 +103,10 @@
                             aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
                             <span class="relative inline-block">
                                 <img id="nav-avatar" src="" alt=""
-                                    class="w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover bg-void-bg">
-                                <span
-                                    class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-void-accent border-2 border-void-bg rounded-full"></span>
+                                    class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
                             </span>
                             <i
-                                class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors hidden sm:inline"></i>
+                                class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
                         </button>
                         <div id="nav-user-menu"
                             class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
@@ -207,19 +206,23 @@
                     <p class="text-void-muted text-sm mt-2 max-w-prose leading-relaxed">Castle code, team access, linked
                         platforms, and account security.</p>
                 </div>
-                <div class="flex flex-wrap items-center gap-3" role="tablist" aria-label="Account sections">
+                <div role="tablist" aria-label="Account sections" class="overflow-x-auto">
                     <div
-                        class="inline-flex flex-wrap gap-0.5 p-1 rounded-xl bg-black/30 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] w-fit max-w-full">
+                        class="flex min-w-full gap-0.5 p-1 rounded-xl bg-black/30 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                         <button type="button" data-profile-tab="channels"
-                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-void-accent text-void-text bg-void-accent/10">Channels</button>
-                        <button type="button" data-profile-tab="connections"
-                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Connections</button>
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-void-accent text-void-text bg-void-accent/10">Channels &amp; Connections</button>
                         <button type="button" data-profile-tab="transactions"
-                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">History</button>
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">History</button>
                         <button type="button" data-profile-tab="security"
-                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Security</button>
-                        <button type="button" data-profile-tab="personalise"
-                            class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Personalise</button>
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Security &amp; Privacy</button>
+                        <button type="button" data-profile-tab="accessibility"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Accessibility</button>
+                        <button type="button" data-profile-tab="notifications"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Notifications</button>
+                        <button type="button" data-profile-tab="upgrade"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Upgrade</button>
+                        <button type="button" data-profile-tab="redeem"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Redeem</button>
                     </div>
                 </div>
             </header>
@@ -238,8 +241,10 @@
                         <div class="flex-1 min-w-0">
                             <div class="flex flex-wrap items-center gap-2 mb-1">
                                 <h2 id="viewer-settings-display-name"
-                                    class="text-xl sm:text-2xl font-display font-black text-white uppercase italic tracking-tight leading-none truncate">
+                                    class="text-xl sm:text-2xl font-display font-black text-white uppercase italic tracking-tight leading-none truncate pr-1">
                                     —</h2>
+                                <span id="viewer-settings-role-badge"
+                                    class="text-[10px] font-black uppercase tracking-[0.18em] px-3.5 py-1.5 rounded-full border bg-white/[0.06] text-void-muted border-white/10">Collector</span>
                             </div>
                             <div class="flex items-center gap-2">
                                 <div class="text-[9px] font-black uppercase tracking-[0.18em] text-void-muted mr-1">
@@ -269,25 +274,6 @@
                         manage any channels yet.</p>
                 </div>
 
-                <div id="viewer-settings-upgrade-card"
-                    class="glass-panel rounded-2xl border border-void-accent/20 bg-void-accent/[0.04] p-5 sm:p-7 space-y-4 shadow-[0_0_40px_-12px_rgba(var(--void-accent-rgb),0.35)]">
-                    <div class="flex justify-between items-end border-b border-void-accent/15 pb-3">
-                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-accent">Upgrade to
-                            creator</div>
-                        <i class="bx bxs-magic-wand text-[10px] text-void-accent opacity-70"
-                            aria-hidden="true"></i>
-                    </div>
-                    <p class="text-xs text-void-muted leading-relaxed">Run your own channel on Castle: mint cards,
-                        packs, and Channel Point drops. Pricing will apply later — for now you can try the full setup.
-                    </p>
-                    <a id="viewer-settings-upgrade-btn" href="/onboarding"
-                        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Start
-                        creator setup</a>
-                </div>
-
-            </div>
-
-            <div id="profile-panel-connections" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
                 <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
                     <div class="flex justify-between items-end border-b border-white/10 pb-3">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Linked platforms
@@ -298,6 +284,7 @@
                         Castle uses it for, and connect or disconnect — similar to Twitch’s own settings.</p>
                     <div id="viewer-settings-connections"></div>
                 </div>
+
             </div>
 
             <div id="profile-panel-transactions" class="profile-settings-panel hidden space-y-8">
@@ -345,10 +332,131 @@
                         class="px-6 py-3 rounded-xl border border-red-500/50 bg-red-600/15 text-red-300 text-[10px] font-black uppercase tracking-widest hover:bg-red-600/25 transition-colors">Delete
                         my account</button>
                 </div>
+
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Privacy</div>
+                        <i class="bx bxs-shield text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Public profile -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Public profile</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Allow anyone to view your Castle
+                                profile page.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-profile-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="profile_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Show collection -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show collection</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display your card collection,
+                                stats, and sets to visitors.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-collection-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="collection_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Appear on leaderboards -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Appear on leaderboards</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Show your username in streamer and
+                                global leaderboards.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-show-on-leaderboard" role="switch"
+                            aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="show_on_leaderboard">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Show wishlist -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show wishlist</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Let visitors see which cards you
+                                are looking for.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-wishlist-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="wishlist_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Show trade code -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show trade code</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display your trade code on your
+                                public profile so others can initiate trades.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-trade-code-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="trade_code_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <!-- ── PERSONALISATION PANEL ── -->
-            <div id="profile-panel-personalise" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+            <!-- ── ACCESSIBILITY PANEL ── -->
+            <div id="profile-panel-accessibility" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+
+                <!-- Appearance -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Appearance</div>
+                        <i class="bx bx-palette text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Light mode -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Light mode</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Switch to a light colour scheme across
+                                the platform.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-light-mode" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_light_mode">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+
+                    <!-- Colourblind mode -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Colourblind mode</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Adjusts card and UI colours for
+                                better visibility. Coming soon.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-colorblind" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none opacity-50 cursor-not-allowed"
+                            data-pref-key="castle_pref_colorblind" disabled>
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+                </div>
 
                 <!-- Card Display -->
                 <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
@@ -356,24 +464,6 @@
                         <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Card display
                         </div>
                         <i class="bx bxs-layer text-xs text-void-accent/60" aria-hidden="true"></i>
-                    </div>
-
-                    <!-- Card size -->
-                    <div class="flex items-start justify-between gap-6">
-                        <div class="space-y-1">
-                            <p class="text-sm font-bold text-void-text">Default card size</p>
-                            <p class="text-[11px] text-void-muted leading-relaxed">Controls how large cards appear in
-                                your collection grid.</p>
-                        </div>
-                        <div class="shrink-0 inline-flex rounded-xl bg-black/30 border border-white/10 p-1 gap-0.5"
-                            role="group" aria-label="Card size">
-                            <button type="button" data-pref-card-size="small"
-                                class="pref-card-size-btn px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-void-muted hover:text-void-text hover:bg-white/[0.04]">S</button>
-                            <button type="button" data-pref-card-size="medium"
-                                class="pref-card-size-btn px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-void-muted hover:text-void-text hover:bg-white/[0.04]">M</button>
-                            <button type="button" data-pref-card-size="large"
-                                class="pref-card-size-btn px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-void-muted hover:text-void-text hover:bg-white/[0.04]">L</button>
-                        </div>
                     </div>
 
                     <!-- Holographic foil -->
@@ -422,13 +512,19 @@
                             <p class="text-[11px] text-void-muted leading-relaxed">How your collection is sorted when
                                 you first open it.</p>
                         </div>
-                        <select id="pref-default-sort"
-                            class="shrink-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-[11px] font-bold text-void-text focus:outline-none focus:border-void-accent/40 cursor-pointer">
-                            <option value="newest">Newest first</option>
-                            <option value="oldest">Oldest first</option>
-                            <option value="rarity">Rarity</option>
-                            <option value="name">Name</option>
-                        </select>
+                        <div class="void-dropdown shrink-0" data-select-id="pref-default-sort" style="min-width:148px">
+                            <select id="pref-default-sort" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <option value="newest">Newest first</option>
+                                <option value="oldest">Oldest first</option>
+                                <option value="rarity">Rarity</option>
+                                <option value="name">Name</option>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">Newest first</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
                     </div>
 
                     <!-- Show duplicates -->
@@ -447,11 +543,11 @@
                     </div>
                 </div>
 
-                <!-- Accessibility -->
+                <!-- Motion & Safety -->
                 <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
                     <div class="flex justify-between items-center border-b border-white/10 pb-3">
-                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Accessibility
-                        </div>
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Motion &amp;
+                            Safety</div>
                         <i class="bx bx-accessibility text-xs text-void-accent/60" aria-hidden="true"></i>
                     </div>
 
@@ -469,13 +565,398 @@
                                 class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
                         </button>
                     </div>
+
+                    <!-- Disable all animations -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Disable all animations</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Removes all transitions, effects, and
+                                motion — more aggressive than reduce motion.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-no-animations" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_no_animations">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+
+                    <!-- Photosensitivity mode -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Photosensitivity mode</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Disables holographic foil, 3D tilt,
+                                and any flashing effects on cards. Recommended for photosensitive users.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-photosensitivity" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_photosensitivity">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
                 </div>
 
-                <!-- Saved indicator -->
-                <p id="pref-saved-notice"
-                    class="hidden text-[10px] font-black uppercase tracking-widest text-void-accent text-center py-1">
-                    Preferences saved</p>
+                <!-- Regional -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Regional</div>
+                        <i class="bx bx-globe text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Timezone -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Timezone</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Used for drop schedules and event timestamps.</p>
+                        </div>
+                        <div class="void-dropdown shrink-0" data-select-id="regional-timezone" style="min-width:248px">
+                            <select id="regional-timezone" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <optgroup label="North America">
+                                    <option value="America/New_York">Eastern Time (ET)</option>
+                                    <option value="America/Chicago">Central Time (CT)</option>
+                                    <option value="America/Denver">Mountain Time (MT)</option>
+                                    <option value="America/Phoenix">Arizona (no DST)</option>
+                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                                    <option value="America/Anchorage">Alaska</option>
+                                    <option value="Pacific/Honolulu">Hawaii</option>
+                                    <option value="America/Toronto">Toronto</option>
+                                    <option value="America/Halifax">Halifax</option>
+                                    <option value="America/St_Johns">St. John's</option>
+                                    <option value="America/Vancouver">Vancouver</option>
+                                    <option value="America/Winnipeg">Winnipeg</option>
+                                    <option value="America/Edmonton">Edmonton</option>
+                                    <option value="America/Mexico_City">Mexico City</option>
+                                    <option value="America/Monterrey">Monterrey</option>
+                                    <option value="America/Guatemala">Guatemala City</option>
+                                    <option value="America/Panama">Panama City</option>
+                                    <option value="America/Havana">Havana</option>
+                                    <option value="America/Jamaica">Kingston</option>
+                                    <option value="America/Puerto_Rico">Puerto Rico</option>
+                                </optgroup>
+                                <optgroup label="South America">
+                                    <option value="America/Bogota">Bogotá</option>
+                                    <option value="America/Lima">Lima</option>
+                                    <option value="America/Caracas">Caracas</option>
+                                    <option value="America/La_Paz">La Paz</option>
+                                    <option value="America/Guyana">Georgetown</option>
+                                    <option value="America/Asuncion">Asunción</option>
+                                    <option value="America/Santiago">Santiago</option>
+                                    <option value="America/Sao_Paulo">São Paulo</option>
+                                    <option value="America/Fortaleza">Fortaleza</option>
+                                    <option value="America/Manaus">Manaus</option>
+                                    <option value="America/Argentina/Buenos_Aires">Buenos Aires</option>
+                                    <option value="America/Montevideo">Montevideo</option>
+                                    <option value="America/Noronha">Fernando de Noronha</option>
+                                </optgroup>
+                                <optgroup label="Europe">
+                                    <option value="Atlantic/Reykjavik">Reykjavik</option>
+                                    <option value="Europe/London">London</option>
+                                    <option value="Europe/Dublin">Dublin</option>
+                                    <option value="Europe/Lisbon">Lisbon</option>
+                                    <option value="Europe/Paris">Paris</option>
+                                    <option value="Europe/Berlin">Berlin</option>
+                                    <option value="Europe/Amsterdam">Amsterdam</option>
+                                    <option value="Europe/Brussels">Brussels</option>
+                                    <option value="Europe/Madrid">Madrid</option>
+                                    <option value="Europe/Rome">Rome</option>
+                                    <option value="Europe/Zurich">Zurich</option>
+                                    <option value="Europe/Vienna">Vienna</option>
+                                    <option value="Europe/Prague">Prague</option>
+                                    <option value="Europe/Budapest">Budapest</option>
+                                    <option value="Europe/Warsaw">Warsaw</option>
+                                    <option value="Europe/Stockholm">Stockholm</option>
+                                    <option value="Europe/Oslo">Oslo</option>
+                                    <option value="Europe/Copenhagen">Copenhagen</option>
+                                    <option value="Europe/Helsinki">Helsinki</option>
+                                    <option value="Europe/Tallinn">Tallinn</option>
+                                    <option value="Europe/Riga">Riga</option>
+                                    <option value="Europe/Vilnius">Vilnius</option>
+                                    <option value="Europe/Kyiv">Kyiv</option>
+                                    <option value="Europe/Bucharest">Bucharest</option>
+                                    <option value="Europe/Athens">Athens</option>
+                                    <option value="Europe/Sofia">Sofia</option>
+                                    <option value="Europe/Minsk">Minsk</option>
+                                    <option value="Europe/Istanbul">Istanbul</option>
+                                    <option value="Europe/Moscow">Moscow</option>
+                                    <option value="Europe/Samara">Samara</option>
+                                    <option value="Europe/Kaliningrad">Kaliningrad</option>
+                                </optgroup>
+                                <optgroup label="Africa">
+                                    <option value="Atlantic/Azores">Azores</option>
+                                    <option value="Atlantic/Cape_Verde">Cape Verde</option>
+                                    <option value="Africa/Abidjan">Abidjan</option>
+                                    <option value="Africa/Algiers">Algiers</option>
+                                    <option value="Africa/Tunis">Tunis</option>
+                                    <option value="Africa/Casablanca">Casablanca</option>
+                                    <option value="Africa/Lagos">Lagos</option>
+                                    <option value="Africa/Khartoum">Khartoum</option>
+                                    <option value="Africa/Cairo">Cairo</option>
+                                    <option value="Africa/Johannesburg">Johannesburg</option>
+                                    <option value="Africa/Harare">Harare</option>
+                                    <option value="Africa/Nairobi">Nairobi</option>
+                                    <option value="Africa/Addis_Ababa">Addis Ababa</option>
+                                    <option value="Africa/Dar_es_Salaam">Dar es Salaam</option>
+                                </optgroup>
+                                <optgroup label="Middle East">
+                                    <option value="Asia/Beirut">Beirut</option>
+                                    <option value="Asia/Damascus">Damascus</option>
+                                    <option value="Asia/Jerusalem">Jerusalem</option>
+                                    <option value="Asia/Amman">Amman</option>
+                                    <option value="Asia/Baghdad">Baghdad</option>
+                                    <option value="Asia/Kuwait">Kuwait City</option>
+                                    <option value="Asia/Riyadh">Riyadh</option>
+                                    <option value="Asia/Qatar">Doha</option>
+                                    <option value="Asia/Bahrain">Bahrain</option>
+                                    <option value="Asia/Muscat">Muscat</option>
+                                    <option value="Asia/Tehran">Tehran</option>
+                                    <option value="Asia/Yerevan">Yerevan</option>
+                                    <option value="Asia/Baku">Baku</option>
+                                    <option value="Asia/Tbilisi">Tbilisi</option>
+                                </optgroup>
+                                <optgroup label="Asia">
+                                    <option value="Asia/Dubai">Dubai</option>
+                                    <option value="Asia/Kabul">Kabul</option>
+                                    <option value="Asia/Karachi">Karachi</option>
+                                    <option value="Asia/Tashkent">Tashkent</option>
+                                    <option value="Asia/Almaty">Almaty</option>
+                                    <option value="Asia/Bishkek">Bishkek</option>
+                                    <option value="Asia/Kolkata">Kolkata</option>
+                                    <option value="Asia/Colombo">Colombo</option>
+                                    <option value="Asia/Kathmandu">Kathmandu</option>
+                                    <option value="Asia/Dhaka">Dhaka</option>
+                                    <option value="Asia/Rangoon">Yangon</option>
+                                    <option value="Asia/Bangkok">Bangkok</option>
+                                    <option value="Asia/Ho_Chi_Minh">Ho Chi Minh City</option>
+                                    <option value="Asia/Phnom_Penh">Phnom Penh</option>
+                                    <option value="Asia/Vientiane">Vientiane</option>
+                                    <option value="Asia/Jakarta">Jakarta</option>
+                                    <option value="Asia/Makassar">Makassar</option>
+                                    <option value="Asia/Jayapura">Jayapura</option>
+                                    <option value="Asia/Singapore">Singapore</option>
+                                    <option value="Asia/Kuala_Lumpur">Kuala Lumpur</option>
+                                    <option value="Asia/Manila">Manila</option>
+                                    <option value="Asia/Hong_Kong">Hong Kong</option>
+                                    <option value="Asia/Taipei">Taipei</option>
+                                    <option value="Asia/Shanghai">Shanghai</option>
+                                    <option value="Asia/Seoul">Seoul</option>
+                                    <option value="Asia/Tokyo">Tokyo</option>
+                                    <option value="Asia/Vladivostok">Vladivostok</option>
+                                    <option value="Asia/Magadan">Magadan</option>
+                                    <option value="Asia/Kamchatka">Kamchatka</option>
+                                    <option value="Asia/Novosibirsk">Novosibirsk</option>
+                                    <option value="Asia/Krasnoyarsk">Krasnoyarsk</option>
+                                    <option value="Asia/Irkutsk">Irkutsk</option>
+                                    <option value="Asia/Yakutsk">Yakutsk</option>
+                                </optgroup>
+                                <optgroup label="Australia &amp; Pacific">
+                                    <option value="Australia/Perth">Perth</option>
+                                    <option value="Australia/Darwin">Darwin</option>
+                                    <option value="Australia/Brisbane">Brisbane</option>
+                                    <option value="Australia/Adelaide">Adelaide</option>
+                                    <option value="Australia/Sydney">Sydney</option>
+                                    <option value="Australia/Melbourne">Melbourne</option>
+                                    <option value="Australia/Hobart">Hobart</option>
+                                    <option value="Australia/Lord_Howe">Lord Howe Island</option>
+                                    <option value="Pacific/Port_Moresby">Port Moresby</option>
+                                    <option value="Pacific/Guam">Guam</option>
+                                    <option value="Pacific/Palau">Palau</option>
+                                    <option value="Pacific/Auckland">Auckland</option>
+                                    <option value="Pacific/Chatham">Chatham Islands</option>
+                                    <option value="Pacific/Fiji">Fiji</option>
+                                    <option value="Pacific/Tongatapu">Tonga</option>
+                                    <option value="Pacific/Apia">Samoa</option>
+                                    <option value="Pacific/Fakaofo">Tokelau</option>
+                                    <option value="Pacific/Tahiti">Tahiti</option>
+                                    <option value="Pacific/Marquesas">Marquesas Islands</option>
+                                    <option value="Pacific/Gambier">Gambier Islands</option>
+                                    <option value="Pacific/Pago_Pago">American Samoa</option>
+                                    <option value="Pacific/Niue">Niue</option>
+                                    <option value="Pacific/Midway">Midway Island</option>
+                                </optgroup>
+                                <optgroup label="Other">
+                                    <option value="UTC">UTC</option>
+                                </optgroup>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">Eastern Time (ET)</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
+                    </div>
+
+                    <!-- Language -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Language</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Platform display language preference.</p>
+                        </div>
+                        <div class="void-dropdown shrink-0" data-select-id="regional-language" style="min-width:132px">
+                            <select id="regional-language" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <option value="en">English</option>
+                                <option value="es">Español</option>
+                                <option value="pt">Português</option>
+                                <option value="fr">Français</option>
+                                <option value="de">Deutsch</option>
+                                <option value="ja">日本語</option>
+                                <option value="ko">한국어</option>
+                                <option value="zh">中文</option>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">English</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
+                    </div>
+
+                    <!-- Currency -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Currency</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display prices in your local currency.</p>
+                        </div>
+                        <div class="void-dropdown shrink-0" data-select-id="regional-currency" style="min-width:132px">
+                            <select id="regional-currency" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <option value="usd">USD ($)</option>
+                                <option value="eur">EUR (€)</option>
+                                <option value="gbp">GBP (£)</option>
+                                <option value="cad">CAD (C$)</option>
+                                <option value="aud">AUD (A$)</option>
+                                <option value="jpy">JPY (¥)</option>
+                                <option value="brl">BRL (R$)</option>
+                                <option value="mxn">MXN ($)</option>
+                                <option value="sek">SEK (kr)</option>
+                                <option value="nok">NOK (kr)</option>
+                                <option value="dkk">DKK (kr)</option>
+                                <option value="chf">CHF (Fr)</option>
+                                <option value="nzd">NZD (NZ$)</option>
+                                <option value="sgd">SGD (S$)</option>
+                                <option value="krw">KRW (₩)</option>
+                                <option value="inr">INR (₹)</option>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">USD ($)</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
+
+            <!-- ── NOTIFICATIONS PANEL ── -->
+            <div id="profile-panel-notifications" class="profile-settings-panel hidden space-y-6">
+
+                <!-- In-app notifications -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">In-app notifications</div>
+                        <i class="bx bxs-bell text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Card drops -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Card drops</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Alert when you receive a new card from a Channel Points drop.</p>
+                        </div>
+                        <button type="button" id="notif-toggle-card-drops" role="switch" aria-checked="true"
+                            class="notification-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-notif-key="card_drops">
+                            <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Trade activity -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Trade activity</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Incoming trade requests, offers, completions, and rejections.</p>
+                        </div>
+                        <button type="button" id="notif-toggle-trades" role="switch" aria-checked="true"
+                            class="notification-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-notif-key="trades">
+                            <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Achievement unlocks -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Achievement unlocks</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Notify when you earn a new achievement or badge.</p>
+                        </div>
+                        <button type="button" id="notif-toggle-achievements" role="switch" aria-checked="true"
+                            class="notification-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-notif-key="achievements">
+                            <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+<!-- ── UPGRADE PANEL ── -->
+            <div id="profile-panel-upgrade" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+                <div id="viewer-settings-upgrade-card"
+                    class="glass-panel rounded-2xl border border-void-accent/20 bg-void-accent/[0.04] p-5 sm:p-7 space-y-4 shadow-[0_0_40px_-12px_rgba(var(--void-accent-rgb),0.35)]">
+                    <div class="flex justify-between items-end border-b border-void-accent/15 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-accent">Upgrade to
+                            creator</div>
+                        <i class="bx bxs-magic-wand text-[10px] text-void-accent opacity-70"
+                            aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Run your own channel on Castle: mint cards,
+                        packs, and Channel Point drops. Pricing will apply later — for now you can try the full setup.
+                    </p>
+                    <a id="viewer-settings-upgrade-btn" href="/onboarding"
+                        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Start
+                        creator setup</a>
+                </div>
+                <div id="viewer-settings-already-creator"
+                    class="hidden p-16 sm:p-20 text-center flex flex-col items-center justify-center space-y-5 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
+                    <div
+                        class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
+                        <i class="bx bxs-crown" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="text-xl font-display font-black uppercase italic text-void-text tracking-tight">
+                        You're a creator</h3>
+                    <p class="text-void-muted text-xs max-w-md leading-relaxed">Your channel is already set up. Manage
+                        your cards, packs, and drops from the dashboard.</p>
+                    <a href="/dashboard"
+                        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Go
+                        to dashboard</a>
+                </div>
+            </div>
+
+            <!-- ── REDEEM PANEL ── -->
+            <div id="profile-panel-redeem" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Redeem a code
+                        </div>
+                        <i class="bx bxs-gift text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Have a promo or gift code? Enter it below to
+                        claim your reward.</p>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="redeem-code-input" placeholder="Enter code (e.g. CASTLE2025)"
+                            autocomplete="off"
+                            class="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-void-text placeholder:text-void-muted/50 focus:outline-none focus:border-void-accent/40 focus:ring-1 focus:ring-void-accent/20 uppercase tracking-widest" />
+                        <button type="button" id="redeem-code-btn"
+                            class="px-6 py-3 rounded-xl bg-void-accent text-void-bg font-black text-[9px] uppercase tracking-widest shadow-lg shadow-void-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0">Redeem</button>
+                    </div>
+                    <div id="redeem-result" class="hidden"></div>
+                </div>
+            </div>
+
+            <!-- Global saved indicator — shown by flashSavedNotice() from any tab -->
+            <p id="pref-saved-notice"
+                class="hidden text-[10px] font-black uppercase tracking-widest text-void-accent text-center py-1">
+                Preferences saved</p>
 
             <div id="viewer-delete-account-modal"
                 class="fixed inset-0 z-[4000] hidden flex items-center justify-center p-6 bg-void-bg/90 backdrop-blur-md">
