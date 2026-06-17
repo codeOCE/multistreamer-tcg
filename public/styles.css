@@ -25,6 +25,21 @@
     --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Disable the native browser drag "ghost image" globally (cards, avatars, logos,
+   links). Interactions use pointer events, not native HTML5 drag. Elements that
+   opt in with draggable="true" are preserved so real drag features still work. */
+img:not([draggable="true"]),
+a:not([draggable="true"]),
+svg,
+picture,
+video {
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+}
+
 
 /* Brand marks: cdn.codeoce.com/logo/logo_white.png (dark UI), cdn.codeoce.com/logo/logo_black.png (light favicon) */
 img.brand-castle-mark {
@@ -43,6 +58,10 @@ img.brand-castle-mark {
 
 /* Firefox */
 * { scrollbar-width: thin; scrollbar-color: rgba(var(--void-accent-rgb), 0.18) transparent; }
+
+/* Reserve scrollbar space on every page so the fixed nav doesn't horizontally shift
+   when navigating between scrollable and non-scrollable pages. */
+html { scrollbar-gutter: stable; }
 
 body {
     background-color: var(--void-bg);
@@ -118,6 +137,12 @@ select option {
     color: var(--void-text);
 }
 
+
+#binder-actions-area:not(.hidden) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
 
 #dashboard-view select,
 #binder-actions-area ~ * select {
@@ -2313,3 +2338,13 @@ html.castle-hide-dupes .binder-dupe-badge {
     mix-blend-mode: normal;
     image-rendering: high-quality;
 }
+
+/* Cross-document view transitions — instant-feel nav */
+@view-transition {
+    navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: none;
+}
+

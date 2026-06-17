@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
@@ -745,16 +745,71 @@
         #mc-right {
             position: fixed;
             right: 0;
-            top: 50%;
-            transform: translateY(-50%);
+            top: 120px;
             width: calc((100vw - 900px) / 2);
             min-width: 180px;
-            max-height: 80vh;
+            max-height: calc(100vh - 144px);
             overflow-y: auto;
             display: flex;
             flex-direction: column;
             align-items: stretch;
             padding: 0 20px;
+        }
+
+        /* ── Reroll button + animation ── */
+        .mc-reroll-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.55rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--void-muted);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+        }
+        .mc-reroll-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--void-accent);
+            color: var(--void-text);
+            transform: translateY(-1px);
+        }
+        .mc-reroll-btn:active {
+            transform: translateY(0) scale(0.96);
+        }
+        .mc-reroll-btn i {
+            font-size: 0.6rem;
+            transition: transform 0.4s ease;
+        }
+        .mc-reroll-btn:hover i {
+            transform: rotate(90deg);
+        }
+        .mc-reroll-btn.is-spinning {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .mc-reroll-btn.is-spinning i {
+            animation: mc-reroll-spin 0.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        @keyframes mc-reroll-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        /* Slot-machine reel on the goal title while rerolling */
+        @keyframes mc-slot-shake {
+            0%, 100% { transform: translateY(-2px); }
+            50% { transform: translateY(2px); }
+        }
+        .mc-slot-rolling {
+            filter: blur(1.2px);
+            opacity: 0.8;
+            color: var(--void-accent) !important;
+            animation: mc-slot-shake 0.09s linear infinite;
         }
 
         /* ── Side panel ── */
@@ -1019,103 +1074,7 @@
 <body class="bg-void-bg text-void-text antialiased">
     <div class="saas-bg-glow"></div>
 
-    <!-- Navbar -->
-    <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-        <div class="w-full px-8 h-20 flex items-center justify-between">
-            <a href="/" class="flex items-center gap-2 group cursor-pointer">
-                <div
-                    class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
-                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt=""
-                        class="brand-castle-mark w-full h-full" width="36" height="36">
-                </div>
-                <span
-                    class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span
-                        class="text-void-accent">TCG</span></span>
-            </a>
-            <div class="flex items-center gap-3">
-                <div id="nav-user-preview" class="hidden items-center">
-                    <span id="nav-username" class="hidden">---</span>
-                    <span id="nav-user-role" class="hidden">Collector</span>
-                    <div id="nav-user-menu-root" class="relative">
-                        <button type="button" id="nav-user-menu-trigger"
-                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
-                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
-                            <span class="relative inline-block">
-                                <img id="nav-avatar" src="" alt=""
-                                    class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
-                            </span>
-                            <i
-                                class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
-                        </button>
-                        <div id="nav-user-menu"
-                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
-                            role="menu">
-                            <div class="border-b border-white/5">
-                                <button type="button" id="nav-user-identity-toggle"
-                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
-                                    aria-expanded="false" aria-controls="nav-user-team-panel">
-                                    <img id="nav-user-menu-avatar" src="" alt=""
-                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg"
-                                        width="44" height="44">
-                                    <div class="min-w-0 flex-1">
-                                        <p id="nav-user-menu-name"
-                                            class="text-sm font-bold text-white tracking-tight truncate">—</p>
-                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
-                                            <span id="nav-user-platform-icons"
-                                                class="flex items-center gap-1 shrink-0"></span>
-                                            <span id="nav-user-menu-role"
-                                                class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
-                                        </div>
-                                    </div>
-                                    <span id="nav-user-team-chevron-wrap"
-                                        class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
-                                        <i id="nav-user-team-chevron"
-                                            class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
-                                    </span>
-                                </button>
-                                <div id="nav-user-team-panel"
-                                    class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
-                                    <p
-                                        class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">
-                                        Team channels</p>
-                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
-                                </div>
-                            </div>
-                            <div class="px-4 py-3 border-b border-white/5">
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="min-w-0">
-                                        <p
-                                            class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">
-                                            Castle code</p>
-                                        <p id="nav-user-menu-castle-code"
-                                            class="font-mono text-sm font-bold text-white tracking-wider">—</p>
-                                    </div>
-                                    <button type="button" id="nav-user-menu-copy-code"
-                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
-                                </div>
-                            </div>
-                            <div class="p-1.5">
-                                <button type="button" id="nav-user-menu-settings" role="menuitem"
-                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
-                                    <i class="fa-solid fa-gear text-void-muted w-4 text-center shrink-0"></i>
-                                    <span class="flex flex-col leading-tight normal-case">
-                                        <span class="uppercase tracking-widest">Account settings</span>
-                                        <span
-                                            class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle
-                                            code, blocks, security</span>
-                                    </span>
-                                </button>
-                                <button type="button" id="nav-user-menu-logout" role="menuitem"
-                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
-                                    <i class="fa-solid fa-right-from-bracket w-4 text-center"></i> Log out
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <!-- Navbar injected by /streamer-nav.js (same source of truth as battle, leaderboard, magic-dust, trading, /{streamer}/binder) -->
 
     <!-- Loading -->
     <div id="mc-loading">
@@ -1297,7 +1256,8 @@
     </div>
 
     <script src="/nav-user-menu.js"></script>
-    <script src="/castle-nav.js"></script>
+    <script src="/nav-notifications.js"></script>
+    <script src="/streamer-nav.js"></script>
     <script src="/my-collection.js"></script>
 </body>
 

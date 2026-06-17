@@ -65,9 +65,15 @@
 
         /* ── Page wrapper ── */
         #lb-main {
-            max-width: 720px;
+            max-width: 1040px;
             margin: 0 auto;
             padding: clamp(88px, 12vw, 112px) clamp(16px, 4vw, 48px) 80px;
+        }
+        /* Hero + tab switcher stay narrower & centered; the board uses the full width */
+        #lb-hero, #lb-tabs {
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         /* ── Hero ── */
@@ -276,6 +282,328 @@
             padding: 2px 6px;
             flex-shrink: 0;
         }
+
+        /* ── Sortable collection table ── */
+        .lb-table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        table.lb-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .lb-table thead th {
+            padding: clamp(8px, 1.4vw, 12px) clamp(4px, 1vw, 8px);
+            font-size: clamp(0.45rem, 1.2vw, 0.55rem);
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            white-space: nowrap;
+            text-align: center;
+        }
+        .lb-table thead th.lb-col-num {
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.15s;
+        }
+        .lb-table thead th.lb-col-num:hover { color: var(--void-text); }
+        .lb-table th.lb-col-rank { width: clamp(28px, 6vw, 40px); }
+        .lb-table th.lb-col-name { text-align: left; padding-left: clamp(8px, 2vw, 14px); }
+        .lb-table th.lb-sort-active { color: rgba(var(--page-accent-rgb), 1); }
+        .lb-sort-arrow { font-size: 0.5rem; margin-left: 3px; vertical-align: middle; }
+
+        .lb-table tbody td {
+            padding: clamp(7px, 1.3vw, 10px) clamp(4px, 1vw, 8px);
+            text-align: center;
+            font-size: clamp(0.72rem, 1.8vw, 0.85rem);
+            font-weight: 700;
+            color: var(--void-text);
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            white-space: nowrap;
+        }
+        .lb-table tbody tr:last-child td { border-bottom: none; }
+        .lb-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
+        .lb-table tbody tr.lb-row-me td { background: rgba(var(--page-accent-rgb), 0.06); }
+        .lb-table td.lb-col-sorted { background: rgba(var(--page-accent-rgb), 0.045); }
+
+        .lb-cell-rank {
+            color: var(--void-muted);
+            font-size: clamp(0.62rem, 1.6vw, 0.72rem);
+            font-weight: 800;
+            text-align: center;
+        }
+        .lb-cell-rank.lb-rank-1 { color: #fbbf24; font-size: clamp(0.78rem, 2vw, 0.95rem); }
+        .lb-cell-rank.lb-rank-2 { color: #94a3b8; font-size: clamp(0.74rem, 1.9vw, 0.9rem); }
+        .lb-cell-rank.lb-rank-3 { color: #d97706; font-size: clamp(0.74rem, 1.9vw, 0.9rem); }
+
+        .lb-cell-name { text-align: left; padding-left: clamp(8px, 2vw, 14px) !important; }
+        .lb-name-inner { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .lb-name-txt {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: clamp(0.68rem, 1.7vw, 0.78rem);
+            font-weight: 700;
+            max-width: clamp(80px, 22vw, 180px);
+        }
+        .lb-table .lb-avatar { width: 26px; height: 26px; }
+        .lb-row-me .lb-name-txt { color: rgba(var(--page-accent-rgb), 1); }
+
+        /* Value colours */
+        .lb-cell-points { color: rgba(var(--page-accent-rgb), 1); font-weight: 800; }
+        .lb-r-legendary { color: #fbbf24; }
+        .lb-r-epic      { color: #c084fc; }
+        .lb-r-rare      { color: #60a5fa; }
+        .lb-r-uncommon  { color: #4ade80; }
+        .lb-r-common    { color: var(--void-text); }
+        .lb-c-win       { color: #4ade80; }
+        .lb-c-loss      { color: #f87171; }
+        .lb-zero        { color: rgba(255,255,255,0.18); font-weight: 600; }
+
+        /* Active deck column (battles) */
+        .lb-table th.lb-col-deck { text-align: center; cursor: default; white-space: nowrap; }
+        .lb-cell-deck { text-align: center; }
+        .lb-deck {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(3px, 0.8vw, 5px);
+        }
+        .lb-deck-slot {
+            display: inline-flex;
+            width: clamp(20px, 4.6vw, 28px);
+            height: clamp(28px, 6.4vw, 39px);
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            flex-shrink: 0;
+        }
+        .lb-deck-slot img { width: 100%; height: 100%; object-fit: cover; }
+        .lb-deck { cursor: pointer; }
+        .lb-deck-empty { color: var(--void-muted); font-size: 0.62rem; font-weight: 700; }
+
+        /* Active deck hover popover */
+        #lb-deck-tip {
+            position: fixed;
+            z-index: 720;
+            display: none;
+            pointer-events: none;
+            background: var(--void-bg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+        }
+        #lb-deck-tip.show { display: block; animation: lb-fade 0.12s ease both; }
+        .lb-tip-title {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .lb-tip-cards { display: flex; gap: 10px; }
+        .lb-tip-card { width: clamp(76px, 18vw, 100px); }
+        .lb-tip-card img,
+        .lb-tip-card .lb-tip-noimg {
+            width: 100%;
+            aspect-ratio: 5 / 7;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1.5px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05);
+            display: block;
+        }
+        .lb-tip-name {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            text-align: center;
+            color: var(--void-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .lb-tip-stats {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 4px;
+            font-size: 0.64rem;
+            font-weight: 800;
+        }
+        .lb-tip-atk { color: #f87171; }
+        .lb-tip-def { color: #60a5fa; }
+        .lb-tip-stats i { font-size: 0.72rem; margin-right: 1px; vertical-align: -1px; }
+        .lb-swords { width: 0.78rem; height: 0.78rem; margin-right: 2px; vertical-align: -2px; }
+        .lb-tip-pips {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 5px;
+        }
+        .lb-tip-pip {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 0.58rem;
+            color: var(--void-text);
+        }
+        .lb-tip-pip img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Viewer's own "your position" row (shown when outside the top 100) */
+        .lb-viewer-sep td {
+            padding: 0;
+            height: clamp(6px, 1.4vw, 10px);
+            border: none;
+            background: transparent;
+        }
+        .lb-row-viewer td {
+            border-top: 1px dashed rgba(var(--page-accent-rgb), 0.45);
+            border-bottom: none;
+            background: rgba(var(--page-accent-rgb), 0.09) !important;
+        }
+        .lb-row-viewer .lb-cell-rank { color: rgba(var(--page-accent-rgb), 1); }
+
+        /* ── Info button ── */
+        #lb-info-btn {
+            position: fixed;
+            top: clamp(74px, 10vw, 94px);
+            right: clamp(14px, 4vw, 40px);
+            z-index: 450;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: rgba(var(--page-accent-rgb), 0.85);
+            font-size: clamp(1.3rem, 3vw, 1.6rem);
+            line-height: 1;
+            cursor: pointer;
+            transition: color 0.2s, transform 0.2s;
+        }
+        #lb-info-btn:hover {
+            color: rgba(var(--page-accent-rgb), 1);
+            transform: scale(1.1);
+        }
+
+        /* ── Info modal ── */
+        #lb-info-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 700;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: clamp(16px, 4vw, 40px);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(6px);
+        }
+        #lb-info-modal.open { display: flex; animation: lb-fade 0.2s ease both; }
+        @keyframes lb-fade { from { opacity: 0; } to { opacity: 1; } }
+
+        .lb-info-card {
+            position: relative;
+            width: min(100%, 460px);
+            max-height: 86vh;
+            overflow-y: auto;
+            background: var(--void-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 18px;
+            padding: clamp(22px, 5vw, 32px);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+            animation: lb-rise 0.28s var(--ease-premium, cubic-bezier(0.16,1,0.3,1)) both;
+        }
+        .lb-info-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+            color: var(--void-muted);
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .lb-info-close:hover { color: var(--void-text); background: rgba(255,255,255,0.08); }
+
+        .lb-info-eyebrow {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+        }
+        #lb-info-title {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(1.5rem, 5vw, 2rem);
+            letter-spacing: -0.03em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            margin: 2px 0 18px;
+            line-height: 0.95;
+        }
+        .lb-info-section { margin-top: 18px; }
+        .lb-info-section h3 {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.95);
+            margin-bottom: 6px;
+        }
+        .lb-info-section h3 i { font-size: 0.95rem; }
+        .lb-info-section p {
+            font-size: clamp(0.78rem, 2vw, 0.85rem);
+            line-height: 1.5;
+            color: var(--void-muted);
+        }
+        .lb-info-section p strong { color: var(--void-text); font-weight: 700; }
+
+        .lb-info-weights {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .lb-info-weights > div {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.025);
+            border: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .lb-info-weights > div span { letter-spacing: 0.04em; }
+        .lb-info-weights > div b { color: var(--void-text); font-weight: 800; }
     </style>
     <script src="/castle-prefs.js"></script>
 </head>
@@ -283,80 +611,7 @@
 <body class="bg-void-bg text-void-text antialiased">
     <div class="saas-bg-glow" id="lb-bg-glow"></div>
 
-    <!-- Navbar -->
-    <nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-        <div class="w-full px-8 h-20 flex items-center justify-between">
-            <a href="/" class="flex items-center gap-2 group cursor-pointer">
-                <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
-                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
-                </div>
-                <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
-            </a>
-            <div class="flex items-center gap-3">
-                <div id="nav-user-preview" class="hidden items-center">
-                    <span id="nav-username" class="hidden">---</span>
-                    <span id="nav-user-role" class="hidden">Collector</span>
-                    <div id="nav-user-menu-root" class="relative">
-                        <button type="button" id="nav-user-menu-trigger"
-                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
-                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
-                            <span class="relative inline-block">
-                                <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
-                            </span>
-                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors"></i>
-                        </button>
-                        <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
-                            <div class="border-b border-white/5">
-                                <button type="button" id="nav-user-identity-toggle"
-                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
-                                    aria-expanded="false" aria-controls="nav-user-team-panel">
-                                    <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
-                                    <div class="min-w-0 flex-1">
-                                        <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
-                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
-                                            <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
-                                            <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
-                                        </div>
-                                    </div>
-                                    <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
-                                        <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
-                                    </span>
-                                </button>
-                                <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
-                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
-                                </div>
-                            </div>
-                            <div class="px-4 py-3 border-b border-white/5">
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="min-w-0">
-                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
-                                        <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
-                                    </div>
-                                    <button type="button" id="nav-user-menu-copy-code"
-                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
-                                </div>
-                            </div>
-                            <div class="p-1.5">
-                                <button type="button" id="nav-user-menu-settings" role="menuitem"
-                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
-                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
-                                    <span class="flex flex-col leading-tight normal-case">
-                                        <span class="uppercase tracking-widest">Account settings</span>
-                                        <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
-                                    </span>
-                                </button>
-                                <button type="button" id="nav-user-menu-logout" role="menuitem"
-                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
-                                    <i class="bx bx-log-out w-4 text-center"></i> Log out
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <!-- Nav — injected by /streamer-nav.js -->
 
     <!-- Loading state -->
     <div id="lb-loading">
@@ -405,7 +660,28 @@
 
     </div>
 
+    <!-- Info button (top-left, under the nav) -->
+    <button id="lb-info-btn" class="hidden" type="button" aria-label="How the leaderboard works"
+        title="How the leaderboard works" onclick="window._lbOpenInfo()">
+        <i class="bx bx-info-circle"></i>
+    </button>
+
+    <!-- Info modal -->
+    <div id="lb-info-modal" role="dialog" aria-modal="true" aria-labelledby="lb-info-title" onclick="window._lbCloseInfo(event)">
+        <div class="lb-info-card" onclick="event.stopPropagation()">
+            <button class="lb-info-close" type="button" aria-label="Close" onclick="window._lbCloseInfo()">
+                <i class="bx bx-x"></i>
+            </button>
+
+            <p class="lb-info-eyebrow" id="lb-info-eyebrow">Collection</p>
+            <h2 id="lb-info-title">How it works</h2>
+
+            <div id="lb-info-body"></div>
+        </div>
+    </div>
+
     <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
     <script src="/streamer-nav.js"></script>
     <script src="/leaderboard.js"></script>
 </body>

@@ -571,26 +571,25 @@
             const accentColor = done ? '#4ade80' : 'var(--void-accent)';
 
             return `
-            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,${done ? '0.12' : '0.06'});border-radius:16px;padding:16px 18px;opacity:${done ? '0.65' : '1'};transition:opacity 0.3s">
+            <div data-mc-goal-card style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,${done ? '0.12' : '0.06'});border-radius:16px;padding:16px 18px;opacity:${done ? '0.65' : '1'};transition:opacity 0.3s">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                             ${done ? '<span style="color:#4ade80;font-size:0.75rem">&#10003;</span>' : ''}
-                            <span style="font-weight:700;font-size:0.8rem;color:var(--void-text);text-transform:uppercase;letter-spacing:0.04em">${escapeHTML(g.title)}</span>
-                            <span style="font-size:0.55rem;color:var(--void-muted);background:rgba(255,255,255,0.04);border-radius:6px;padding:2px 6px;text-transform:uppercase">${g.type}</span>
+                            <span data-mc-goal-title style="font-weight:700;font-size:0.8rem;color:var(--void-text);text-transform:uppercase;letter-spacing:0.04em;display:inline-block">${escapeHTML(g.title)}</span>
                         </div>
-                        <div style="font-size:0.65rem;color:var(--void-muted);margin-top:3px">${escapeHTML(g.description)}</div>
+                        <div data-mc-goal-desc style="font-size:0.65rem;color:var(--void-muted);margin-top:3px">${escapeHTML(g.description)}</div>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                        ${canReroll ? `<button class="mc-reroll-btn" onclick="window._mcRerollGoal('${escapeHTML(g.id)}', this)" title="Swap this goal (1 free reroll per day)"><i class="fa-solid fa-dice"></i>Reroll</button>` : ''}
                         <div style="text-align:right">
-                            <div style="font-size:0.7rem;font-weight:700;color:${accentColor}">${done ? g.xp_reward : `+${g.xp_reward}`} XP</div>
-                            <div style="font-size:0.55rem;color:var(--void-muted)">${g.progress}/${g.target}</div>
+                            <div data-mc-goal-xp style="font-size:0.7rem;font-weight:700;color:${accentColor}">${done ? g.xp_reward : `+${g.xp_reward}`} XP</div>
+                            <div data-mc-goal-progress style="font-size:0.55rem;color:var(--void-muted)">${g.progress}/${g.target}</div>
                         </div>
-                        ${canReroll ? `<button onclick="window._mcRerollGoal('${escapeHTML(g.id)}')" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.08em;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:var(--void-muted);cursor:pointer;white-space:nowrap" title="Swap this goal (1 free reroll per day)">Reroll</button>` : ''}
                     </div>
                 </div>
                 <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
-                    <div style="height:100%;width:${pct}%;background:${accentColor};border-radius:2px;transition:width 0.5s ease"></div>
+                    <div data-mc-goal-bar style="height:100%;width:${pct}%;background:${accentColor};border-radius:2px;transition:width 0.5s ease"></div>
                 </div>
             </div>`;
         }).join('');
@@ -605,11 +604,95 @@
         } catch (_) {}
     }
 
-    async function rerollGoal(goalRowId) {
+    // Pool of goal titles to flash through while the slot reel spins.
+    function collectGoalTitlePool() {
+        const titles = Array.from(document.querySelectorAll('[data-mc-goal-title]'))
+            .map(el => el.textContent.trim())
+            .filter(Boolean);
+        const filler = ['NEW GOAL?', 'ROLLING…', 'COLLECT CARDS', 'OPEN PACKS', 'WATCH STREAMS', 'TRADE CARDS', 'EARN XP'];
+        const pool = titles.concat(filler);
+        return pool.length ? pool : filler;
+    }
+
+    // Decelerating reel that lands smoothly on `finalTitle`.
+    function settleReel(titleEl, pool, finalTitle) {
+        return new Promise(resolve => {
+            // Increasing delays simulate a slot wheel slowing to a stop.
+            const delays = [70, 80, 95, 115, 140, 175, 220, 290, 380];
+            let i = 0;
+            const step = () => {
+                if (i >= delays.length) {
+                    titleEl.classList.remove('mc-slot-rolling');
+                    titleEl.textContent = finalTitle;
+                    resolve();
+                    return;
+                }
+                titleEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+                setTimeout(step, delays[i++]);
+            };
+            step();
+        });
+    }
+
+    async function rerollGoal(goalRowId, btn) {
+        if (btn) btn.classList.add('is-spinning');
+
+        const card = btn && btn.closest('[data-mc-goal-card]');
+        const titleEl = card && card.querySelector('[data-mc-goal-title]');
+        const descEl = card && card.querySelector('[data-mc-goal-desc]');
+        const pool = collectGoalTitlePool();
+
+        // Fast spin while the request is in flight.
+        let reelTimer = null;
+        if (titleEl) {
+            titleEl.classList.add('mc-slot-rolling');
+            if (descEl) descEl.style.opacity = '0.25';
+            reelTimer = setInterval(() => {
+                titleEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+            }, 60);
+        }
+        const stopSpin = () => { if (reelTimer) { clearInterval(reelTimer); reelTimer = null; } };
+
         try {
-            await writeFetch(`${BACKEND}/api/goals/reroll`, { goal_row_id: goalRowId });
-            await loadDailyGoals();
+            // Reroll, then fetch the new goal so the reel can land on it.
+            const minSpin = new Promise(r => setTimeout(r, 450));
+            const post = writeFetch(`${BACKEND}/api/goals/reroll`, { goal_row_id: goalRowId });
+            await Promise.all([post, minSpin]);
+
+            const res = await fetch(`${BACKEND}/api/goals/daily`, { credentials: 'include' });
+            const data = res.ok ? await res.json() : null;
+            const newGoal = data && (data.goals || []).find(g => g.id === goalRowId);
+
+            stopSpin();
+
+            // No DOM hooks (or no data) -> fall back to a full re-render.
+            if (!card || !titleEl || !newGoal) {
+                if (data) renderGoals(data);
+                if (btn) btn.classList.remove('is-spinning');
+                return;
+            }
+
+            // Land the reel on the new title, then update just this card in place.
+            await settleReel(titleEl, pool, newGoal.title);
+
+            const pct = Math.min(100, Math.round((newGoal.progress / newGoal.target) * 100));
+            if (descEl) {
+                descEl.textContent = newGoal.description;
+                descEl.style.opacity = '';
+            }
+            const xpEl = card.querySelector('[data-mc-goal-xp]');
+            const progEl = card.querySelector('[data-mc-goal-progress]');
+            const barEl = card.querySelector('[data-mc-goal-bar]');
+            if (xpEl) xpEl.textContent = `+${newGoal.xp_reward} XP`;
+            if (progEl) progEl.textContent = `${newGoal.progress}/${newGoal.target}`;
+            if (barEl) barEl.style.width = `${pct}%`;
+            if (btn) btn.classList.remove('is-spinning');
         } catch (e) {
+            stopSpin();
+            if (titleEl) titleEl.classList.remove('mc-slot-rolling');
+            if (descEl) descEl.style.opacity = '';
+            if (btn) btn.classList.remove('is-spinning');
+            await loadDailyGoals();
             alert(e.message || 'Reroll failed');
         }
     }

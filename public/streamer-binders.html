@@ -18,13 +18,6 @@
     <style>
         .hidden { display: none !important; }
 
-        /* streamer-nav.js elements use hidden md:flex — restore display on desktop */
-        @media (min-width: 768px) {
-            #streamer-nav-links { display: flex !important; }
-            #streamer-nav-identity { display: flex !important; }
-            #streamer-nav-left { display: flex !important; }
-        }
-
         /* ── Page layout ── */
         #sb-root { min-height: 100vh; padding-top: 80px; }
 
@@ -546,6 +539,7 @@
     </div>
 
     <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
     <script src="/castle-nav.js"></script>
     <script src="/streamer-nav.js"></script>
     <script src="/streamer-binders.js"></script>

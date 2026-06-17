@@ -1,6 +1,19 @@
 
 
 
+/* Disable native drag "ghost image" on cards/avatars/logos (preserve opt-in). */
+img:not([draggable="true"]),
+a:not([draggable="true"]),
+svg,
+picture,
+video {
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+}
+
 .vs-bg {
     background: radial-gradient(ellipse 140% 100% at 50% 60%,
             rgba(15, 10, 30, 0.97) 0%,

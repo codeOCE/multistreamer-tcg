@@ -13,10 +13,12 @@
 (function () {
     'use strict';
 
+    const SWORD_SVG = 'M21 2h-5c-.3 0-.58.13-.77.37l-8.3 10.14L5 10.58V7.99H3v3c0 .27.11.52.29.71l3 3 .09.09-4.79 4.79 2.83 2.83 4.79-4.79.09.09 3 3c.19.19.44.29.71.29h3v-2h-2.59l-1.93-1.93 10.14-8.3c.23-.19.37-.47.37-.77V3c0-.55-.45-1-1-1m-1 5.53-9.93 8.13-1.72-1.72 8.13-9.93h3.53v3.53Z';
+
     const VIEWER_LINKS = [
         { label: 'My Collection', href: '/my-collection', icon: 'bx bxs-collection' },
         { label: 'Trading',       href: '/trading',       icon: 'bx bx-transfer' },
-        { label: 'Battle',        href: '/battle',        icon: 'bx bxs-bolt' },
+        { label: 'Battle',        href: '/battle',        svg: SWORD_SVG },
         { label: 'Profile',       href: '/profile',       icon: 'bx bxs-user' },
         { label: 'Settings',      href: '/settings',      icon: 'bx bxs-cog' },
     ];
@@ -25,7 +27,7 @@
         { label: 'Dashboard',     href: '/dashboard',     icon: 'bx bxs-dashboard' },
         { label: 'My Collection', href: '/my-collection', icon: 'bx bxs-collection' },
         { label: 'Trading',       href: '/trading',       icon: 'bx bx-transfer' },
-        { label: 'Battle',        href: '/battle',        icon: 'bx bxs-bolt' },
+        { label: 'Battle',        href: '/battle',        svg: SWORD_SVG },
         { label: 'Profile',       href: '/profile',       icon: 'bx bxs-user' },
         { label: 'Settings',      href: '/settings',      icon: 'bx bxs-cog' },
     ];
@@ -56,9 +58,20 @@
                 a.classList.add('text-void-muted', 'hover:text-void-text', 'hover:bg-white/[0.04]');
             }
 
-            const icon = document.createElement('i');
-            icon.className = link.icon + ' text-xs';
-            a.appendChild(icon);
+            if (link.svg) {
+                const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svgEl.setAttribute('width', '12'); svgEl.setAttribute('height', '12');
+                svgEl.setAttribute('viewBox', '0 0 24 24'); svgEl.setAttribute('fill', 'currentColor');
+                svgEl.style.flexShrink = '0';
+                const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                pathEl.setAttribute('d', link.svg);
+                svgEl.appendChild(pathEl);
+                a.appendChild(svgEl);
+            } else {
+                const icon = document.createElement('i');
+                icon.className = link.icon + ' text-xs';
+                a.appendChild(icon);
+            }
             a.appendChild(document.createTextNode(link.label));
 
             wrap.appendChild(a);

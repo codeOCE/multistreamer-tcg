@@ -93,10 +93,21 @@
                                 BINDER</h3>
 
                             
-                            <div id="binder-actions-area" class="hidden ml-4">
+                            <div id="binder-actions-area" class="hidden ml-4 items-center gap-2">
+                                <button id="binder-privacy-toggle" type="button" onclick="toggleActiveBinderPrivacy()"
+                                    class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-void-muted text-[9px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
+                                    title="Private — click to make public">
+                                    <i id="binder-privacy-icon" class="bx bx-lock"></i>
+                                    <span id="binder-privacy-label">Private</span>
+                                </button>
+                                <button id="binder-copy-link-btn" type="button" onclick="copyBinderShareLink()"
+                                    class="hidden px-3 py-1.5 rounded-full bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center gap-2"
+                                    title="Copy share link">
+                                    <i class="bx bx-link"></i> Copy Link
+                                </button>
                                 <button onclick="shareBinderPage()"
                                     class="px-3 py-1.5 rounded-full bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center gap-2">
-                                    <i class="bx bxs-share"></i> Share
+                                    <i class="bx bxs-share"></i> Export PNG
                                 </button>
                             </div>
                         </div>

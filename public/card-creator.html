@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -679,7 +679,6 @@
     <div class="cs-cm-sep"></div>
     <button class="cs-cm-item" onclick="csGroup();_csHideContextMenu()"><i class="bx bxs-select-multiple" style="font-size:9px;opacity:0.6;"></i> Group <span class="cs-cm-hint">Ctrl+G</span></button>
     <button class="cs-cm-item" onclick="csUngroup();_csHideContextMenu()"><i class="bx bx-collapse-alt" style="font-size:9px;opacity:0.6;"></i> Ungroup</button>
-    <button class="cs-cm-item" onclick="csToggleAutoLayout();_csHideContextMenu()"><i class="bx bxs-layout" style="font-size:9px;opacity:0.6;"></i> Toggle Auto Layout</button>
     <button class="cs-cm-item" style="color:#ef4444;" onclick="csDeleteSelected()"><i class="bx bxs-trash" style="font-size:9px;opacity:0.6;"></i> Delete <span class="cs-cm-hint">Del</span></button>
     <div id="cs-cm-replace-sep" class="cs-cm-sep hidden"></div>
     <button id="cs-cm-replace-btn" class="cs-cm-item hidden" onclick="csReplaceImage();_csHideContextMenu()"><i class="bx bx-image" style="font-size:9px;opacity:0.6;"></i> Replace Image</button>
@@ -1025,16 +1024,7 @@
             <button class="cs-t" id="cst-zoom" onclick="csTool('zoom')" title="Zoom (Z) · Alt+click to zoom out"><i class="bx bxs-search"></i></button>
             <button class="cs-t" id="cst-hand" onclick="csTool('hand')" title="Hand / Pan (H)"><i class="bx bxs-hand-right"></i><span class="cs-t-kbd">H</span></button>
             <div class="cs-ts-sep"></div>
-            <!-- Phase 1: Precision & Selection -->
-            <button class="cs-t" id="cst-lasso" onclick="csTool('lasso')" title="Lasso Select (A)"><i class="bx bxs-polygon"></i><span class="cs-t-kbd">A</span></button>
-            <button class="cs-t" id="cst-magic" onclick="csTool('magic')" title="Magic Select — click colour to isolate (Q)"><i class="bx bxs-magic-wand"></i><span class="cs-t-kbd">Q</span></button>
-            <button class="cs-t" id="cst-measure" onclick="csTool('measure')" title="Measure (M)"><i class="bx bxs-ruler"></i><span class="cs-t-kbd">M</span></button>
-            <div class="cs-ts-sep"></div>
-            <!-- Phase 2: Structure -->
-            <button class="cs-t" id="cst-frame" onclick="csTool('frame')" title="Frame / Clip Container (N)"><i class="bx bxs-square"></i><span class="cs-t-kbd">N</span></button>
-            <div class="cs-ts-sep"></div>
-            <!-- Phase 4: Artistic Brushes -->
-            <button class="cs-t" id="cst-blur" onclick="csTool('blur')" title="Blur Brush"><i class="bx bxs-droplet"></i></button>
+            <button class="cs-t" id="cst-magic" onclick="csTool('magic')" title="Magic Erase (Q)"><i class="bx bxs-magic-wand"></i><span class="cs-t-kbd">Q</span></button>
             <div class="cs-ts-sep"></div>
             <!-- Fill / Stroke color swapper -->
             <div id="cs-colorswap" title="Fill &amp; Stroke colors">
@@ -1116,18 +1106,6 @@
             <div id="cs-card-frame"></div>
             <div id="cs-trait-overlay"><div id="cs-trait-overlay-label">Trait Zone</div></div>
             <div id="cs-grid-overlay"></div>
-            <!-- Lasso polygon overlay -->
-            <svg id="cs-lasso-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;display:none;">
-                <polygon id="cs-lasso-poly" fill="rgba(0,242,254,0.1)" stroke="#00f2fe" stroke-width="1.5" stroke-dasharray="5,3" points=""/>
-            </svg>
-            <!-- Measure tooltip -->
-            <div id="cs-measure-tip" style="position:absolute;pointer-events:none;z-index:20;display:none;background:oklch(18% 0.02 256 / 0.92);border:1px solid rgba(0,242,254,0.4);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;backdrop-filter:blur(8px);"></div>
-            <!-- Measure line SVG -->
-            <svg id="cs-measure-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9;display:none;">
-                <line id="cs-measure-line" stroke="#00f2fe" stroke-width="1.5" stroke-dasharray="4,3" x1="0" y1="0" x2="0" y2="0"/>
-                <circle id="cs-measure-dot1" r="3" fill="#00f2fe"/>
-                <circle id="cs-measure-dot2" r="3" fill="#00f2fe"/>
-            </svg>
             <!-- Eyedropper magnifier (acts as cursor) -->
             <div id="cs-eyedrop-mag" style="position:fixed;pointer-events:none;z-index:9999;display:none;transform:translate(-50%,-50%);flex-direction:column;align-items:center;gap:6px;">
                 <div id="cs-eyedrop-circle" style="width:96px;height:96px;border-radius:50%;border:2.5px solid rgba(0,242,254,0.9);overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.7),inset 0 0 0 1px rgba(0,0,0,0.4);flex-shrink:0;"></div>
@@ -1289,16 +1267,6 @@ const BACKEND_URL = (document.querySelector('meta[name="castle-public-url"]')?.c
 function escapeHTML(str) { if (!str) return ''; const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 let _activeToast = null;
 function showToast(msg, type = 'info') {
-    // Silence non-critical toasts
-    if (type === 'success' || type === 'loading') {
-        console.log(`[Studio] ${type}: ${msg}`);
-        if (type === 'loading') {
-            const btn = document.getElementById('cs-save-btn');
-            if (btn) btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i>';
-        }
-        return null;
-    }
-    
     if (_activeToast) { _activeToast.remove(); _activeToast = null; }
     const c = document.getElementById('toast-container'); if (!c) return null;
     const t = document.createElement('div'); t.className = `toast-void toast-${type}`;
@@ -1306,7 +1274,9 @@ function showToast(msg, type = 'info') {
     t.innerHTML = `<i class="bx ${icons[type]||icons.info} toast-icon"></i><div class="toast-message">${escapeHTML(msg)}</div>`;
     c.appendChild(t);
     _activeToast = t;
-    setTimeout(() => { if (t && t.parentNode) { t.classList.add('fade-out'); setTimeout(() => t.remove(), 300); } }, 3200);
+    if (type !== 'loading') {
+        setTimeout(() => { if (t && t.parentNode) { t.classList.add('fade-out'); setTimeout(() => t.remove(), 300); } }, 3200);
+    }
     return t;
 }
 function clearLoadingToast() { if (_activeToast) { _activeToast.remove(); _activeToast = null; } }

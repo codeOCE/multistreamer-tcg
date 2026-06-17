@@ -6,19 +6,48 @@
         return m ? m.content.replace(/\/$/, '') : '';
     })();
 
-    const params      = new URLSearchParams(location.search);
-    const STREAMER    = params.get('streamer') || '';
+    // Extract streamer from ?streamer= OR /{slug}/battle path
+    const params = new URLSearchParams(location.search);
+    let STREAMER = params.get('streamer') || '';
+    if (!STREAMER) {
+        const BARE_PAGES = new Set([
+            'dashboard','onboarding','arena','privacy','terms','cookies',
+            'arena-test','404','my-collection','battle','profile','settings',
+            'card-studio','card-creator','stream-features','login','logout',
+            'auth','trading','coming-soon','magic-dust','binder','binders',
+        ]);
+        const parts = location.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+        if (parts.length >= 2 && parts[1] === 'battle' && !BARE_PAGES.has(parts[0])) {
+            STREAMER = parts[0];
+        }
+    }
 
     let currentUser   = null;
     let streamerData  = null;
     let savedDecks    = [];
     let userCards     = [];
-    let cardsLoaded   = false;  // guard: don't open picker until this is true
+    let cardsLoaded   = false;
     let activeDeckIdx = 0;
-    let activeDeckId  = null;   // DB id of the deck with is_active: true
+    let activeDeckId  = null;
     let pickerSlot    = null;
     let pendingSlots  = { 1: null, 2: null, 3: null };
     let csrfToken     = null;
+    let userRank      = null;
+    const pickerFilters = { rarity: null, traits: new Set(), query: '' };
+
+    // MMR tier system. Threshold = minimum rating for the tier.
+    const RANK_TIERS = [
+        { name: 'Master',   min: 1700, color: '#c084fc' },
+        { name: 'Diamond',  min: 1500, color: '#67e8f9' },
+        { name: 'Platinum', min: 1300, color: '#94e2d5' },
+        { name: 'Gold',     min: 1100, color: '#fbbf24' },
+        { name: 'Silver',   min: 900,  color: '#c0c5cc' },
+        { name: 'Bronze',   min: 0,    color: '#b08968' },
+    ];
+    function getTier(rating) {
+        if (rating == null) return null;
+        return RANK_TIERS.find(t => rating >= t.min) || RANK_TIERS[RANK_TIERS.length - 1];
+    }
 
     async function ensureCsrfToken() {
         if (csrfToken) return csrfToken;
@@ -79,18 +108,15 @@
     function hide(id) { document.getElementById(id)?.classList.add('hidden'); }
     function qs(id)   { return document.getElementById(id); }
 
-    // Normalise a user_card from either nested (battle deck API) or flat (enriched_user_cards view) shape
     function normaliseCard(uc) {
         if (!uc) return null;
-        // Collection API uses user_card_id; deck/slot APIs use id — always expose .id for UI + saves
         const rowId = uc.id ?? uc.user_card_id;
         if (rowId == null || rowId === '') return null;
-        // Flat enriched_user_cards shape
-        const imgUrl = uc.card?.image_url || uc.image_url || '';
-        const name   = uc.card?.name      || uc.card_name || uc.name || '—';
-        const atk    = uc.attack  ?? uc.card?.attack  ?? null;
-        const def    = uc.defense ?? uc.card?.defense ?? null;
-        // Mechanic: nested OR flat fields
+        const imgUrl  = uc.card?.image_url || uc.image_url || '';
+        const name    = uc.card?.name      || uc.card_name || uc.name || '—';
+        const atk     = uc.attack  ?? uc.card?.attack  ?? null;
+        const def     = uc.defense ?? uc.card?.defense ?? null;
+        const rarity  = (uc.rarity ?? uc.card?.rarity ?? '').toString().toLowerCase() || null;
         const mechanic = uc.mechanic
             ? uc.mechanic
             : (uc.mechanic_icon || uc.mechanic_name)
@@ -101,7 +127,7 @@
             : (uc.genesis_mechanic_icon || uc.genesis_mechanic_name)
                 ? { icon: uc.genesis_mechanic_icon, name: uc.genesis_mechanic_name, display_name: uc.genesis_mechanic_display_name }
                 : null;
-        return { ...uc, id: rowId, _imgUrl: imgUrl, _name: name, _atk: atk, _def: def, _mechanic: mechanic, _genesis: genesis_mechanic };
+        return { ...uc, id: rowId, _imgUrl: imgUrl, _name: name, _atk: atk, _def: def, _rarity: rarity, _mechanic: mechanic, _genesis: genesis_mechanic };
     }
 
     function traitPipsHTML(mechanic, genesis_mechanic) {
@@ -133,34 +159,30 @@
 
             if (!currentUser?.twitch_id) { hide('bt-loading'); show('bt-signin'); return; }
 
+            // If STREAMER still empty, fall back to the streamer returned from bootstrap
+            if (!STREAMER && streamerData?.username) {
+                STREAMER = streamerData.username;
+            }
+
             await ensureCsrfToken();
 
-            // Apply streamer brand colour to the whole page
             const brandColor = streamerData?.binder_color || streamerData?.brand_color_primary;
             if (brandColor) applyBrandColor(brandColor);
 
-            // Nav profile dropdown + shared nav links
             setupNavUser(currentUser);
-            if (window.castleNav) castleNav.autoInit();
-
-            const backLink = qs('bt-back-link');
-            if (backLink && STREAMER) {
-                backLink.href = `/${STREAMER}`;
-                const lbl = qs('bt-back-label');
-                if (lbl) lbl.textContent = `${streamerData?.brand_name || STREAMER} Binder`;
-            }
-
-            const creatorLabel = qs('bt-creator-label');
-            if (creatorLabel) creatorLabel.textContent = (streamerData?.brand_name || streamerData?.username || STREAMER || '').toUpperCase();
 
             document.title = `Battle Arena${streamerData ? ` · ${streamerData.brand_name || streamerData.username}` : ''} · Castle TCG`;
 
             hide('bt-loading');
-            qs('bt-nav')?.classList.remove('hidden');
             show('bt-root');
 
-            // Load all data in parallel; user can see the page immediately
-            await Promise.all([loadDecks(), loadHistory(), loadBattleStats(), loadUserCards()]);
+            await Promise.all([
+                loadDecks(),
+                loadHistory(),
+                loadBattleStats(),
+                loadUserCards(),
+                loadBattleLeaderboard(),
+            ]);
 
         } catch (err) {
             console.error('[Battle] init:', err);
@@ -169,7 +191,7 @@
         }
     }
 
-    /* ── Decks (tabs map by deck *name* "Battle Deck N", not array index) ─ */
+/* ── Decks (tabs map by deck *name* "Battle Deck N") ─────────────────── */
     function battleDeckNameForTab(tabIdx) {
         return `Battle Deck ${tabIdx + 1}`;
     }
@@ -259,7 +281,6 @@
     /* ── Deck tabs ───────────────────────────────────────────────────────── */
     document.querySelectorAll('.bt-deck-tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
-            // Don't switch tabs when clicking the toggle pill
             if (e.target.closest('.bt-deck-toggle')) return;
             document.querySelectorAll('.bt-deck-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
@@ -270,14 +291,13 @@
 
     function renderDeckTabs() {
         document.querySelectorAll('.bt-deck-tab').forEach(tab => {
-            const idx    = parseInt(tab.dataset.deckIdx, 10);
-            const deck   = getDeckForTab(idx);
+            const idx      = parseInt(tab.dataset.deckIdx, 10);
+            const deck     = getDeckForTab(idx);
             const isActive = deck && deck.id === activeDeckId;
 
-            // Remove previously injected toggle
             tab.querySelectorAll('.bt-deck-toggle').forEach(n => n.remove());
 
-            if (!deck) return; // no deck saved at this slot yet
+            if (!deck) return;
 
             const toggle = document.createElement('button');
             toggle.className = 'bt-deck-toggle' + (isActive ? ' is-active' : '');
@@ -286,13 +306,56 @@
             if (!isActive) {
                 toggle.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    activateDeck(deck.id);
+                    openActivateConfirm(deck);
                 });
             }
 
             tab.appendChild(toggle);
         });
     }
+
+    /* ── Confirm activate modal ──────────────────────────────────────────── */
+    let pendingActivateDeckId = null;
+
+    function openActivateConfirm(deck) {
+        if (!deck?.id) return;
+        pendingActivateDeckId = deck.id;
+        const modal = qs('bt-confirm-active');
+        if (!modal) { activateDeck(deck.id); return; }
+        const targetEl  = qs('bt-confirm-active-target');
+        const currentEl = qs('bt-confirm-active-current');
+        const currentWrap = qs('bt-confirm-active-current-wrap');
+        if (targetEl) targetEl.textContent = deck.name || 'this deck';
+        const current = savedDecks.find(d => d.is_active && d.id !== deck.id);
+        if (current && currentEl && currentWrap) {
+            currentEl.textContent = current.name || 'another deck';
+            currentWrap.classList.remove('hidden');
+        } else if (currentWrap) {
+            currentWrap.classList.add('hidden');
+        }
+        const confirmBtn = qs('bt-confirm-active-confirm');
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Make Active'; }
+        modal.classList.add('open');
+    }
+
+    function closeActivateConfirm() {
+        pendingActivateDeckId = null;
+        qs('bt-confirm-active')?.classList.remove('open');
+    }
+
+    window._btCancelActivate = closeActivateConfirm;
+    window._btConfirmActivate = async function () {
+        const id = pendingActivateDeckId;
+        if (!id) { closeActivateConfirm(); return; }
+        const btn = qs('bt-confirm-active-confirm');
+        if (btn) { btn.disabled = true; btn.textContent = 'Activating…'; }
+        const ok = await activateDeck(id);
+        if (ok) {
+            closeActivateConfirm();
+        } else if (btn) {
+            btn.disabled = false; btn.textContent = 'Try again';
+        }
+    };
 
     async function activateDeck(deckId) {
         const q = STREAMER ? `?streamer=${STREAMER}` : '';
@@ -304,12 +367,15 @@
                 headers: jsonHeaders(),
                 body: JSON.stringify({ id: deckId }),
             });
-            if (!res.ok) { console.error('[Battle] activateDeck failed', res.status); return; }
-            // Update local state
+            if (!res.ok) { console.error('[Battle] activateDeck failed', res.status); return false; }
             activeDeckId = deckId;
             savedDecks.forEach(d => { d.is_active = (d.id === deckId); });
             renderDeckTabs();
-        } catch (e) { console.error('[Battle] activateDeck:', e); }
+            return true;
+        } catch (e) {
+            console.error('[Battle] activateDeck:', e);
+            return false;
+        }
     }
 
     /* ── User cards ──────────────────────────────────────────────────────── */
@@ -326,53 +392,115 @@
     }
 
     /* ── Card Picker ─────────────────────────────────────────────────────── */
+    function traitKeyOf(m) {
+        if (!m) return null;
+        return (m.name || m.display_name || '').toLowerCase().trim() || null;
+    }
+
+    function rebuildTraitChips() {
+        const row = qs('bt-trait-row');
+        if (!row) return;
+        // Collect distinct traits present in the user's cards (mechanic + genesis), keyed by lowercase name.
+        const seen = new Map();
+        userCards.forEach(uc => {
+            [uc._mechanic, uc._genesis].forEach(m => {
+                const key = traitKeyOf(m);
+                if (!key || seen.has(key)) return;
+                seen.set(key, { key, label: m.display_name || m.name, icon: m.icon || '' });
+            });
+        });
+        // Keep the static "Traits" label and remove any previously appended chips.
+        Array.from(row.querySelectorAll('.bt-filter-chip')).forEach(el => el.remove());
+        Array.from(seen.values())
+            .sort((a, b) => a.label.localeCompare(b.label))
+            .forEach(t => {
+                const isUrl = t.icon && (t.icon.startsWith('/') || t.icon.startsWith('http'));
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'bt-filter-chip';
+                btn.dataset.trait = t.key;
+                btn.innerHTML = (isUrl
+                        ? `<img src="${esc(t.icon)}" alt="">`
+                        : (t.icon ? `<span>${esc(t.icon)}</span>` : '')) +
+                    `<span>${esc(t.label)}</span>`;
+                btn.addEventListener('click', () => {
+                    if (pickerFilters.traits.has(t.key)) pickerFilters.traits.delete(t.key);
+                    else pickerFilters.traits.add(t.key);
+                    btn.classList.toggle('active');
+                    renderPickerGrid();
+                });
+                row.appendChild(btn);
+            });
+    }
+
     window._btOpenPicker = function (slot) {
         pickerSlot = slot;
         qs('bt-picker-slot-label').textContent = slot;
-        qs('bt-picker-search').value = '';
-        show('bt-picker');
+        // Reset filters every time the picker opens.
+        pickerFilters.rarity = null;
+        pickerFilters.traits.clear();
+        pickerFilters.query  = '';
+        const searchEl = qs('bt-picker-search');
+        if (searchEl) { searchEl.value = ''; searchEl.classList.add('collapsed'); }
+        qs('bt-picker-search-toggle')?.classList.remove('active');
+        document.querySelectorAll('#bt-picker .bt-filter-chip.active').forEach(c => c.classList.remove('active'));
+
+        qs('bt-picker')?.classList.add('open');
+        document.body.style.overflow = 'hidden';
         if (cardsLoaded) {
-            renderPickerGrid('');
+            rebuildTraitChips();
+            renderPickerGrid();
         } else {
-            // Show spinner while cards are still loading
             const grid = qs('bt-picker-grid');
             if (grid) grid.innerHTML = `
                 <div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:48px 0;">
                     <div style="width:28px;height:28px;border:2px solid rgba(var(--void-accent-rgb),0.2);border-top-color:var(--void-accent);border-radius:50%;animation:bt-spin 0.8s linear infinite;"></div>
                     <span style="font-size:0.6rem;color:var(--void-muted);">Loading your cards…</span>
                 </div>`;
-            // Retry once cards finish
             const check = setInterval(() => {
-                if (cardsLoaded) { clearInterval(check); renderPickerGrid(qs('bt-picker-search')?.value || ''); }
+                if (cardsLoaded) { clearInterval(check); rebuildTraitChips(); renderPickerGrid(); }
             }, 200);
         }
     };
 
-    function renderPickerGrid(query) {
+    function renderPickerGrid() {
         const grid = qs('bt-picker-grid');
         if (!grid) return;
 
-        const q = query.toLowerCase().trim();
-        const filtered = q
-            ? userCards.filter(uc => {
-                const name   = (uc._name || '').toLowerCase();
-                const trait1 = (uc._mechanic?.display_name  || uc._mechanic?.name  || '').toLowerCase();
-                const trait2 = (uc._genesis?.display_name   || uc._genesis?.name   || '').toLowerCase();
-                return name.includes(q) || trait1.includes(q) || trait2.includes(q);
-            })
-            : userCards;
+        const q          = pickerFilters.query.toLowerCase().trim();
+        const rarity     = pickerFilters.rarity;
+        const traitSet   = pickerFilters.traits;
+        const hasTraits  = traitSet.size > 0;
+        const hasQuery   = q.length > 0;
+        const hasRarity  = !!rarity;
+
+        const filtered = userCards.filter(uc => {
+            if (hasRarity && uc._rarity !== rarity) return false;
+            if (hasTraits) {
+                const t1 = traitKeyOf(uc._mechanic);
+                const t2 = traitKeyOf(uc._genesis);
+                let match = false;
+                traitSet.forEach(k => { if (k === t1 || k === t2) match = true; });
+                if (!match) return false;
+            }
+            if (hasQuery) {
+                if (!(uc._name || '').toLowerCase().includes(q)) return false;
+            }
+            return true;
+        });
 
         if (!filtered.length) {
+            const anyFilter = hasQuery || hasRarity || hasTraits;
             grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px 0;color:var(--void-muted);font-size:0.65rem;font-style:italic;">
-                ${q ? 'No cards match your search.' : 'No cards found in your collection for this streamer.'}
+                ${anyFilter ? 'No cards match these filters.' : 'No cards found in your collection for this streamer.'}
             </div>`;
             return;
         }
 
         grid.innerHTML = filtered.map(uc => {
-            const imgUrl  = esc(uc._imgUrl);
-            const name    = esc(uc._name);
-            const id      = esc(uc.id);
+            const imgUrl   = esc(uc._imgUrl);
+            const name     = esc(uc._name);
+            const id       = esc(uc.id);
             const mechanic = uc._mechanic, genesis = uc._genesis;
 
             const traitBadges = [mechanic, genesis].filter(Boolean).map(m => {
@@ -410,14 +538,58 @@
         };
         renderSlots();
         updateBattleBtn();
-        hide('bt-picker');
-        saveDeck({ feedback: false });
+        closePicker();
     };
 
-    window._btClosePicker = function () { hide('bt-picker'); };
+    function closePicker() {
+        qs('bt-picker')?.classList.remove('open');
+        document.body.style.overflow = '';
+    }
 
-    qs('bt-picker-search')?.addEventListener('input', e => renderPickerGrid(e.target.value));
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide('bt-picker'); });
+    window._btClosePicker = closePicker;
+
+    qs('bt-picker-search')?.addEventListener('input', e => {
+        pickerFilters.query = e.target.value;
+        renderPickerGrid();
+    });
+
+    // Rarity chip toggling (chips live in HTML, so wire on DOM ready)
+    document.querySelectorAll('#bt-rarity-row .bt-filter-chip[data-rarity]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const r = btn.dataset.rarity;
+            if (pickerFilters.rarity === r) {
+                pickerFilters.rarity = null;
+                btn.classList.remove('active');
+            } else {
+                pickerFilters.rarity = r;
+                document.querySelectorAll('#bt-rarity-row .bt-filter-chip[data-rarity]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
+            renderPickerGrid();
+        });
+    });
+
+    // Magnifier toggle — expands/collapses the search input.
+    qs('bt-picker-search-toggle')?.addEventListener('click', () => {
+        const input  = qs('bt-picker-search');
+        const toggle = qs('bt-picker-search-toggle');
+        if (!input || !toggle) return;
+        const collapsed = input.classList.toggle('collapsed');
+        toggle.classList.toggle('active', !collapsed);
+        if (collapsed) {
+            input.value = '';
+            pickerFilters.query = '';
+            renderPickerGrid();
+        } else {
+            setTimeout(() => input.focus(), 60);
+        }
+    });
+
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'Escape') return;
+        if (qs('bt-confirm-active')?.classList.contains('open')) { closeActivateConfirm(); return; }
+        closePicker();
+    });
 
     /* ── Save deck ───────────────────────────────────────────────────────── */
     function deckSlotCount() {
@@ -439,12 +611,50 @@
         }
     }
 
+    function deckMatchesSaved() {
+        const existing = getDeckForTab(activeDeckIdx);
+        if (!existing?.id) return false;
+        const savedIds = [
+            slotData(existing.slot_1)?.user_card_id || null,
+            slotData(existing.slot_2)?.user_card_id || null,
+            slotData(existing.slot_3)?.user_card_id || null,
+        ];
+        const pendingIds = [1, 2, 3].map(s => pendingSlots[s]?.user_card_id || null);
+        return savedIds.every((id, i) => id === pendingIds[i]);
+    }
+
     function updateSaveDeckButton() {
-        const btn = qs('bt-save-deck-btn');
-        if (!btn) return;
+        const btn      = qs('bt-save-deck-btn');
+        const revert   = qs('bt-revert-deck-btn');
         const existing = getDeckForTab(activeDeckIdx);
         const canCreate = deckSlotCount() > 0;
-        btn.disabled = !existing?.id && !canCreate;
+        const matches  = deckMatchesSaved();
+
+        if (btn) {
+            if (matches) {
+                btn.disabled = true;
+                btn.textContent = 'Saved';
+                btn.classList.add('is-saved');
+            } else {
+                btn.disabled = !existing?.id && !canCreate;
+                btn.textContent = 'Save Deck';
+                btn.classList.remove('is-saved');
+            }
+        }
+
+        if (revert) {
+            const showRevert = !!existing?.id && !matches;
+            revert.classList.toggle('hidden', !showRevert);
+            revert.disabled = !showRevert;
+        }
+    }
+
+    function revertDeck() {
+        const existing = getDeckForTab(activeDeckIdx);
+        if (!existing?.id) return;
+        renderActiveDeck();
+        showDeckSaveMsg('Reverted to last saved.', '');
+        setTimeout(() => { showDeckSaveMsg('', ''); }, 2000);
     }
 
     async function saveDeck(opts) {
@@ -516,6 +726,7 @@
     }
 
     qs('bt-save-deck-btn')?.addEventListener('click', () => { saveDeck({ feedback: true }); });
+    qs('bt-revert-deck-btn')?.addEventListener('click', revertDeck);
 
     /* ── Battle ──────────────────────────────────────────────────────────── */
     qs('bt-battle-btn')?.addEventListener('click', async () => {
@@ -580,16 +791,25 @@
         const list = qs('bt-history-list');
         if (!list) return;
         if (!history.length) {
-            list.innerHTML = `<p style="font-size:0.6rem;color:var(--void-muted);opacity:0.5;text-align:center;padding:16px 0;font-style:italic;">No battles yet.</p>`;
+            list.innerHTML = `<p class="bt-empty-msg">No battles yet.</p>`;
             return;
         }
-        const me = (currentUser?.username || '').toUpperCase();
         list.innerHTML = history.map(h => {
             const cls   = h.won === true ? 'win' : h.won === false ? 'loss' : 'draw';
             const label = h.won === true ? 'WIN'  : h.won === false ? 'LOSS'  : 'DRAW';
+            const delta = h.mmr_delta;
+            let mmrHtml = '';
+            if (delta != null) {
+                const dCls  = delta > 0 ? 'pos' : delta < 0 ? 'neg' : 'zero';
+                const dText = delta > 0 ? `+${delta}` : delta < 0 ? `${delta}` : '±0';
+                mmrHtml = `<span class="bt-history-mmr ${dCls}">${dText}</span>`;
+            }
             return `<div class="bt-history-row">
-                <div class="bt-history-vs">${esc(me)} VS ${esc((h.opponent || '?').toUpperCase())}</div>
-                <div class="bt-history-result ${cls}">${label}</div>
+                <div class="bt-history-vs">vs ${esc((h.opponent || '?'))}</div>
+                <div class="bt-history-result ${cls}">
+                    <span class="bt-history-label">${label}</span>
+                    ${mmrHtml}
+                </div>
             </div>`;
         }).join('');
     }
@@ -611,6 +831,141 @@
                 if (d) d.textContent = m[3];
             }
         } catch (e) { /* silent */ }
+    }
+
+    /* ── Battle Leaderboard ──────────────────────────────────────────────── */
+    function setLeaderboardMsg(text) {
+        const list = qs('bt-lb-list');
+        if (list) list.innerHTML = `<p class="bt-empty-msg">${esc(text)}</p>`;
+    }
+
+    async function loadBattleLeaderboard() {
+        if (!STREAMER) { setLeaderboardMsg('No leaderboard available.'); return; }
+        try {
+            const res  = await fetch(`${BACKEND}/api/battle/leaderboard?streamer=${STREAMER}`, { credentials: 'include' });
+            if (!res.ok) { setLeaderboardMsg("Couldn't load leaderboard."); return; }
+            const data = await res.json();
+            const rows = data.leaderboard || [];
+
+            // Determine user's rank + rating — check top-5 first, then server-computed values
+            const myName = (currentUser?.username || '').toLowerCase();
+            const myRow  = rows.find(r => (r.username || '').toLowerCase() === myName);
+            let myRating = null;
+            if (myRow) {
+                userRank = myRow.rank;
+                myRating = myRow.rating ?? null;
+            } else {
+                if (data.my_rank != null)   userRank = data.my_rank;
+                if (data.my_rating != null) myRating = data.my_rating;
+            }
+            const rankEl = qs('bt-stat-rank');
+            if (rankEl) {
+                const tier = getTier(myRating);
+                if (tier) {
+                    rankEl.textContent = tier.name;
+                    rankEl.style.color = tier.color;
+                } else {
+                    rankEl.textContent = '—';
+                    rankEl.style.color = '';
+                }
+            }
+
+            renderBattleLeaderboard(rows);
+        } catch (e) {
+            console.error('[Battle] loadBattleLeaderboard:', e);
+            setLeaderboardMsg("Couldn't load leaderboard.");
+        }
+    }
+
+    function renderBattleLeaderboard(rows) {
+        const list = qs('bt-lb-list');
+        if (!list) return;
+
+        if (!rows.length) {
+            list.innerHTML = `<p class="bt-empty-msg">No battles yet.</p>`;
+            return;
+        }
+
+        const RANK_COLORS = ['#fbbf24', '#94a3b8', '#d97706', 'var(--void-accent)', 'var(--void-accent)'];
+
+        list.innerHTML = rows.map((r, i) => {
+            const rankColor = RANK_COLORS[i] || 'var(--void-muted)';
+            const rankLabel = i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`;
+            const tier = getTier(r.rating);
+
+            const renderThumb = (slot) => slot?.image_url
+                ? `<div class="bt-lb-deck-slot"><img src="${esc(slot.image_url)}" alt="${esc(slot.name || '')}" class="bt-lb-deck-card"></div>`
+                : `<div class="bt-lb-deck-slot"><div class="bt-lb-deck-empty"></div></div>`;
+
+            const renderTipCard = (slot) => {
+                if (!slot?.image_url) {
+                    return `<div class="bt-deck-tip-card">
+                        <div class="bt-deck-tip-img-wrap">
+                            <div class="bt-deck-tip-img-empty">Empty</div>
+                        </div>
+                    </div>`;
+                }
+                const traits = [];
+                if (slot.mechanic?.display_name) {
+                    traits.push({ kind: 'mechanic', name: slot.mechanic.display_name, icon: slot.mechanic.icon });
+                }
+                if (slot.genesis_mechanic?.display_name) {
+                    traits.push({ kind: 'genesis', name: slot.genesis_mechanic.display_name, icon: slot.genesis_mechanic.icon });
+                }
+                const traitHtml = traits.length
+                    ? `<div class="bt-deck-tip-traits">${traits.map(t => {
+                          const isUrl = t.icon && (t.icon.startsWith('/') || t.icon.startsWith('http'));
+                          const iconHtml = isUrl
+                              ? `<img src="${esc(t.icon)}" alt="">`
+                              : esc(t.icon || '');
+                          return `<div class="bt-deck-tip-trait ${t.kind === 'genesis' ? 'genesis' : ''}">
+                              <span class="bt-deck-tip-trait-icon">${iconHtml}</span>
+                              <span>${esc(t.name)}</span>
+                          </div>`;
+                      }).join('')}</div>`
+                    : '';
+                return `<div class="bt-deck-tip-card">
+                    <div class="bt-deck-tip-img-wrap">
+                        <img src="${esc(slot.image_url)}" alt="${esc(slot.name || '')}">
+                    </div>
+                    <div class="bt-deck-tip-name">${esc(slot.name || '—')}</div>
+                    <div class="bt-deck-tip-stats">
+                        <span class="bt-deck-tip-stat atk">ATK ${slot.attack ?? '—'}</span>
+                        <span class="bt-deck-tip-stat def">DEF ${slot.defense ?? '—'}</span>
+                    </div>
+                    ${traitHtml}
+                </div>`;
+            };
+
+            let deckHtml;
+            if (r.active_deck) {
+                const slots = [r.active_deck.slot_1, r.active_deck.slot_2, r.active_deck.slot_3];
+                deckHtml = slots.map(renderThumb).join('') +
+                    `<div class="bt-deck-tip">${slots.map(renderTipCard).join('')}</div>`;
+            } else {
+                deckHtml = `<span class="bt-lb-no-deck">—</span>`;
+            }
+
+            const tierHtml = tier
+                ? `<span class="bt-lb-tier" style="color:${tier.color}">${tier.name}</span><span class="bt-lb-sep">·</span>`
+                : '';
+
+            return `<div class="bt-lb-row">
+                <span class="bt-lb-rank" style="color:${rankColor}">${rankLabel}</span>
+                <div class="bt-lb-info">
+                    <div class="bt-lb-name">${esc(r.username || '—')}</div>
+                    <div class="bt-lb-record">
+                        ${tierHtml}
+                        <span class="bt-lb-w">${r.wins}W</span>
+                        <span class="bt-lb-sep">·</span>
+                        <span class="bt-lb-l">${r.losses}L</span>
+                        <span class="bt-lb-sep">·</span>
+                        <span class="bt-lb-d">${r.draws}D</span>
+                    </div>
+                </div>
+                <div class="bt-lb-deck">${deckHtml}</div>
+            </div>`;
+        }).join('');
     }
 
     /* ── Boot ────────────────────────────────────────────────────────────── */

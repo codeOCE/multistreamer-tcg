@@ -188,9 +188,9 @@ function renderHero(streamer, user) {
                 `<i class="bx bxs-archive-out text-[0.8rem]"></i>Get Packs` +
             `</a>` +
             // My Binder (hidden until collection loads)
-            `<button id="cp-binder-btn" class="${pill('hidden')}" onclick="window._cpOpenBinder()" style="background:none;border:1px solid rgba(255,255,255,0.06)">` +
+            `<a id="cp-binder-btn" href="/${encodeURIComponent(CP_SLUG)}/binder" class="${pill('hidden')}" style="border:1px solid rgba(255,255,255,0.06)">` +
                 `<i class="bx bxs-book-open text-[0.8rem]"></i><span id="cp-binder-count">My Binder</span>` +
-            `</button>` +
+            `</a>` +
             // Social links
             socials.map(l =>
                 `<a href="${escapeHTML(l.href)}" target="_blank" rel="noopener" class="${pill()}"><i class="${l.icon} text-[0.8rem]"></i>${l.label}</a>`

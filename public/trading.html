@@ -122,9 +122,25 @@
         .tr-expand {
             overflow: hidden;
             max-height: 0;
-            transition: max-height 0.28s ease;
+            box-sizing: border-box;      /* include padding so collapsed height is truly 0 (no clipped pill peeking) */
+            opacity: 0;
+            visibility: hidden;
+            transition: max-height 0.28s ease, opacity 0.2s ease, visibility 0s linear 0.28s;
         }
-        .tr-expand.open { max-height: 600px; }
+        .tr-expand.open {
+            max-height: 600px;
+            opacity: 1;
+            visibility: visible;
+            transition: max-height 0.28s ease, opacity 0.2s ease;
+        }
+
+        /* Always-visible search bar (no dropdown) */
+        .tr-search-wrap { position: relative; margin: 2px 0 6px; }
+        .tr-search-wrap > i {
+            position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+            font-size: 0.9rem; color: var(--void-muted); pointer-events: none;
+        }
+        .tr-search-wrap .tr-search-field { padding-left: 32px; }
 
         .tr-search-field {
             width: 100%;
@@ -227,6 +243,7 @@
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .tr-belt-card:hover { transform: scale(1.08); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .tr-belt-card.peek-active { transform: scale(1.12) !important; box-shadow: 0 0 0 2px #fff, 0 8px 32px rgba(0,0,0,0.6) !important; }
         .tr-belt-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
         #tr-page-label {
@@ -680,6 +697,184 @@
             object-fit: contain;
         }
 
+        /* Deck-style picker tiles (List a Card) — image with name/rarity below,
+           trait pips overlaid, stacked-by-card copies badge. Mirrors the battle deck. */
+        .tr-deck-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            cursor: pointer;
+            border-radius: 10px;
+            padding: 5px;
+            border: 1px solid transparent;
+            transition: all 0.18s;
+        }
+        .tr-deck-card:hover {
+            background: rgba(var(--page-accent-rgb), 0.05);
+            border-color: rgba(var(--page-accent-rgb), 0.3);
+            transform: translateY(-2px);
+        }
+        .tr-deck-card.selected {
+            background: rgba(var(--page-accent-rgb), 0.08);
+            border-color: rgba(var(--page-accent-rgb), 0.5);
+        }
+        .tr-deck-card--static { cursor: default; }
+        .tr-deck-card--static:hover { transform: none; background: transparent; border-color: transparent; }
+        /* Trade pile per-card actions */
+        .tr-pile-actions { display: flex; gap: 5px; margin-top: 2px; }
+        .tr-pile-btn {
+            flex: 1; padding: 4px 6px; border-radius: 7px;
+            font-size: 0.52rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+            cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+        }
+        .tr-pile-btn--list { color: rgba(var(--page-accent-rgb),1); border-color: rgba(var(--page-accent-rgb),0.4); background: rgba(var(--page-accent-rgb),0.1); }
+        .tr-pile-btn--list:hover { background: rgba(var(--page-accent-rgb),0.2); }
+        .tr-pile-btn--remove { color: var(--void-muted); border-color: rgba(255,255,255,0.1); background: transparent; }
+        .tr-pile-btn--remove:hover { color: #fca5a5; border-color: rgba(239,68,68,0.4); }
+        .tr-pile-btn--listed { color: var(--void-muted); border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); cursor: default; }
+        .tr-deck-img-wrap {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.07);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+        }
+        .tr-deck-card.selected .tr-deck-img-wrap {
+            border-color: rgba(var(--page-accent-rgb), 0.9);
+            box-shadow: 0 0 0 2px rgba(var(--page-accent-rgb), 0.35), 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .tr-deck-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .tr-deck-img-fallback {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .tr-deck-img-fallback i { font-size: 2rem; color: rgba(255,255,255,0.1); }
+        .tr-deck-name {
+            font-size: 0.55rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tr-deck-rarity {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        .tr-deck-copies {
+            position: absolute;
+            top: 5px; right: 5px;
+            background: rgba(0,0,0,0.75);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 99px;
+            padding: 2px 7px;
+            font-size: 0.52rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            color: #fff;
+            backdrop-filter: blur(4px);
+        }
+        .tr-deck-traits {
+            position: absolute;
+            bottom: 7px; left: 7px;
+            display: flex; gap: 3px; flex-wrap: wrap;
+            z-index: 2;
+        }
+        .tr-deck-pip {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.72);
+            border: 1px solid rgba(255,255,255,0.18);
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+            font-size: 0.55rem; font-weight: 800; color: #fff; text-transform: uppercase;
+        }
+        .tr-deck-pip img { width: 14px; height: 14px; object-fit: contain; }
+        /* Group header that clusters all copies of one card together in the picker grid */
+        .tr-deck-group-header {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; gap: 8px;
+            margin: 10px 2px 2px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.62rem; font-weight: 800;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--void-text);
+        }
+        .tr-deck-group-header::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+        .tr-deck-group-header span {
+            color: var(--void-muted); font-size: 0.55rem; font-weight: 800;
+            padding: 1px 7px; border-radius: 99px;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+        }
+        .tr-deck-group-header span::before { content: '×'; }
+
+        /* Battle-style picker filter bar (List a Card / Make an Offer popups) */
+        .tr-modal.tr-modal-wide { max-width: 1040px; }
+        .tr-picker-filterbar {
+            display: flex; flex-direction: column; gap: 10px;
+            margin-bottom: 16px; padding-bottom: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            flex-shrink: 0;
+        }
+        .bt-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .bt-filter-row-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+        .bt-filter-label {
+            font-size: 0.48rem; font-weight: 800; letter-spacing: 0.2em;
+            text-transform: uppercase; color: var(--void-muted); opacity: 0.6; padding-right: 4px;
+        }
+        .bt-filter-chip {
+            font-family: 'Outfit', sans-serif; font-size: 0.58rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 11px;
+            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+            background: transparent; color: var(--void-muted); cursor: pointer;
+            transition: all 0.18s; white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .bt-filter-chip:hover { color: var(--void-text); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.03); }
+        .bt-filter-chip.active {
+            color: rgba(var(--page-accent-rgb),1);
+            border-color: rgba(var(--page-accent-rgb),0.45);
+            background: rgba(var(--page-accent-rgb),0.1);
+        }
+        .bt-filter-chip[data-rarity].active {
+            color: var(--bt-rarity-color); border-color: var(--bt-rarity-color);
+            background: color-mix(in srgb, var(--bt-rarity-color) 14%, transparent);
+        }
+        .bt-filter-chip img { width: 12px; height: 12px; object-fit: contain; }
+        .bt-picker-search-toggle {
+            width: 30px; height: 30px; border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.02);
+            color: var(--void-muted); cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.8rem; line-height: 1; transition: all 0.18s; flex-shrink: 0;
+        }
+        /* Boxicons glyphs inherit a tall line-height and render slightly low; force the
+           glyph to a centered block so it sits dead-centre in the circle. */
+        .bt-picker-search-toggle i { display: block; line-height: 1; }
+        .bt-picker-search-toggle:hover { color: var(--void-text); border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.05); }
+        .bt-picker-search-toggle.active {
+            color: rgba(var(--page-accent-rgb),1);
+            border-color: rgba(var(--page-accent-rgb),0.45);
+            background: rgba(var(--page-accent-rgb),0.1);
+        }
+        .bt-search-input {
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 999px; padding: 6px 14px; font-size: 0.7rem; font-weight: 600;
+            color: var(--void-text); outline: none;
+            transition: width 0.25s ease, border-color 0.2s, padding 0.25s ease, opacity 0.2s;
+            font-family: 'Space Grotesk', sans-serif; width: 200px;
+        }
+        .bt-search-input.collapsed { width: 0; padding-left: 0; padding-right: 0; border-color: transparent; opacity: 0; pointer-events: none; }
+        .bt-search-input::placeholder { color: var(--void-muted); }
+        .bt-search-input:focus { border-color: rgba(var(--page-accent-rgb),0.4); box-shadow: 0 0 0 3px rgba(var(--page-accent-rgb),0.06); }
+
         /* Modal actions row */
         .tr-modal-actions {
             display: flex;
@@ -975,80 +1170,7 @@
 <body class="bg-void-bg text-void-text antialiased">
 <div class="saas-bg-glow"></div>
 
-<!-- ── Navbar ── -->
-<nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
-    <div class="w-full px-8 h-20 flex items-center justify-between">
-        <a href="/" class="flex items-center gap-2 group cursor-pointer">
-            <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
-                <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
-            </div>
-            <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
-        </a>
-        <div class="flex items-center gap-3">
-            <div id="nav-user-preview" class="hidden items-center">
-                <span id="nav-username" class="hidden">---</span>
-                <span id="nav-user-role" class="hidden">Collector</span>
-                <div id="nav-user-menu-root" class="relative">
-                    <button type="button" id="nav-user-menu-trigger"
-                        class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
-                        aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
-                        <span class="relative inline-block">
-                            <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
-                        </span>
-                        <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
-                    </button>
-                    <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
-                        <div class="border-b border-white/5">
-                            <button type="button" id="nav-user-identity-toggle"
-                                class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
-                                aria-expanded="false" aria-controls="nav-user-team-panel">
-                                <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
-                                <div class="min-w-0 flex-1">
-                                    <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
-                                    <div class="flex items-center gap-2 mt-1 flex-wrap">
-                                        <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
-                                        <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
-                                    </div>
-                                </div>
-                                <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
-                                    <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
-                                </span>
-                            </button>
-                            <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
-                                <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
-                                <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
-                            </div>
-                        </div>
-                        <div class="px-4 py-3 border-b border-white/5">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="min-w-0">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
-                                    <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
-                                </div>
-                                <button type="button" id="nav-user-menu-copy-code"
-                                    class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
-                            </div>
-                        </div>
-                        <div class="p-1.5">
-                            <button type="button" id="nav-user-menu-settings" role="menuitem"
-                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
-                                <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
-                                <span class="flex flex-col leading-tight normal-case">
-                                    <span class="uppercase tracking-widest">Account settings</span>
-                                    <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
-                                </span>
-                            </button>
-                            <button type="button" id="nav-user-menu-logout" role="menuitem"
-                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
-                                <i class="bx bx-log-out w-4 text-center"></i> Log out
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</nav>
+<!-- Nav — injected by /streamer-nav.js -->
 
 <!-- ── Loading ── -->
 <div id="tr-loading">
@@ -1064,11 +1186,9 @@
         <aside id="tr-sidebar" class="tr-rise tr-rise-1">
             <div class="tr-section-label">Browse</div>
 
-            <button class="tr-nav-btn" id="tr-btn-search" onclick="tToggleSearch()">
-                <i class="bx bx-search"></i> Search
-            </button>
-            <div class="tr-expand" id="tr-search-panel" style="padding:0 4px 4px;">
-                <input type="text" class="tr-search-field" id="tr-search-input" placeholder="Card name..." oninput="tOnSearch(this.value)">
+            <div class="tr-search-wrap">
+                <i class="bx bx-search"></i>
+                <input type="text" class="tr-search-field" id="tr-search-input" placeholder="Search card name..." oninput="tOnSearch(this.value)">
             </div>
 
             <button class="tr-nav-btn" id="tr-btn-traits" onclick="tToggleTraits()">
@@ -1101,6 +1221,10 @@
                 <div class="tr-trait-grid" id="tr-set-chips"></div>
             </div>
 
+            <button class="tr-nav-btn" id="tr-btn-clear" onclick="tClearFilters()">
+                <i class="bx bx-x-circle"></i> Clear filters
+            </button>
+
             <div class="tr-divider"></div>
 
             <div class="tr-section-label">Actions</div>
@@ -1109,7 +1233,13 @@
                 <i class="bx bx-plus-circle"></i> List a card
             </button>
             <button class="tr-nav-btn" id="tr-btn-mine" onclick="tViewMyListings()">
-                <i class="bx bxs-layer"></i> Your listings
+                <i class="bx bxs-layer"></i> <span id="tr-mine-label">Your listings</span>
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-pile" onclick="tOpenTradePile()">
+                <i class="bx bxs-collection"></i> Your Trade Pile
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-direct" onclick="tOpenDirectTrades()">
+                <i class="bx bx-transfer-alt"></i> Direct Trades
             </button>
             <button class="tr-nav-btn" id="tr-btn-find-traders" onclick="tOpenWishlistMatches()" style="color:var(--void-accent)">
                 <i class="bx bx-search-alt-2"></i> Find Traders
@@ -1151,48 +1281,61 @@
 
 <!-- ── List a Card Modal ── -->
 <div class="tr-modal-overlay" id="tr-list-modal" onclick="if(event.target===this)tCloseModal('tr-list-modal')">
-    <div class="tr-modal">
+    <div class="tr-modal tr-modal-wide">
         <button class="tr-modal-close" onclick="tCloseModal('tr-list-modal')"><i class="bx bx-x"></i></button>
-        <p class="tr-modal-title" id="tr-list-title">List a Card</p>
-        <p class="tr-modal-sub" id="tr-list-sub">Choose a card from your collection to put on the market.</p>
-        <!-- Breadcrumb shown in instance-picker (level 2) -->
-        <div id="tr-list-breadcrumb" style="display:none;align-items:center;gap:8px;margin-bottom:12px">
-            <button type="button" onclick="tListBack()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:var(--void-muted);font-size:0.6rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;transition:all 0.15s" onmouseover="this.style.color='var(--void-text)'" onmouseout="this.style.color='var(--void-muted)'">
-                <i class="bx bx-arrow-back" style="font-size:0.85rem"></i> All Cards
-            </button>
-            <span style="font-size:0.6rem;color:rgba(255,255,255,0.2)">/</span>
-            <span id="tr-list-breadcrumb-name" style="font-size:0.65rem;font-weight:800;color:var(--void-text);letter-spacing:0.04em"></span>
-        </div>
-        <div id="tr-list-filters">
-            <input type="text" class="tr-picker-search" id="tr-list-search" placeholder="Search by name or rarity…" oninput="tOnListSearch(this.value)">
-            <div class="tr-picker-chip-row" id="tr-list-trait-chips"></div>
+        <p class="tr-modal-title" id="tr-list-title">List Cards</p>
+        <p class="tr-modal-sub" id="tr-list-sub">Tap to select one or more cards to put on the market.</p>
+        <div class="tr-picker-filterbar" id="tr-list-filters">
+            <div class="bt-filter-row" id="tr-list-rarity-row">
+                <span class="bt-filter-label">Rarity</span>
+                <button class="bt-filter-chip" data-rarity="legendary" style="--bt-rarity-color:#fbbf24">Legendary</button>
+                <button class="bt-filter-chip" data-rarity="epic"      style="--bt-rarity-color:#a855f7">Epic</button>
+                <button class="bt-filter-chip" data-rarity="rare"      style="--bt-rarity-color:#3faaff">Rare</button>
+                <button class="bt-filter-chip" data-rarity="uncommon"  style="--bt-rarity-color:#34d399">Uncommon</button>
+                <button class="bt-filter-chip" data-rarity="common"    style="--bt-rarity-color:#94a3b8">Common</button>
+                <div class="bt-filter-row-end">
+                    <input id="tr-list-search" class="bt-search-input collapsed" type="text" placeholder="Search name…" autocomplete="off">
+                    <button type="button" id="tr-list-search-toggle" class="bt-picker-search-toggle" title="Search by name" aria-label="Toggle search"><i class="bx bx-search"></i></button>
+                </div>
+            </div>
+            <div class="bt-filter-row" id="tr-list-trait-row">
+                <span class="bt-filter-label">Traits</span>
+            </div>
             <div class="tr-picker-count" id="tr-list-count"></div>
         </div>
         <div class="tr-picker-grid" id="tr-list-grid"></div>
-        <div class="tr-modal-pager" id="tr-list-pager">
-            <button class="tr-pager-btn" id="tr-list-prev" onclick="tListPagePrev()"><i class="bx bx-chevron-left"></i></button>
-            <span class="tr-pager-info" id="tr-list-page-info"></span>
-            <button class="tr-pager-btn" id="tr-list-next" onclick="tListPageNext()"><i class="bx bx-chevron-right"></i></button>
-        </div>
         <div class="tr-modal-actions">
             <button class="tr-btn-ghost" onclick="tCloseModal('tr-list-modal')">Cancel</button>
-            <button class="tr-btn-primary" id="tr-list-confirm" disabled onclick="tConfirmList()">List Selected Card</button>
+            <button class="tr-btn-primary" id="tr-list-confirm" disabled onclick="tConfirmList()">List Selected</button>
         </div>
     </div>
 </div>
 
 <!-- ── Make an Offer Modal ── -->
 <div class="tr-modal-overlay" id="tr-offer-modal" onclick="if(event.target===this)tCloseModal('tr-offer-modal')">
-    <div class="tr-modal">
+    <div class="tr-modal tr-modal-wide">
         <button class="tr-modal-close" onclick="tCloseModal('tr-offer-modal')"><i class="bx bx-x"></i></button>
         <p class="tr-modal-title">Make an Offer</p>
         <p class="tr-modal-sub" id="tr-offer-sub">Choose one of your cards to offer in exchange.</p>
-        <div class="tr-picker-grid" id="tr-offer-grid"></div>
-        <div class="tr-modal-pager" id="tr-offer-pager">
-            <button class="tr-pager-btn" id="tr-offer-prev" onclick="tOfferPagePrev()"><i class="bx bx-chevron-left"></i></button>
-            <span class="tr-pager-info" id="tr-offer-page-info"></span>
-            <button class="tr-pager-btn" id="tr-offer-next" onclick="tOfferPageNext()"><i class="bx bx-chevron-right"></i></button>
+        <div class="tr-picker-filterbar" id="tr-offer-filters">
+            <div class="bt-filter-row" id="tr-offer-rarity-row">
+                <span class="bt-filter-label">Rarity</span>
+                <button class="bt-filter-chip" data-rarity="legendary" style="--bt-rarity-color:#fbbf24">Legendary</button>
+                <button class="bt-filter-chip" data-rarity="epic"      style="--bt-rarity-color:#a855f7">Epic</button>
+                <button class="bt-filter-chip" data-rarity="rare"      style="--bt-rarity-color:#3faaff">Rare</button>
+                <button class="bt-filter-chip" data-rarity="uncommon"  style="--bt-rarity-color:#34d399">Uncommon</button>
+                <button class="bt-filter-chip" data-rarity="common"    style="--bt-rarity-color:#94a3b8">Common</button>
+                <div class="bt-filter-row-end">
+                    <input id="tr-offer-search" class="bt-search-input collapsed" type="text" placeholder="Search name…" autocomplete="off">
+                    <button type="button" id="tr-offer-search-toggle" class="bt-picker-search-toggle" title="Search by name" aria-label="Toggle search"><i class="bx bx-search"></i></button>
+                </div>
+            </div>
+            <div class="bt-filter-row" id="tr-offer-trait-row">
+                <span class="bt-filter-label">Traits</span>
+            </div>
+            <div class="tr-picker-count" id="tr-offer-count"></div>
         </div>
+        <div class="tr-picker-grid" id="tr-offer-grid"></div>
         <div class="tr-modal-actions">
             <button class="tr-btn-ghost" onclick="tCloseModal('tr-offer-modal')">Cancel</button>
             <button class="tr-btn-primary" id="tr-offer-confirm" disabled onclick="tConfirmOffer()">Submit Offer</button>
@@ -1214,40 +1357,213 @@
     </div>
 </div>
 
-<!-- Wishlist matches modal -->
-<div class="tr-modal-overlay" id="tr-wishlist-modal" onclick="if(event.target===this)tCloseModal('tr-wishlist-modal')">
-    <div class="tr-modal-box" style="max-width:520px">
-        <div class="tr-modal-header">
-            <h2 class="tr-modal-title">Find Traders</h2>
-            <button class="tr-modal-x" onclick="tCloseModal('tr-wishlist-modal')"><i class="bx bx-x"></i></button>
-        </div>
-        <p class="tr-modal-sub">Players who own something you want and want something you own.</p>
-        <div id="tr-wishlist-list" class="tr-picker-grid" style="grid-template-columns:1fr;gap:8px;max-height:420px;overflow-y:auto"></div>
-        <div class="tr-modal-actions" style="margin-top:8px">
-            <button class="tr-btn-ghost" onclick="tCloseModal('tr-wishlist-modal')">Close</button>
+<!-- ── Your Trade Pile Modal ── -->
+<div class="tr-modal-overlay" id="tr-pile-modal" onclick="if(event.target===this)tCloseModal('tr-pile-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-pile-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Your Trade Pile</p>
+        <p class="tr-modal-sub">Every card you've marked as tradeable in your binder.</p>
+        <div class="tr-picker-count" id="tr-pile-count" style="margin-bottom:12px"></div>
+        <div class="tr-picker-grid" id="tr-pile-grid"></div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-pile-modal')">Close</button>
         </div>
     </div>
 </div>
 
-<!-- ── Card Detail Modal ── -->
-<div class="tr-modal-overlay" id="tr-detail-modal" onclick="if(event.target===this)tCloseModal('tr-detail-modal')">
-    <div class="tr-modal tr-detail-modal">
-        <button class="tr-modal-close" onclick="tCloseModal('tr-detail-modal')"><i class="bx bx-x"></i></button>
-        <div class="tr-detail-layout">
-            <div class="tr-detail-img-col">
-                <div class="tr-detail-img-wrap">
-                    <img id="tr-detail-img" src="" alt="" style="display:none">
-                    <div id="tr-detail-img-placeholder" class="tr-placeholder"><i class="bx bxs-image"></i></div>
+<!-- Wishlist matches modal -->
+<div class="tr-modal-overlay" id="tr-wishlist-modal" onclick="if(event.target===this)tCloseModal('tr-wishlist-modal')">
+    <div class="tr-modal" style="max-width:520px;width:100%">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-wishlist-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Find Traders</p>
+        <p class="tr-modal-sub">Players who own something you want and want something you own.</p>
+        <div id="tr-wishlist-list" class="tr-picker-grid" style="grid-template-columns:1fr;gap:8px;max-height:420px;overflow-y:auto"></div>
+    </div>
+</div>
+
+<!-- ── Direct Trades (peer-to-peer via Castle Code) ── -->
+<style>
+    .tr-direct-bar {
+        display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+        justify-content: space-between; margin-bottom: 18px;
+    }
+    .tr-direct-mycode {
+        display: flex; align-items: center; gap: 10px;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 12px; padding: 8px 14px;
+    }
+    .tr-direct-mycode-label {
+        font-size: 0.5rem; font-weight: 800; letter-spacing: 0.18em;
+        text-transform: uppercase; color: var(--void-muted);
+    }
+    .tr-direct-mycode-value {
+        font-size: 0.85rem; font-weight: 900; letter-spacing: 0.18em;
+        color: var(--void-accent); font-family: 'Space Grotesk', monospace;
+    }
+    .tr-direct-copy {
+        background: none; border: none; color: var(--void-muted); cursor: pointer;
+        font-size: 0.9rem; transition: color 0.15s;
+    }
+    .tr-direct-copy:hover { color: var(--void-accent); }
+    .tr-direct-start { display: flex; gap: 8px; align-items: center; }
+    .tr-direct-input {
+        background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 10px; padding: 9px 12px; color: var(--void-text);
+        font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
+        font-family: 'Space Grotesk', monospace; width: 190px; outline: none;
+        transition: border-color 0.15s;
+    }
+    .tr-direct-input:focus { border-color: var(--void-accent); }
+    .tr-direct-list { display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; }
+    .tr-direct-row {
+        background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 16px; padding: 16px;
+    }
+    .tr-direct-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .tr-direct-party { display: flex; align-items: center; gap: 12px; }
+    .tr-direct-avatar { width: 40px; height: 40px; border-radius: 11px; object-fit: cover; }
+    .tr-direct-dir {
+        font-size: 0.5rem; font-weight: 800; letter-spacing: 0.18em;
+        text-transform: uppercase; color: var(--void-muted);
+    }
+    .tr-direct-name {
+        font-size: 0.85rem; font-weight: 900; font-style: italic;
+        text-transform: uppercase; letter-spacing: 0.02em; color: var(--void-text);
+    }
+    .tr-direct-status {
+        font-size: 0.5rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+        padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+    }
+    .tr-direct-swap {
+        display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center;
+        padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .tr-direct-side-label {
+        font-size: 0.48rem; font-weight: 800; letter-spacing: 0.16em;
+        text-transform: uppercase; color: var(--void-muted); margin-bottom: 8px;
+    }
+    .tr-direct-thumbs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tr-direct-thumb {
+        width: 38px; height: 53px; object-fit: cover; border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+    .tr-direct-thumb--empty {
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(255,255,255,0.04); font-size: 0.55rem; color: var(--void-muted); text-transform: uppercase;
+    }
+    .tr-direct-empty-cards { font-size: 0.7rem; color: var(--void-muted); opacity: 0.5; }
+    .tr-direct-swap-icon { font-size: 1.3rem; color: var(--void-accent); opacity: 0.7; }
+    .tr-direct-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .tr-direct-actions button { flex: 1; }
+    .tr-builder-section { margin-bottom: 16px; }
+    .tr-builder-section-head {
+        display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+    }
+    .tr-builder-section-head > span:first-child {
+        font-size: 0.55rem; font-weight: 800; letter-spacing: 0.16em;
+        text-transform: uppercase; color: var(--void-text);
+    }
+    #tr-builder-modal .tr-picker-grid { max-height: 36vh; }
+    .tr-picker-grid--readonly { opacity: 0.85; }
+</style>
+
+<div class="tr-modal-overlay" id="tr-direct-modal" onclick="if(event.target===this)tCloseModal('tr-direct-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-direct-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Direct Trades</p>
+        <p class="tr-modal-sub">Trade one-to-one with another collector using their Castle Code. They can counter your offer before either side confirms.</p>
+        <div class="tr-direct-bar">
+            <div class="tr-direct-mycode">
+                <span class="tr-direct-mycode-label">Your Castle Code</span>
+                <span id="tr-direct-mycode" class="tr-direct-mycode-value">…</span>
+                <button class="tr-direct-copy" onclick="tCopyMyCode()" title="Copy code"><i class="bx bxs-copy"></i></button>
+            </div>
+            <div class="tr-direct-start">
+                <input id="tr-direct-code-input" class="tr-direct-input" type="text" placeholder="Their code…" maxlength="16" autocomplete="off">
+                <button class="tr-btn-primary" onclick="tStartTrade()">Start Trade</button>
+            </div>
+        </div>
+        <div id="tr-direct-list" class="tr-direct-list"></div>
+    </div>
+</div>
+
+<!-- ── Trade Builder Modal (initiate / counter) ── -->
+<div class="tr-modal-overlay" id="tr-builder-modal" onclick="if(event.target===this)tCloseModal('tr-builder-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-builder-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title" id="tr-builder-title">Propose Trade</p>
+        <p class="tr-modal-sub" id="tr-builder-sub">Pick the card(s) you want to offer.</p>
+        <div class="tr-builder-section">
+            <div class="tr-builder-section-head">
+                <span id="tr-builder-mine-label">Your Offer</span>
+                <span class="tr-picker-count" id="tr-builder-mine-count"></span>
+            </div>
+            <div class="tr-picker-grid" id="tr-builder-mine-grid"></div>
+        </div>
+        <div class="tr-builder-section" id="tr-builder-theirs-section" style="display:none">
+            <div class="tr-builder-section-head">
+                <span id="tr-builder-theirs-label">Their Cards</span>
+            </div>
+            <div class="tr-picker-grid tr-picker-grid--readonly" id="tr-builder-theirs-grid"></div>
+        </div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-builder-modal')">Cancel</button>
+            <button class="tr-btn-primary" id="tr-builder-send" disabled onclick="tSendTrade()">Send Trade Offer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Card Inspect Modal (ported from binder: 3D flip + holographic + tilt) ── -->
+<div id="card-detail-modal" class="fixed inset-0 z-[2000] hidden card-detail-modal-backdrop overflow-y-auto overflow-x-hidden">
+    <button type="button" onclick="tCloseInspect()" aria-label="Close" class="fixed top-5 right-5 z-[2010] w-10 h-10 rounded-full border border-white/10 bg-black/30 backdrop-blur-md hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-colors duration-200">
+        <i class="bx bx-x text-base"></i>
+    </button>
+    <div class="min-h-full w-full flex items-center justify-center p-6 pt-16 pb-10 sm:p-10" onclick="if(event.target===this) tCloseInspect()">
+        <div class="card-detail-modal-layout void-fade w-full max-w-[min(100%,38rem)] lg:max-w-[min(100%,46rem)] mx-auto grid grid-cols-1 lg:grid-cols-[auto_minmax(0,19rem)] gap-6 lg:gap-8 lg:items-center" onclick="event.stopPropagation()">
+            <div class="card-detail-art-col flex justify-center lg:justify-start items-center shrink-0">
+                <div id="card-detail-flip-scene" class="card-detail-flip-scene card-detail-foil-drag-only outline-none select-none" tabindex="0" role="button" aria-label="Card — tap to flip; drag to tilt" aria-pressed="false">
+                    <div class="card-detail-tilt-wrap">
+                        <div class="card-detail-flip-track">
+                            <div class="card-detail-face card-detail-face--front">
+                                <div class="card-detail-card-face absolute inset-0">
+                                    <img id="card-detail-image" src="" alt="" class="absolute inset-0 h-full w-full object-cover block z-0 pointer-events-none">
+                                    <div id="card-detail-holo-layer" class="holo-layer holo-layer--card-detail hidden" aria-hidden="true"></div>
+                                    <div id="card-detail-holo-shine" class="holo-shine holo-shine--card-detail hidden" aria-hidden="true"></div>
+                                    <div class="card-detail-sparkle" aria-hidden="true"></div>
+                                </div>
+                            </div>
+                            <div class="card-detail-face card-detail-face--back">
+                                <img id="card-detail-back-image" src="/Castle_Default_Cardback.png" alt="" class="h-full w-full object-contain object-center block pointer-events-none" draggable="false">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="tr-detail-info-col">
-                <div id="tr-detail-set" class="tr-detail-set"></div>
-                <div id="tr-detail-name" class="tr-detail-name"></div>
-                <div id="tr-detail-rarity" class="tr-detail-rarity-pill"></div>
+            <div class="card-detail-body flex flex-col min-w-0 gap-4 lg:max-h-[min(70vh,548px)] lg:overflow-y-auto lg:pr-1 custom-scrollbar">
+                <header class="space-y-2">
+                    <div id="card-detail-rarity" class="card-detail-rarity-label leading-none" data-rarity="common"></div>
+                    <h3 id="card-detail-name" class="font-display text-xl sm:text-2xl font-bold uppercase tracking-tight text-white leading-tight"></h3>
+                    <div class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-snug text-void-muted/90">
+                        <span class="inline-flex items-baseline gap-1"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">Set</span> <span id="card-detail-set" class="text-void-text/85 font-semibold">—</span></span>
+                        <span class="text-white/12 px-0.5 select-none" aria-hidden="true">·</span>
+                        <span class="inline-flex items-baseline gap-0.5"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">No.</span> <span id="card-detail-number" class="text-void-text/85 font-semibold tabular-nums">—</span></span>
+                    </div>
+                </header>
+                <p id="card-detail-description" class="card-detail-description text-[12px] sm:text-[13px] text-void-muted/90 leading-relaxed pl-3 border-l border-white/[0.07]"></p>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="card-detail-stat-pill">
+                        <span class="card-detail-stat-label">Attack</span>
+                        <div id="card-detail-attack" class="card-detail-stat-value">0</div>
+                    </div>
+                    <div class="card-detail-stat-pill">
+                        <span class="card-detail-stat-label">Defense</span>
+                        <div id="card-detail-defense" class="card-detail-stat-value">0</div>
+                    </div>
+                </div>
                 <div id="tr-detail-traits" class="tr-detail-traits"></div>
                 <div id="tr-detail-lister" class="tr-detail-lister"></div>
-                <div class="tr-modal-actions" style="margin-top:auto;padding-top:24px;">
-                    <button class="tr-btn-ghost" onclick="tCloseModal('tr-detail-modal')">Close</button>
+                <div class="tr-modal-actions" style="margin-top:auto;padding-top:16px;">
+                    <button class="tr-btn-ghost" onclick="tCloseInspect()">Close</button>
                     <button id="tr-detail-cancel-btn" class="tr-btn-danger" style="display:none" onclick="tDetailCancel()">Cancel Listing</button>
                     <button id="tr-detail-offer-btn" class="tr-btn-primary" onclick="tDetailOffer()">Send Offer</button>
                 </div>
@@ -1275,6 +1591,7 @@
 <div id="tr-toast"></div>
 
 <script src="/nav-user-menu.js"></script>
+<script src="/nav-notifications.js"></script>
 <script src="/streamer-nav.js"></script>
 <script src="/trading.js"></script>
 </body>

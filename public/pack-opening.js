@@ -37,6 +37,20 @@
   let mergeMode         = false;
   let inspecting        = false;
 
+  // ── Embed mode (iframe inside binder modal) ───────────────────────────────
+  const _urlParams      = new URLSearchParams(window.location.search);
+  const EMBED_MODE      = _urlParams.get('embed') === '1';
+  const FILTER_STREAMER = (_urlParams.get('streamer') || '').toLowerCase() || null;
+
+  if (EMBED_MODE) {
+    document.documentElement.classList.add('embed-mode');
+    document.body.classList.add('embed-mode');
+  }
+
+  function _postClose() {
+    try { window.parent.postMessage({ type: 'pack-modal-close' }, '*'); } catch (_) {}
+  }
+
   // ── CSRF ──────────────────────────────────────────────────────────────────
   async function fetchCsrf() {
     try {
@@ -251,7 +265,23 @@
       if (!Array.isArray(pendingPacks)) pendingPacks = [];
     } catch (_) {}
 
-    if (pendingPacks.length === 0) { showScreen('empty'); return; }
+    if (FILTER_STREAMER) {
+      pendingPacks = pendingPacks.filter(p =>
+        (p.streamer?.username || '').toLowerCase() === FILTER_STREAMER
+      );
+    }
+
+    if (pendingPacks.length === 0) {
+      if (EMBED_MODE) {
+        const cta = document.querySelector('#s-empty .empty-cta');
+        if (cta) {
+          cta.textContent = 'Close';
+          cta.href = '#';
+          cta.addEventListener('click', e => { e.preventDefault(); _postClose(); });
+        }
+      }
+      showScreen('empty'); return;
+    }
 
     updatePackChip();
     showScreen('lobby');
@@ -965,14 +995,24 @@
 
   // ── Navigation ────────────────────────────────────────────────────────────
   window.nextPack = function () {
-    if (pendingPacks.length === 0) { window.location.href = '/my-collection.html'; return; }
+    if (pendingPacks.length === 0) {
+      if (EMBED_MODE) { _postClose(); return; }
+      window.location.href = '/my-collection.html'; return;
+    }
     currentCardIdx = 0;
     updatePackChip();
     showScreen('lobby');
     setBgGlow('99,102,241');
     updateLobbyBranding();
   };
-  window.goCollection = function () { window.location.href = '/my-collection.html'; };
+  window.goCollection = function () {
+    if (EMBED_MODE) { _postClose(); return; }
+    window.location.href = '/my-collection.html';
+  };
+  window.packGoBack = function () {
+    if (EMBED_MODE) { _postClose(); return; }
+    history.back();
+  };
 
   // ── Keyboard support ──────────────────────────────────────────────────────
   function setupKeyboard() {
@@ -1102,25 +1142,18 @@
     if (!card?.user_card_id) return;
     const btn = document.getElementById('btn-market');
     if (!btn || btn.disabled) return;
-    if (!currentStreamerId) { showRevealToast('Streamer not found', 'error'); return; }
     btn.disabled = true;
     try {
-      const r = await authedPost(`${BACKEND}/api/market/listings`, { user_card_id: card.user_card_id, streamer_id: currentStreamerId });
-      const data = await r.json();
+      const r = await authedPost(`${BACKEND}/api/market/trade-pile`, { user_card_id: card.user_card_id, in_pile: true });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Failed to send to trade pile');
       const icon = btn.querySelector('i');
-      if (r.status === 409) {
-        btn.classList.add('listed-on');
-        if (icon) icon.className = 'fa-solid fa-check';
-        showRevealToast('Already listed', 'success');
-        return;
-      }
-      if (!r.ok) throw new Error(data.error || 'List failed');
       btn.classList.add('listed-on');
       if (icon) icon.className = 'fa-solid fa-check';
-      showRevealToast('Listed for trade!', 'success');
+      showRevealToast('Sent to trade pile!', 'success');
     } catch (e) {
       btn.disabled = false;
-      showRevealToast(e.message || 'List failed', 'error');
+      showRevealToast(e.message || 'Failed to send to trade pile', 'error');
     }
   };
 

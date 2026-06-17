@@ -76,6 +76,58 @@
         #dash-promo-card-picker-list { max-height: 12rem; overflow-y: auto; padding: 4px 0; }
         #dash-promo-card-picker-list button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 12px; font-size: 0.69rem; font-weight: 700; text-align: left; transition: background 0.12s, color 0.12s; }
         #dash-promo-card-picker-list button:hover { background: rgba(var(--void-accent-rgb),0.08); color: var(--void-accent); }
+
+        /* ── Analytics date picker ── */
+        .adp-popover {
+            position: fixed; z-index: 999; width: min(680px, 96vw);
+            background: rgba(8,10,14,0.97); border: 1.5px solid rgba(var(--void-accent-rgb),0.25);
+            border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,0.7); backdrop-filter: blur(16px);
+            padding: 16px;
+        }
+        .adp-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .adp-preset {
+            padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 900;
+            text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5);
+        }
+        .adp-preset:hover { background: rgba(var(--void-accent-rgb),0.1); border-color: rgba(var(--void-accent-rgb),0.4); color: var(--void-accent); }
+        .adp-preset--active { background: rgba(var(--void-accent-rgb),0.15); border-color: var(--void-accent); color: var(--void-accent); }
+        .adp-calendars { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 540px) { .adp-calendars { grid-template-columns: 1fr; } .adp-popover { width: 96vw; } }
+        .adp-cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .adp-cal-title { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em; color: rgba(255,255,255,0.85); }
+        .adp-cal-nav { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); cursor: pointer; transition: all 0.15s; font-size: 13px; }
+        .adp-cal-nav:hover { background: rgba(var(--void-accent-rgb),0.1); color: var(--void-accent); border-color: rgba(var(--void-accent-rgb),0.3); }
+        .adp-cal-nav:disabled { opacity: 0.2; cursor: default; }
+        .adp-cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+        .adp-day-label { font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;
+            color: rgba(255,255,255,0.2); text-align: center; padding: 2px 0 4px; }
+        .adp-day {
+            aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700; border-radius: 6px; cursor: pointer;
+            color: rgba(255,255,255,0.6); transition: all 0.1s; border: 1px solid transparent;
+        }
+        .adp-day:hover:not(.adp-day--disabled):not(.adp-day--empty) { background: rgba(var(--void-accent-rgb),0.15); color: var(--void-accent); }
+        .adp-day--today { border-color: rgba(var(--void-accent-rgb),0.35); }
+        .adp-day--disabled { color: rgba(255,255,255,0.15); cursor: default; }
+        .adp-day--empty { cursor: default; }
+        .adp-day--start, .adp-day--end { background: var(--void-accent) !important; color: #000 !important; font-weight: 900; border-color: var(--void-accent); }
+        .adp-day--in-range { background: rgba(var(--void-accent-rgb),0.12); color: rgba(255,255,255,0.85); border-radius: 0; }
+        .adp-day--start { border-radius: 6px 0 0 6px; }
+        .adp-day--end { border-radius: 0 6px 6px 0; }
+        .adp-day--start.adp-day--end { border-radius: 6px; }
+        .adp-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.07); }
+        .adp-range-label { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.35); }
+        .adp-btn-cancel, .adp-btn-apply {
+            padding: 5px 14px; border-radius: 8px; font-size: 10px; font-weight: 900;
+            text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s;
+        }
+        .adp-btn-cancel { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+        .adp-btn-cancel:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
+        .adp-btn-apply { background: var(--void-accent); border: 1px solid var(--void-accent); color: #000; }
+        .adp-btn-apply:disabled { opacity: 0.3; cursor: default; }
+        .adp-btn-apply:not(:disabled):hover { opacity: 0.85; }
     </style>
 
     <!-- Preload critical assets -->
@@ -320,13 +372,7 @@
                     <button onclick="switchTab('queue')" id="tab-queue" class="dashboard-tab-btn">
                         <i class="bx bxs-detail"></i> Queue System
                     </button>
-                    <button onclick="switchTab('battle-settings')" id="tab-battle-settings" class="dashboard-tab-btn">
-                        <svg class="bx3-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24"
-                            height="24" aria-hidden="true">
-                            <path
-                                d="m21,2h-5c-.3,0-.58.13-.77.37L6.93,12.51l-1.93-1.93v-2.59h-2v3c0,.27.11.52.29.71l3,3,.09.09-4.79,4.79,2.83,2.83,4.79-4.79.09.09,3,3c.19.19.44.29.71.29h3v-2h-2.59l-1.93-1.93,10.14-8.3c.23-.19.37-.47.37-.77V3c0-.55-.45-1-1-1Zm-1,5.53l-9.93,8.13-1.72-1.72,8.13-9.93h3.53v3.53Z" />
-                        </svg> Battle Settings
-                    </button>
+
                     <button onclick="switchTab('channel-points')" id="tab-channel-points" class="dashboard-tab-btn">
                         <i class="bx bxs-coin"></i> Channel Points
                     </button>
@@ -1080,24 +1126,37 @@
                     <div class="glass-card overflow-hidden">
 
                         <!-- Period navigation bar -->
-                        <div class="flex items-center border-b border-white/5"
+                        <div class="flex items-center border-b border-white/5 relative"
                             style="background:rgba(255,255,255,0.015)">
-                            <button onclick="shiftAnalyticsPeriod(-1)"
+                            <button onclick="shiftAnalyticsPeriod(-1)" id="analytics-period-prev"
                                 class="analytics-period-nav flex items-center justify-center w-10 h-9 text-white/30 hover:text-void-accent transition-colors flex-shrink-0">
                                 <i class="bx bx-chevron-left text-lg"></i>
                             </button>
-                            <div class="flex-1 text-center py-2 select-none">
-                                <div id="analytics-period-range"
-                                    class="text-[11px] font-black tracking-wide text-void-accent">—</div>
-                                <div id="analytics-period-days"
-                                    class="text-[9px] font-bold uppercase tracking-widest text-white/25 mt-0.5">—</div>
-                            </div>
+                            <!-- Clickable date range trigger -->
+                            <button type="button" id="analytics-period-trigger" onclick="toggleAnalyticsDatePicker()"
+                                class="flex-1 text-center py-2 select-none hover:bg-white/5 transition-colors rounded-lg mx-1 group">
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <i class="bx bx-calendar text-[10px] text-white/30 group-hover:text-void-accent transition-colors"></i>
+                                    <div id="analytics-period-range" class="text-[11px] font-black tracking-wide text-void-accent">—</div>
+                                    <i class="bx bx-chevron-down text-[10px] text-white/30 group-hover:text-void-accent transition-colors" id="analytics-period-caret"></i>
+                                </div>
+                                <div id="analytics-period-days" class="text-[9px] font-bold uppercase tracking-widest text-white/25 mt-0.5">—</div>
+                            </button>
                             <button onclick="shiftAnalyticsPeriod(1)" id="analytics-period-next"
                                 class="analytics-period-nav flex items-center justify-center w-10 h-9 text-white/30 hover:text-void-accent transition-colors flex-shrink-0 disabled:opacity-20 disabled:cursor-default disabled:hover:text-white/30"
                                 disabled>
                                 <i class="bx bx-chevron-right text-lg"></i>
                             </button>
                         </div>
+
+                        <!-- hidden select kept for legacy JS reads -->
+                        <select id="analytics-time-range" class="hidden" aria-hidden="true">
+                            <option value="7" selected>7</option>
+                            <option value="14">14</option>
+                            <option value="30">30</option>
+                            <option value="90">90</option>
+                            <option value="all">all</option>
+                        </select>
 
                         <!-- Stat tile tabs -->
                         <div class="flex border-b border-white/10" role="tablist" aria-label="Analytics charts">
@@ -1607,17 +1666,7 @@
                     </div>
                 </section>
 
-                <!-- Stream Features placeholder tabs -->
-                <section id="content-battle-settings" class="tab-content space-y-6">
-                    <div class="glass-card flex flex-col items-center justify-center py-20 text-center space-y-6">
-                        <i class="bx bxs-bolt text-5xl text-void-accent/20"></i>
-                        <div>
-                            <h3 class="text-xl font-black uppercase italic tracking-tight">Battle Settings</h3>
-                            <p class="text-xs text-void-muted mt-2 max-w-sm mx-auto">Configure battle rules, rewards,
-                                and mechanics for your community.</p>
-                        </div>
-                    </div>
-                </section>
+
 
                 <section id="content-overlay" class="tab-content space-y-6">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2768,6 +2817,7 @@
 
         <script src="/castle-auth-origin.js"></script>
         <script src="/nav-user-menu.js"></script>
+        <script src="/nav-notifications.js"></script>
         <script src="/dashboard.js"></script>
         <script src="/layer-editor.js"></script>
         <script>
@@ -3127,6 +3177,226 @@
                 </div>
             </div>
         </div>
+
+        <!-- Analytics date range picker — must live outside any backdrop-filter ancestor -->
+        <div id="analytics-date-picker" class="adp-popover hidden" role="dialog" aria-label="Select date range" onclick="event.stopPropagation()">
+            <div class="adp-presets">
+                <button class="adp-preset adp-preset--active" data-days="7"   onclick="applyAnalyticsPreset(7)">Last 7 days</button>
+                <button class="adp-preset"                    data-days="14"  onclick="applyAnalyticsPreset(14)">Last 14 days</button>
+                <button class="adp-preset"                    data-days="30"  onclick="applyAnalyticsPreset(30)">Last 30 days</button>
+                <button class="adp-preset"                    data-days="90"  onclick="applyAnalyticsPreset(90)">Last 90 days</button>
+                <button class="adp-preset"                    data-days="all" onclick="applyAnalyticsPreset('all')">All time</button>
+            </div>
+            <div class="adp-calendars">
+                <div class="adp-cal" id="adp-cal-left"></div>
+                <div class="adp-cal" id="adp-cal-right"></div>
+            </div>
+            <div class="adp-footer">
+                <span id="adp-range-label" class="adp-range-label">Select a start date</span>
+                <div class="flex gap-2">
+                    <button class="adp-btn-cancel" onclick="closeAnalyticsDatePicker()">Cancel</button>
+                    <button class="adp-btn-apply" id="adp-apply-btn" onclick="applyAnalyticsCustomRange()" disabled>Apply</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        // ── Analytics date range picker ──────────────────────────────────────
+        (function () {
+            var _adpOpen   = false;
+            var _selStart  = null;
+            var _selEnd    = null;
+            var _hovDay    = null;
+            var _leftYear  = null;
+            var _leftMonth = null;
+
+            var DAYS   = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+            var MONTHS = ['January','February','March','April','May','June',
+                          'July','August','September','October','November','December'];
+
+            function today() { var d = new Date(); d.setHours(0,0,0,0); return d; }
+            function isoDate(d) {
+                return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+            }
+            function sameDay(a,b) {
+                return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+            }
+            function initMonths() {
+                var t = today();
+                _leftYear  = t.getMonth() === 0 ? t.getFullYear()-1 : t.getFullYear();
+                _leftMonth = t.getMonth() === 0 ? 11 : t.getMonth()-1;
+            }
+            function rightOf() {
+                var m = _leftMonth+1, y = _leftYear;
+                if (m > 11) { m = 0; y++; }
+                return { year: y, month: m };
+            }
+            function positionPopover() {
+                var el      = document.getElementById('analytics-date-picker');
+                var trigger = document.getElementById('analytics-period-trigger');
+                if (!el || !trigger) return;
+                var rect = trigger.getBoundingClientRect();
+                var w    = Math.min(680, window.innerWidth * 0.96);
+                var left = rect.left + rect.width / 2 - w / 2;
+                left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+                var top  = rect.bottom + 6;
+                if (top + 420 > window.innerHeight) top = rect.top - 420 - 6;
+                el.style.left  = left + 'px';
+                el.style.top   = top  + 'px';
+                el.style.width = w    + 'px';
+            }
+            function renderCal(elId, year, month) {
+                var el = document.getElementById(elId); if (!el) return;
+                var t  = today();
+                var isLeft = elId === 'adp-cal-left';
+                var title  = MONTHS[month] + ' ' + year;
+                var firstDay    = new Date(year, month, 1).getDay();
+                var daysInMonth = new Date(year, month+1, 0).getDate();
+                var html = '<div class="adp-cal-header">'
+                    + '<button class="adp-cal-nav" '+(isLeft?'onclick="adpNavMonth(-1)"':'disabled')+' aria-label="Prev"><i class="bx bx-chevron-left"></i></button>'
+                    + '<span class="adp-cal-title">'+title+'</span>'
+                    + '<button class="adp-cal-nav" '+(!isLeft?'onclick="adpNavMonth(1)"':'disabled')+' aria-label="Next"><i class="bx bx-chevron-right"></i></button>'
+                    + '</div><div class="adp-cal-grid">';
+                DAYS.forEach(function(d){ html += '<div class="adp-day-label">'+d+'</div>'; });
+                for (var i = 0; i < firstDay; i++) html += '<div class="adp-day adp-day--empty"></div>';
+                // When hovering with only a start selected, compute the preview range
+                // in whichever direction the cursor is — before or after the start.
+                var hov = _hovDay;
+                var previewStart = _selStart, previewEnd = _selEnd;
+                if (_selStart && !_selEnd && hov) {
+                    if (hov >= _selStart) { previewStart = _selStart; previewEnd = hov; }
+                    else                  { previewStart = hov;        previewEnd = _selStart; }
+                }
+                for (var d = 1; d <= daysInMonth; d++) {
+                    var day      = new Date(year, month, d);
+                    var isFuture = day > t;
+                    var cls      = 'adp-day';
+                    if (isFuture)                                                          cls += ' adp-day--disabled';
+                    if (sameDay(day, t))                                                   cls += ' adp-day--today';
+                    if (previewStart && sameDay(day, previewStart))                        cls += ' adp-day--start';
+                    if (previewEnd   && sameDay(day, previewEnd))                          cls += ' adp-day--end';
+                    if (previewStart && previewEnd && day > previewStart && day < previewEnd) cls += ' adp-day--in-range';
+                    var ds = isoDate(day);
+                    html += '<div class="'+cls+'" data-date="'+ds+'"'
+                        + (!isFuture ? ' onclick="adpClickDay(\''+ds+'\')" onmouseenter="adpHoverDay(\''+ds+'\')"' : '')
+                        + '>'+d+'</div>';
+                }
+                html += '</div>';
+                el.innerHTML = html;
+            }
+            // Update day-cell highlight classes, range label, and Apply state
+            // WITHOUT rebuilding the calendar markup. Rebuilding innerHTML on every
+            // hover replaces the day nodes mid-interaction, which makes the browser
+            // drop clicks (mousedown and mouseup land on different elements).
+            function applyRangeHighlight() {
+                var hov = _hovDay;
+                var previewStart = _selStart, previewEnd = _selEnd;
+                if (_selStart && !_selEnd && hov) {
+                    if (hov >= _selStart) { previewStart = _selStart; previewEnd = hov; }
+                    else                  { previewStart = hov;        previewEnd = _selStart; }
+                }
+                document.querySelectorAll('#analytics-date-picker .adp-day[data-date]').forEach(function(cell){
+                    var d = new Date(cell.dataset.date); d.setHours(0,0,0,0);
+                    cell.classList.toggle('adp-day--start',    !!(previewStart && sameDay(d, previewStart)));
+                    cell.classList.toggle('adp-day--end',      !!(previewEnd   && sameDay(d, previewEnd)));
+                    cell.classList.toggle('adp-day--in-range', !!(previewStart && previewEnd && d > previewStart && d < previewEnd));
+                });
+                var lbl = document.getElementById('adp-range-label');
+                if (lbl) {
+                    if (!_selStart)      lbl.textContent = 'Select a start date';
+                    else if (!_selEnd)   lbl.textContent = 'Select an end date';
+                    else { var fmt={month:'short',day:'numeric',year:'numeric'}; lbl.textContent=_selStart.toLocaleDateString(undefined,fmt)+' \u2013 '+_selEnd.toLocaleDateString(undefined,fmt); }
+                }
+                var applyBtn = document.getElementById('adp-apply-btn');
+                if (applyBtn) applyBtn.disabled = !(_selStart && _selEnd);
+            }
+            function renderBoth() {
+                var r = rightOf();
+                renderCal('adp-cal-left',  _leftYear, _leftMonth);
+                renderCal('adp-cal-right', r.year, r.month);
+                applyRangeHighlight();
+            }
+
+            window.adpClickDay = function(ds) {
+                var d = new Date(ds); d.setHours(0,0,0,0);
+                if (!_selStart || (_selStart && _selEnd)) { _selStart = d; _selEnd = null; }
+                else if (d < _selStart) { _selEnd = _selStart; _selStart = d; }
+                else { _selEnd = d; }
+                _hovDay = null;
+                renderBoth();
+            };
+            window.adpHoverDay = function(ds) {
+                if (_selStart && !_selEnd) {
+                    var nd = new Date(ds); nd.setHours(0,0,0,0);
+                    if (_hovDay && sameDay(_hovDay, nd)) return;
+                    _hovDay = nd;
+                    applyRangeHighlight();
+                }
+            };
+            window.adpNavMonth = function(dir) {
+                _leftMonth += dir;
+                if (_leftMonth > 11) { _leftMonth = 0; _leftYear++; }
+                if (_leftMonth < 0)  { _leftMonth = 11; _leftYear--; }
+                var r = rightOf(), t = today();
+                if (new Date(r.year, r.month, 1) > t) {
+                    _leftMonth -= dir;
+                    if (_leftMonth > 11) { _leftMonth = 0; _leftYear++; }
+                    if (_leftMonth < 0)  { _leftMonth = 11; _leftYear--; }
+                }
+                renderBoth();
+            };
+
+            window.toggleAnalyticsDatePicker = function() {
+                var el = document.getElementById('analytics-date-picker'); if (!el) return;
+                _adpOpen = !_adpOpen;
+                if (_adpOpen) {
+                    el.classList.remove('hidden');
+                    positionPopover();
+                    initMonths();
+                    renderBoth();
+                } else {
+                    el.classList.add('hidden');
+                }
+                var caret = document.getElementById('analytics-period-caret');
+                if (caret) caret.className = 'bx text-[10px] text-white/30 group-hover:text-void-accent transition-colors '
+                    + (_adpOpen ? 'bx-chevron-up' : 'bx-chevron-down');
+            };
+            window.closeAnalyticsDatePicker = function() {
+                _adpOpen = false;
+                var el = document.getElementById('analytics-date-picker');
+                if (el) el.classList.add('hidden');
+                var caret = document.getElementById('analytics-period-caret');
+                if (caret) caret.className = 'bx bx-chevron-down text-[10px] text-white/30 group-hover:text-void-accent transition-colors';
+            };
+            window.applyAnalyticsPreset = function(days) {
+                window._analyticsCustomRange = null;
+                _selStart = null; _selEnd = null;
+                var sel = document.getElementById('analytics-time-range');
+                if (sel) sel.value = String(days);
+                document.querySelectorAll('.adp-preset').forEach(function(b) {
+                    b.classList.toggle('adp-preset--active', String(b.dataset.days) === String(days));
+                });
+                closeAnalyticsDatePicker();
+                if (typeof window._triggerLoadAnalytics === 'function') window._triggerLoadAnalytics();
+            };
+            window.applyAnalyticsCustomRange = function() {
+                if (!_selStart || !_selEnd) return;
+                window._analyticsCustomRange = { start: isoDate(_selStart), end: isoDate(_selEnd) };
+                document.querySelectorAll('.adp-preset').forEach(function(b){ b.classList.remove('adp-preset--active'); });
+                closeAnalyticsDatePicker();
+                if (typeof window._triggerLoadAnalytics === 'function') window._triggerLoadAnalytics();
+            };
+
+            // Close on outside click — the picker itself stops propagation so only
+            // clicks that escape the picker div reach this listener.
+            document.addEventListener('click', function(e) {
+                if (!_adpOpen) return;
+                var trigger = document.getElementById('analytics-period-trigger');
+                if (trigger && trigger.contains(e.target)) return; // toggle button handled separately
+                closeAnalyticsDatePicker();
+            });
+        })();
+        </script>
 </body>
 
 </html>

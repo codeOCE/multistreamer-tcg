@@ -144,6 +144,20 @@
             pointer-events: none;
             z-index: 2;
         }
+        /* Right-side scrim: mutes the banner's baked-in brand mark and gives the
+           castle code / action buttons a clean dark field to sit on. */
+        #pf-banner::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(255deg,
+                rgba(5, 7, 10, 0.82) 0%,
+                rgba(5, 7, 10, 0.40) 20%,
+                rgba(5, 7, 10, 0.0) 44%
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
 
         /* ══════════════════════════════
            IDENTITY BAR — overlaps banner bottom
@@ -317,7 +331,7 @@
             color: var(--void-accent);
         }
         .pf-action-row { display: flex; gap: 8px; align-items: center; }
-        #pf-edit-btn, #pf-sections-btn {
+        #pf-edit-btn {
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -333,12 +347,12 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        #pf-edit-btn:hover, #pf-sections-btn:hover {
+        #pf-edit-btn:hover {
             background: rgba(255,255,255,0.08);
             color: var(--void-text);
             border-color: rgba(255,255,255,0.2);
         }
-        #pf-edit-btn.active, #pf-sections-btn.active {
+        #pf-edit-btn.active {
             background: rgba(var(--void-accent-rgb),0.12);
             border-color: rgba(var(--void-accent-rgb),0.4);
             color: var(--void-accent);
@@ -347,31 +361,62 @@
         /* ══════════════════════════════
            SECTIONS PANEL
         ══════════════════════════════ */
-        #pf-sections-panel {
-            margin: 0 24px 18px;
-            padding: 16px;
-            border-radius: 14px;
-            border: 1px solid rgba(var(--void-accent-rgb),0.12);
-            background: rgba(var(--void-accent-rgb),0.03);
+        /* ══════════════════════════════
+           INLINE WIDGET EDITORS
+        ══════════════════════════════ */
+
+        /* Per-widget hide/show button */
+        .pf-hide-btn {
+            display: none; position: absolute; top: 9px; left: 38px;
+            width: 24px; height: 24px; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 5px; color: var(--void-muted); font-size: 0.72rem;
+            cursor: pointer; z-index: 11; transition: background 0.15s, color 0.15s;
         }
-        .pf-sections-grid {
+        body.pf-editing .pf-hide-btn { display: flex; }
+        .pf-hide-btn:hover { background: rgba(var(--void-accent-rgb),0.2); color: #fff; }
+
+        /* Ghost tiles */
+        body.pf-editing .pf-widget.hidden {
+            display: flex !important; opacity: 0.38; min-height: 54px; height: auto;
+        }
+        body.pf-editing .pf-widget.hidden .pf-widget-body { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-drag-handle,
+        body.pf-editing .pf-widget.hidden .pf-width-bar,
+        body.pf-editing .pf-widget.hidden .pf-resize-handle,
+        body.pf-editing .pf-widget.hidden .pf-style-cycle { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-hide-btn { left: 9px; color: var(--void-accent); }
+        body.pf-editing .pf-widget.hidden .pf-widget-title::after {
+            content: 'hidden'; margin-left: 8px; font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 0.1em; color: var(--void-muted); opacity: 0.6;
+            vertical-align: middle; text-transform: uppercase;
+        }
+
+        /* Showcase count badge in title bar (edit mode only) */
+        .pf-sc-edit-count {
+            margin-left: auto; margin-right: 6px;
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.06em;
+            color: var(--void-muted); padding: 2px 8px; border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+        }
+        body.pf-editing .pf-sc-edit-count { display: inline-block !important; }
+
+        /* Selected showcase chips strip */
+        .pf-sc-selected-strip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 10px 14px 8px; flex-wrap: wrap; flex-shrink: 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            min-height: 52px;
+        }
+
+        /* Card results grid (showcase + wishlist) */
+        .pf-sc-results-grid {
+            flex: 1 1 auto; padding: 10px 14px 14px;
             display: grid;
-            grid-template-columns: repeat(3, minmax(0,1fr));
-            gap: 8px;
-            margin-bottom: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+            gap: 7px; align-content: start;
         }
-        @media (max-width: 500px) { .pf-sections-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-        .pf-sections-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.6rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--void-muted);
-            font-weight: 700;
-        }
-        .pf-sections-item input { accent-color: rgba(var(--void-accent-rgb),1); }
+
         #pf-wishlist-editor {
             width: 100%;
             min-height: 80px;
@@ -389,26 +434,10 @@
             border-color: rgba(var(--void-accent-rgb),0.5);
             box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.18);
         }
-        #pf-save-sections {
-            margin-top: 10px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(var(--void-accent-rgb),0.35);
-            background: rgba(var(--void-accent-rgb),0.1);
-            color: var(--void-accent);
-            font-size: 0.6rem;
-            font-weight: 800;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            cursor: pointer;
-        }
         #pf-achievement-picker {
-            margin-top: 10px;
-            max-height: 180px;
-            overflow: auto;
+            margin-top: 4px;
+            max-height: none;
+            overflow: visible;
             padding-right: 4px;
             display: flex;
             flex-direction: column;
@@ -434,42 +463,68 @@
            TWO-COLUMN STEAM LAYOUT
         ══════════════════════════════ */
         #pf-steam-layout {
+            --pf-tile-h: 450px;            /* tallest a tile may grow before its body scrolls */
+            --pf-tile-min: 200px;          /* shortest a sparse tile may collapse to */
             display: grid;
-            grid-template-columns: 268px 1fr;
+            grid-template-columns: repeat(4, minmax(0,1fr));
+            /* Rows size to content, clamped: sparse widgets collapse, full ones cap + scroll.
+               Eliminates the dead space under near-empty tiles while neighbours stay matched. */
+            grid-auto-rows: minmax(var(--pf-tile-min), var(--pf-tile-h));
             gap: 14px;
             padding: 0 24px;
-            align-items: start;
+            align-items: stretch;
+            position: relative;
         }
+        /* Title pinned, body scrolls; height comes from the grid track (stretch). */
+        .pf-widget {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .pf-widget > .pf-widget-title { flex: 0 0 auto; }
+        .pf-widget-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(var(--void-accent-rgb),0.35) transparent;
+        }
+        .pf-widget-body::-webkit-scrollbar { width: 7px; }
+        .pf-widget-body::-webkit-scrollbar-thumb {
+            background: rgba(var(--void-accent-rgb),0.3);
+            border-radius: 4px;
+        }
+        .pf-widget-body::-webkit-scrollbar-thumb:hover { background: rgba(var(--void-accent-rgb),0.55); }
+        .pf-widget-body::-webkit-scrollbar-track { background: transparent; }
+        /* ── Widget width tiers (4-col grid) ── */
+        .pf-widget.pf-w-1 { grid-column: span 1; }
+        .pf-widget.pf-w-2 { grid-column: span 2; }
+        .pf-widget.pf-w-3 { grid-column: span 3; }
+        .pf-widget.pf-w-4 { grid-column: span 4; }
+
         @media (max-width: 900px) {
-            #pf-steam-layout { grid-template-columns: 1fr; padding: 0 16px; }
+            #pf-steam-layout { grid-template-columns: repeat(2, minmax(0,1fr)); padding: 0 16px; }
+            /* collapse to at most 2 columns wide */
+            .pf-widget.pf-w-2,
+            .pf-widget.pf-w-3,
+            .pf-widget.pf-w-4 { grid-column: span 2; }
             #pf-identity-bar { padding: 0 16px 22px; margin-top: -58px; }
-            #pf-sections-panel { margin: 0 16px 18px; }
             #pf-banner { height: 160px; }
             #pf-avatar-block { margin-top: -10px; }
             #pf-avatar { width: 86px; height: 86px; border-radius: 50%; }
         }
-
-        /* Sidebar */
-        #pf-sidebar-widgets {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        @media (max-width: 600px) {
+            #pf-steam-layout { grid-template-columns: 1fr; }
+            .pf-widget[class*="pf-w-"] { grid-column: 1 / -1; }
         }
-
-        /* Main */
-        #pf-main-widgets {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        /* Width controls only meaningful on the full 4-col grid */
+        @media (max-width: 900px) {
+            body.pf-editing .pf-width-bar,
+            body.pf-editing .pf-resize-handle { display: none; }
         }
-
-        /* Trophy + Latest side by side */
-        #pf-row2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-        @media (max-width: 600px) { #pf-row2 { grid-template-columns: 1fr; } }
 
         /* ══════════════════════════════
            WIDGET BASE (Steam-style panels)
@@ -514,9 +569,171 @@
             cursor: grab;
             z-index: 10;
         }
-        body.pf-editing .pf-drag-handle { display: flex; }
-        body.pf-editing .pf-widget { cursor: grab; }
-        body.pf-editing .pf-widget:active { cursor: grabbing; }
+        body.pf-editing .pf-drag-handle { display: flex; touch-action: none; }
+        .pf-drag-handle:active { cursor: grabbing; }
+
+        /* ── Edit-mode resize edge handle ── */
+        .pf-resize-handle {
+            display: none;
+            position: absolute;
+            top: 0; right: 0;
+            width: 12px; height: 100%;
+            cursor: ew-resize;
+            touch-action: none;
+            z-index: 9;
+        }
+        body.pf-editing .pf-resize-handle { display: block; }
+        .pf-resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%; right: 3px;
+            transform: translateY(-50%);
+            width: 3px; height: 36px;
+            border-radius: 3px;
+            background: rgba(var(--void-accent-rgb),0.3);
+            transition: background 0.15s, height 0.15s;
+        }
+        .pf-resize-handle:hover::after { background: rgba(var(--void-accent-rgb),0.75); height: 52px; }
+        .pf-widget.pf-resizing { outline: 2px solid rgba(var(--void-accent-rgb),0.55); outline-offset: -1px; }
+
+        /* ── Reorder drag states ── */
+        .pf-widget.pf-dragging {
+            opacity: 0.4;
+            outline: 2px dashed rgba(var(--void-accent-rgb),0.65);
+            outline-offset: -2px;
+        }
+        body.pf-grid-dragging { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+
+        /* ── Edit-mode width control bar ── */
+        .pf-width-bar {
+            display: none;
+            position: absolute;
+            top: 9px; right: 41px;
+            gap: 3px;
+            z-index: 11;
+        }
+        body.pf-editing .pf-width-bar { display: flex; }
+        .pf-width-btn {
+            min-width: 22px; height: 24px;
+            padding: 0 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 5px;
+            color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.56rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            -webkit-user-select: none; user-select: none;
+        }
+        .pf-width-btn:hover { background: rgba(var(--void-accent-rgb),0.18); color: #fff; }
+        .pf-width-btn.active {
+            background: rgba(var(--void-accent-rgb),0.28);
+            border-color: rgba(var(--void-accent-rgb),0.6);
+            color: var(--void-accent);
+        }
+
+        /* ══════════════════════════════
+           SLABS (top graded cards)
+        ══════════════════════════════ */
+        .pf-slabs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+            gap: 10px;
+            padding: 0 16px 16px;
+        }
+        .pf-slab {
+            position: relative;
+            aspect-ratio: 5 / 7;
+            border-radius: 9px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(0,0,0,0.3);
+            transition: transform 0.18s, border-color 0.18s;
+        }
+        .pf-slab:hover { transform: translateY(-3px); border-color: rgba(var(--void-accent-rgb),0.5); }
+        .pf-slab img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-slab-grade {
+            position: absolute;
+            top: 6px; left: 6px;
+            min-width: 22px;
+            padding: 2px 6px;
+            border-radius: 6px;
+            background: rgba(5,7,10,0.85);
+            border: 1px solid rgba(var(--void-accent-rgb),0.5);
+            color: var(--void-accent);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-align: center;
+            backdrop-filter: blur(4px);
+        }
+        .pf-slab-grade.genesis {
+            border-color: #ffd24a;
+            color: #ffd24a;
+            box-shadow: 0 0 8px rgba(255,210,74,0.4);
+        }
+
+        /* ══════════════════════════════
+           BINDERS
+        ══════════════════════════════ */
+        .pf-binders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            padding: 0 16px 16px;
+        }
+        .pf-binder {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(var(--void-accent-rgb),0.14);
+            border-radius: 11px;
+            padding: 10px;
+            transition: transform 0.18s, border-color 0.18s, background 0.18s;
+        }
+        a.pf-binder:hover {
+            transform: translateY(-3px);
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            background: rgba(var(--void-accent-rgb),0.05);
+        }
+        .pf-binder-previews {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            margin-bottom: 9px;
+        }
+        .pf-binder-previews img,
+        .pf-binder-slot-empty {
+            aspect-ratio: 5 / 7;
+            border-radius: 5px;
+            object-fit: cover;
+            width: 100%;
+            display: block;
+            background: rgba(0,0,0,0.35);
+        }
+        .pf-binder-slot-empty { border: 1px dashed rgba(255,255,255,0.07); }
+        .pf-binder-name {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #e8eef2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-binder-count {
+            font-size: 0.55rem;
+            color: var(--void-muted);
+            margin-top: 2px;
+        }
 
         /* ── Widget section header ── */
         .pf-widget-title {
@@ -529,19 +746,113 @@
             margin-bottom: 12px;
             border-top: 1px solid rgba(var(--void-accent-rgb),0.2);
         }
+        /* Edit mode: drop the title flush under the toolbar pinned at the widget top. */
+        body.pf-editing .pf-widget:not(.hidden) > .pf-widget-title { margin-top: 36px; }
+
+        /* ══════════════════════════════
+           UNIFIED EDIT TOOLBAR (one bar per widget)
+           Drag anywhere on the bar to reorder; buttons set width / layout / hide.
+        ══════════════════════════════ */
+        .pf-edit-toolbar { display: none; }
+        body.pf-editing .pf-widget > .pf-edit-toolbar {
+            display: flex;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 36px;
+            align-items: center;
+            gap: 8px;
+            padding: 0 8px 0 11px;
+            background: linear-gradient(180deg, rgba(13,16,22,0.97) 0%, rgba(13,16,22,0.86) 100%);
+            border-bottom: 1px solid rgba(var(--void-accent-rgb),0.22);
+            border-radius: 13px 13px 0 0;
+            z-index: 12;
+            cursor: grab;
+            -webkit-user-select: none; user-select: none;
+        }
+        body.pf-editing .pf-widget.pf-dragging > .pf-edit-toolbar,
+        body.pf-editing .pf-widget > .pf-edit-toolbar:active { cursor: grabbing; }
+        .pf-tb-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+        .pf-tb-grip { color: var(--void-muted); font-size: 0.85rem; flex-shrink: 0; }
+        .pf-tb-name {
+            font-family: 'Outfit', sans-serif; font-weight: 800;
+            font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+            color: var(--void-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pf-tb-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+        /* Width segmented control */
+        .pf-tb-seg {
+            display: inline-flex;
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px; overflow: hidden;
+        }
+        .pf-tb-segbtn {
+            min-width: 26px; height: 24px; padding: 0 7px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: transparent; border: none;
+            border-right: 1px solid rgba(255,255,255,0.08);
+            color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.58rem; font-weight: 700;
+            cursor: pointer; transition: background 0.12s, color 0.12s;
+        }
+        .pf-tb-segbtn:last-child { border-right: none; }
+        .pf-tb-segbtn:hover { background: rgba(var(--void-accent-rgb),0.16); color: #fff; }
+        .pf-tb-segbtn.active { background: rgba(var(--void-accent-rgb),0.30); color: #fff; }
+
+        /* Layout / hide pill buttons */
+        .pf-tb-btn {
+            height: 24px; padding: 0 9px;
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px; color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.54rem; font-weight: 700;
+            letter-spacing: 0.07em; text-transform: uppercase;
+            cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+        }
+        .pf-tb-btn i { font-size: 0.82rem; }
+        .pf-tb-btn.pf-tb-icon { padding: 0; width: 26px; justify-content: center; }
+        .pf-tb-btn:hover {
+            background: rgba(var(--void-accent-rgb),0.16); color: #fff;
+            border-color: rgba(var(--void-accent-rgb),0.4);
+        }
+
+        /* Collapsed (hidden) widgets: toolbar IS the tile — compact, in-flow. */
+        body.pf-editing .pf-widget.hidden { align-self: start; opacity: 0.6; }
+        body.pf-editing .pf-widget.hidden > .pf-edit-toolbar {
+            position: relative;
+            background: rgba(13,16,22,0.7);
+            border-radius: 13px;
+            border-bottom: none;
+        }
+        body.pf-editing .pf-widget.hidden > .pf-widget-title,
+        body.pf-editing .pf-widget.hidden > .pf-widget-body { display: none !important; }
+        body.pf-editing .pf-widget.hidden .pf-tb-name { color: var(--void-accent); }
+        .pf-tb-btn.pf-tb-show {
+            background: rgba(var(--void-accent-rgb),0.12);
+            border-color: rgba(var(--void-accent-rgb),0.4);
+            color: var(--void-accent);
+        }
+        /* Old scattered controls are replaced by the toolbar — keep them out. */
+        body.pf-editing .pf-drag-handle,
+        body.pf-editing .pf-width-bar,
+        body.pf-editing .pf-style-cycle,
+        body.pf-editing .pf-hide-btn,
+        body.pf-editing .pf-resize-handle { display: none !important; }
 
         /* ══════════════════════════════
            SHOWCASE CAROUSEL
         ══════════════════════════════ */
         #pf-showcase-inner {
             position: relative;
-            height: 430px;
-            perspective: 1400px;
-            padding-bottom: 16px;
+            height: 372px;
+            perspective: 1300px;
+            padding-bottom: 6px;
         }
         .pf-showcase-slot {
             position: absolute;
-            width: 200px; height: 280px;
+            width: 190px; height: 266px;
             border-radius: 10px;
             overflow: hidden;
             top: 50%;
@@ -556,10 +867,10 @@
             z-index: 10;
             box-shadow: 0 0 50px 6px rgba(var(--void-accent-rgb),0.22), 0 25px 60px rgba(0,0,0,0.7);
         }
-        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 225px); transform: translateX(-50%) translateY(-53%) rotateY(-22deg) scale(0.82); z-index: 7; opacity: 0.75; }
-        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 405px); transform: translateX(-50%) translateY(-57%) rotateY(-38deg) scale(0.62); z-index: 4; opacity: 0.38; }
-        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 225px); transform: translateX(-50%) translateY(-53%) rotateY(22deg)  scale(0.82); z-index: 7; opacity: 0.75; }
-        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 405px); transform: translateX(-50%) translateY(-57%) rotateY(38deg)  scale(0.62); z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 205px); transform: translateX(-50%) translateY(-53%) rotateY(-22deg) scale(0.82); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 370px); transform: translateX(-50%) translateY(-57%) rotateY(-38deg) scale(0.62); z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 205px); transform: translateX(-50%) translateY(-53%) rotateY(22deg)  scale(0.82); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 370px); transform: translateX(-50%) translateY(-57%) rotateY(38deg)  scale(0.62); z-index: 4; opacity: 0.38; }
         .pf-showcase-slot[data-pos="hidden"] { left: 50%; transform: translateX(-50%) translateY(-60%) scale(0.4); z-index: 1; opacity: 0; pointer-events: none; }
 
         .pf-showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 48px 8px rgba(251,191,36,0.3),  0 20px 48px rgba(0,0,0,0.6); }
@@ -571,7 +882,7 @@
             display: flex; align-items: center; justify-content: center;
             color: rgba(255,255,255,0.07); font-size: 2.5rem;
         }
-        #pf-dots { display: flex; justify-content: center; gap: 5px; margin-top: 12px; padding-bottom: 14px; }
+        #pf-dots { display: flex; justify-content: center; gap: 5px; margin-top: 8px; padding-bottom: 8px; }
         /* Showcase view toggle */
         .pf-showcase-view-btn {
             margin-left: auto;
@@ -610,26 +921,46 @@
         /* ══════════════════════════════
            STATS WIDGET
         ══════════════════════════════ */
+        /* Stat-cell grid that fills the tile; 1 col at 1/4, 2 cols at 1/2 */
+        #pf-stats-rows {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-auto-rows: 1fr;
+            gap: 7px;
+            padding: 2px 14px 12px;
+            min-height: 0;
+        }
+        #widget-stats.pf-w-2 #pf-stats-rows { grid-template-columns: 1fr 1fr; }
         .pf-stat-row {
             display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            padding: 5px 14px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-            font-size: 0.56rem;
-            letter-spacing: 0.07em;
-            text-transform: uppercase;
-            font-weight: 700;
-            color: #8f98a0;
+            flex-direction: column-reverse;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 3px;
+            padding: 6px 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.025);
+            overflow: hidden;
         }
-        .pf-stat-row:last-child { border-bottom: none; }
+        .pf-stat-row > span:first-child {
+            font-size: 0.5rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 800;
+            color: var(--void-muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+        }
         .pf-stat-row .val {
             font-family: 'Space Grotesk', monospace;
-            font-size: 0.8rem;
+            font-size: 1.4rem;
             font-weight: 700;
+            line-height: 1;
             color: var(--void-text);
         }
-        #pf-stats-footer { padding: 10px 14px 14px; }
+        #widget-stats.pf-w-2 .pf-stat-row .val { font-size: 1.85rem; }
+        #pf-stats-footer { padding: 0 14px 12px; flex: 0 0 auto; }
 
         /* ══════════════════════════════
            TROPHY CABINET
@@ -717,10 +1048,10 @@
            WISHLIST
         ══════════════════════════════ */
         #pf-wishlist-list {
-            padding: 0 10px 12px;
+            padding: 0 16px 16px;
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 6px;
+            grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+            gap: 10px;
         }
         .pf-wishlist-card {
             position: relative;
@@ -769,6 +1100,28 @@
 
         /* ── Wishlist picker (in sections panel) ── */
         #pf-wishlist-search-wrap { position: relative; margin-bottom: 8px; }
+        /* Wishlist creator picker */
+        .pf-wl-creators {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            margin-bottom: 10px;
+        }
+        .pf-wl-creator {
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.03);
+            color: var(--void-muted);
+            font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .pf-wl-creator:hover { color: var(--void-text); border-color: rgba(255,255,255,0.25); }
+        .pf-wl-creator.active {
+            color: #fff;
+            background: var(--c, rgba(var(--void-accent-rgb),0.85));
+            border-color: var(--c, rgba(var(--void-accent-rgb),1));
+        }
+        #pf-wishlist-search-wrap { margin-bottom: 8px; }
         #pf-wishlist-search-input {
             width: 100%;
             padding: 8px 12px;
@@ -783,13 +1136,71 @@
             border-color: rgba(var(--void-accent-rgb),0.5);
             box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.18);
         }
-        #pf-wishlist-search-results {
+        #pf-wishlist-search-results,
+        #pf-sc-results {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 5px;
             margin-bottom: 8px;
             min-height: 0;
         }
+        #pf-sc-status, #pf-wishlist-search-status, #pf-banner-picker-status {
+            font-size: 0.55rem; color: var(--void-muted); font-style: italic;
+            min-height: 1em; margin: 2px 0 6px;
+        }
+        #pf-sc-status.error {
+            color: #ff6b6b; font-style: normal; font-weight: 700;
+            animation: pf-sc-shake 0.3s;
+        }
+        @keyframes pf-sc-shake {
+            0%,100% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            75% { transform: translateX(3px); }
+        }
+
+        /* Showcase selected strip */
+        #pf-sc-selected {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            margin-bottom: 10px;
+        }
+        .pf-sc-selected-empty { font-size: 0.55rem; color: var(--void-muted); font-style: italic; padding: 2px 0; }
+        .pf-sc-chip {
+            position: relative;
+            width: 44px; aspect-ratio: 5/7;
+            border-radius: 6px; overflow: hidden;
+            border: 1px solid rgba(var(--void-accent-rgb),0.4);
+            background: #0d0f14;
+        }
+        .pf-sc-chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-sc-chip-x {
+            position: absolute; top: 2px; right: 2px;
+            width: 16px; height: 16px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.7); border: none; color: #fff;
+            font-size: 0.7rem; cursor: pointer; line-height: 1;
+        }
+        .pf-sc-chip-x:hover { background: rgba(255,80,80,0.85); }
+
+        /* Binder selector rows (toggle + drag reorder) */
+        #pf-binders-selector { display: flex; flex-direction: column; gap: 6px; }
+        .pf-binder-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 10px; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(255,255,255,0.03);
+        }
+        .pf-binder-row.dragging { opacity: 0.5; border-color: rgba(var(--void-accent-rgb),0.6); }
+        .pf-binder-row-grip { color: var(--void-muted); cursor: grab; font-size: 0.9rem; flex-shrink: 0; }
+        .pf-binder-row-name {
+            flex: 1; min-width: 0;
+            font-size: 0.66rem; font-weight: 700; color: var(--void-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pf-binder-row-name small { display: block; font-size: 0.78em; font-weight: 600; color: var(--void-muted); }
+        .pf-mini-switch { position: relative; display: inline-flex; flex-shrink: 0; cursor: pointer; }
+        .pf-mini-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .pf-mini-switch input:checked ~ .pf-switch { background: rgba(var(--void-accent-rgb),0.85); border-color: rgba(var(--void-accent-rgb),1); }
+        .pf-mini-switch input:checked ~ .pf-switch::after { transform: translateX(16px); background: #fff; }
         .pf-wl-result {
             position: relative;
             aspect-ratio: 5/7;
@@ -865,51 +1276,85 @@
         /* ══════════════════════════════
            ACHIEVEMENTS
         ══════════════════════════════ */
+        /* fill the tile so the summary can pin to the bottom */
         #pf-achievements-grid {
+            flex: 1; min-height: 0;
+            display: flex; flex-direction: column;
             padding: 0 14px 14px;
+        }
+        .pf-ach-showcase { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+        /* Icon grid with name + creator under each tile */
+        .pf-ach-icon-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0,1fr));
-            gap: 8px;
+            grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+            gap: 12px 10px;
+            align-content: start;
         }
-        @media (max-width: 640px) { #pf-achievements-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-        .pf-achievement-card {
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.07);
-            background: rgba(10,12,16,0.6);
-            padding: 10px;
-            min-height: 62px;
-            display: flex;
-            gap: 8px;
-            align-items: flex-start;
-        }
-        .pf-achievement-card .icon {
-            width: 22px; height: 22px;
-            border-radius: 8px;
-            border: 1px solid rgba(var(--void-accent-rgb),0.3);
-            background: rgba(var(--void-accent-rgb),0.1);
+        /* showcase grid scrolls; summary stays pinned below it */
+        .pf-ach-showcase > .pf-ach-icon-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 2px 6px; }
+        .pf-ach-tile { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px; }
+        .pf-ach-icon {
+            width: 100%; aspect-ratio: 1;
+            border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 0.78rem; flex-shrink: 0;
+            background: rgba(var(--void-accent-rgb),0.08);
+            border: 1px solid rgba(255,255,255,0.07);
+            font-size: 1.65rem; line-height: 1;
+            transition: transform 0.15s, border-color 0.15s, background 0.15s;
         }
-        .pf-achievement-card .title {
-            font-size: 0.54rem; font-weight: 800;
-            text-transform: uppercase; letter-spacing: 0.07em;
-            color: var(--void-text); line-height: 1.3;
+        .pf-ach-tile:hover .pf-ach-icon {
+            transform: translateY(-2px);
+            border-color: rgba(var(--void-accent-rgb),0.55);
+            background: rgba(var(--void-accent-rgb),0.14);
         }
-        .pf-achievement-card .meta {
-            margin-top: 3px; font-size: 0.47rem;
-            color: var(--void-muted); letter-spacing: 0.06em; text-transform: uppercase;
-            display: flex; flex-direction: column; gap: 2px;
+        .pf-ach-tile-name {
+            font-size: 0.5rem; font-weight: 700; color: var(--void-text); line-height: 1.25;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
-        .pf-ach-creator {
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-            color: rgba(var(--void-accent-rgb),0.85);
-            font-size: 0.46rem;
+        .pf-ach-tile-creator {
+            font-size: 0.44rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--void-muted);
+            max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .pf-ach-creator i { font-size: 0.58rem; }
+
+        /* Summary stat row — spread out, pinned to the bottom */
+        .pf-ach-summary {
+            flex: 0 0 auto;
+            display: flex; justify-content: space-between; gap: 12px;
+            margin-top: 12px; padding-top: 14px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        .pf-ach-summary .stat .num {
+            font-family: 'Outfit', sans-serif; font-weight: 900; line-height: 1;
+            font-size: 1.85rem; color: var(--void-text);
+        }
+        .pf-ach-summary .stat .num span { font-size: 0.9rem; color: var(--void-muted); margin-left: 1px; }
+        .pf-ach-summary .stat .lbl {
+            margin-top: 5px;
+            font-size: 0.46rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* Grouped-by-creator alternate */
+        #widget-achievements .pf-ach-grouped { display: none; }
+        #widget-achievements[data-layout="grouped"] .pf-ach-showcase { display: none; }
+        #widget-achievements[data-layout="grouped"] .pf-ach-grouped { display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; overflow-y: auto; }
+        .pf-ach-group-head {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 0.55rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-accent); margin-bottom: 9px;
+        }
+        .pf-ach-group-head i { font-size: 0.8rem; opacity: 0.85; }
+        .pf-ach-group-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pf-ach-group-count {
+            margin-left: auto; flex-shrink: 0;
+            background: rgba(var(--void-accent-rgb),0.15);
+            color: var(--void-accent);
+            border-radius: 999px; padding: 2px 8px;
+            font-size: 0.5rem; letter-spacing: 0.05em;
+        }
         .pf-achievements-empty {
-            grid-column: 1 / -1;
             color: var(--void-muted); font-size: 0.63rem;
             font-style: italic; padding: 4px 2px;
         }
@@ -933,127 +1378,127 @@
         /* ══════════════════════════════
            COLLECTION BREAKDOWN
         ══════════════════════════════ */
+        /* Proportion bars that fill the tile height */
         #pf-rarity-bars {
-            padding: 0 14px 16px;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-        }
-        .pf-rarity-pill {
+            flex: 1;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            padding: 10px 4px;
-            border-radius: 8px;
-            background: rgba(255,255,255,0.04);
+            justify-content: space-evenly;
+            gap: 10px;
+            padding: 6px 16px 16px;
+            min-height: 0;
         }
-        .pf-rarity-pill-label {
-            font-size: 0.45rem;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--void-muted);
+        .pf-rarity-row { display: flex; flex-direction: column; gap: 7px; }
+        .pf-rarity-top { display: flex; justify-content: space-between; align-items: baseline; }
+        .pf-rarity-lbl {
+            font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
         }
-        .pf-rarity-pill-count {
-            font-size: 1.1rem;
-            font-weight: 700;
-            line-height: 1;
+        .pf-rarity-cnt {
+            font-family: 'Space Grotesk', monospace; font-size: 1.05rem; font-weight: 700;
+            color: var(--void-text); display: flex; align-items: baseline; gap: 6px;
         }
+        .pf-rarity-pct { font-size: 0.5rem; font-weight: 700; color: var(--void-muted); }
+        .pf-rarity-track { height: 10px; border-radius: 5px; background: rgba(255,255,255,0.06); overflow: hidden; }
+        .pf-rarity-fill { height: 100%; width: 0%; border-radius: 5px; transition: width 0.9s cubic-bezier(0.16,1,0.3,1); }
+        #widget-rarity-chart.pf-w-2 .pf-rarity-track { height: 13px; }
+        #widget-rarity-chart.pf-w-2 .pf-rarity-cnt { font-size: 1.3rem; }
 
         /* ══════════════════════════════
            BATTLE RECORD
         ══════════════════════════════ */
-        #pf-battle-inner { padding: 0 16px 18px; }
-        .pf-battle-numbers {
+        /* Centered, filling: hero win-rate + big W/L + bar */
+        #pf-battle-inner {
+            flex: 1;
             display: flex;
-            align-items: center;
+            flex-direction: column;
             justify-content: center;
-            gap: 28px;
-            padding: 12px 0 16px;
+            gap: 16px;
+            padding: 8px 18px 18px;
+            min-height: 0;
+        }
+        .pf-battle-hero { text-align: center; }
+        .pf-battle-rate-big {
+            font-family: 'Outfit', sans-serif; font-weight: 900; line-height: 1;
+            font-size: 3.4rem; color: var(--void-text);
+        }
+        .pf-battle-rate-big span { font-size: 1.4rem; color: var(--void-muted); margin-left: 2px; }
+        .pf-battle-rate-sub {
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase;
+            color: var(--void-muted); margin-top: 6px;
+        }
+        .pf-battle-numbers {
+            display: flex; align-items: center; justify-content: center; gap: 26px;
         }
         .pf-battle-stat { text-align: center; }
         .pf-battle-num {
-            font-family: 'Outfit', sans-serif;
-            font-weight: 900;
-            font-size: 2.2rem;
-            line-height: 1;
+            font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.9rem; line-height: 1;
         }
         .pf-battle-lbl {
-            font-size: 0.48rem;
-            font-weight: 800;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            color: var(--void-muted);
-            margin-top: 4px;
+            font-size: 0.48rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase;
+            color: var(--void-muted); margin-top: 5px;
         }
-        .pf-battle-divider {
-            font-size: 1.4rem;
-            color: rgba(255,255,255,0.08);
-            font-weight: 900;
-            padding-bottom: 12px;
-        }
+        .pf-battle-divider { font-size: 1.3rem; color: rgba(255,255,255,0.08); font-weight: 900; }
         .pf-battle-bar-track {
-            height: 5px;
-            border-radius: 3px;
-            background: rgba(168,85,247,0.18);
-            overflow: hidden;
-            margin-bottom: 7px;
+            height: 8px; border-radius: 4px; background: rgba(168,85,247,0.18);
+            overflow: hidden; margin-bottom: 7px;
         }
         .pf-battle-bar-fill {
-            height: 100%;
-            border-radius: 3px;
+            height: 100%; border-radius: 4px;
             background: linear-gradient(90deg, rgba(var(--void-accent-rgb),0.7), rgba(var(--void-accent-rgb),1));
-            width: 0%;
-            transition: width 1s cubic-bezier(0.16,1,0.3,1);
+            width: 0%; transition: width 1s cubic-bezier(0.16,1,0.3,1);
         }
         .pf-battle-rate {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.48rem;
-            font-weight: 800;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
+            display: flex; justify-content: space-between;
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
         }
         .pf-battle-rate .win { color: rgba(var(--void-accent-rgb),0.9); }
         .pf-battle-rate .lose { color: rgba(168,85,247,0.8); }
+        #widget-battle-record.pf-w-2 .pf-battle-rate-big { font-size: 4.3rem; }
+        #widget-battle-record.pf-w-2 .pf-battle-num { font-size: 2.4rem; }
         .pf-battle-empty {
-            padding: 16px 0 8px;
-            text-align: center;
-            font-size: 0.62rem;
-            font-style: italic;
-            color: var(--void-muted);
-            opacity: 0.6;
+            padding: 16px 0 8px; text-align: center; font-size: 0.62rem;
+            font-style: italic; color: var(--void-muted); opacity: 0.6;
         }
 
         /* ══════════════════════════════
            SUPPORTED CREATORS
         ══════════════════════════════ */
-        #pf-creators-inner { padding: 0 14px 16px; }
+        /* Avatar tiles; columns scale with widget width */
+        #pf-creators-inner { flex: 1; display: flex; padding: 4px 14px 16px; min-height: 0; }
         .pf-creators-grid {
+            flex: 1;
+            width: 100%;
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            grid-template-columns: 1fr;
+            grid-auto-rows: minmax(54px, 1fr);
             gap: 8px;
         }
+        #widget-creators.pf-w-2 .pf-creators-grid { grid-template-columns: repeat(2, 1fr); }
+        #widget-creators.pf-w-3 .pf-creators-grid { grid-template-columns: repeat(3, 1fr); }
+        #widget-creators.pf-w-4 .pf-creators-grid { grid-template-columns: repeat(4, 1fr); }
         .pf-creator-chip {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            border-radius: 8px;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 11px;
             border: 1px solid rgba(255,255,255,0.07);
             background: rgba(255,255,255,0.03);
             overflow: hidden;
         }
-        .pf-creator-dot {
-            width: 8px; height: 8px;
+        .pf-creator-av {
+            width: 34px; height: 34px;
             border-radius: 50%;
-            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 0.95rem;
+            color: #fff; flex-shrink: 0;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.45);
         }
+        .pf-creator-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .pf-creator-name {
-            font-size: 0.58rem;
+            font-size: 0.6rem;
             font-weight: 700;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.05em;
             text-transform: uppercase;
             color: var(--void-text);
             white-space: nowrap;
@@ -1061,30 +1506,43 @@
             text-overflow: ellipsis;
         }
         .pf-creator-count {
-            margin-left: auto;
             font-size: 0.5rem;
-            font-weight: 800;
+            font-weight: 700;
             color: var(--void-muted);
-            flex-shrink: 0;
         }
 
         /* ══════════════════════════════
            CARD SETS
         ══════════════════════════════ */
-        #pf-sets-inner { padding: 0 14px 16px; display: flex; flex-direction: column; gap: 7px; }
+        /* Set cards in a grid; columns scale with widget width */
+        #pf-sets-inner {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-auto-rows: minmax(48px, 1fr);
+            gap: 8px;
+            padding: 4px 14px 16px;
+            min-height: 0;
+        }
+        #widget-sets.pf-w-2 #pf-sets-inner { grid-template-columns: repeat(2, 1fr); }
+        #widget-sets.pf-w-3 #pf-sets-inner { grid-template-columns: repeat(3, 1fr); }
+        #widget-sets.pf-w-4 #pf-sets-inner { grid-template-columns: repeat(4, 1fr); }
         .pf-set-row {
             display: flex;
-            align-items: center;
-            gap: 10px;
+            flex-direction: column;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.025);
+            overflow: hidden;
         }
-        .pf-set-info {
-            flex: 1;
-            min-width: 0;
-        }
+        .pf-set-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
         .pf-set-name {
-            font-size: 0.58rem;
+            font-size: 0.6rem;
             font-weight: 700;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.05em;
             text-transform: uppercase;
             color: var(--void-text);
             white-space: nowrap;
@@ -1092,33 +1550,175 @@
             text-overflow: ellipsis;
         }
         .pf-set-code {
-            font-size: 0.46rem;
+            font-size: 0.44rem;
             font-weight: 700;
             letter-spacing: 0.12em;
             text-transform: uppercase;
             color: var(--void-muted);
             opacity: 0.6;
+            margin-top: -2px;
         }
         .pf-set-bar-wrap {
-            flex: 1;
-            height: 4px;
-            border-radius: 2px;
+            height: 6px;
+            border-radius: 3px;
             background: rgba(255,255,255,0.06);
             overflow: hidden;
         }
         .pf-set-bar-fill {
             height: 100%;
-            border-radius: 2px;
+            width: 0%;
+            border-radius: 3px;
             background: linear-gradient(90deg, rgba(var(--void-accent-rgb),0.6), rgba(var(--void-accent-rgb),1));
             transition: width 1s cubic-bezier(0.16,1,0.3,1);
         }
         .pf-set-count {
-            font-size: 0.5rem;
+            font-size: 0.55rem;
             font-weight: 800;
-            letter-spacing: 0.08em;
-            color: rgba(var(--void-accent-rgb),0.85);
+            letter-spacing: 0.04em;
+            color: rgba(var(--void-accent-rgb),0.9);
             white-space: nowrap;
+            flex-shrink: 0;
         }
+
+        /* ══════════════════════════════
+           WIDGET LAYOUT VARIANTS
+        ══════════════════════════════ */
+        /* Style system controls showcase mode; hide its built-in toggle */
+        #pf-showcase-view-toggle { display: none; }
+
+        /* Tile layout-cycle button (edit mode) */
+        .pf-style-cycle {
+            display: none;
+            position: absolute;
+            top: 9px; left: 9px;
+            width: 24px; height: 24px;
+            align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 5px;
+            color: var(--void-muted);
+            font-size: 0.72rem;
+            cursor: pointer; z-index: 11;
+            transition: background 0.15s, color 0.15s;
+        }
+        body.pf-editing .pf-style-cycle { display: flex; }
+        .pf-style-cycle:hover { background: rgba(var(--void-accent-rgb),0.2); color: #fff; }
+
+        /* Edit mode: block widget content clicks */
+        body.pf-editing .pf-widget-body { pointer-events: none; }
+
+        /* Ghost tiles: hidden widgets shown as collapsed placeholders in edit mode */
+        body.pf-editing .pf-widget.hidden {
+            display: flex !important;
+            opacity: 0.38;
+            min-height: 54px;
+            height: auto;
+        }
+        body.pf-editing .pf-widget.hidden .pf-widget-body { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-drag-handle,
+        body.pf-editing .pf-widget.hidden .pf-width-bar,
+        body.pf-editing .pf-widget.hidden .pf-resize-handle,
+        body.pf-editing .pf-widget.hidden .pf-style-cycle { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-widget-title::after {
+            content: 'hidden';
+            margin-left: 8px; font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 0.1em; color: var(--void-muted);
+            opacity: 0.6; vertical-align: middle; text-transform: uppercase;
+        }
+
+        /* Styles tab UI (drawer) */
+        #pf-styles-list { display: flex; flex-direction: column; gap: 10px; }
+        .pf-style-card {
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.025);
+        }
+        .pf-style-name {
+            font-size: 0.66rem; font-weight: 800; letter-spacing: 0.04em;
+            color: var(--void-text); margin-bottom: 9px;
+        }
+        .pf-style-axis { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+        .pf-style-axis-lbl {
+            flex: 0 0 48px;
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .pf-seg-group {
+            flex: 1; display: flex; gap: 4px;
+            background: rgba(0,0,0,0.25); border-radius: 8px; padding: 3px;
+        }
+        .pf-seg {
+            flex: 1; padding: 6px 4px; border: none; cursor: pointer;
+            background: transparent; color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.54rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+            border-radius: 6px; transition: background 0.15s, color 0.15s;
+        }
+        .pf-seg:hover { color: var(--void-text); }
+        .pf-seg.active { background: rgba(var(--void-accent-rgb),0.85); color: #fff; }
+
+        /* ── Layout variants ── */
+        #widget-stats[data-layout="rows"] #pf-stats-rows { grid-template-columns: 1fr !important; gap: 0; }
+        #widget-stats[data-layout="rows"] .pf-stat-row {
+            flex-direction: row; align-items: baseline; justify-content: space-between;
+            border: none; border-bottom: 1px solid rgba(255,255,255,0.05);
+            border-radius: 0; background: transparent; padding: 0 12px;
+        }
+        #widget-stats[data-layout="rows"] .pf-stat-row .val { font-size: 1.05rem; }
+        #widget-stats[data-layout="rows"] .pf-stat-row > span:first-child { font-size: 0.55rem; }
+
+        #widget-rarity-chart[data-layout="pills"] #pf-rarity-bars {
+            flex-direction: row; flex-wrap: wrap; align-content: center; gap: 8px;
+        }
+        #widget-rarity-chart[data-layout="pills"] .pf-rarity-row {
+            flex: 1 1 44%; flex-direction: row; align-items: center; justify-content: space-between;
+            gap: 8px; background: rgba(255,255,255,0.04); padding: 14px 12px; border-radius: 10px;
+        }
+        #widget-rarity-chart[data-layout="pills"] .pf-rarity-track { display: none; }
+
+        #widget-latest[data-layout="gallery"] #pf-latest-inner {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(54px,1fr));
+            gap: 8px; align-content: start;
+        }
+        #widget-latest[data-layout="gallery"] .pf-latest-card {
+            flex-direction: column; padding: 0; border: none; gap: 0; border-radius: 7px; overflow: hidden;
+        }
+        #widget-latest[data-layout="gallery"] .pf-latest-card:hover { padding-left: 0; background: none; }
+        #widget-latest[data-layout="gallery"] .pf-latest-info,
+        #widget-latest[data-layout="gallery"] .pf-latest-card .pf-rarity-dot-sm { display: none; }
+        #widget-latest[data-layout="gallery"] .pf-latest-thumb { width: 100%; height: auto; aspect-ratio: 5/7; }
+
+        #widget-wishlist[data-layout="list"] #pf-wishlist-list { grid-template-columns: 1fr; gap: 6px; }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card {
+            aspect-ratio: auto; height: 46px; display: flex; align-items: center; border-radius: 8px;
+        }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card img { width: 33px; height: 100%; flex-shrink: 0; }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card-overlay {
+            position: static; opacity: 1; background: none; padding: 0 10px; flex: 1; min-width: 0;
+        }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card-name {
+            color: var(--void-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+
+        #widget-battle-record[data-layout="compact"] .pf-battle-hero,
+        #widget-battle-record[data-layout="compact"] .pf-battle-bar-track,
+        #widget-battle-record[data-layout="compact"] .pf-battle-rate { display: none; }
+
+        #widget-binders[data-layout="list"] .pf-binders-grid { grid-template-columns: 1fr; }
+        #widget-binders[data-layout="list"] .pf-binder {
+            display: flex; flex-direction: row; align-items: center; gap: 12px;
+        }
+        #widget-binders[data-layout="list"] .pf-binder-previews { width: 56px; flex: 0 0 56px; margin-bottom: 0; }
+        #widget-binders[data-layout="list"] .pf-binder-name { flex: 1; min-width: 0; }
+
+        #widget-slabs[data-layout="list"] .pf-slabs-grid { grid-template-columns: 1fr; }
+        #widget-slabs[data-layout="list"] .pf-slab {
+            aspect-ratio: auto; height: 50px; display: flex; align-items: center; padding-right: 8px;
+        }
+        #widget-slabs[data-layout="list"] .pf-slab img { width: 36px; height: 100%; flex: 0 0 36px; }
+        #widget-slabs[data-layout="list"] .pf-slab-grade { position: static; margin-left: auto; }
 
         /* ══════════════════════════════
            CARD MODAL
@@ -1337,22 +1937,302 @@
             animation: pf-spin 0.75s linear infinite;
         }
         @keyframes pf-spin { to { transform: rotate(360deg); } }
+
+        /* ══════════════════════════════
+           SHOWCASE EDIT GRID
+        ══════════════════════════════ */
+        #pf-showcase-edit-grid { display: none; }
+        body.pf-editing #pf-showcase-inner,
+        body.pf-editing #pf-dots,
+        body.pf-editing #pf-showcase-grid-view { display: none !important; }
+        body.pf-editing #pf-showcase-edit-grid {
+            display: flex !important;
+            flex-direction: row;
+            gap: 8px;
+            padding: 12px 14px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(var(--void-accent-rgb),0.3) transparent;
+        }
+        .pf-sc-edit-slot {
+            flex: 0 0 auto;
+            width: 72px;
+            aspect-ratio: 5/7;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        .pf-sc-edit-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-sc-edit-slot-x {
+            position: absolute; top: 4px; right: 4px;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.72); border: none; color: #fff;
+            font-size: 0.75rem; cursor: pointer; line-height: 1;
+            opacity: 0; transition: opacity 0.15s;
+        }
+        .pf-sc-edit-slot:hover .pf-sc-edit-slot-x { opacity: 1; }
+        .pf-sc-edit-slot-x:hover { background: rgba(220,50,50,0.85); }
+        .pf-sc-edit-empty {
+            flex: 0 0 auto;
+            width: 72px;
+            aspect-ratio: 5/7;
+            border: 2px dashed rgba(var(--void-accent-rgb),0.3);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--void-muted);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .pf-sc-edit-empty:hover {
+            border-color: rgba(var(--void-accent-rgb),0.7);
+            color: var(--void-accent);
+        }
+
+        /* ══════════════════════════════
+           WISHLIST ADD BUTTON
+        ══════════════════════════════ */
+        #pf-wishlist-add-btn { display: none; }
+        body.pf-editing #pf-wishlist-add-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            margin: 0 10px 12px;
+            padding: 7px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.35);
+            background: rgba(var(--void-accent-rgb),0.08);
+            color: var(--void-accent);
+            font-size: 0.6rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        body.pf-editing #pf-wishlist-add-btn:hover {
+            background: rgba(var(--void-accent-rgb),0.18);
+            border-color: rgba(var(--void-accent-rgb),0.6);
+        }
+
+        /* Wishlist X overlays (edit mode) */
+        .pf-wishlist-card-remove {
+            position: absolute; top: 4px; right: 4px;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.72); border: none; color: #fff;
+            font-size: 0.75rem; cursor: pointer; line-height: 1;
+            opacity: 0; transition: opacity 0.15s; z-index: 5;
+        }
+        body.pf-editing .pf-wishlist-card:hover .pf-wishlist-card-remove { opacity: 1; }
+        .pf-wishlist-card-remove:hover { background: rgba(220,50,50,0.85); }
+
+        /* ══════════════════════════════
+           BINDERS SELECTOR (edit mode)
+        ══════════════════════════════ */
+        body.pf-editing #widget-binders #pf-binders-inner { display: none !important; }
+        body.pf-editing #widget-binders #pf-binders-selector {
+            display: flex !important;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px 10px 12px;
+            overflow-y: auto;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        #widget-binders #pf-binders-selector { display: none; }
+
+        /* ══════════════════════════════
+           COMPACT CARD PICKER
+        ══════════════════════════════ */
+        #pf-compact-picker {
+            position: fixed; inset: 0; z-index: 9600;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+            background: rgba(3,5,8,0.7);
+            backdrop-filter: blur(12px);
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.18s;
+        }
+        #pf-compact-picker.open { opacity: 1; pointer-events: all; }
+        #pf-compact-picker-inner {
+            width: 100%; max-width: 480px;
+            height: min(580px, 88vh);
+            background: #0d0f14;
+            border: 1px solid rgba(var(--void-accent-rgb),0.2);
+            border-radius: 18px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7);
+            overflow: hidden;
+        }
+        #pf-cp-head {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            flex-shrink: 0;
+        }
+        #pf-cp-title {
+            flex: 1; font-family: 'Outfit', sans-serif; font-weight: 900;
+            font-size: 0.8rem; letter-spacing: 0.04em; color: var(--void-text);
+        }
+        #pf-cp-close {
+            width: 28px; height: 28px; border-radius: 7px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+            color: var(--void-muted); font-size: 1rem; cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #pf-cp-close:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+        #pf-cp-creators {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            padding: 10px 14px 8px; flex-shrink: 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        #pf-cp-search {
+            margin: 8px 14px 0; flex-shrink: 0;
+            padding: 8px 12px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.3); color: var(--void-text);
+            font-size: 0.68rem; font-family: 'Space Grotesk', sans-serif; outline: none;
+        }
+        #pf-cp-search.hidden { display: none; }
+        #pf-cp-search:focus { border-color: rgba(var(--void-accent-rgb),0.5); }
+        #pf-cp-status {
+            font-size: 0.52rem; color: var(--void-muted); font-style: italic;
+            padding: 4px 14px 0; min-height: 1em; flex-shrink: 0;
+        }
+        #pf-cp-grid {
+            flex: 0 0 auto;
+            overflow-x: auto; overflow-y: hidden;
+            display: flex; flex-direction: row;
+            gap: 8px;
+            padding: 10px 14px 14px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(var(--void-accent-rgb),0.3) transparent;
+        }
+        #pf-cp-grid .pf-wl-result {
+            flex: 0 0 90px;
+            width: 90px;
+        }
+
+        /* ── Save indicator ──────────────────────────────────────────────────── */
+        #pf-save-indicator {
+            position: fixed; top: 88px; right: 16px; z-index: 9500;
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 14px; border-radius: 10px;
+            background: #0d0f14;
+            border: 1px solid rgba(var(--void-accent-rgb),0.25);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+            color: var(--void-muted);
+            opacity: 0; pointer-events: none;
+            transform: translateY(-6px);
+            transition: opacity 0.18s, transform 0.18s;
+        }
+        #pf-save-indicator.visible {
+            opacity: 1; pointer-events: all; transform: translateY(0);
+        }
+        #pf-save-indicator .pf-si-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--void-accent); flex-shrink: 0;
+        }
+        #pf-save-indicator.saving .pf-si-dot {
+            animation: pf-si-pulse 0.9s ease-in-out infinite;
+        }
+        #pf-save-indicator.saved { border-color: rgba(52,211,153,0.35); }
+        #pf-save-indicator.saved .pf-si-dot { background: #34d399; animation: none; }
+        #pf-save-indicator.saved #pf-si-label { color: #34d399; }
+        @keyframes pf-si-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.7); }
+        }
     </style>
     <script src="/castle-prefs.js"></script>
 </head>
 <body class="bg-void-bg text-void-text antialiased">
     <div class="saas-bg-glow"></div>
+    <div id="pf-save-indicator">
+        <span class="pf-si-dot"></span>
+        <span id="pf-si-label">Saving…</span>
+    </div>
     <div id="toast-container"></div>
 
     <!-- NAV -->
     <nav class="fixed top-0 left-0 right-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl pt-[env(safe-area-inset-top,0px)]" aria-label="Main">
         <div class="w-full px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
-            <a href="/" class="flex items-center gap-2 group cursor-pointer">
+            <a href="/my-collection" class="flex items-center gap-2 group cursor-pointer">
                 <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
                     <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
                 </div>
                 <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
             </a>
+            <div class="flex items-center gap-3">
+                <div id="nav-user-preview" class="hidden items-center">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Collector</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt=""
+                                    class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
+                            </span>
+                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors"></i>
+                        </button>
+                        <div id="nav-user-menu"
+                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                            role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt=""
+                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg"
+                                        width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
+                                            <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                        <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="bx bx-log-out w-4 text-center"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </nav>
 
@@ -1421,64 +2301,14 @@
                         </button>
                         <button id="pf-edit-btn">
                             <i class="bx bxs-pencil" style="font-size:10px"></i>
-                            <span id="pf-edit-label">Edit profile</span>
-                        </button>
-                        <button id="pf-sections-btn" class="hidden">
-                            <i class="bx bxs-cog" style="font-size:10px"></i>
-                            <span>Sections</span>
+                            <span id="pf-edit-label">Edit layout</span>
                         </button>
                     </div>
                 </div>
             </div>
         </div>
-        <!-- ░░ SECTIONS PANEL ░░ -->
-        <div id="pf-sections-panel" class="hidden pf-rise pf-rise-2">
-            <div class="pf-widget-title" style="border:none;padding:0;margin-bottom:10px;">Profile Sections</div>
-            <div class="pf-sections-grid">
-                <label class="pf-sections-item"><input type="checkbox" value="widget-showcase"      checked> Showcase</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-stats"         checked> Stats</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-rarity-chart"  checked> Rarity Breakdown</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-trophy"        checked> Trophy Cabinet</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-latest"        checked> Latest Pulls</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-wishlist"      checked> Wishlist</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-achievements"  checked> Achievements</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-battle-record" checked> Battle Record</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-creators"      checked> Supported Creators</label>
-                <label class="pf-sections-item"><input type="checkbox" value="widget-sets"          checked> Card Sets</label>
-            </div>
-            <label class="pf-sections-item" style="margin-bottom:10px;">
-                <input type="checkbox" id="pf-trades-public-toggle"> Accept trade offers <span style="opacity:0.5;font-size:0.9em;">(visible to all visitors)</span>
-            </label>
-            <div class="pf-sections-item" style="margin-bottom:8px;">Profile Title <span style="opacity:0.45;font-size:0.88em;">(earned — click to equip)</span></div>
-            <div id="pf-title-picker"></div>
-            <div style="margin-top:12px;">
-                <div class="pf-sections-item" style="margin-bottom:4px;">Profile Banner <span style="opacity:0.45;font-size:0.88em;">(earned from packs)</span></div>
-                <div id="pf-banner-picker-status" style="font-size:0.52rem;color:var(--void-muted);font-style:italic;margin-bottom:6px;min-height:1em;"></div>
-                <div id="pf-banner-picker"></div>
-            </div>
-            <div style="margin-top:10px;">
-                <div class="pf-sections-item" style="margin-bottom:6px;">Wishlist Cards (search &amp; click to add)</div>
-                <div id="pf-wishlist-search-wrap">
-                    <input id="pf-wishlist-search-input" type="text" placeholder="Search cards… (e.g. Dragon, Legendary)">
-                </div>
-                <div id="pf-wishlist-search-status"></div>
-                <div id="pf-wishlist-search-results"></div>
-                <div id="pf-wishlist-current-label" class="hidden">On your wishlist</div>
-                <div id="pf-wishlist-current"></div>
-            </div>
-            <label class="pf-sections-item" style="margin-top:10px;">Pinned Achievements (up to 6)</label>
-            <div id="pf-achievement-picker"></div>
-            <button id="pf-save-sections">
-                <i class="bx bxs-save" style="font-size:10px"></i>
-                Save profile sections
-            </button>
-        </div>
-
-        <!-- ░░ STEAM TWO-COLUMN LAYOUT ░░ -->
+        <!-- ░░ PROFILE WIDGET GRID (4-col) ░░ -->
         <div id="pf-steam-layout" class="pf-rise pf-rise-2">
-
-            <!-- LEFT SIDEBAR -->
-            <aside id="pf-sidebar-widgets">
 
                 <!-- STATS -->
                 <div class="pf-widget" id="widget-stats" draggable="false">
@@ -1493,6 +2323,7 @@
                     <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
                     <div class="pf-widget-title">Wishlist</div>
                     <div id="pf-wishlist-list"></div>
+                    <button id="pf-wishlist-add-btn" class="pf-wishlist-add-btn">+ Add Cards</button>
                 </div>
 
                 <!-- COLLECTION BREAKDOWN -->
@@ -1502,38 +2333,25 @@
                     <div id="pf-rarity-bars"></div>
                 </div>
 
-            </aside>
-
-            <!-- MAIN CONTENT -->
-            <div id="pf-main-widgets">
-
                 <!-- SHOWCASE -->
                 <div class="pf-widget" id="widget-showcase" draggable="false">
                     <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
                     <div class="pf-widget-title" id="pf-showcase-title" style="display:flex;align-items:center;">
                         <span id="pf-showcase-title-text">—'s Collection</span>
                         <button id="pf-showcase-view-toggle" class="pf-showcase-view-btn" title="Switch to grid"><i class="bx bx-grid-alt"></i></button>
+                        <span id="pf-sc-count" class="pf-sc-edit-count hidden">0 / 10</span>
                     </div>
                     <div id="pf-showcase-inner"></div>
                     <div id="pf-dots"></div>
                     <div id="pf-showcase-grid-view" class="hidden"></div>
+                    <div id="pf-showcase-edit-grid"></div>
                 </div>
 
-                <!-- TROPHY + LATEST (side by side) -->
-                <div id="pf-row2">
-
-                    <div class="pf-widget" id="widget-trophy" draggable="false">
-                        <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                        <div class="pf-widget-title">Trophy Cabinet</div>
-                        <div id="pf-trophy-grid"></div>
-                    </div>
-
-                    <div class="pf-widget" id="widget-latest" draggable="false">
-                        <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                        <div class="pf-widget-title">Latest Pack Pull</div>
-                        <div id="pf-latest-inner"></div>
-                    </div>
-
+                <!-- LATEST PACK PULL -->
+                <div class="pf-widget" id="widget-latest" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Latest Pack Pull</div>
+                    <div id="pf-latest-inner"></div>
                 </div>
 
                 <!-- ACHIEVEMENTS -->
@@ -1550,18 +2368,26 @@
                     <div id="pf-battle-inner"></div>
                 </div>
 
-                <!-- SUPPORTED CREATORS -->
-                <div class="pf-widget" id="widget-creators" draggable="false">
+                <!-- BINDERS -->
+                <div class="pf-widget" id="widget-binders" draggable="false">
                     <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                    <div class="pf-widget-title">Supported Creators</div>
-                    <div id="pf-creators-inner"></div>
+                    <div class="pf-widget-title">Binders</div>
+                    <div id="pf-binders-inner"></div>
+                    <div id="pf-binders-selector"></div>
                 </div>
 
-                <!-- SET BREAKDOWN -->
-                <div class="pf-widget" id="widget-sets" draggable="false">
+                <!-- SLABS -->
+                <div class="pf-widget" id="widget-slabs" draggable="false">
                     <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
-                    <div class="pf-widget-title">Card Sets</div>
-                    <div id="pf-sets-inner"></div>
+                    <div class="pf-widget-title">Top Slabs</div>
+                    <div id="pf-slabs-inner"></div>
+                </div>
+
+                <!-- TRINKETS -->
+                <div class="pf-widget" id="widget-trinkets" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Trinkets</div>
+                    <div id="pf-trinkets-inner"></div>
                 </div>
 
             </div>
@@ -1585,7 +2411,24 @@
         </div>
     </div>
 
+    <!-- COMPACT CARD PICKER -->
+    <div id="pf-compact-picker" role="dialog" aria-modal="true">
+        <div id="pf-compact-picker-inner">
+            <div id="pf-cp-head">
+                <span id="pf-cp-title">Add Card</span>
+                <button id="pf-cp-close" aria-label="Close"><i class="bx bx-x"></i></button>
+            </div>
+            <div id="pf-cp-creators" class="pf-wl-creators"></div>
+            <input type="text" id="pf-cp-search" placeholder="Filter cards…" autocomplete="off" class="hidden">
+            <div id="pf-cp-status"></div>
+            <div id="pf-cp-grid"></div>
+        </div>
+    </div>
+
+    <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
+    <script src="/castle-nav.js"></script>
     <script src="/castle-auth-origin.js"></script>
-    <script src="/profile.js"></script>
+    <script src="/profile.js?v=20260615a"></script>
 </body>
 </html>

@@ -6,8 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Magic Dust · Castle TCG</title>
   <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/tailwind-built.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -60,20 +65,9 @@
       background: #39ff6e; opacity: 0; transition: opacity .06s;
     }
 
-    /* ── Back btn ── */
-    #back-btn {
-      position: fixed; top: 18px; left: 18px; z-index: 600;
-      width: 40px; height: 40px; border-radius: 12px;
-      border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05);
-      color: rgba(255,255,255,.4); font-size: .85rem; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: all .2s; text-decoration: none;
-    }
-    #back-btn:hover { color: #fff; border-color: rgba(255,255,255,.24); }
-
     /* ── Dust balance chip ── */
     #dust-chip {
-      position: fixed; top: 18px; right: 18px; z-index: 600;
+      position: fixed; top: 98px; right: 18px; z-index: 600;
       padding: 8px 16px; border-radius: 99px;
       background: rgba(57,255,110,.07); border: 1px solid rgba(57,255,110,.2);
       font-size: .52rem; font-weight: 900; letter-spacing: .18em;
@@ -94,140 +88,57 @@
       gap: 16px;
     }
 
-    /* ── Portal wrapper (scaled by JS) ── */
-    #portal-wrap {
+    /* ── Anvil scene (anvil + forge, scales as one) ── */
+    #anvil-scene {
       position: relative;
       flex-shrink: 0;
-      width: 560px;
-      height: 560px;
-      aspect-ratio: 1 / 1;
-      padding: 0;
-      border: 0;
+      width: min(640px, 94vw);
+      aspect-ratio: 470 / 380;
+      max-height: 66vh;
     }
-
-    /* Portal SVG */
-    #portal-svg {
+    #anvil-svg {
       display: block;
-      width: 100%;
-      height: 100%;
-      aspect-ratio: 1 / 1;
+      width: 100%; height: 100%;
       overflow: visible;
-      filter: drop-shadow(0 0 40px rgba(0,0,0,.7));
       shape-rendering: geometricPrecision;
     }
 
-    /* ── Card slot (HTML positioned over SVG center) ── */
-    #card-frame {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 325px; height: 457px;
-      z-index: 30;
+    /* Forge flame flicker (SVG paths) */
+    .forge-flame { transform-box: fill-box; transform-origin: 50% 100%;
+      animation: forge-flicker .55s ease-in-out infinite alternate; }
+    .forge-flame.f2 { animation-delay: .13s; animation-duration: .47s; }
+    .forge-flame.f3 { animation-delay: .26s; animation-duration: .62s; }
+    @keyframes forge-flicker {
+      from { transform: scaleY(.82) scaleX(1.04) translateY(2px); opacity: .8; }
+      to   { transform: scaleY(1.14) scaleX(.95) translateY(-2px); opacity: 1; }
     }
 
-    /* Tower icons: float above the card-frame.png medallion circles */
-    .tower-emblem {
-      position: absolute;
-      width: 52px; height: 52px;
-      display: none;
-      align-items: center; justify-content: center;
-      left: 104px; /* (260-52)/2 */
-      pointer-events: none; z-index: 36;
-    }
-    #tower-top { top: 22px;  }
-    #tower-bot { top: 288px; }
-    .tower-emblem i {
-      color: rgba(200,175,120,.55); font-size: 1.1rem;
-      text-shadow: 0 1px 3px rgba(0,0,0,.9);
-      transition: color .4s, text-shadow .4s;
-    }
-    body.has-card .tower-emblem i { color: rgba(57,255,110,.85); text-shadow: 0 0 10px rgba(57,255,110,.55); }
-    body.burning .tower-emblem i  { color: #39ff6e; text-shadow: 0 0 14px #39ff6e, 0 0 28px rgba(57,255,110,.5); }
-
+    /* Card laid on the anvil top face. Lives inside an SVG <foreignObject>
+       so it scales with the scene and sits in the slab's perspective plane. */
     #card-slot {
-      position: absolute;
-      left: 76px; top: 103px;
-      width: 176px; height: 247px;
-      background: #060408;
-      border: 1px solid rgba(0,0,0,.7);
+      position: relative;
+      width: 100%; height: 100%;
+      background: #0a0a0e;
+      border: 2px solid rgba(0,0,0,.55);
+      border-radius: 5px;
       overflow: hidden; cursor: pointer;
-      box-shadow: inset 0 0 60px rgba(0,0,0,.95), inset 0 0 22px rgba(30,10,50,.5);
+      box-shadow: inset 0 0 22px rgba(0,0,0,.85), 0 2px 6px rgba(0,0,0,.5);
+      transition: box-shadow .3s;
     }
-
-    /* Glass shell to make the card look physically encased. */
-    #slot-glass {
-      position: absolute; inset: 0;
-      z-index: 7; pointer-events: none;
-      background:
-        linear-gradient(112deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,.04) 26%, rgba(255,255,255,.015) 48%, rgba(255,255,255,.08) 100%),
-        radial-gradient(ellipse at 82% 18%, rgba(255,255,255,.12), transparent 52%);
-      border: 1px solid rgba(255,255,255,.1);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.14),
-        inset 0 -8px 16px rgba(8,14,26,.24),
-        0 0 12px rgba(100,170,255,.05);
-      backdrop-filter: blur(0.45px) saturate(108%);
-      -webkit-backdrop-filter: blur(0.45px) saturate(108%);
-      mix-blend-mode: screen;
-    }
-
-    #frame-img {
-      position: absolute;
-      top: -17px; left: -14px;
-      width: 355px; height: 493px;
-      object-fit: contain;
-      pointer-events: none; z-index: 35;
-      /* Punch a transparent hole where card-slot sits so the card image shows through */
-      mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='355' height='493'%3E%3Crect width='355' height='493' fill='white'/%3E%3Crect x='90' y='120' width='176' height='247' fill='black'/%3E%3C/svg%3E");
-      mask-size: 100% 100%;
-      -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='355' height='493'%3E%3Crect width='355' height='493' fill='white'/%3E%3Crect x='90' y='120' width='176' height='247' fill='black'/%3E%3C/svg%3E");
-      -webkit-mask-size: 100% 100%;
-    }
-
-    /* Fire glow on card-frame (visible outside SVG frame borders) while idle-spinning */
-    body.has-card #card-frame { animation: none; box-shadow: none; }
-    /* Intense fire during burn */
-    body.burning #card-frame { animation: none; box-shadow: none; }
-    @keyframes fire-idle {
-      from {
-        box-shadow:
-          0 0 18px rgba(200,70,5,.2),
-          0 0 36px rgba(180,50,0,.12);
-      }
-      to {
-        box-shadow:
-          0 0 26px rgba(255,110,10,.35),
-          0 0 52px rgba(210,60,0,.22),
-          0 0 80px rgba(170,30,0,.1);
-      }
-    }
-    @keyframes fire-burn {
-      from {
-        box-shadow:
-          0 0 30px rgba(255,90,5,.7),
-          0 0 65px rgba(230,55,0,.52),
-          0 0 110px rgba(180,20,0,.34),
-          0 0 160px rgba(120,10,0,.18);
-      }
-      to {
-        box-shadow:
-          0 0 40px rgba(255,165,30,.82),
-          0 0 80px rgba(250,80,0,.65),
-          0 0 130px rgba(200,30,0,.44),
-          0 0 190px rgba(130,10,0,.22);
-      }
+    body.has-card #card-slot {
+      box-shadow: inset 0 0 14px rgba(0,0,0,.6), 0 0 18px rgba(57,255,110,.18);
     }
 
     #slot-placeholder {
       position: absolute; inset: 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 12px; opacity: .22;
+      gap: 10px; opacity: .3; color: rgba(255,255,255,.6);
     }
-    #slot-placeholder i { font-size: 1.6rem; }
+    #slot-placeholder i { font-size: 1.8rem; }
     #slot-placeholder span {
-      font-size: .44rem; font-weight: 900;
-      letter-spacing: .22em; text-transform: uppercase;
+      font-size: .5rem; font-weight: 900;
+      letter-spacing: .2em; text-transform: uppercase;
     }
 
     #slot-img {
@@ -235,15 +146,6 @@
       width: 100%; height: 100%;
       object-fit: cover; display: none;
     }
-
-    #slot-burn-veil {
-      position: absolute; inset: 0;
-      background: radial-gradient(circle at 50% 50%, rgba(57,255,110,.4) 0%, transparent 70%);
-      opacity: 0; pointer-events: none; z-index: 6;
-      transition: opacity .3s;
-    }
-    body.burning #slot-burn-veil { opacity: 1; animation: veil-pulse .35s ease-in-out infinite alternate; }
-    @keyframes veil-pulse { to { opacity: .65; } }
 
     /* ── Bottom controls ── */
     #bottom-area {
@@ -386,15 +288,6 @@
     #confirm-no { background: rgba(255,255,255,.04); border: 1.5px solid rgba(255,255,255,.1); color: rgba(255,255,255,.5); }
     #confirm-no:hover { border-color: rgba(255,255,255,.22); color: rgba(255,255,255,.8); }
 
-    /* ── Dust burst ── */
-    #dust-burst {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-      z-index: 9997; pointer-events: none;
-      font-size: 2.6rem; font-weight: 900; color: #39ff6e;
-      text-shadow: 0 0 30px #39ff6e, 0 0 60px rgba(57,255,110,.4);
-      white-space: nowrap; opacity: 0;
-    }
-
     /* ── Sign-in screen ── */
     #signin-screen {
       position: fixed; inset: 0; z-index: 800; background: #07080c;
@@ -428,6 +321,8 @@
     <script src="/castle-prefs.js"></script>
 </head>
 <body>
+  <!-- Nav — injected by /streamer-nav.js -->
+
   <!-- Hidden SVG defs for reusable gradients/filters -->
   <svg width="0" height="0" style="position:absolute;overflow:hidden">
     <defs>
@@ -525,8 +420,6 @@
 
   <div id="stars"></div>
   <div id="bg-glow"></div>
-  <div id="flash"></div>
-  <div id="dust-burst"></div>
 
   <!-- Sign-in gate -->
   <div id="signin-screen" class="hidden">
@@ -537,103 +430,82 @@
   </div>
 
   <!-- Chrome -->
-  <a id="back-btn" href="/"><i class="fa-solid fa-arrow-left"></i></a>
   <div id="dust-chip">
     <i class="fa-solid fa-fire-flame-curved"></i>
     <span id="dust-balance">—</span>
     <span style="opacity:.38;font-size:.44rem;letter-spacing:.1em">DUST</span>
   </div>
 
-  <!-- Main portal -->
+  <!-- Main: anvil scene -->
   <div id="main">
-    <div id="portal-wrap">
+    <div id="anvil-scene">
 
-      <!-- The SVG portal (rings drawn here) -->
-      <svg id="portal-svg" viewBox="0 0 560 560" width="560" height="560" preserveAspectRatio="xMidYMid meet">
+      <!-- Anvil + forge (placeholder shapes; swap for real workshop art later) -->
+      <svg id="anvil-svg" viewBox="0 0 470 380" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="steel-top" x1="0" y1="0" x2="0.25" y2="1">
+            <stop offset="0" stop-color="#525863"/>
+            <stop offset="0.55" stop-color="#3b414a"/>
+            <stop offset="1" stop-color="#2c313a"/>
+          </linearGradient>
+          <linearGradient id="steel-front" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#30353d"/>
+            <stop offset="1" stop-color="#1f2329"/>
+          </linearGradient>
+          <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#3a3f47"/>
+            <stop offset="1" stop-color="#191c21"/>
+          </linearGradient>
+          <radialGradient id="forge-glow" cx="0.5" cy="0.6" r="0.6">
+            <stop offset="0" stop-color="rgba(255,150,30,0.55)"/>
+            <stop offset="1" stop-color="rgba(255,120,10,0)"/>
+          </radialGradient>
+        </defs>
 
-        <!-- ── Outer ring group (CW spin) ── -->
-        <g id="rg-outer" style="transform-origin:280px 280px">
-          <image href="/stone-ring.png" x="5" y="5" width="550" height="550"
-            clip-path="url(#cp-outer)" preserveAspectRatio="xMidYMid meet"/>
-          <circle cx="280" cy="280" r="212" fill="none"
-            stroke="url(#hl-grad)" stroke-width="1.5" opacity=".6"/>
-          <circle cx="280" cy="280" r="274" fill="none"
-            stroke="rgba(0,0,0,0.6)" stroke-width="3"/>
-          <!-- Rune items injected by JS -->
+        <!-- ground shadow -->
+        <ellipse cx="305" cy="348" rx="120" ry="13" fill="rgba(0,0,0,0.45)"/>
+
+        <!-- ── Forge (top-left) ── -->
+        <g id="forge">
+          <circle cx="100" cy="120" r="54" fill="url(#forge-glow)"/>
+          <path d="M22,166 Q22,52 100,52 Q178,52 178,166 Z" fill="url(#stone)" stroke="#0f1115" stroke-width="2"/>
+          <path d="M50,166 Q50,98 100,98 Q150,98 150,166 Z" fill="#0a0a0d"/>
+          <!-- logs -->
+          <rect x="64" y="148" width="72" height="12" rx="6" fill="#5b3a22" transform="rotate(-7 100 154)"/>
+          <rect x="70" y="138" width="62" height="11" rx="5" fill="#6d4727" transform="rotate(8 100 143)"/>
+          <!-- flames -->
+          <path class="forge-flame"    d="M100,150 C76,128 84,100 100,74 C118,100 124,128 100,150 Z" fill="#ff7a18"/>
+          <path class="forge-flame f2" d="M100,150 C86,130 90,108 100,88 C111,108 116,130 100,150 Z" fill="#ffb020"/>
+          <path class="forge-flame f3" d="M100,150 C93,134 96,118 100,102 C104,118 108,134 100,150 Z" fill="#ffe27a"/>
         </g>
 
-        <!-- ── Middle ring group (CCW spin) ── -->
-        <g id="rg-middle" style="transform-origin:280px 280px">
-          <image href="/stone-ring.png" x="69" y="69" width="422" height="422"
-            clip-path="url(#cp-middle)" preserveAspectRatio="xMidYMid meet"/>
-          <circle cx="280" cy="280" r="146" fill="none"
-            stroke="url(#hl-grad)" stroke-width="1.5" opacity=".5"/>
-          <circle cx="280" cy="280" r="210" fill="none"
-            stroke="rgba(0,0,0,0.6)" stroke-width="3"/>
-        </g>
+        <!-- ── Anvil (extruded silhouette: back slab gives depth, front is the
+             iconic anvil profile, light top face reads the work surface) ── -->
+        <!-- back slab (the thickness seen behind/above) -->
+        <polygon fill="#161a1f" points="213,204 268,183.4 285,175.4 413,160 413,186 398,195.8 383,203.6 363,238 385,241.4 385,263.4 308,272.6 308,250.6 331,241.8 313,212 273,206.8"/>
+        <!-- front silhouette (horn, face, heel, waist, splayed feet) -->
+        <polygon fill="url(#steel-front)" points="170,270 225,249.4 242,241.4 370,226 370,252 355,261.8 340,269.6 320,304 342,307.4 342,329.4 265,338.6 265,316.6 288,307.8 270,278 230,272.8"/>
+        <!-- right heel end face -->
+        <polygon fill="#1c2027" points="370,226 370,252 413,186 413,160"/>
+        <!-- top working face + horn top (the lit surface) -->
+        <polygon fill="url(#steel-top)" stroke="#11141a" stroke-width="1"
+          points="170,270 225,249.4 242,241.4 370,226 413,160 285,175.4 268,183.4 213,204"/>
+        <!-- forged top edge highlight -->
+        <polyline fill="none" stroke="#5b626d" stroke-width="1.5" stroke-linejoin="round"
+          points="170,270 225,249.4 242,241.4 370,226"/>
 
-        <!-- ── Inner ring group (CW spin, slower) ── -->
-        <g id="rg-inner" style="transform-origin:280px 280px">
-          <image href="/stone-ring.png" x="135" y="135" width="290" height="290"
-            clip-path="url(#cp-inner)" preserveAspectRatio="xMidYMid meet"/>
-          <circle cx="280" cy="280" r="96" fill="none"
-            stroke="url(#hl-grad)" stroke-width="1.5" opacity=".45"/>
-          <circle cx="280" cy="280" r="144" fill="none"
-            stroke="rgba(0,0,0,0.6)" stroke-width="3"/>
-        </g>
-
-        <!-- ── Static ring-edge green ambient glow (non-rotating) ── -->
-        <circle id="glow-outer"  cx="280" cy="280" r="247" fill="none"
-          stroke="rgba(57,255,110,0)" stroke-width="58"
-          style="transition:stroke .5s"/>
-        <circle id="glow-middle" cx="280" cy="280" r="178" fill="none"
-          stroke="rgba(57,255,110,0)" stroke-width="66"
-          style="transition:stroke .5s"/>
-        <circle id="glow-inner"  cx="280" cy="280" r="120" fill="none"
-          stroke="rgba(57,255,110,0)" stroke-width="50"
-          style="transition:stroke .5s"/>
-
-        <!-- ── Dark background behind card slot ── -->
-        <circle cx="280" cy="280" r="94" fill="#060608" opacity=".98"/>
-
-        <!-- ── Outer decorative ring border lines ── -->
-        <circle cx="280" cy="280" r="273" fill="none"
-          stroke="rgba(80,86,92,0.26)"  stroke-width="1.2"/>
-        <circle cx="280" cy="280" r="211" fill="none"
-          stroke="rgba(70,76,82,0.2)"   stroke-width="1"/>
-        <circle cx="280" cy="280" r="210" fill="none"
-          stroke="rgba(65,71,76,0.18)"  stroke-width="1"/>
-        <circle cx="280" cy="280" r="145" fill="none"
-          stroke="rgba(55,60,65,0.18)"  stroke-width="1"/>
-        <circle cx="280" cy="280" r="144" fill="none"
-          stroke="rgba(55,60,65,0.16)"  stroke-width="1"/>
-        <circle cx="280" cy="280" r="94"  fill="none"
-          stroke="rgba(45,50,55,0.22)"  stroke-width="1"/>
-
-      </svg>
-
-      <!-- Card frame overlaid on SVG center -->
-      <div id="card-frame">
-
-        <!-- Card image/content sits at (30,72) inside the 200×330 frame -->
-        <div id="card-slot">
-          <div id="slot-placeholder">
-            <i class="fa-solid fa-plus"></i>
-            <span>Place Card</span>
+        <!-- Card laid flat on the work surface (foreignObject keeps it in-plane) -->
+        <foreignObject x="0" y="0" width="100" height="150"
+          transform="matrix(0.845,-0.102,-0.1893,0.2907,299.5,184)">
+          <div xmlns="http://www.w3.org/1999/xhtml" id="card-slot">
+            <div id="slot-placeholder">
+              <i class="fa-solid fa-plus"></i>
+              <span>Place Card</span>
+            </div>
+            <img id="slot-img" src="" alt="">
           </div>
-          <img id="slot-img" src="" alt="">
-          <div id="slot-burn-veil"></div>
-          <div id="slot-glass"></div>
-        </div>
-
-        <!-- Card frame image: positioned over card slot, interior masked out so card shows through -->
-        <img id="frame-img" src="/card-frame.png" alt="">
-
-        <!-- Tower icons float above the card-frame.png medallion positions -->
-        <div class="tower-emblem" id="tower-top"><i class="fa-solid fa-chess-rook"></i></div>
-        <div class="tower-emblem" id="tower-bot"><i class="fa-solid fa-chess-rook"></i></div>
-
-      </div>
+        </foreignObject>
+      </svg>
 
     </div>
 
@@ -759,44 +631,14 @@
   // Sigils intentionally disabled for now.
 
   /* ────────────────────────────────────────────
-     PORTAL SCALE
+     SCENE HOOKS (portal removed — anvil scene sizes via CSS)
+     idleSpin/fastSpin/stopSpin/setGlow kept as no-ops so existing
+     callers in selectCard/clearCard/executeBurn stay valid.
   ──────────────────────────────────────────── */
-  function scalePortal() {
-    const wrap = document.getElementById('portal-wrap');
-    const vw   = window.innerWidth;
-    const vh   = window.innerHeight;
-    const maxH = vh - 110;
-    const maxW = vw - 4;
-    const size = Math.floor(Math.min(maxW, maxH, 560 * 1.14));
-    const evenSize = size - (size % 2);
-    wrap.style.width = `${evenSize}px`;
-    wrap.style.height = `${evenSize}px`;
-  }
-  scalePortal();
-  window.addEventListener('resize', scalePortal);
-
-  /* ────────────────────────────────────────────
-     RING SPIN CONTROL
-  ──────────────────────────────────────────── */
-  const RGO = document.getElementById('rg-outer');
-  const RGM = document.getElementById('rg-middle');
-  const RGI = document.getElementById('rg-inner');
-
-  function setSpins(cwDur, ccwDur, innerDur) {
-    RGO.style.animation = cwDur    ? `rcw  ${cwDur}s linear infinite`  : '';
-    RGM.style.animation = ccwDur   ? `rccw ${ccwDur}s linear infinite` : '';
-    RGI.style.animation = innerDur ? `rcw  ${innerDur}s linear infinite` : '';
-  }
-  function idleSpin() { setSpins(40, 55, 65); }
-  function fastSpin() { setSpins(8, 6, 10); }
-  function stopSpin() { setSpins(0, 0, 0); }
-
-  function setGlow(intensity) {
-    // Portal green aura intentionally disabled.
-    document.getElementById('glow-outer').setAttribute('stroke',  'rgba(57,255,110,0)');
-    document.getElementById('glow-middle').setAttribute('stroke', 'rgba(57,255,110,0)');
-    document.getElementById('glow-inner').setAttribute('stroke',  'rgba(57,255,110,0)');
-  }
+  function idleSpin() {}
+  function fastSpin() {}
+  function stopSpin() {}
+  function setGlow() {}
 
   /* ────────────────────────────────────────────
      CARD SELECTION
@@ -828,7 +670,7 @@
     const img  = document.getElementById('slot-img');
     const ph   = document.getElementById('slot-placeholder');
     const slot = document.getElementById('card-slot');
-    img.style.display = 'none'; img.src = '';
+    img.style.display = 'none'; img.src = ''; img.style.opacity = '';
     ph.style.display  = '';
     slot.classList.remove('has-card');
     document.getElementById('card-info').classList.remove('on');
@@ -899,12 +741,6 @@
     isBurning = true;
     document.getElementById('confirm').classList.remove('open');
     document.getElementById('burn-btn').disabled = true;
-    document.body.classList.add('burning');
-
-    // Wind up rings fast
-    fastSpin();
-    setGlow(1);
-    await sleep(1500);
 
     try {
       const cardToRemove = selectedCard;
@@ -918,41 +754,35 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
-      // Flash
-      const flash = document.getElementById('flash');
-      flash.style.opacity = '.65'; await sleep(70); flash.style.opacity = '0';
+      // Anvil smash (placeholder): the card is struck on the anvil, shatters
+      // into fragments that fly up into the dust counter. Real anvil/workshop
+      // art TODO — hook points live in /anvil-smash.js.
+      const slotImg = document.getElementById('slot-img');
+      const chip    = document.getElementById('dust-chip');
+      if (typeof window.playAnvilSmash === 'function' && slotImg) {
+        window.playAnvilSmash({
+          cardEl: slotImg,
+          imageUrl: cardToRemove.image_url || slotImg.src,
+          amount: data.dust_earned,
+          target: chip,
+        });
+      }
 
-      // Dust burst
-      const burst = document.getElementById('dust-burst');
-      burst.textContent = `+${data.dust_earned} ✦`;
-      burst.style.transition = 'none';
-      burst.style.opacity = '0';
-      burst.style.transform = 'translate(-50%,-50%) scale(.6)';
-      await sleep(10);
-      burst.style.transition = 'opacity .5s ease, transform 1.3s cubic-bezier(.15,.8,.25,1)';
-      burst.style.opacity = '1';
-      burst.style.transform = 'translate(-50%,-220%) scale(1)';
-
-      // Update balance
+      // Update balance + glow the chip as the fragments arrive.
       dustBalance = data.magic_dust;
       document.getElementById('dust-balance').textContent = dustBalance.toLocaleString();
-      const chip = document.getElementById('dust-chip');
       chip.classList.add('glow');
 
-      // Decelerate + clear
-      await sleep(500);
+      // Let the hammer strike + shards burst before clearing the slot.
+      await sleep(900);
       clearCard();
-      document.body.classList.remove('burning');
       allCards = allCards.filter(c => c.user_card_id !== cardToRemove.user_card_id);
       if (pickerLoaded) renderPicker();
 
       await sleep(900);
-      burst.style.opacity = '0';
-      await sleep(600);
       chip.classList.remove('glow');
 
     } catch (e) {
-      document.body.classList.remove('burning');
       if (selectedCard) { idleSpin(); setGlow(.35); } else { stopSpin(); setGlow(0); }
       showToast(e.message || 'Burn failed', 'error');
     }
@@ -966,12 +796,34 @@
   ──────────────────────────────────────────── */
   function showSignIn() { document.getElementById('signin-screen').classList.remove('hidden'); }
 
+  function setupNavUser(user) {
+    if (!user) return;
+    window.currentUser = { ...user, avatar: user.avatar_url || user.avatar };
+    const navAvatar  = document.getElementById('nav-avatar');
+    const menuAvatar = document.getElementById('nav-user-menu-avatar');
+    if (navAvatar)  navAvatar.src  = window.currentUser.avatar || '';
+    if (menuAvatar) menuAvatar.src = window.currentUser.avatar || '';
+    const preview = document.getElementById('nav-user-preview');
+    if (preview) { preview.classList.remove('hidden'); preview.style.display = 'flex'; }
+    window.initNavUserMenu?.();
+    window.updateNavUserMenuLabels?.();
+  }
+
   (async function init() {
     // Fetch CSRF token for POST requests
     try {
       const cr = await fetch(`${BACKEND}/api/csrf`, { credentials: 'include' });
       if (cr.ok) { const cd = await cr.json(); csrfToken = cd.token || null; }
     } catch (e) { console.warn('[MagicDust] csrf fetch failed', e); }
+
+    // Session for nav user menu
+    try {
+      const sr = await fetch(`${BACKEND}/api/auth/session`, { credentials: 'include' });
+      if (sr.ok) {
+        const sess = await sr.json().catch(() => null);
+        if (sess && sess.user) setupNavUser(sess.user);
+      }
+    } catch (e) { console.warn('[MagicDust] session fetch failed', e); }
 
     // Dust balance (also validates session)
     try {
@@ -1028,7 +880,9 @@
     ) closePicker();
   });
   </script>
+<script src="/anvil-smash.js"></script>
 <script src="/nav-user-menu.js"></script>
+<script src="/nav-notifications.js"></script>
 <script src="/streamer-nav.js"></script>
 </body>
 </html>

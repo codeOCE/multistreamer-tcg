@@ -242,15 +242,15 @@ async function initStudio() {
     // Auth + CSRF
     try {
         const res = await fetch(`${BACKEND_URL}/api/v2/bootstrap?lite=1`, { credentials: 'include' });
-        if (!res.ok) { window.location.href = '/dashboard.html'; return; }
+        if (!res.ok) { window.location.href = '/dashboard'; return; }
         const data = await res.json();
         if (!data.user || !data.user.is_creator) { 
-            window.location.href = '/dashboard.html'; 
+            window.location.href = '/dashboard'; 
             return; 
         }
         _csCsrfToken = data.csrf_token || null;
     } catch {
-        window.location.href = '/dashboard.html';
+        window.location.href = '/dashboard';
         return;
     }
 
@@ -4510,7 +4510,7 @@ window.csSelectAll = function() {
 };
 
 /* ─── Navigation ─────────────────────────────────────────────────────────── */
-window.csGoBack = function() { window.location.href = '/dashboard.html'; };
+window.csGoBack = function() { window.location.href = '/dashboard'; };
 
 /* ─── Inline Title Edit ───────────────────────────────────────────────────── */
 window.csStartTitleEdit = function() {

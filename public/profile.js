@@ -1,7 +1,7 @@
 /**
  * profile.js — Public profile page logic for /profile/:username
- * Widgets: showcase carousel, castle stats, trophy cabinet, latest pack pull.
- * Drag-and-drop layout persisted to localStorage.
+ * 4-col widget grid: pointer-drag reorder (live FLIP reflow) + edge-handle
+ * resize with tier snapping. Layout/widths/order persisted server-side.
  */
 (function () {
     'use strict';
@@ -107,7 +107,14 @@
     // ── Card modal ──────────────────────────────────────────────────────────
     let isOwner = false;
     let featuredCardIds = [];
+    let featuredCardInfo = {}; // user_card_id -> { name, image_url, rarity } for the selected strip
     let currentModalCard = null;
+
+    function rememberCardInfo(cards) {
+        (Array.isArray(cards) ? cards : []).forEach(c => {
+            if (c && c.user_card_id) featuredCardInfo[c.user_card_id] = { name: c.name, image_url: c.image_url, rarity: c.rarity };
+        });
+    }
 
     const modal    = document.getElementById('pf-card-modal');
     const modalImg = document.getElementById('pf-modal-img');
@@ -145,52 +152,84 @@
     modal?.addEventListener('click', (e) => { if (e.target === modal) closeCardModal(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardModal(); });
 
-    pinBtn?.addEventListener('click', async () => {
-        if (!currentModalCard || !currentModalCard.user_card_id) return;
-        const id = currentModalCard.user_card_id;
+    // ── Save indicator ────────────────────────────────────────────────────────
+    let _siPending = 0;
+    let _siHideTimer = null;
+    function markDirty() {
+        _siPending++;
+        clearTimeout(_siHideTimer);
+        const el = document.getElementById('pf-save-indicator');
+        const lbl = document.getElementById('pf-si-label');
+        if (!el) return;
+        el.classList.remove('saved');
+        el.classList.add('visible', 'saving');
+        if (lbl) lbl.textContent = 'Saving…';
+    }
+    function markSaved() {
+        _siPending = Math.max(0, _siPending - 1);
+        if (_siPending > 0) return;
+        const el = document.getElementById('pf-save-indicator');
+        const lbl = document.getElementById('pf-si-label');
+        if (!el) return;
+        el.classList.remove('saving');
+        el.classList.add('saved');
+        if (lbl) lbl.textContent = 'Saved';
+        _siHideTimer = setTimeout(() => {
+            el.classList.remove('visible', 'saved');
+        }, 1800);
+    }
+
+    // Persist featured (showcase) cards and refresh the showcase carousel.
+    async function saveFeaturedCards() {
+        markDirty();
+        try {
+            const base = backendBase();
+            await fetch(`${base}/api/viewer/profile/featured-cards`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ featured_card_ids: featuredCardIds })
+            });
+            // Cache-bust: the profile GET is edge-cached ~60s, so force a fresh copy.
+            const res = await fetch(`${base}/api/public/profile/${encodeURIComponent(profileUsername)}?_=${Date.now()}`, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                rememberCardInfo(data.showcase_cards || []);
+                buildShowcaseSlots(data.showcase_cards || []);
+            }
+            if (editMode) buildShowcaseEditGrid();
+        } catch (err) {
+            console.error('[Profile] featured save failed:', err);
+        } finally {
+            markSaved();
+        }
+    }
+
+    // Toggle a card in/out of the showcase (max 10). Returns the new pinned state.
+    function toggleFeaturedCard(id) {
+        if (!id) return false;
         const isPinned = featuredCardIds.includes(id);
-        
         if (isPinned) {
             featuredCardIds = featuredCardIds.filter(x => x !== id);
         } else {
             if (featuredCardIds.length >= 10) {
-                if (typeof showToast === 'function') showToast('Showcase is limited to 10 cards.', 'info');
-                return;
+                if (typeof showToast === 'function') showToast('You can only feature 10 cards — remove one first.', 'error');
+                return false; // limit hit: not added
             }
             featuredCardIds.push(id);
         }
-        
-        // Update UI
-        const newIsPinned = featuredCardIds.includes(id);
+        return featuredCardIds.includes(id);
+    }
+
+    pinBtn?.addEventListener('click', async () => {
+        if (!currentModalCard || !currentModalCard.user_card_id) return;
+        const id = currentModalCard.user_card_id;
+        const wasPinned = featuredCardIds.includes(id);
+        const newIsPinned = toggleFeaturedCard(id);
+        if (newIsPinned === wasPinned) return; // limit hit, no change
         pinLabel.textContent = newIsPinned ? 'Unpin from Showcase' : 'Pin to Showcase';
         pinBtn.querySelector('i').className = newIsPinned ? 'bx bxs-pin' : 'bx bx-pin';
-
-        // Persist
-        try {
-            const base = backendBase();
-            const token = localStorage.getItem('castle_token');
-            await fetch(`${base}/api/viewer/profile/featured-cards`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ featured_card_ids: featuredCardIds })
-            });
-            
-            // Reload showcase content to reflect changes immediately
-            const res = await fetch(`${base}/api/public/profile/${encodeURIComponent(profileUsername)}`);
-            if (res.ok) {
-                const data = await res.json();
-                buildShowcaseSlots(data.showcase_cards || []);
-            }
-
-            if (typeof showToast === 'function') {
-                showToast(newIsPinned ? 'Card pinned to showcase!' : 'Card unpinned!', 'success');
-            }
-        } catch (err) {
-            console.error('[Profile] Pin failed:', err);
-        }
+        await saveFeaturedCards();
+        if (typeof showToast === 'function') showToast(newIsPinned ? 'Card pinned to showcase!' : 'Card unpinned!', 'success');
     });
 
     // ── Showcase carousel / grid ─────────────────────────────────────────────
@@ -218,23 +257,23 @@
         }
         if (isGrid && autoTimer) { clearInterval(autoTimer); autoTimer = null; }
         if (save && isOwner) {
+            markDirty();
             try {
                 const base = backendBase();
-                const token = localStorage.getItem('castle_token');
-                if (token) {
-                    const order = getSavedOrder();
-                    fetch(`${base}/api/viewer/profile-layout`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({
-                            layout: order,
-                            sections: getSavedSections(),
-                            sidebar_widgets: [...sidebarWidgetIds],
-                            settings: { showcase_mode: mode }
-                        })
-                    }).catch(() => {});
-                }
-            } catch (_) {}
+                const order = getSavedOrder();
+                fetch(`${base}/api/viewer/profile-layout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        layout: order,
+                        sections: getSavedSections(),
+                        widget_widths: widgetWidths,
+                        widget_styles: widgetStyles,
+                        layout_version: DEFAULT_LAYOUT_VERSION,
+                        settings: { showcase_mode: mode }
+                    })
+                }).then(() => markSaved()).catch(() => markSaved());
+            } catch (_) { markSaved(); }
         }
     }
 
@@ -369,7 +408,7 @@
             { label: 'Creators supported', val: stats.unique_streamers },
             { label: 'Legendary cards', val: stats.legendary_count },
             { label: 'Epic cards', val: stats.epic_count },
-            { label: 'Rare cards', val: stats.rare_count },
+            { label: 'Complete sets', val: stats.sets_completed },
             { label: 'Battles won', val: stats.battles_won },
             { label: 'Battles lost', val: stats.battles_lost },
             { label: 'Trades completed', val: stats.trades_completed },
@@ -381,35 +420,6 @@
                 <span>${escapeHTML(r.label)}</span>
                 <span class="val">${Number(r.val || 0).toLocaleString()}</span>
             </div>`).join('');
-    }
-
-    // ── Trophy cabinet ──────────────────────────────────────────────────────
-    function renderTrophy(cards) {
-        const grid = document.getElementById('pf-trophy-grid');
-        if (!grid) return;
-        if (!cards || cards.length === 0) {
-            grid.innerHTML = '<p style="grid-column:1/-1;padding:8px 2px 6px;color:var(--void-muted);font-size:0.63rem;font-style:italic;">No trophies yet — pin your best cards here.</p>';
-            return;
-        }
-        const slots = [];
-        for (let i = 0; i < 8; i++) {
-            const card = cards[i];
-            if (card) {
-                const rc = rarityClass(card.rarity);
-                slots.push(`
-                    <div class="pf-trophy-slot ${rc}" data-idx="${i}" title="${escapeHTML(card.name)}">
-                        <img src="${escapeHTML(card.image_url || '')}" alt="${escapeHTML(card.name)}" loading="lazy">
-                        <div class="pf-rarity-pip ${rc}"></div>
-                    </div>`);
-            } else {
-                slots.push('<div class="pf-trophy-slot empty"></div>');
-            }
-        }
-        grid.innerHTML = slots.join('');
-        grid.querySelectorAll('.pf-trophy-slot:not(.empty)').forEach(el => {
-            const idx = parseInt(el.getAttribute('data-idx'), 10);
-            el.addEventListener('click', () => openCardModal(cards[idx]));
-        });
     }
 
     // ── Latest pack pull ────────────────────────────────────────────────────
@@ -447,41 +457,89 @@
             wrap.innerHTML = '<p class="pf-wishlist-empty">No cards on wishlist yet.</p>';
             return;
         }
+        const showX = editMode && isOwner;
         wrap.innerHTML = cards.map((c) => `
-            <div class="pf-wishlist-card" title="${escapeHTML(c.name)}">
+            <div class="pf-wishlist-card" data-card-id="${escapeHTML(c.card_id)}" title="${escapeHTML(c.name)}">
                 <img src="${escapeHTML(c.image_url || '')}" alt="${escapeHTML(c.name)}" loading="lazy">
                 <div class="pf-wishlist-card-overlay">
                     <div class="pf-wishlist-card-name">${escapeHTML(c.name)}</div>
                     ${c.set_name ? `<div class="pf-wishlist-card-set">${escapeHTML(c.set_name)}</div>` : ''}
                 </div>
                 <div class="pf-rarity-pip ${rarityClass(c.rarity)}"></div>
+                ${showX ? `<button class="pf-wishlist-card-remove" type="button" aria-label="Remove"><i class="bx bx-x"></i></button>` : ''}
             </div>`).join('');
+        if (showX) {
+            wrap.querySelectorAll('.pf-wishlist-card-remove').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const id = btn.closest('.pf-wishlist-card').dataset.cardId;
+                    wishlistItems = wishlistItems.filter(i => i.card_id !== id);
+                    await saveWishlist(wishlistItems);
+                });
+            });
+        }
     }
 
-    function renderAchievements(items) {
+    // Steam-style: a dense icon grid + summary stats, with a "Grouped by creator"
+    // alternate layout. Both render; CSS shows one based on the widget's data-layout.
+    function renderAchievements() {
         const wrap = document.getElementById('pf-achievements-grid');
         if (!wrap) return;
-        if (!Array.isArray(items) || items.length === 0) {
+        const all = Array.isArray(unlockedAchievements) ? unlockedAchievements : [];
+        if (all.length === 0) {
             wrap.innerHTML = '<p class="pf-achievements-empty">No achievements unlocked yet.</p>';
             return;
         }
-        wrap.innerHTML = items.slice(0, 6).map((ach) => {
-            const creatorParts = [ach.creator_name, ach.brand_name].filter(Boolean).map(escapeHTML);
-            const creatorLine = creatorParts.length
-                ? `<span class="pf-ach-creator"><i class="bx bxs-crown"></i>${creatorParts.join(' · ')}</span>`
-                : '';
-            const timeLine = ach.unlocked_at
-                ? `<span>${escapeHTML(timeAgo(ach.unlocked_at))}</span>`
-                : '';
-            return `
-            <div class="pf-achievement-card">
-                <div class="icon">${escapeHTML(ach.icon || '🏆')}</div>
-                <div>
-                    <div class="title">${escapeHTML(ach.name || ach.id || 'Achievement')}</div>
-                    <div class="meta">${creatorLine}${timeLine}</div>
-                </div>
+
+        const unlocked = all.length;
+        const creators = new Set(all.map(a => a.creator_username || '__general__')).size;
+        const pct = achievementsAvgCompletion; // avg completion across collected creators
+
+        const iconTiles = all.map(a => `
+            <div class="pf-ach-tile" title="${escapeHTML(a.description || a.name || '')}">
+                <div class="pf-ach-icon"><span>${escapeHTML(a.icon || '🏆')}</span></div>
+                <div class="pf-ach-tile-name">${escapeHTML(a.name || 'Achievement')}</div>
+                <div class="pf-ach-tile-creator">${escapeHTML(a.creator_name || a.brand_name || 'Castle')}</div>
+            </div>`).join('');
+
+        const summary = `
+            <div class="pf-ach-summary">
+                <div class="stat"><div class="num">${unlocked.toLocaleString()}</div><div class="lbl">Achievements</div></div>
+                <div class="stat"><div class="num">${creators.toLocaleString()}</div><div class="lbl">Creators</div></div>
+                <div class="stat"><div class="num">${pct}<span>%</span></div><div class="lbl">Avg Completion</div></div>
             </div>`;
-        }).join('');
+
+        // Grouped-by-creator alternate
+        const groups = new Map();
+        for (const a of all) {
+            const key = a.creator_username || '__general__';
+            if (!groups.has(key)) {
+                groups.set(key, { name: a.brand_name || a.creator_name || (key === '__general__' ? 'Castle' : key), items: [] });
+            }
+            groups.get(key).items.push(a);
+        }
+        const grouped = [...groups.values()].map(g => `
+            <div class="pf-ach-group">
+                <div class="pf-ach-group-head">
+                    <i class="bx bxs-crown"></i>
+                    <span class="pf-ach-group-name">${escapeHTML(g.name)}</span>
+                    <span class="pf-ach-group-count">${g.items.length}</span>
+                </div>
+                <div class="pf-ach-icon-grid">
+                    ${g.items.map(a => `
+                        <div class="pf-ach-tile" title="${escapeHTML(a.description || a.name || '')}">
+                            <div class="pf-ach-icon"><span>${escapeHTML(a.icon || '🏆')}</span></div>
+                            <div class="pf-ach-tile-name">${escapeHTML(a.name || 'Achievement')}</div>
+                        </div>`).join('')}
+                </div>
+            </div>`).join('');
+
+        wrap.innerHTML = `
+            <div class="pf-ach-showcase">
+                <div class="pf-ach-icon-grid">${iconTiles}</div>
+                ${summary}
+            </div>
+            <div class="pf-ach-grouped">${grouped}</div>`;
     }
 
     function renderBio(titleId) {
@@ -547,11 +605,24 @@
             { label: 'Rare',      count: rare,   color: '#3faaff' },
             { label: 'Common',    count: common, color: '#64748b' },
         ];
-        wrap.innerHTML = tiers.map(t => `
-            <div class="pf-rarity-pill">
-                <span class="pf-rarity-pill-label">${escapeHTML(t.label)}</span>
-                <span class="pf-rarity-pill-count" style="color:${t.color}">${t.count.toLocaleString()}</span>
-            </div>`).join('');
+        const maxCount = Math.max(...tiers.map(t => t.count), 1);
+        wrap.innerHTML = tiers.map(t => {
+            const barW = Math.round((t.count / maxCount) * 100);
+            const pct = total > 0 ? Math.round((t.count / total) * 100) : 0;
+            return `
+            <div class="pf-rarity-row">
+                <div class="pf-rarity-top">
+                    <span class="pf-rarity-lbl" style="color:${t.color}">${escapeHTML(t.label)}</span>
+                    <span class="pf-rarity-cnt">${t.count.toLocaleString()}<span class="pf-rarity-pct">${pct}%</span></span>
+                </div>
+                <div class="pf-rarity-track">
+                    <div class="pf-rarity-fill" data-w="${barW}" style="background:${t.color}"></div>
+                </div>
+            </div>`;
+        }).join('');
+        setTimeout(() => {
+            wrap.querySelectorAll('.pf-rarity-fill').forEach(el => { el.style.width = el.dataset.w + '%'; });
+        }, 300);
     }
 
     function renderBattleRecord(stats) {
@@ -566,6 +637,10 @@
         }
         const winRate = Math.round((wins / total) * 100);
         wrap.innerHTML = `
+            <div class="pf-battle-hero">
+                <div class="pf-battle-rate-big">${winRate}<span>%</span></div>
+                <div class="pf-battle-rate-sub">Win rate · ${total.toLocaleString()} battles</div>
+            </div>
             <div class="pf-battle-numbers">
                 <div class="pf-battle-stat">
                     <div class="pf-battle-num" style="color:rgba(var(--void-accent-rgb),1)">${wins.toLocaleString()}</div>
@@ -581,8 +656,8 @@
                 <div class="pf-battle-bar-fill" data-w="${winRate}"></div>
             </div>
             <div class="pf-battle-rate">
-                <span class="win">${winRate}% win rate</span>
-                <span class="lose">${100 - winRate}% loss rate</span>
+                <span class="win">${winRate}% won</span>
+                <span class="lose">${100 - winRate}% lost</span>
             </div>`;
         setTimeout(() => {
             const fill = wrap.querySelector('.pf-battle-bar-fill');
@@ -590,54 +665,73 @@
         }, 400);
     }
 
-    function renderCreators(creators) {
-        const wrap = document.getElementById('pf-creators-inner');
+    // ── Top Slabs (highest-graded cards) ─────────────────────────────────────
+    function renderSlabs(cards) {
+        const wrap = document.getElementById('pf-slabs-inner');
         if (!wrap) return;
-        if (!Array.isArray(creators) || creators.length === 0) {
-            wrap.innerHTML = '<div class="pf-battle-empty">No creators supported yet.</div>';
+        const list = Array.isArray(cards) ? cards.filter(c => c && c.image_url) : [];
+        if (list.length === 0) {
+            wrap.innerHTML = '<div class="pf-battle-empty">No graded cards yet — open packs to earn slabs.</div>';
             return;
         }
-        const chips = creators.map(c => {
-            const color = c.color || 'rgba(var(--void-accent-rgb),0.8)';
-            const name = escapeHTML(c.brand_name || c.username || 'Unknown');
-            return `<div class="pf-creator-chip">
-                <span class="pf-creator-dot" style="background:${escapeHTML(color)};box-shadow:0 0 6px ${escapeHTML(color)}44;"></span>
-                <span class="pf-creator-name">${name}</span>
-                <span class="pf-creator-count">${c.count}</span>
+        wrap.innerHTML = `<div class="pf-slabs-grid">${list.map((c, i) => {
+            const isGenesis = Number(c.grade) >= 11;
+            const gradeLabel = isGenesis ? 'GEM' : String(c.grade ?? '—');
+            return `
+            <div class="pf-slab ${rarityClass(c.rarity)}" data-idx="${i}" title="${escapeHTML(c.name || '')}">
+                <img src="${escapeHTML(c.image_url || '')}" alt="${escapeHTML(c.name || '')}" loading="lazy">
+                <span class="pf-slab-grade ${isGenesis ? 'genesis' : ''}">${escapeHTML(gradeLabel)}</span>
             </div>`;
-        }).join('');
-        wrap.innerHTML = `<div class="pf-creators-grid">${chips}</div>`;
+        }).join('')}</div>`;
+        wrap.querySelectorAll('.pf-slab').forEach(el => {
+            const idx = parseInt(el.getAttribute('data-idx'), 10);
+            el.addEventListener('click', () => openCardModal(list[idx]));
+        });
     }
 
-    function renderSets(sets) {
-        const wrap = document.getElementById('pf-sets-inner');
+    // ── Binders ───────────────────────────────────────────────────────────────
+    // Apply the owner's chosen binder selection + order to the full binder list.
+    function selectedBinders() {
+        const all = Array.isArray(bindersData) ? bindersData : [];
+        if (!Array.isArray(shownBinders)) return all; // no selection saved → show all
+        const byId = new Map(all.map(b => [b.id, b]));
+        return shownBinders.map(id => byId.get(id)).filter(Boolean);
+    }
+
+    function renderBinders(binders) {
+        if (Array.isArray(binders)) bindersData = binders;
+        const wrap = document.getElementById('pf-binders-inner');
         if (!wrap) return;
-        if (!Array.isArray(sets) || sets.length === 0) {
-            wrap.innerHTML = '<div class="pf-battle-empty">No card sets collected yet.</div>';
+        const list = selectedBinders();
+        if (list.length === 0) {
+            wrap.innerHTML = '<div class="pf-battle-empty">No public binders yet.</div>';
             return;
         }
-        const maxOwned = Math.max(...sets.map(s => s.unique_owned), 1);
-        wrap.innerHTML = sets.map(s => {
-            const barW = Math.round((s.unique_owned / maxOwned) * 100);
-            const label = s.total_in_set > s.unique_owned
-                ? `${s.unique_owned} / ${s.total_in_set}`
-                : `${s.unique_owned}`;
-            return `<div class="pf-set-row">
-                <div class="pf-set-info">
-                    <div class="pf-set-name">${escapeHTML(s.set_name)}</div>
-                    ${s.set_code ? `<div class="pf-set-code">${escapeHTML(s.set_code)}</div>` : ''}
-                </div>
-                <div class="pf-set-bar-wrap">
-                    <div class="pf-set-bar-fill" data-w="${barW}"></div>
-                </div>
-                <span class="pf-set-count">${escapeHTML(label)}</span>
-            </div>`;
-        }).join('');
-        setTimeout(() => {
-            wrap.querySelectorAll('.pf-set-bar-fill').forEach(el => {
-                el.style.width = el.dataset.w + '%';
-            });
-        }, 400);
+        wrap.innerHTML = `<div class="pf-binders-grid">${list.map(b => {
+            const previews = (Array.isArray(b.preview_cards) ? b.preview_cards : []).slice(0, 4);
+            const slots = [];
+            for (let i = 0; i < 4; i++) {
+                const p = previews[i];
+                slots.push(p
+                    ? `<img src="${escapeHTML(p.baked_image_url || p.image_url || '')}" alt="" loading="lazy">`
+                    : '<span class="pf-binder-slot-empty"></span>');
+            }
+            const href = b.share_token ? `/view/${encodeURIComponent(b.share_token)}` : '#';
+            const tag = b.share_token ? 'a' : 'div';
+            const hrefAttr = b.share_token ? ` href="${href}"` : '';
+            return `<${tag} class="pf-binder"${hrefAttr}>
+                <div class="pf-binder-previews">${slots.join('')}</div>
+                <div class="pf-binder-name">${escapeHTML(b.name || 'Binder')}</div>
+                <div class="pf-binder-count">${Number(b.card_count || 0)} cards</div>
+            </${tag}>`;
+        }).join('')}</div>`;
+    }
+
+    // ── Trinkets (cosmetics — not yet implemented) ────────────────────────────
+    function renderTrinkets() {
+        const wrap = document.getElementById('pf-trinkets-inner');
+        if (!wrap) return;
+        wrap.innerHTML = '<div class="pf-battle-empty">Trinkets are coming soon — collect cosmetics to display here.</div>';
     }
 
     function timeAgo(iso) {
@@ -655,35 +749,95 @@
     }
 
     // ── Widget layout ───────────────────────────────────────────────────────
-    let sidebarWidgetIds = new Set(['widget-stats', 'widget-rarity-chart', 'widget-wishlist']);
+    // Bump this to re-force the curated default layout on every profile.
+    const DEFAULT_LAYOUT_VERSION = 2;
 
-    // 'sidebar' = sidebar only, 'main' = main column only, 'any' = either
-    const WIDGET_ZONE = {
-        'widget-showcase':     'main',
-        'widget-stats':        'sidebar',
-        'widget-rarity-chart': 'sidebar',
-        'widget-wishlist':     'any',
-        'widget-trophy':       'main',
-        'widget-latest':       'main',
-        'widget-achievements': 'main',
-        'widget-battle-record':'any',
-        'widget-creators':     'any',
-        'widget-sets':         'main',
+    // Allowed grid-column span per widget on the 4-col grid: { min, max, def }
+    const WIDGET_WIDTH_RANGE = {
+        'widget-showcase':      { min: 3, max: 4, def: 4 },
+        'widget-wishlist':      { min: 2, max: 4, def: 4 },
+        'widget-trinkets':      { min: 2, max: 4, def: 4 },
+        'widget-binders':       { min: 2, max: 4, def: 4 },
+        'widget-slabs':         { min: 2, max: 4, def: 4 },
+        'widget-achievements':  { min: 1, max: 4, def: 4 },
+        'widget-latest':        { min: 1, max: 3, def: 3 },
+        'widget-stats':         { min: 1, max: 2, def: 2 },
+        'widget-rarity-chart':  { min: 1, max: 2, def: 2 },
+        'widget-battle-record': { min: 1, max: 2, def: 2 },
     };
 
+    // Curated default layout (order + spans). Forced on everyone at each version bump.
     const DEFAULT_ORDER = [
         'widget-showcase',
         'widget-stats',
         'widget-rarity-chart',
-        'widget-trophy',
         'widget-latest',
-        'widget-wishlist',
         'widget-achievements',
+        'widget-slabs',
+        'widget-binders',
+        'widget-wishlist',
         'widget-battle-record',
-        'widget-creators',
-        'widget-sets',
+        'widget-trinkets',
     ];
+    const DEFAULT_WIDTHS = {
+        'widget-showcase':      4,
+        'widget-stats':         2,
+        'widget-rarity-chart':  2,
+        'widget-latest':        2,
+        'widget-achievements':  2,
+        'widget-slabs':         2,
+        'widget-binders':       2,
+        'widget-wishlist':      4,
+        'widget-battle-record': 2,
+        'widget-trinkets':      2,
+    };
+    // Hidden by default (still toggleable in the sections panel).
+    const DEFAULT_HIDDEN = ['widget-trinkets'];
+    const DEFAULT_SECTIONS = DEFAULT_ORDER.filter(id => !DEFAULT_HIDDEN.includes(id));
     const MIN_REQUIRED_SECTIONS = ['widget-showcase'];
+
+    // ── Per-widget content layout (3 options each) ───────────────────────────
+    // First entry is the default layout for each widget.
+    const WIDGET_LAYOUTS = {
+        'widget-showcase':      [{ id: 'carousel', label: 'Carousel' }, { id: 'grid', label: 'Grid' }],
+        'widget-stats':         [{ id: 'cards', label: 'Cards' }, { id: 'rows',    label: 'Rows' }],
+        'widget-rarity-chart':  [{ id: 'bars',  label: 'Bars'  }, { id: 'pills',   label: 'Pills' }],
+        'widget-latest':        [{ id: 'list',  label: 'List'  }, { id: 'gallery', label: 'Gallery' }],
+        'widget-wishlist':      [{ id: 'grid',  label: 'Grid'  }, { id: 'list',    label: 'List' }],
+        'widget-achievements':  [{ id: 'showcase', label: 'Showcase' }, { id: 'grouped', label: 'Grouped' }],
+        'widget-battle-record': [{ id: 'hero',  label: 'Hero'  }, { id: 'compact', label: 'Compact' }],
+        'widget-binders':       [{ id: 'cards', label: 'Cards' }, { id: 'list',    label: 'List' }],
+        'widget-slabs':         [{ id: 'grid',  label: 'Grid'  }, { id: 'list',    label: 'List' }],
+        'widget-trinkets':      [{ id: 'grid',  label: 'Grid'  }, { id: 'list',    label: 'List' }],
+    };
+    let widgetStyles = {}; // { widgetId: layoutId }
+
+    function getWidgetLayout(id) {
+        const opts = WIDGET_LAYOUTS[id];
+        if (!opts) return null;
+        const l = widgetStyles[id];
+        return opts.some(o => o.id === l) ? l : opts[0].id;
+    }
+    function applyWidgetStyles() {
+        document.querySelectorAll('#pf-steam-layout > .pf-widget').forEach(el => {
+            const l = getWidgetLayout(el.id);
+            if (l) el.dataset.layout = l;
+        });
+        // Showcase: drive its carousel/grid renderer from the chosen layout
+        const sl = getWidgetLayout('widget-showcase');
+        if (sl) {
+            const mode = sl === 'carousel' ? 'carousel' : 'grid';
+            if (typeof setShowcaseView === 'function' && showcaseViewMode !== mode) setShowcaseView(mode);
+            else showcaseViewMode = mode;
+        }
+    }
+    function setWidgetStyle(id, value) {
+        widgetStyles[id] = value;
+        applyWidgetStyles();
+    }
+    async function saveStyles() {
+        await saveLayoutAndSections(getSavedOrder(), getSavedSections());
+    }
     let savedLayoutOrder = null;
     let visibleSections = null;
     let wishlistItems = [];
@@ -692,6 +846,13 @@
     let currentLevel = 1;
     let unlockedAchievements = [];
     let pinnedAchievementIds = [];
+    let widgetWidths = {}; // { widgetId: columnSpan }
+    let forcedDefaultLayout = false; // true when the curated default was forced this load
+    let supportedCreators = []; // creators the owner collects (for the compact picker)
+    let bindersData = []; // owner's binders (full list from the API)
+    let shownBinders = null; // ordered array of binder ids to show (null = show all)
+    let achievementsTotal = 0; // total achievements that exist (for completion %)
+    let achievementsAvgCompletion = 0; // server-computed avg completion across collected creators
 
     function normalizeWidgetArray(arr, fallback) {
         if (!Array.isArray(arr)) return [...fallback];
@@ -713,20 +874,15 @@
     }
 
     async function saveLayoutAndSections(layout, sections) {
+        markDirty();
         try {
             const base = backendBase();
-            const token = localStorage.getItem('castle_token');
-            if (token) {
-                await fetch(`${base}/api/viewer/profile-layout`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ layout, sections, trades_public: tradesPublic, sidebar_widgets: [...sidebarWidgetIds] })
-                });
-            }
-        } catch (_) {}
+            await fetch(`${base}/api/viewer/profile-layout`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ layout, sections, trades_public: tradesPublic, widget_widths: widgetWidths, widget_styles: widgetStyles, shown_binders: shownBinders, layout_version: DEFAULT_LAYOUT_VERSION })
+            });
+        } catch (_) {} finally { markSaved(); }
     }
 
     async function saveBannerChoice(bannerId) {
@@ -741,17 +897,15 @@
             bannerImg.src = DEFAULT_PROFILE_BANNER;
             bannerEl.classList.add('has-banner-img');
         }
+        markDirty();
         try {
             const base = backendBase();
-            const token = localStorage.getItem('castle_token');
-            if (token) {
-                await fetch(`${base}/api/viewer/profile/banner`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ banner_id: bannerId || null })
-                });
-            }
-        } catch (_) {}
+            await fetch(`${base}/api/viewer/profile/banner`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ banner_id: bannerId || null })
+            });
+        } catch (_) {} finally { markSaved(); }
     }
 
     function renderBannerPicker() {
@@ -786,10 +940,7 @@
         if (status) status.textContent = 'Loading banners…';
         try {
             const base = backendBase();
-            const token = localStorage.getItem('castle_token');
-            const res = await fetch(`${base}/api/viewer/profile/banners`, {
-                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-            });
+            const res = await fetch(`${base}/api/viewer/profile/banners`);
             if (res.ok) collectedBanners = await res.json();
         } catch (_) {}
         if (status) status.textContent = '';
@@ -811,17 +962,15 @@
     async function saveBio(text) {
         bioText = String(text || '').trim();
         renderBio(bioText);
+        markDirty();
         try {
             const base = backendBase();
-            const token = localStorage.getItem('castle_token');
-            if (token) {
-                await fetch(`${base}/api/viewer/profile/bio`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ bio: bioText })
-                });
-            }
-        } catch (_) {}
+            await fetch(`${base}/api/viewer/profile/bio`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bio: bioText })
+            });
+        } catch (_) {} finally { markSaved(); }
     }
 
     async function saveWishlist(items) {
@@ -829,58 +978,101 @@
             ? items.filter(i => i && typeof i === 'object' && i.card_id)
             : [];
         renderWishlist(wishlistItems);
+        markDirty();
         try {
             const base = backendBase();
-            const token = localStorage.getItem('castle_token');
-            if (token) {
-                await fetch(`${base}/api/viewer/profile/wishlist`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ items: wishlistItems })
-                });
-            }
-        } catch (_) {}
+            await fetch(`${base}/api/viewer/profile/wishlist`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: wishlistItems })
+            });
+        } catch (_) {} finally { markSaved(); }
     }
 
     async function savePinnedAchievements(ids) {
         pinnedAchievementIds = Array.isArray(ids) ? ids : [];
-        renderAchievements(getPinnedAchievementsForDisplay());
+        renderAchievements();
+        markDirty();
         try {
             const base = backendBase();
-            const token = localStorage.getItem('castle_token');
-            if (token) {
-                await fetch(`${base}/api/viewer/profile/pinned-achievements`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ achievement_ids: pinnedAchievementIds })
-                });
-            }
-        } catch (_) {}
+            await fetch(`${base}/api/viewer/profile/pinned-achievements`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ achievement_ids: pinnedAchievementIds })
+            });
+        } catch (_) {} finally { markSaved(); }
     }
 
     function applyWidgetOrder(order) {
-        const sidebar = document.getElementById('pf-sidebar-widgets');
-        const main = document.getElementById('pf-main-widgets');
-        if (!sidebar || !main) return;
+        const grid = document.getElementById('pf-steam-layout');
+        if (!grid) return;
         order.forEach(id => {
             const el = document.getElementById(id);
-            if (!el) return;
-            const zone = WIDGET_ZONE[id] || 'any';
-            if (zone === 'sidebar' || (zone === 'any' && sidebarWidgetIds.has(id))) {
-                sidebar.appendChild(el);
-            } else if (id === 'widget-trophy' || id === 'widget-latest') {
-                const row2 = document.getElementById('pf-row2');
-                if (row2) row2.appendChild(el);
-            } else {
-                main.appendChild(el);
-            }
+            if (el) grid.appendChild(el);
         });
-        // Ensure sidebar-only widgets are not tracked in sidebarWidgetIds (they're always sidebar)
-        Object.entries(WIDGET_ZONE).forEach(([id, zone]) => {
-            if (zone === 'sidebar') sidebarWidgetIds.delete(id);
+    }
+
+    // Clamp a desired column span to a widget's allowed range (fallback to default).
+    function clampWidth(id, width) {
+        const range = WIDGET_WIDTH_RANGE[id];
+        if (!range) return 4;
+        const n = Number.isFinite(width) ? Math.round(width) : range.def;
+        return Math.max(range.min, Math.min(range.max, n));
+    }
+
+    function getWidgetWidth(id) {
+        const saved = widgetWidths && widgetWidths[id];
+        return clampWidth(id, saved != null ? saved : (WIDGET_WIDTH_RANGE[id]?.def ?? 4));
+    }
+
+    // Apply saved/default column spans as pf-w-N classes on each widget.
+    function applyWidgetWidths() {
+        Object.keys(WIDGET_WIDTH_RANGE).forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const w = getWidgetWidth(id);
+            el.classList.remove('pf-w-1', 'pf-w-2', 'pf-w-3', 'pf-w-4');
+            el.classList.add(`pf-w-${w}`);
+        });
+    }
+
+    // Persist widget widths (owner only) via the shared layout save flow.
+    async function saveWidths() {
+        await saveLayoutAndSections(getSavedOrder(), getSavedSections());
+    }
+
+    const WIDTH_LABELS = { 1: '¼', 2: '½', 3: '¾', 4: 'Full' };
+
+    // Build the edit-mode width-button bar inside each widget (owner only).
+    function buildWidthBars() {
+        if (!isOwner) return;
+        Object.keys(WIDGET_WIDTH_RANGE).forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            let bar = el.querySelector(':scope > .pf-width-bar');
+            if (bar) bar.remove();
+            const range = WIDGET_WIDTH_RANGE[id];
+            if (!range || range.min === range.max) return; // no choices to offer
+            bar = document.createElement('div');
+            bar.className = 'pf-width-bar';
+            const current = getWidgetWidth(id);
+            for (let w = range.min; w <= range.max; w++) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'pf-width-btn' + (w === current ? ' active' : '');
+                btn.dataset.width = String(w);
+                btn.textContent = WIDTH_LABELS[w] || String(w);
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    widgetWidths[id] = w;
+                    applyWidgetWidths();
+                    bar.querySelectorAll('.pf-width-btn').forEach(b =>
+                        b.classList.toggle('active', b.dataset.width === String(w)));
+                    saveWidths();
+                });
+                bar.appendChild(btn);
+            }
+            el.appendChild(bar);
         });
     }
 
@@ -893,123 +1085,268 @@
         });
     }
 
-    let _wlSearchTimer = null;
-
-    function syncWishlistChips() {
-        const cards = Array.isArray(wishlistItems) ? wishlistItems.filter(i => i && i.card_id) : [];
-        const label = document.getElementById('pf-wishlist-current-label');
-        const wrap  = document.getElementById('pf-wishlist-current');
-        if (!wrap) return;
-        if (cards.length === 0) {
-            if (label) label.classList.add('hidden');
-            wrap.innerHTML = '';
-            return;
-        }
-        if (label) label.classList.remove('hidden');
-        wrap.innerHTML = cards.map((c) => `
-            <span class="pf-wl-chip" data-card-id="${escapeHTML(c.card_id)}">
-                <i class="bx bx-x"></i>${escapeHTML(c.name)}
-            </span>`).join('');
-        wrap.querySelectorAll('.pf-wl-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                const id = chip.getAttribute('data-card-id');
-                wishlistItems = wishlistItems.filter(i => i.card_id !== id);
-                syncWishlistChips();
-                document.querySelectorAll(`.pf-wl-result[data-card-id="${id}"]`).forEach(el => el.classList.remove('selected'));
-            });
-        });
+    // ── Showcase count badge (live in edit mode) ─────────────────────────────
+    function updateShowcaseCount() {
+        const countEl = document.getElementById('pf-sc-count');
+        if (countEl) countEl.textContent = `${featuredCardIds.length} / 10 selected`;
     }
-
-    function renderWishlistSearchResults(cards) {
-        const wrap   = document.getElementById('pf-wishlist-search-results');
-        const status = document.getElementById('pf-wishlist-search-status');
+    // ── Showcase edit grid ────────────────────────────────────────────────────
+    function buildShowcaseEditGrid() {
+        const wrap = document.getElementById('pf-showcase-edit-grid');
         if (!wrap) return;
-        if (!cards || cards.length === 0) {
-            wrap.innerHTML = '';
-            if (status) status.textContent = 'No cards found.';
-            return;
-        }
-        if (status) status.textContent = '';
-        const current = new Set((wishlistItems || []).map(i => i.card_id));
-        wrap.innerHTML = cards.map((c) => `
-            <div class="pf-wl-result ${current.has(c.card_id) ? 'selected' : ''}" data-card-id="${escapeHTML(c.card_id)}" title="${escapeHTML(c.name)}">
-                <img src="${escapeHTML(c.image_url || '')}" alt="${escapeHTML(c.name)}" loading="lazy">
-                <div class="pf-wl-result-check"><i class="bx bx-check"></i></div>
-                <div class="pf-wl-result-name">${escapeHTML(c.name)}</div>
+        const MAX = 10;
+        const filled = featuredCardIds.map(id => ({ id, info: featuredCardInfo[id] || {} }));
+        const emptyCount = Math.max(0, MAX - filled.length);
+        let html = filled.map(({ id, info }) => `
+            <div class="pf-sc-edit-slot" data-id="${escapeHTML(id)}">
+                <img src="${escapeHTML(info.image_url || '')}" alt="${escapeHTML(info.name || '')}" loading="lazy">
+                <button class="pf-sc-edit-slot-x" type="button" aria-label="Remove"><i class="bx bx-x"></i></button>
             </div>`).join('');
-        wrap.querySelectorAll('.pf-wl-result').forEach((el, i) => {
-            el.addEventListener('click', () => {
-                const card = cards[i];
-                const idx = wishlistItems.findIndex(w => w.card_id === card.card_id);
-                if (idx >= 0) {
-                    wishlistItems.splice(idx, 1);
-                } else if (wishlistItems.length < 20) {
-                    wishlistItems.push(card);
+        for (let i = 0; i < emptyCount; i++) {
+            html += `<div class="pf-sc-edit-empty"><i class="bx bx-plus"></i></div>`;
+        }
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('.pf-sc-edit-slot-x').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.closest('.pf-sc-edit-slot').dataset.id;
+                featuredCardIds = featuredCardIds.filter(x => x !== id);
+                updateShowcaseCount();
+                buildShowcaseEditGrid();
+                await saveFeaturedCards();
+            });
+        });
+        wrap.querySelectorAll('.pf-sc-edit-empty').forEach(el => {
+            el.addEventListener('click', () => openCompactPicker('showcase'));
+        });
+        updateShowcaseCount();
+    }
+
+    // ── Compact card picker ───────────────────────────────────────────────────
+    let _cpType = null;
+    let _cpCatalog = [];
+    let _cpSearchTimer = null;
+
+    function openCompactPicker(type) {
+        _cpType = type;
+        _cpCatalog = [];
+        const picker = document.getElementById('pf-compact-picker');
+        const title  = document.getElementById('pf-cp-title');
+        const crWrap = document.getElementById('pf-cp-creators');
+        const search = document.getElementById('pf-cp-search');
+        const status = document.getElementById('pf-cp-status');
+        const grid   = document.getElementById('pf-cp-grid');
+        if (!picker) return;
+
+        if (title) title.textContent = type === 'showcase' ? 'Add to Showcase' : 'Add to Wishlist';
+        if (grid) grid.innerHTML = '';
+        if (status) status.textContent = '';
+
+        if (search) {
+            search.classList.remove('hidden');
+            search.value = '';
+            if (!search.dataset.cpInit) {
+                search.dataset.cpInit = '1';
+                search.addEventListener('input', () => {
+                    clearTimeout(_cpSearchTimer);
+                    _cpSearchTimer = setTimeout(() => {
+                        const q = search.value.trim().toLowerCase();
+                        const filtered = q ? _cpCatalog.filter(c => (c.name || '').toLowerCase().includes(q)) : _cpCatalog;
+                        _cpRenderGrid(filtered);
+                    }, 180);
+                });
+            }
+        }
+
+        if (crWrap) {
+            const creators = Array.isArray(supportedCreators) ? supportedCreators : [];
+            if (creators.length === 0) {
+                crWrap.innerHTML = '<span style="font-size:0.55rem;color:var(--void-muted);font-style:italic;">No creators found.</span>';
+            } else {
+                crWrap.innerHTML = creators.map(c => {
+                    const name = c.brand_name || c.username || 'Creator';
+                    const color = c.color || 'rgba(var(--void-accent-rgb),0.85)';
+                    const key = type === 'showcase' ? (c.streamer_id || c.username) : c.username;
+                    return `<button type="button" class="pf-wl-creator" data-key="${escapeHTML(key)}" style="--c:${escapeHTML(color)}">${escapeHTML(name)}</button>`;
+                }).join('');
+                crWrap.querySelectorAll('.pf-wl-creator').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        crWrap.querySelectorAll('.pf-wl-creator').forEach(b => b.classList.toggle('active', b === btn));
+                        _cpLoadCards(btn.dataset.key);
+                    });
+                });
+            }
+        }
+
+        picker.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeCompactPicker() {
+        const picker = document.getElementById('pf-compact-picker');
+        if (!picker) return;
+        picker.classList.remove('open');
+        document.body.style.overflow = '';
+        if (_cpType === 'wishlist') renderWishlist(wishlistItems);
+        _cpType = null;
+        _cpCatalog = [];
+    }
+
+    async function _cpLoadCards(key) {
+        const status = document.getElementById('pf-cp-status');
+        const grid   = document.getElementById('pf-cp-grid');
+        if (status) status.textContent = 'Loading…';
+        if (grid) grid.innerHTML = '';
+        try {
+            const base = backendBase();
+            let cards;
+            if (_cpType === 'showcase') {
+                const res = await fetch(`${base}/api/viewer/cards?streamer=${encodeURIComponent(key)}`);
+                if (!res.ok) throw new Error('cards');
+                const raw = await res.json();
+                cards = Array.isArray(raw) ? raw : [];
+                rememberCardInfo(cards);
+                _cpCatalog = cards;
+            } else {
+                const res = await fetch(`${base}/api/public/catalog?streamer=${encodeURIComponent(key)}`);
+                if (!res.ok) throw new Error('catalog');
+                const raw = await res.json();
+                const creator = (Array.isArray(supportedCreators) ? supportedCreators : [])
+                    .find(c => c.username === key) || {};
+                const brandName = creator.brand_name || creator.username || '';
+                _cpCatalog = (Array.isArray(raw) ? raw : []).map(c => ({
+                    card_id: c.id, user_card_id: c.id, name: c.name,
+                    image_url: c.image_url, rarity: c.rarity, set_name: c.set_name || null,
+                    brand_name: brandName, streamer_username: key
+                }));
+                cards = _cpCatalog;
+            }
+            if (status) {
+                if (!cards.length) {
+                    status.textContent = 'No cards found.';
+                } else if (_cpType === 'showcase') {
+                    const remaining = 10 - featuredCardIds.length;
+                    status.textContent = `${cards.length} card${cards.length !== 1 ? 's' : ''} · ${remaining} slot${remaining !== 1 ? 's' : ''} remaining`;
+                } else {
+                    status.textContent = `${cards.length} card${cards.length !== 1 ? 's' : ''}`;
                 }
-                el.classList.toggle('selected', wishlistItems.some(w => w.card_id === card.card_id));
-                syncWishlistChips();
+            }
+            _cpRenderGrid(cards);
+        } catch (_) {
+            if (status) status.textContent = 'Failed to load cards.';
+        }
+    }
+
+    function _cpRenderGrid(cards) {
+        const grid = document.getElementById('pf-cp-grid');
+        if (!grid) return;
+        if (!cards || cards.length === 0) { grid.innerHTML = ''; return; }
+
+        const pickedShowcase = new Set(featuredCardIds);
+        const pickedWishlist = new Set((wishlistItems || []).map(i => i.card_id));
+
+        grid.innerHTML = cards.map(c => {
+            const isSelected = _cpType === 'showcase'
+                ? pickedShowcase.has(c.user_card_id)
+                : pickedWishlist.has(c.card_id);
+            return `<div class="pf-wl-result ${isSelected ? 'selected' : ''}" data-uid="${escapeHTML(c.user_card_id || '')}" data-cid="${escapeHTML(c.card_id || '')}" title="${escapeHTML(c.name || '')}">
+                <img src="${escapeHTML(c.image_url || '')}" alt="${escapeHTML(c.name || '')}" loading="lazy">
+                <div class="pf-wl-result-check"><i class="bx bx-check"></i></div>
+                <div class="pf-wl-result-name">${escapeHTML(c.name || '')}</div>
+            </div>`;
+        }).join('');
+
+        grid.querySelectorAll('.pf-wl-result').forEach((el, i) => {
+            el.addEventListener('click', async () => {
+                const card = cards[i];
+                if (_cpType === 'showcase') {
+                    const uid = card.user_card_id;
+                    if (featuredCardIds.includes(uid)) return;
+                    if (featuredCardIds.length >= 10) {
+                        const s = document.getElementById('pf-cp-status');
+                        if (s) s.textContent = 'Showcase full (10 max) — remove a card first.';
+                        return;
+                    }
+                    featuredCardIds.push(uid);
+                    el.classList.add('selected');
+                    buildShowcaseEditGrid();
+                    await saveFeaturedCards();
+                    closeCompactPicker();
+                } else {
+                    const cid = card.card_id;
+                    const idx = wishlistItems.findIndex(w => w.card_id === cid);
+                    if (idx >= 0) {
+                        wishlistItems.splice(idx, 1);
+                        el.classList.remove('selected');
+                    } else if (wishlistItems.length < 20) {
+                        wishlistItems.push(card);
+                        el.classList.add('selected');
+                    }
+                    await saveWishlist(wishlistItems);
+                }
             });
         });
     }
 
-    function initWishlistPicker() {
-        const input = document.getElementById('pf-wishlist-search-input');
-        if (!input || input.dataset.wlInit) return;
-        input.dataset.wlInit = '1';
-        const status = document.getElementById('pf-wishlist-search-status');
-        input.addEventListener('input', () => {
-            const q = input.value.trim();
-            clearTimeout(_wlSearchTimer);
-            if (q.length < 2) {
-                document.getElementById('pf-wishlist-search-results').innerHTML = '';
-                if (status) status.textContent = q.length === 1 ? 'Type at least 2 characters…' : '';
-                return;
-            }
-            if (status) status.textContent = 'Searching…';
-            _wlSearchTimer = setTimeout(async () => {
-                try {
-                    const base = backendBase();
-                    const res = await fetch(`${base}/api/public/cards/search?q=${encodeURIComponent(q)}&limit=16`);
-                    if (res.ok) renderWishlistSearchResults(await res.json());
-                } catch (_) {
-                    if (status) status.textContent = 'Search failed.';
-                }
-            }, 320);
+    document.getElementById('pf-cp-close')?.addEventListener('click', closeCompactPicker);
+    document.getElementById('pf-compact-picker')?.addEventListener('click', (e) => {
+        if (e.target === document.getElementById('pf-compact-picker')) closeCompactPicker();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.getElementById('pf-compact-picker')?.classList.contains('open')) {
+            closeCompactPicker();
+        }
+    });
+
+    // ── Binder selector: toggle which show + drag to reorder ─────────────────
+    function binderRowsForEditor() {
+        const all = Array.isArray(bindersData) ? bindersData : [];
+        if (!Array.isArray(shownBinders)) return all.map(b => ({ b, shown: true }));
+        const byId = new Map(all.map(b => [b.id, b]));
+        const shownSet = new Set(shownBinders);
+        const ordered = shownBinders.map(id => byId.get(id)).filter(Boolean).map(b => ({ b, shown: true }));
+        all.forEach(b => { if (!shownSet.has(b.id)) ordered.push({ b, shown: false }); });
+        return ordered;
+    }
+    function syncBindersTab() {
+        const wrap = document.getElementById('pf-binders-selector');
+        if (!wrap) return;
+        const rows = binderRowsForEditor();
+        if (rows.length === 0) {
+            wrap.innerHTML = '<div class="pf-wishlist-empty" style="padding:2px 0;">You have no public binders yet.</div>';
+            return;
+        }
+        wrap.innerHTML = rows.map(({ b, shown }) => `
+            <div class="pf-binder-row" data-id="${escapeHTML(b.id)}" draggable="true">
+                <span class="pf-binder-row-grip"><i class="bx bxs-dots-vertical"></i></span>
+                <span class="pf-binder-row-name">${escapeHTML(b.name || 'Binder')}<small>${Number(b.card_count || 0)} cards</small></span>
+                <label class="pf-mini-switch"><input type="checkbox" ${shown ? 'checked' : ''}><span class="pf-switch"></span></label>
+            </div>`).join('');
+        wrap.querySelectorAll('.pf-binder-row input').forEach(input =>
+            input.addEventListener('change', () => commitBinderSelection(wrap)));
+        initBinderDrag(wrap);
+    }
+    function commitBinderSelection(wrap) {
+        const rows = [...wrap.querySelectorAll('.pf-binder-row')];
+        shownBinders = rows.filter(r => r.querySelector('input')?.checked).map(r => r.dataset.id);
+        renderBinders();
+        saveLayoutAndSections(getSavedOrder(), getSavedSections());
+    }
+    function initBinderDrag(wrap) {
+        let dragEl = null;
+        wrap.querySelectorAll('.pf-binder-row').forEach(row => {
+            row.addEventListener('dragstart', (e) => { dragEl = row; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+            row.addEventListener('dragend', () => { row.classList.remove('dragging'); dragEl = null; commitBinderSelection(wrap); });
+            row.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                if (!dragEl || dragEl === row) return;
+                const r = row.getBoundingClientRect();
+                wrap.insertBefore(dragEl, (e.clientY > r.top + r.height / 2) ? row.nextSibling : row);
+            });
         });
     }
 
-    function syncSectionsPanel() {
-        const visible = new Set(getSavedSections());
-        document.querySelectorAll('#pf-sections-panel input[type="checkbox"]').forEach((input) => {
-            if (input.id === 'pf-trades-public-toggle') return;
-            const id = input.value;
-            input.checked = visible.has(id);
-            if (MIN_REQUIRED_SECTIONS.includes(id)) {
-                input.disabled = true;
-            }
-        });
-        const tradesToggle = document.getElementById('pf-trades-public-toggle');
-        if (tradesToggle) tradesToggle.checked = !!tradesPublic;
-        renderTitlePicker();
-        syncWishlistChips();
-        initWishlistPicker();
-        loadBannerPicker();
-        const picker = document.getElementById('pf-achievement-picker');
-        if (picker) {
-            if (!Array.isArray(unlockedAchievements) || unlockedAchievements.length === 0) {
-                picker.innerHTML = '<div class="pf-wishlist-empty" style="padding:2px 0;">Unlock achievements to pin them.</div>';
-            } else {
-                const selected = new Set(pinnedAchievementIds);
-                picker.innerHTML = unlockedAchievements.map((ach) => `
-                    <label class="pf-achievement-pick">
-                        <input type="checkbox" data-achievement-id="${escapeHTML(ach.id || '')}" ${selected.has(ach.id) ? 'checked' : ''}>
-                        <span class="icon">${escapeHTML(ach.icon || '🏆')}</span>
-                        <span>${escapeHTML(ach.name || ach.id || 'Achievement')}</span>
-                    </label>
-                `).join('');
-            }
-        }
-    }
+    function syncSectionsPanel() { /* no-op: no drawer */ }
 
     function getPinnedAchievementsForDisplay() {
         const all = Array.isArray(unlockedAchievements) ? unlockedAchievements : [];
@@ -1024,80 +1361,447 @@
     let activeBannerId = null;
     let collectedBanners = [];
 
-    let dragSrcId = null;
+    // ── Widget interactions: pointer-based reorder + edge-handle resize ───────
+    function pfGrid() { return document.getElementById('pf-steam-layout'); }
 
-    function initDragAndDrop() {
-        ['pf-sidebar-widgets', 'pf-main-widgets'].forEach(containerId => {
-            const container = document.getElementById(containerId);
-            if (!container) return;
+    // Wrap each widget's content (everything except the title + edit handles) in a
+    // scrollable body so every tile can be a fixed, uniform height. Idempotent.
+    function wrapWidgetBodies() {
+        const grid = pfGrid();
+        if (!grid) return;
+        grid.querySelectorAll(':scope > .pf-widget').forEach(widget => {
+            if (widget.querySelector(':scope > .pf-widget-body')) return;
+            const body = document.createElement('div');
+            body.className = 'pf-widget-body';
+            [...widget.children].forEach(ch => {
+                if (ch.classList.contains('pf-drag-handle')) return;
+                if (ch.classList.contains('pf-edit-toolbar')) return;
+                if (ch.classList.contains('pf-width-bar')) return;
+                if (ch.classList.contains('pf-resize-handle')) return;
+                if (ch.classList.contains('pf-widget-title')) return;
+                if (ch.classList.contains('pf-widget-inline-editor')) return;
+                if (ch.classList.contains('pf-hide-btn')) return;
+                if (ch.classList.contains('pf-style-cycle')) return;
+                if (ch.id === 'pf-showcase-edit-grid') return;
+                if (ch.id === 'pf-wishlist-add-btn') return;
+                if (ch.id === 'pf-binders-selector') return;
+                body.appendChild(ch);
+            });
+            widget.appendChild(body);
+        });
+    }
 
-            container.querySelectorAll('.pf-widget').forEach(widget => {
-                widget.addEventListener('dragstart', (e) => {
-                    dragSrcId = widget.id;
-                    widget.classList.add('drag-active');
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', widget.id);
-                });
-                widget.addEventListener('dragend', () => {
-                    widget.classList.remove('drag-active');
-                    document.querySelectorAll('.pf-widget').forEach(w => w.classList.remove('drag-over'));
-                });
-                widget.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    const zone = WIDGET_ZONE[dragSrcId] || 'any';
-                    const allowed = zone === 'any'
-                        || (zone === 'sidebar' && containerId === 'pf-sidebar-widgets')
-                        || (zone === 'main'    && containerId === 'pf-main-widgets');
-                    e.dataTransfer.dropEffect = allowed ? 'move' : 'none';
-                    document.querySelectorAll('.pf-widget').forEach(w => w.classList.remove('drag-over'));
-                    if (allowed && widget.id !== dragSrcId) widget.classList.add('drag-over');
-                });
-                widget.addEventListener('dragleave', () => {
-                    widget.classList.remove('drag-over');
-                });
-                widget.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    widget.classList.remove('drag-over');
-                    if (!dragSrcId || dragSrcId === widget.id) return;
-                    const src = document.getElementById(dragSrcId);
-                    if (!src) return;
+    function orderedVisibleWidgets() {
+        const grid = pfGrid();
+        if (!grid) return [];
+        return [...grid.querySelectorAll(':scope > .pf-widget')].filter(el => !el.classList.contains('hidden'));
+    }
 
-                    // Enforce zone rules
-                    const zone = WIDGET_ZONE[dragSrcId] || 'any';
-                    if (zone === 'sidebar' && container.id !== 'pf-sidebar-widgets') return;
-                    if (zone === 'main'    && container.id !== 'pf-main-widgets') return;
+    // Number of columns the grid is currently rendering (4 / 2 / 1 responsive).
+    function gridColumnCount() {
+        const grid = pfGrid();
+        if (!grid) return 4;
+        const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length;
+        return Math.max(1, cols);
+    }
 
-                    if (src.parentElement === container) {
-                        const allWidgets = [...container.querySelectorAll(':scope > .pf-widget')];
-                        const srcIdx = allWidgets.indexOf(src);
-                        const tgtIdx = allWidgets.indexOf(widget);
-                        if (srcIdx < 0 || tgtIdx < 0) return;
-                        if (srcIdx < tgtIdx) {
-                            container.insertBefore(src, widget.nextSibling);
-                        } else {
-                            container.insertBefore(src, widget);
-                        }
-                    } else {
-                        if (container.id === 'pf-sidebar-widgets') {
-                            sidebarWidgetIds.add(dragSrcId);
-                        } else {
-                            sidebarWidgetIds.delete(dragSrcId);
-                        }
-                        container.insertBefore(src, widget);
+    // After a drop, shrink the dropped widget to fill leftover space in its row
+    // (e.g. dropped beside a ½ widget → snaps to ½). Desktop 4-col only.
+    function autoFillDropped(id) {
+        if (gridColumnCount() !== 4) return;
+        const range = WIDGET_WIDTH_RANGE[id];
+        if (!range) return;
+        let col = 0; // columns filled in the current row (0..4)
+        for (const el of orderedVisibleWidgets()) {
+            const wid = el.id;
+            const w = getWidgetWidth(wid);
+            const remaining = 4 - col; // gap before placing this widget
+            if (wid === id) {
+                if (remaining > 0 && remaining < 4 && range.min <= remaining) {
+                    widgetWidths[id] = Math.min(range.max, remaining);
+                }
+                return;
+            }
+            if (w > remaining) col = 0; // wraps to next row
+            col += w;
+            if (col >= 4) col = 0;
+        }
+    }
+
+    // Edge handle for drag-to-resize (owner only; CSS-hidden unless editing).
+    function buildResizeHandles() {
+        if (!isOwner) return;
+        Object.keys(WIDGET_WIDTH_RANGE).forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const range = WIDGET_WIDTH_RANGE[id];
+            const existing = el.querySelector(':scope > .pf-resize-handle');
+            if (!range || range.min === range.max) { if (existing) existing.remove(); return; }
+            if (existing) return;
+            const handle = document.createElement('div');
+            handle.className = 'pf-resize-handle';
+            handle.title = 'Drag to resize';
+            handle.dataset.resizeFor = id;
+            el.appendChild(handle);
+        });
+    }
+
+    // Edit-mode button on each tile that cycles its layout variants.
+    function buildStyleButtons() {
+        if (!isOwner) return;
+        document.querySelectorAll('#pf-steam-layout > .pf-widget').forEach(el => {
+            const opts = WIDGET_LAYOUTS[el.id];
+            let btn = el.querySelector(':scope > .pf-style-cycle');
+            if (!opts || opts.length < 2) { if (btn) btn.remove(); return; }
+            if (btn) return;
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'pf-style-cycle';
+            btn.title = 'Change layout';
+            btn.innerHTML = '<i class="bx bx-layout"></i>';
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const cur = getWidgetLayout(el.id);
+                const idx = opts.findIndex(o => o.id === cur);
+                const next = opts[(idx + 1) % opts.length];
+                setWidgetStyle(el.id, next.id);
+                saveStyles();
+                if (typeof syncStylesTab === 'function') syncStylesTab();
+                if (typeof showToast === 'function') showToast(`Layout: ${next.label}`, 'info');
+            });
+            el.appendChild(btn);
+        });
+    }
+
+    // ── Per-widget hide/show button ───────────────────────────────────────────
+    function buildHideButtons() {
+        if (!isOwner) return;
+        const visible = new Set(getSavedSections());
+        document.querySelectorAll('#pf-steam-layout > .pf-widget').forEach(el => {
+            let btn = el.querySelector(':scope > .pf-hide-btn');
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'pf-hide-btn';
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = el.id;
+                    if (MIN_REQUIRED_SECTIONS.includes(id)) {
+                        if (typeof showToast === 'function') showToast('This widget cannot be hidden', 'info');
+                        return;
                     }
-
-                    const newOrder = [
-                        ...[...document.getElementById('pf-sidebar-widgets').querySelectorAll(':scope > .pf-widget')].map(w => w.id),
-                        ...[...document.getElementById('pf-main-widgets').querySelectorAll('.pf-widget')].map(w => w.id),
-                    ];
-                    saveOrder(newOrder);
+                    const cur = getSavedSections();
+                    const isVis = cur.includes(id);
+                    const next = isVis ? cur.filter(s => s !== id) : [...cur, id];
+                    saveSections(next).then(() => buildHideButtons());
                 });
+                el.appendChild(btn);
+            }
+            const isVis = visible.has(el.id);
+            const isRequired = MIN_REQUIRED_SECTIONS.includes(el.id);
+            btn.innerHTML = isVis ? '<i class="bx bx-hide"></i>' : '<i class="bx bx-show"></i>';
+            btn.title = isVis ? 'Hide widget' : 'Show widget';
+            btn.style.opacity = isRequired ? '0.3' : '';
+            btn.style.cursor = isRequired ? 'not-allowed' : '';
+        });
+    }
+
+    function openPickerModal() { /* no-op: editing happens inline on the widget */ }
+
+    // ── Unified per-widget edit toolbar ───────────────────────────────────────
+    // One control bar per widget (drag anywhere on it to reorder). Holds the
+    // width segmented control, layout toggle, and hide/show — replacing the old
+    // scattered chips + edge-drag resize.
+    function buildEditToolbars() {
+        if (!isOwner) return;
+        const visible = new Set(getSavedSections());
+        document.querySelectorAll('#pf-steam-layout > .pf-widget').forEach(el => {
+            const id = el.id;
+            const old = el.querySelector(':scope > .pf-edit-toolbar');
+            if (old) old.remove();
+
+            const isVis = visible.has(id);
+            const isRequired = MIN_REQUIRED_SECTIONS.includes(id);
+
+            const tb = document.createElement('div');
+            tb.className = 'pf-edit-toolbar' + (isVis ? '' : ' is-hidden');
+
+            // Left: drag affordance (whole bar drags) + name when collapsed
+            const left = document.createElement('div');
+            left.className = 'pf-tb-left';
+            left.innerHTML = isVis
+                ? '<i class="bx bxs-grid-alt pf-tb-grip"></i>'
+                : `<i class="bx bx-show pf-tb-grip" style="opacity:.5"></i><span class="pf-tb-name">${escapeHTML(WIDGET_NAMES[id] || id)}</span>`;
+            tb.appendChild(left);
+
+            const right = document.createElement('div');
+            right.className = 'pf-tb-right';
+
+            if (isVis) {
+                // Width segmented control (only tiers this widget allows)
+                const range = WIDGET_WIDTH_RANGE[id];
+                if (range && range.min !== range.max) {
+                    const seg = document.createElement('div');
+                    seg.className = 'pf-tb-seg';
+                    const cur = getWidgetWidth(id);
+                    for (let w = range.min; w <= range.max; w++) {
+                        const b = document.createElement('button');
+                        b.type = 'button';
+                        b.className = 'pf-tb-segbtn' + (w === cur ? ' active' : '');
+                        b.dataset.width = String(w);
+                        b.textContent = WIDTH_LABELS[w] || String(w);
+                        b.title = 'Set width';
+                        b.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            widgetWidths[id] = w;
+                            applyWidgetWidths();
+                            seg.querySelectorAll('.pf-tb-segbtn').forEach(x =>
+                                x.classList.toggle('active', x.dataset.width === String(w)));
+                            saveWidths();
+                        });
+                        seg.appendChild(b);
+                    }
+                    right.appendChild(seg);
+                }
+
+                // Layout toggle (widgets with >1 layout variant)
+                const opts = WIDGET_LAYOUTS[id];
+                if (opts && opts.length >= 2) {
+                    const lb = document.createElement('button');
+                    lb.type = 'button';
+                    lb.className = 'pf-tb-btn';
+                    const curOpt = opts.find(o => o.id === getWidgetLayout(id)) || opts[0];
+                    lb.innerHTML = `<i class="bx bx-layout"></i><span>${escapeHTML(curOpt.label)}</span>`;
+                    lb.title = 'Change layout';
+                    lb.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        const idx = opts.findIndex(o => o.id === getWidgetLayout(id));
+                        const next = opts[(idx + 1) % opts.length];
+                        setWidgetStyle(id, next.id);
+                        saveStyles();
+                        lb.querySelector('span').textContent = next.label;
+                    });
+                    right.appendChild(lb);
+                }
+            }
+
+            // Hide / show toggle (always present)
+            const hb = document.createElement('button');
+            hb.type = 'button';
+            hb.className = 'pf-tb-btn pf-tb-icon' + (isVis ? '' : ' pf-tb-show');
+            hb.innerHTML = isVis ? '<i class="bx bx-hide"></i>' : '<i class="bx bx-plus"></i><span>Show</span>';
+            hb.title = isVis ? 'Hide widget' : 'Show widget';
+            hb.classList.toggle('pf-tb-icon', isVis);
+            if (isRequired) { hb.style.opacity = '0.3'; hb.style.cursor = 'not-allowed'; }
+            hb.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                if (isRequired) { if (typeof showToast === 'function') showToast('This widget cannot be hidden', 'info'); return; }
+                const cur = getSavedSections();
+                const nowVis = cur.includes(id);
+                const next = nowVis ? cur.filter(s => s !== id) : [...cur, id];
+                saveSections(next).then(() => buildEditToolbars());
+            });
+            right.appendChild(hb);
+
+            tb.appendChild(right);
+            el.appendChild(tb);
+        });
+    }
+
+
+    const WIDGET_NAMES = {
+        'widget-showcase': 'Showcase', 'widget-stats': 'Castle Stats',
+        'widget-rarity-chart': 'Collection Breakdown', 'widget-latest': 'Latest Pack Pull',
+        'widget-wishlist': 'Wishlist', 'widget-achievements': 'Achievements',
+        'widget-battle-record': 'Battle Record', 'widget-binders': 'Binders',
+        'widget-slabs': 'Top Slabs', 'widget-trinkets': 'Trinkets',
+    };
+
+    // Build the drawer "Styles" tab: per-widget Look (treatment) + Layout pickers.
+    function syncStylesTab() {
+        const wrap = document.getElementById('pf-styles-list');
+        if (!wrap) return;
+        const visible = new Set(getSavedSections());
+        wrap.innerHTML = DEFAULT_ORDER.filter(id => visible.has(id) && document.getElementById(id) && WIDGET_LAYOUTS[id]).map(id => {
+            const cur = getWidgetLayout(id);
+            const segs = WIDGET_LAYOUTS[id].map(o =>
+                `<button class="pf-seg ${o.id === cur ? 'active' : ''}" data-widget="${id}" data-val="${o.id}">${escapeHTML(o.label)}</button>`
+            ).join('');
+            return `<div class="pf-style-card">
+                <div class="pf-style-name">${escapeHTML(WIDGET_NAMES[id] || id)}</div>
+                <div class="pf-seg-group">${segs}</div>
+            </div>`;
+        }).join('');
+        wrap.querySelectorAll('.pf-seg').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setWidgetStyle(btn.dataset.widget, btn.dataset.val);
+                btn.parentElement.querySelectorAll('.pf-seg').forEach(b => b.classList.toggle('active', b === btn));
+                saveStyles();
             });
         });
     }
 
+    let activeResize = null; // { id, el }
+
+    function onResizeMove(e) {
+        if (!activeResize) return;
+        const { id, el } = activeResize;
+        const grid = pfGrid();
+        const colCount = gridColumnCount();
+        if (colCount !== 4) return; // resizing only meaningful at full grid
+        const gridStyle = getComputedStyle(grid);
+        const gap = parseFloat(gridStyle.columnGap) || 14;
+        const inner = grid.clientWidth
+            - parseFloat(gridStyle.paddingLeft || '0')
+            - parseFloat(gridStyle.paddingRight || '0');
+        const colW = (inner - (colCount - 1) * gap) / colCount;
+        const rect = el.getBoundingClientRect();
+        const spanPx = e.clientX - rect.left;
+        let span = Math.round((spanPx + gap) / (colW + gap));
+        const range = WIDGET_WIDTH_RANGE[id];
+        span = Math.max(range.min, Math.min(range.max, colCount, span));
+        if (span !== getWidgetWidth(id)) {
+            widgetWidths[id] = span;
+            applyWidgetWidths();
+            // keep width buttons in sync
+            const bar = el.querySelector(':scope > .pf-width-bar');
+            if (bar) bar.querySelectorAll('.pf-width-btn').forEach(b =>
+                b.classList.toggle('active', b.dataset.width === String(span)));
+        }
+    }
+
+    function endResize() {
+        if (!activeResize) return;
+        activeResize.el.classList.remove('pf-resizing');
+        document.body.classList.remove('pf-grid-dragging');
+        window.removeEventListener('pointermove', onResizeMove);
+        window.removeEventListener('pointerup', endResize);
+        activeResize = null;
+        saveWidths();
+    }
+
+    let activeDrag = null; // { id, el, startX, startY, started }
+
+    // Snapshot positions of all visible widgets for FLIP animation.
+    function snapshotRects() {
+        const m = new Map();
+        orderedVisibleWidgets().forEach(el => m.set(el, el.getBoundingClientRect()));
+        return m;
+    }
+
+    // FLIP: animate every visible widget (except the dragged one) from its
+    // previous position to its new one so the grid reflows smoothly.
+    function flipReflow(prevRects, exceptEl) {
+        orderedVisibleWidgets().forEach(el => {
+            if (el === exceptEl) return;
+            const prev = prevRects.get(el);
+            if (!prev) return;
+            const now = el.getBoundingClientRect();
+            const dx = prev.left - now.left;
+            const dy = prev.top - now.top;
+            if (!dx && !dy) return;
+            el.style.transition = 'none';
+            el.style.transform = `translate(${dx}px, ${dy}px)`;
+            void el.offsetWidth; // force reflow so the start transform applies
+            el.style.transition = 'transform 0.15s cubic-bezier(0.2,0,0,1)';
+            el.style.transform = '';
+            clearTimeout(el._pfFlipTimer);
+            el._pfFlipTimer = setTimeout(() => { el.style.transition = ''; el.style.transform = ''; }, 180);
+        });
+    }
+
+    // The visible widget the pointer is physically hovering over (not just nearest).
+    // Returns null when over a gap or off the grid, so dragging there does nothing.
+    function widgetUnderPoint(x, y) {
+        for (const el of orderedVisibleWidgets()) {
+            if (el === activeDrag.el) continue;
+            const r = el.getBoundingClientRect();
+            if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return { el, r };
+        }
+        return null;
+    }
+
+    const REORDER_COOLDOWN_MS = 28; // min time between swaps — small, just debounces
+
+    function onDragMove(e) {
+        if (!activeDrag) return;
+        if (!activeDrag.started) {
+            // Larger start threshold so a click/nudge doesn't begin a drag
+            if (Math.abs(e.clientX - activeDrag.startX) < 6 && Math.abs(e.clientY - activeDrag.startY) < 6) return;
+            activeDrag.started = true;
+            activeDrag.el.classList.add('pf-dragging');
+            document.body.classList.add('pf-grid-dragging');
+        }
+        const el = activeDrag.el;
+        const hit = widgetUnderPoint(e.clientX, e.clientY);
+        if (!hit) return; // only reorder when hovering a real widget
+
+        // Dead band around the target's center: ignore the middle third so the
+        // pointer must clearly cross past center before a swap triggers.
+        const center = hit.r.left + hit.r.width / 2;
+        const margin = Math.min(12, hit.r.width * 0.05);
+        let after;
+        if (e.clientX > center + margin) after = true;
+        else if (e.clientX < center - margin) after = false;
+        else return; // inside dead band — hold position
+
+        // Cooldown to stop rapid flip-flopping
+        const now = performance.now();
+        if (activeDrag.lastSwap && (now - activeDrag.lastSwap) < REORDER_COOLDOWN_MS) return;
+
+        const grid = pfGrid();
+        let ref = after ? hit.el.nextElementSibling : hit.el;
+        if (ref === el) ref = el.nextElementSibling;
+        if (ref === el) return;
+        if (el.nextElementSibling === ref) return; // already in that slot — no move
+
+        const prev = snapshotRects();
+        grid.insertBefore(el, ref);
+        flipReflow(prev, el);
+        activeDrag.lastSwap = now;
+    }
+
+    function endDrag() {
+        if (!activeDrag) return;
+        const { el, started, id } = activeDrag;
+        el.classList.remove('pf-dragging');
+        document.body.classList.remove('pf-grid-dragging');
+        window.removeEventListener('pointermove', onDragMove);
+        window.removeEventListener('pointerup', endDrag);
+        activeDrag = null;
+        if (!started) return;
+
+        // Auto-fill leftover row space for the dropped widget, then persist.
+        const prev = snapshotRects();
+        autoFillDropped(id);
+        applyWidgetWidths();
+        flipReflow(prev, null);
+        const grid = pfGrid();
+        const newOrder = [...grid.querySelectorAll(':scope > .pf-widget')].map(w => w.id);
+        saveOrder(newOrder); // saveOrder body also persists current widget_widths
+    }
+
+    // Single delegated pointerdown on the grid handles both reorder and resize.
+    function initWidgetInteractions() {
+        const grid = pfGrid();
+        if (!grid || grid.dataset.pfInteract) return;
+        grid.dataset.pfInteract = '1';
+        grid.addEventListener('pointerdown', (e) => {
+            if (!editMode || !isOwner) return;
+            // Reorder by grabbing anywhere on the widget's edit toolbar
+            // (but not on its buttons — those handle width / layout / hide).
+            const tb = e.target.closest('.pf-edit-toolbar');
+            if (!tb || e.target.closest('button')) return;
+            const el = tb.closest('.pf-widget');
+            if (!el || el.classList.contains('hidden')) return; // can't reorder a hidden ghost
+            e.preventDefault();
+            activeDrag = { id: el.id, el, startX: e.clientX, startY: e.clientY, started: false, dropInfo: null };
+            window.addEventListener('pointermove', onDragMove);
+            window.addEventListener('pointerup', endDrag);
+        });
+    }
+
     let editMode = false;
-    let sectionsOpen = false;
     function setEditMode(on) {
         editMode = on;
         document.body.classList.toggle('pf-editing', on);
@@ -1105,49 +1809,37 @@
         const label = document.getElementById('pf-edit-label');
         if (btn) btn.classList.toggle('active', on);
         if (label) label.textContent = on ? 'Done editing' : 'Edit layout';
-
-        // Enable/disable draggable
-        document.querySelectorAll('.pf-widget').forEach(w => {
-            w.setAttribute('draggable', on ? 'true' : 'false');
-        });
-        if (!on) {
-            sectionsOpen = false;
-            document.getElementById('pf-sections-panel')?.classList.add('hidden');
-            document.getElementById('pf-sections-btn')?.classList.remove('active');
+        if (on) {
+            buildEditToolbars();
+            buildShowcaseEditGrid();
+            syncBindersTab();
+            renderWishlist(wishlistItems);
+        } else {
+            closeCompactPicker();
+            buildShowcaseEditGrid();
+            renderWishlist(wishlistItems);
+            // Clear any lingering save indicator when leaving edit mode
+            clearTimeout(_siHideTimer);
+            const si = document.getElementById('pf-save-indicator');
+            if (si) si.classList.remove('visible', 'saving', 'saved');
+            _siPending = 0;
         }
     }
 
-    document.getElementById('pf-edit-btn')?.addEventListener('click', () => setEditMode(!editMode));
-    document.getElementById('pf-sections-btn')?.addEventListener('click', () => {
-        if (!isOwner || !editMode) return;
-        sectionsOpen = !sectionsOpen;
-        document.getElementById('pf-sections-btn')?.classList.toggle('active', sectionsOpen);
-        document.getElementById('pf-sections-panel')?.classList.toggle('hidden', !sectionsOpen);
-        if (sectionsOpen) syncSectionsPanel();
+    document.getElementById('pf-edit-btn')?.addEventListener('click', () => {
+        if (!isOwner) return;
+        setEditMode(!editMode);
     });
-    document.getElementById('pf-trade-offer-btn')?.addEventListener('click', () => {
-        window.location.href = `/trade/offer?to=${encodeURIComponent(profileUsername)}`;
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && editMode && !document.getElementById('pf-compact-picker')?.classList.contains('open')) setEditMode(false);
     });
 
-    document.getElementById('pf-save-sections')?.addEventListener('click', async () => {
-        if (!isOwner) return;
-        const tradesToggle = document.getElementById('pf-trades-public-toggle');
-        if (tradesToggle) tradesPublic = tradesToggle.checked;
-        const selected = [];
-        document.querySelectorAll('#pf-sections-panel input[type="checkbox"]:checked').forEach((input) => {
-            if (input.id === 'pf-trades-public-toggle') return;
-            selected.push(input.value);
-        });
-        await saveSections(selected);
-        await saveBio(bioText);
-        await saveWishlist(wishlistItems);
-        const selectedAchievementIds = [];
-        document.querySelectorAll('#pf-achievement-picker input[type="checkbox"]:checked').forEach((input) => {
-            const id = String(input.getAttribute('data-achievement-id') || '').trim();
-            if (id) selectedAchievementIds.push(id);
-        });
-        await savePinnedAchievements(selectedAchievementIds.slice(0, 6));
-        if (typeof showToast === 'function') showToast('Profile sections updated.', 'success');
+    document.getElementById('pf-wishlist-add-btn')?.addEventListener('click', () => {
+        openCompactPicker('wishlist');
+    });
+
+    document.getElementById('pf-trade-offer-btn')?.addEventListener('click', () => {
+        window.location.href = `/trade/offer?to=${encodeURIComponent(profileUsername)}`;
     });
 
     // ── Copy castle code ───────────────────────────────────────────────────
@@ -1158,6 +1850,20 @@
             if (typeof showToast === 'function') showToast('Castle code copied!', 'success');
         }).catch(() => {});
     });
+
+    // ── Global nav user dropdown ──────────────────────────────────────────────
+    function setupNavUser(user) {
+        if (!user) return;
+        window.currentUser = { ...user, avatar: user.avatar_url || user.avatar };
+        const navAvatar  = document.getElementById('nav-avatar');
+        const menuAvatar = document.getElementById('nav-user-menu-avatar');
+        if (navAvatar)  navAvatar.src  = window.currentUser.avatar || '';
+        if (menuAvatar) menuAvatar.src = window.currentUser.avatar || '';
+        const preview = document.getElementById('nav-user-preview');
+        if (preview) { preview.classList.remove('hidden'); preview.style.display = 'flex'; }
+        window.initNavUserMenu?.();
+        window.updateNavUserMenuLabels?.();
+    }
 
     // ── Main load ───────────────────────────────────────────────────────────
     async function loadProfile() {
@@ -1181,6 +1887,7 @@
             }
             const data = await res.json();
             const { user, stats, showcase_cards, trophy_cards, latest_cards, achievements } = data;
+            supportedCreators = Array.isArray(data.supported_creators) ? data.supported_creators : [];
 
             // Update page title
             document.title = `${user.display_name} · Castle TCG`;
@@ -1228,25 +1935,26 @@
             // Security: Only show edit button if we are the owner
             const editBtn = document.getElementById('pf-edit-btn');
             isOwner = false;
+            let meUser = null;
             try {
                 if (meRes && meRes.ok) {
                     const meData = await meRes.json();
-                    if (meData?.user?.username?.toLowerCase() === profileUsername.toLowerCase()) {
+                    meUser = meData?.user || null;
+                    if (meUser?.username?.toLowerCase() === profileUsername.toLowerCase()) {
                         isOwner = true;
                     }
                 }
             } catch (_) {}
-            
+
+            // Light up the global nav user dropdown for logged-in visitors
+            setupNavUser(meUser);
+
+            if (window.castleNav) castleNav.autoInit();
+
             if (editBtn) {
                 if (!isOwner) editBtn.style.display = 'none';
                 else editBtn.style.display = 'inline-flex';
             }
-            const sectionsBtn = document.getElementById('pf-sections-btn');
-            if (sectionsBtn) {
-                if (!isOwner) sectionsBtn.classList.add('hidden');
-                else sectionsBtn.classList.remove('hidden');
-            }
-
             // Assign layout from DB
             if (user.profile_layout) {
                 savedLayoutOrder = user.profile_layout;
@@ -1254,14 +1962,40 @@
             if (user.profile_sections) {
                 visibleSections = user.profile_sections;
             }
-            if (Array.isArray(user.profile_sidebar_widgets)) {
-                sidebarWidgetIds = new Set(user.profile_sidebar_widgets);
-            }
+            let savedLayoutVersion = null;
             if (user.profile_settings && typeof user.profile_settings === 'object') {
                 const dbMode = user.profile_settings.showcase_mode;
                 if (dbMode === 'carousel' || dbMode === 'grid') {
                     showcaseViewMode = dbMode;
                 }
+                const savedWidths = user.profile_settings.widget_widths;
+                if (savedWidths && typeof savedWidths === 'object') {
+                    widgetWidths = {};
+                    Object.keys(WIDGET_WIDTH_RANGE).forEach(id => {
+                        if (savedWidths[id] != null) widgetWidths[id] = clampWidth(id, Number(savedWidths[id]));
+                    });
+                }
+                const savedStyles = user.profile_settings.widget_styles;
+                if (savedStyles && typeof savedStyles === 'object') {
+                    widgetStyles = {};
+                    Object.entries(savedStyles).forEach(([id, v]) => {
+                        const val = typeof v === 'string' ? v : (v && v.l);
+                        if (WIDGET_LAYOUTS[id] && WIDGET_LAYOUTS[id].some(o => o.id === val)) widgetStyles[id] = val;
+                    });
+                }
+                savedLayoutVersion = Number(user.profile_settings.layout_version) || null;
+                if (Array.isArray(user.profile_settings.shown_binders)) {
+                    shownBinders = user.profile_settings.shown_binders.filter(id => typeof id === 'string');
+                }
+            }
+
+            // Force the curated default whenever the stored layout predates the
+            // current version. Owners get it persisted (stamped) on their visit.
+            if (savedLayoutVersion !== DEFAULT_LAYOUT_VERSION) {
+                savedLayoutOrder = [...DEFAULT_ORDER];
+                visibleSections = [...DEFAULT_SECTIONS];
+                widgetWidths = { ...DEFAULT_WIDTHS };
+                forcedDefaultLayout = true;
             }
             if (user.featured_card_ids) {
                 featuredCardIds = user.featured_card_ids;
@@ -1273,8 +2007,10 @@
                 wishlistItems = user.wishlist_items;
             }
             if (Array.isArray(achievements)) {
-                unlockedAchievements = achievements.slice(0, 24);
+                unlockedAchievements = achievements.slice(0, 300);
             }
+            achievementsTotal = Number(data.achievements_total) || 0;
+            achievementsAvgCompletion = Number(data.achievements_avg_completion) || 0;
             if (Array.isArray(user.profile_pinned_achievements)) {
                 pinnedAchievementIds = user.profile_pinned_achievements
                     .map((id) => String(id || '').trim())
@@ -1300,26 +2036,36 @@
                 }
             }
 
-            // Apply saved widget order
+            // Apply saved widget order + widths
             applyWidgetOrder(getSavedOrder());
             applyWidgetVisibility(getSavedSections());
+            applyWidgetWidths();
+            applyWidgetStyles();
+            wrapWidgetBodies();
             syncSectionsPanel();
 
+            // Persist the forced default once so it stamps the new version for this owner.
+            if (forcedDefaultLayout && isOwner) {
+                saveLayoutAndSections(getSavedOrder(), getSavedSections());
+            }
+
             // Render widgets
+            rememberCardInfo(showcase_cards || []);
             buildShowcaseSlots(showcase_cards || []);
             renderBio(bioText);
             renderStats(user, stats || {});
             renderRarityChart(stats || {});
-            renderTrophy(trophy_cards || []);
             renderLatest(latest_cards || []);
             renderWishlist(wishlistItems);
-            renderAchievements(getPinnedAchievementsForDisplay());
+            renderAchievements();
             renderBattleRecord(stats || {});
-            renderCreators(data.supported_creators || []);
-            renderSets(data.set_breakdown || []);
+            renderSlabs(data.top_graded || []);
+            renderBinders(data.binders || []);
+            renderTrinkets();
 
-            // Init drag
-            initDragAndDrop();
+            // Init reorder interactions + per-widget edit toolbars (hidden until editing)
+            initWidgetInteractions();
+            buildEditToolbars();
 
             // Show page
             document.getElementById('pf-loading')?.classList.add('hidden');

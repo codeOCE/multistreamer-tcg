@@ -5,6 +5,51 @@
 (function () {
     const ACT_AS_KEY = 'castle_act_as_streamer_id';
     const NAME_ICON_SRC = '/Affiliate%20BLUE.png';
+    const NAV_USER_CACHE_KEY = 'castle_nav_user_v1';
+
+    function writeNavUserCache(user) {
+        if (!user) return;
+        try {
+            const avatar = user.avatar_url || user.avatar || null;
+            if (!avatar) return;
+            const cached = {
+                twitch_id: user.twitch_id || null,
+                username: user.username || null,
+                display_name: user.display_name || null,
+                avatar_url: avatar,
+                is_creator: !!user.is_creator,
+            };
+            localStorage.setItem(NAV_USER_CACHE_KEY, JSON.stringify(cached));
+        } catch (_) { /* localStorage may be disabled */ }
+    }
+
+    function readNavUserCache() {
+        try {
+            const raw = localStorage.getItem(NAV_USER_CACHE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (_) { return null; }
+    }
+
+    function clearNavUserCache() {
+        try { localStorage.removeItem(NAV_USER_CACHE_KEY); } catch (_) { /* ignore */ }
+    }
+
+    function hydrateNavFromCache() {
+        const cached = readNavUserCache();
+        if (!cached || !cached.avatar_url) return;
+        const navAvatar  = document.getElementById('nav-avatar');
+        const menuAvatar = document.getElementById('nav-user-menu-avatar');
+        if (navAvatar)  navAvatar.src  = cached.avatar_url;
+        if (menuAvatar) menuAvatar.src = cached.avatar_url;
+        const preview = document.getElementById('nav-user-preview');
+        if (preview) { preview.classList.remove('hidden'); preview.style.display = 'flex'; }
+    }
+
+    window.writeNavUserCache  = writeNavUserCache;
+    window.readNavUserCache   = readNavUserCache;
+    window.clearNavUserCache  = clearNavUserCache;
+    window.hydrateNavFromCache = hydrateNavFromCache;
 
     function getBackendUrl() {
         if (typeof getCastleBackendOrigin === 'function') return getCastleBackendOrigin();
@@ -468,30 +513,31 @@
                 <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Public page &amp; display name</span>
             </span>`);
 
-        const switchViewBtn = makeBtn('nav-user-menu-switch-view', '');
-
         // Insert order: My Collection → View Profile → Settings → separator → Creator/Viewer toggle → Logout
         container.insertBefore(myCollectionBtn, settingsBtn);
         container.insertBefore(editProfileBtn, settingsBtn);
 
-        // Switch view goes between settings and logout, with a divider above it
-        const logoutBtn = document.getElementById('nav-user-menu-logout');
-        const divider = document.createElement('div');
-        divider.className = 'my-1 border-t border-white/5';
-        if (logoutBtn) {
-            container.insertBefore(divider, logoutBtn);
-            container.insertBefore(switchViewBtn, logoutBtn);
-        } else {
-            container.appendChild(divider);
-            container.appendChild(switchViewBtn);
+        // Switch view only injected for creators — never shown to plain viewers
+        const u = getCastleNavUser();
+        if (u && u.is_creator) {
+            const switchViewBtn = makeBtn('nav-user-menu-switch-view', '');
+            const logoutBtn = document.getElementById('nav-user-menu-logout');
+            const divider = document.createElement('div');
+            divider.className = 'my-1 border-t border-white/5';
+            if (logoutBtn) {
+                container.insertBefore(divider, logoutBtn);
+                container.insertBefore(switchViewBtn, logoutBtn);
+            } else {
+                container.appendChild(divider);
+                container.appendChild(switchViewBtn);
+            }
+            switchViewBtn.addEventListener('click', (e) => { e.stopPropagation(); switchView(); });
+            updateSwitchViewButton();
         }
 
         // Wire up new buttons
         myCollectionBtn.addEventListener('click', (e) => { e.stopPropagation(); closeNavUserMenu(); window.location.href = '/my-collection'; });
         editProfileBtn.addEventListener('click', (e) => { e.stopPropagation(); openEditProfile(); });
-        switchViewBtn.addEventListener('click',  (e) => { e.stopPropagation(); switchView(); });
-
-        updateSwitchViewButton();
     }
 
     async function navUserLogout() {
@@ -507,6 +553,7 @@
         try {
             sessionStorage.clear();
         } catch (_) { /* ignore */ }
+        clearNavUserCache();
         window.location.href = '/login';
     }
 
@@ -516,6 +563,10 @@
         const menu = document.getElementById('nav-user-menu');
         if (!root || !trigger || !menu || root.dataset.navMenuInit === '1') return;
         root.dataset.navMenuInit = '1';
+
+        // Persist the freshly-loaded user so the next navigation can hydrate
+        // the dropdown instantly before its bootstrap fetch completes.
+        writeNavUserCache(getCastleNavUser());
 
         // Inject extra items (edit profile, switch view, redeem) before first open
         injectExtraMenuItems(menu);

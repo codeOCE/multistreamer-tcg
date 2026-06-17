@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,66 +8,62 @@
     <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/tailwind-built.css">
 
     <style>
-        /* Ensure .hidden always wins regardless of ID-level display rules */
         .hidden { display: none !important; }
 
         /* ── Three-column page layout ── */
         #bt-layout {
             display: grid;
-            /* Narrow side rails — center column + deck UI get the extra space */
-            grid-template-columns: minmax(188px, 232px) minmax(0, 1fr) 196px;
+            grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) 260px;
             gap: 0;
             width: 100%;
             min-height: calc(100vh - 80px);
-            max-width: 1680px;
-            margin: 0 auto;
-            padding: 0 20px 48px 0; /* flush left */
+            padding: 0 32px 48px 32px;
             align-items: stretch;
         }
 
         /* ── Left: traits ── */
         #bt-traits-col {
-            padding: 28px 10px 28px 0;
+            padding: 24px 8px 24px 0;
             min-width: 0;
-            max-width: 232px;
+            max-width: 280px;
             border-right: 1px solid rgba(255,255,255,0.05);
-            overflow: visible; /* allow tooltips to escape the column */
+            overflow: visible;
         }
         .bt-traits-header {
-            font-size: 0.62rem;
+            font-size: 0.7rem;
             font-weight: 800;
-            letter-spacing: 0.24em;
+            letter-spacing: 0.26em;
             text-transform: uppercase;
             color: var(--void-muted);
-            padding: 0 8px 14px 4px;
+            padding: 0 14px 12px 2px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         .trait-row {
             position: relative;
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 9px 8px 9px 2px;
+            gap: 14px;
+            padding: 10px 14px 10px 2px;
             border-radius: 10px;
             transition: background 0.15s;
             cursor: default;
         }
         .trait-row:hover { background: rgba(255,255,255,0.04); }
-        .trait-row img { width: 24px; height: 24px; object-fit: contain; flex-shrink: 0; }
-        .trait-row span {
-            font-size: 0.6rem; font-weight: 700;
-            letter-spacing: 0.08em; text-transform: uppercase;
+        .trait-row img { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+        .trait-row > span {
+            font-size: 0.72rem; font-weight: 700;
+            letter-spacing: 0.1em; text-transform: uppercase;
             color: var(--void-muted);
             transition: color 0.15s;
         }
-        .trait-row:hover span { color: var(--void-text); }
+        .trait-row:hover > span { color: var(--void-text); }
 
         /* ── Trait tooltip ── */
         .trait-tip {
@@ -89,7 +85,19 @@
         .trait-row:hover .trait-tip {
             opacity: 1;
             transform: translateY(-50%) translateX(0);
-            pointer-events: auto; /* allow hovering keywords inside */
+            pointer-events: auto;
+        }
+        .trait-tip::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 50%;
+            transform: translateY(-50%) rotate(45deg);
+            width: 10px;
+            height: 10px;
+            background: #0d1117;
+            border-left: 1px solid rgba(var(--void-accent-rgb), 0.22);
+            border-bottom: 1px solid rgba(var(--void-accent-rgb), 0.22);
         }
         .trait-tip-name {
             font-family: 'Outfit', sans-serif;
@@ -105,15 +113,8 @@
             line-height: 1.55;
             color: rgba(255,255,255,0.6);
         }
-        .trait-tip-desc strong {
-            color: var(--void-text);
-            font-weight: 700;
-        }
-        .trait-tip-desc em {
-            color: rgba(255,255,255,0.45);
-            font-style: italic;
-        }
-        /* ── Keyword definition blocks inside trait tooltips ── */
+        .trait-tip-desc strong { color: var(--void-text); font-weight: 700; }
+        .trait-tip-desc em { color: rgba(255,255,255,0.45); font-style: italic; }
         .trait-tip-kw-block {
             margin-top: 10px;
             padding-top: 10px;
@@ -122,117 +123,55 @@
             flex-direction: column;
             gap: 7px;
         }
-        .trait-tip-kw-item {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        .trait-tip-kw-label {
-            font-size: 0.5rem;
-            font-weight: 900;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: var(--void-accent);
-        }
+        .trait-tip-kw-item { display: flex; flex-direction: column; gap: 2px; }
+        .trait-tip-kw-label { font-size: 0.5rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; color: var(--void-accent); }
         .trait-tip-kw-def {
-            font-size: 0.58rem;
-            line-height: 1.45;
-            color: rgba(255,255,255,0.5);
+            font-size: 0.62rem; font-weight: 400;
+            line-height: 1.55; letter-spacing: normal;
+            text-transform: none;
+            color: rgba(255,255,255,0.6);
         }
 
-        /* ── Inline keyword tooltips (Battlegrounds-style) ── */
+        /* ── Inline keyword tooltips ── */
         .bt-kw {
-            color: var(--void-text);
-            font-weight: 700;
+            color: var(--void-text); font-weight: 700;
             border-bottom: 1px dotted rgba(var(--void-accent-rgb), 0.5);
-            cursor: help;
-            position: relative;
-            display: inline-block;
+            cursor: help; position: relative; display: inline-block;
         }
         .bt-kw-tip {
-            position: absolute;
-            bottom: calc(100% + 8px);
-            left: 50%;
-            transform: translateX(-50%);
-            width: 200px;
-            background: #0a0d14;
-            border: 1px solid rgba(var(--void-accent-rgb), 0.35);
-            border-radius: 10px;
-            padding: 10px 12px;
-            font-size: 0.58rem;
-            line-height: 1.5;
-            color: rgba(255,255,255,0.7);
-            font-weight: 400;
-            font-style: normal;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.15s;
-            z-index: 700;
-            box-shadow: 0 8px 28px rgba(0,0,0,0.7);
-            white-space: normal;
-            text-align: left;
+            position: absolute; bottom: calc(100% + 8px); left: 50%;
+            transform: translateX(-50%); width: 200px;
+            background: #0a0d14; border: 1px solid rgba(var(--void-accent-rgb), 0.35);
+            border-radius: 10px; padding: 10px 12px;
+            font-size: 0.58rem; line-height: 1.5; color: rgba(255,255,255,0.7);
+            font-weight: 400; font-style: normal; pointer-events: none;
+            opacity: 0; transition: opacity 0.15s; z-index: 700;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.7); white-space: normal; text-align: left;
         }
         .bt-kw-tip strong { color: var(--void-accent); font-weight: 800; display: block; margin-bottom: 4px; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; }
         .bt-kw:hover .bt-kw-tip { opacity: 1; }
-        /* Arrow pointing down */
         .bt-kw-tip::after {
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 50%;
+            content: ''; position: absolute; top: 100%; left: 50%;
             transform: translateX(-50%) rotate(45deg);
-            width: 8px; height: 8px;
-            margin-top: -4px;
+            width: 8px; height: 8px; margin-top: -4px;
             background: #0a0d14;
             border-right: 1px solid rgba(var(--void-accent-rgb), 0.35);
             border-bottom: 1px solid rgba(var(--void-accent-rgb), 0.35);
         }
 
-        /* ── Status effects glossary (bottom of traits col) ── */
+        /* ── Status glossary ── */
         #bt-glossary {
-            margin-top: 20px;
-            padding-top: 16px;
+            margin-top: 16px;
+            padding-top: 14px;
             border-top: 1px solid rgba(255,255,255,0.05);
         }
         .bt-glossary-header {
-            font-size: 0.5rem;
-            font-weight: 800;
-            letter-spacing: 0.28em;
-            text-transform: uppercase;
-            color: var(--void-muted);
-            padding: 0 6px 10px;
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.28em;
+            text-transform: uppercase; color: var(--void-muted); padding: 0 4px 8px;
         }
-        .bt-glossary-row {
-            padding: 7px 6px;
-            border-radius: 6px;
-        }
-        .bt-glossary-term {
-            font-size: 0.57rem;
-            font-weight: 800;
-            color: var(--void-accent);
-            letter-spacing: 0.06em;
-            display: block;
-            margin-bottom: 2px;
-        }
-        .bt-glossary-def {
-            font-size: 0.55rem;
-            line-height: 1.5;
-            color: rgba(255,255,255,0.45);
-        }
-
-        /* Arrow pointing left */
-        .trait-tip::before {
-            content: '';
-            position: absolute;
-            left: -6px;
-            top: 50%;
-            transform: translateY(-50%) rotate(45deg);
-            width: 10px;
-            height: 10px;
-            background: #0d1117;
-            border-left: 1px solid rgba(var(--void-accent-rgb), 0.22);
-            border-bottom: 1px solid rgba(var(--void-accent-rgb), 0.22);
-        }
+        .bt-glossary-row { padding: 6px 4px; border-radius: 6px; }
+        .bt-glossary-term { font-size: 0.57rem; font-weight: 800; color: var(--void-accent); letter-spacing: 0.06em; display: block; margin-bottom: 2px; }
+        .bt-glossary-def { font-size: 0.55rem; line-height: 1.5; color: rgba(255,255,255,0.45); }
 
         /* ── Center: deck builder ── */
         #bt-center-col {
@@ -244,91 +183,47 @@
         }
 
         /* Page heading */
-        #bt-heading {
-            text-align: center;
-        }
-        #bt-creator-label {
-            font-size: 0.58rem;
-            font-weight: 800;
-            letter-spacing: 0.3em;
-            text-transform: uppercase;
-            color: var(--void-muted);
-            margin-bottom: 6px;
-        }
+        #bt-heading { text-align: center; }
         #bt-heading h1 {
-            font-family: 'Outfit', sans-serif;
-            font-weight: 900;
-            font-size: clamp(2rem, 4vw, 3rem);
-            text-transform: uppercase;
-            letter-spacing: -0.02em;
-            line-height: 1;
+            font-family: 'Outfit', sans-serif; font-weight: 900;
+            font-size: clamp(2rem, 4vw, 3rem); text-transform: uppercase;
+            letter-spacing: -0.02em; line-height: 1;
         }
         #bt-heading h1 span { color: var(--void-accent); }
-        #bt-heading p {
-            font-size: 0.65rem;
-            color: var(--void-muted);
-            margin-top: 6px;
-        }
+        #bt-heading p { font-size: 0.65rem; color: var(--void-muted); margin-top: 6px; }
 
         /* Deck tabs */
         #bt-deck-tabs {
-            display: flex;
-            gap: 10px;
-            width: 100%;
-            max-width: min(720px, 100%);
+            display: flex; gap: 10px;
+            width: 100%; max-width: min(720px, 100%);
         }
         .bt-deck-tab {
-            flex: 1;
-            padding: 10px 8px 8px;
+            flex: 1; padding: 10px 8px 8px;
             border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            background: transparent;
+            border-radius: 12px; background: transparent;
             color: rgba(255,255,255,0.4);
-            font-family: 'Outfit', sans-serif;
-            font-weight: 900;
-            font-size: 0.6rem;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-            line-height: 1.4;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
+            font-family: 'Outfit', sans-serif; font-weight: 900;
+            font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase;
+            cursor: pointer; transition: all 0.2s; text-align: center;
+            line-height: 1.4; position: relative;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
         }
         .bt-deck-tab:hover {
-            border-color: rgba(255,255,255,0.18);
-            color: rgba(255,255,255,0.7);
+            border-color: rgba(255,255,255,0.18); color: rgba(255,255,255,0.7);
             background: rgba(255,255,255,0.02);
         }
         .bt-deck-tab.active {
-            border-color: var(--void-accent);
-            color: var(--void-accent);
+            border-color: var(--void-accent); color: var(--void-accent);
             background: rgba(var(--void-accent-rgb), 0.07);
             box-shadow: 0 0 18px rgba(var(--void-accent-rgb), 0.1);
         }
-        /* Toggle pill — always shown on every tab that has a deck */
         .bt-deck-toggle {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 0.44rem;
-            font-weight: 800;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            padding: 3px 8px;
-            border-radius: 20px;
-            border: 1px solid rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.28);
-            background: transparent;
-            cursor: pointer;
-            transition: all 0.18s;
-            white-space: nowrap;
-            font-family: inherit;
-            line-height: 1;
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 0.44rem; font-weight: 800; letter-spacing: 0.1em;
+            text-transform: uppercase; padding: 3px 8px; border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.28);
+            background: transparent; cursor: pointer; transition: all 0.18s;
+            white-space: nowrap; font-family: inherit; line-height: 1;
         }
         .bt-deck-toggle:hover {
             border-color: rgba(var(--void-accent-rgb), 0.35);
@@ -342,52 +237,32 @@
             cursor: default;
         }
         .bt-deck-toggle .bt-toggle-dot {
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
-            background: currentColor;
-            flex-shrink: 0;
-            transition: all 0.18s;
+            width: 5px; height: 5px; border-radius: 50%;
+            background: currentColor; flex-shrink: 0; transition: all 0.18s;
         }
-        .bt-deck-toggle:not(.is-active) .bt-toggle-dot {
-            background: rgba(255,255,255,0.2);
-        }
+        .bt-deck-toggle:not(.is-active) .bt-toggle-dot { background: rgba(255,255,255,0.2); }
 
-        /* Card slots container */
+        /* Card slots */
         #bt-slots-wrap {
-            width: 100%;
-            max-width: min(720px, 100%);
+            width: 100%; max-width: min(720px, 100%);
             background: rgba(255,255,255,0.02);
             border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 20px;
-            padding: 36px 32px 32px;
+            border-radius: 20px; padding: 36px 32px 32px;
         }
         #bt-slots {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
         }
-        .bt-slot-wrap {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-        }
+        .bt-slot-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
         .bt-card-frame {
-            width: 100%;
-            aspect-ratio: 5/7;
-            border-radius: 12px;
+            width: 100%; aspect-ratio: 5/7; border-radius: 12px;
             border: 2px dashed rgba(var(--void-accent-rgb), 0.2);
-            background: rgba(255,255,255,0.02);
-            overflow: hidden;
-            position: relative;
-            cursor: pointer;
+            background: rgba(255,255,255,0.02); overflow: hidden;
+            position: relative; cursor: pointer;
             transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
         }
         .bt-card-frame:hover {
             border-color: rgba(var(--void-accent-rgb), 0.5);
-            transform: translateY(-5px);
-            box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+            transform: translateY(-5px); box-shadow: 0 14px 36px rgba(0,0,0,0.55);
         }
         .bt-card-frame.filled { border-style: solid; border-color: rgba(255,255,255,0.12); }
         .bt-card-frame.filled:hover {
@@ -397,31 +272,22 @@
         .bt-card-empty-icon {
             position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
-            color: rgba(var(--void-accent-rgb), 0.18);
-            font-size: 2rem;
-            transition: color 0.2s;
+            color: rgba(var(--void-accent-rgb), 0.18); font-size: 2rem; transition: color 0.2s;
         }
         .bt-card-frame:hover .bt-card-empty-icon { color: rgba(var(--void-accent-rgb), 0.5); }
         .bt-slot-label {
-            font-size: 0.55rem;
-            font-weight: 800;
-            letter-spacing: 0.22em;
-            text-transform: uppercase;
-            color: var(--void-muted);
+            font-size: 0.55rem; font-weight: 800; letter-spacing: 0.22em;
+            text-transform: uppercase; color: var(--void-muted);
         }
 
-        /* Trait badge pips */
+        /* Trait pips */
         .bt-card-trait {
-            position: absolute;
-            bottom: 7px; left: 7px;
-            display: flex; gap: 3px; flex-wrap: wrap;
-            z-index: 2;
+            position: absolute; bottom: 7px; left: 7px;
+            display: flex; gap: 3px; flex-wrap: wrap; z-index: 2;
         }
         .bt-trait-pip {
-            width: 22px; height: 22px;
-            border-radius: 50%;
-            background: rgba(0,0,0,0.72);
-            border: 1px solid rgba(255,255,255,0.18);
+            width: 22px; height: 22px; border-radius: 50%;
+            background: rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.18);
             display: flex; align-items: center; justify-content: center;
             backdrop-filter: blur(4px);
         }
@@ -430,144 +296,399 @@
         #bt-battle-msg.success { color: var(--void-accent); }
         #bt-battle-msg.error   { color: #f87171; }
 
-        /* Save deck */
+        /* Save deck actions */
         #bt-deck-actions {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            margin-top: 24px;
-            padding-top: 24px;
+            display: flex; flex-direction: column; align-items: center;
+            gap: 10px; margin-top: 24px; padding-top: 24px;
             border-top: 1px solid rgba(255,255,255,0.06);
         }
         #bt-save-deck-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            min-width: 200px;
-            padding: 12px 28px;
-            border-radius: 12px;
-            border: 1px solid rgba(var(--void-accent-rgb), 0.45);
-            background: rgba(var(--void-accent-rgb), 0.12);
-            color: var(--void-accent);
-            font-family: 'Outfit', sans-serif;
-            font-size: 0.65rem;
-            font-weight: 900;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: background 0.2s, border-color 0.2s, transform 0.15s, opacity 0.2s;
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 8px; min-width: 200px; padding: 12px 28px;
+            border-radius: 12px; border: 1px solid rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.12); color: var(--void-accent);
+            font-family: 'Outfit', sans-serif; font-size: 0.65rem;
+            font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+            cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.15s, opacity 0.2s;
         }
         #bt-save-deck-btn:hover:not(:disabled) {
             background: rgba(var(--void-accent-rgb), 0.2);
-            border-color: rgba(var(--void-accent-rgb), 0.65);
+            border-color: rgba(var(--void-accent-rgb), 0.65); transform: translateY(-1px);
+        }
+        #bt-save-deck-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+        #bt-save-deck-btn.is-saved {
+            border-color: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+            color: rgba(255,255,255,0.35);
+            opacity: 1;
+        }
+        #bt-save-deck-btn.is-saved:hover { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); transform: none; }
+        #bt-deck-actions-row {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        #bt-revert-deck-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 12px 22px;
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+            background: transparent; color: rgba(255,255,255,0.55);
+            font-family: 'Outfit', sans-serif; font-size: 0.65rem;
+            font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+            cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+        }
+        #bt-revert-deck-btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.04);
+            border-color: rgba(255,255,255,0.22);
+            color: var(--void-text);
             transform: translateY(-1px);
         }
-        #bt-save-deck-btn:disabled {
-            opacity: 0.35;
-            cursor: not-allowed;
-            transform: none;
-        }
+        #bt-revert-deck-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
         #bt-deck-save-msg {
-            font-size: 0.62rem;
-            font-weight: 600;
-            text-align: center;
-            min-height: 1.2em;
+            font-size: 0.62rem; font-weight: 600; text-align: center; min-height: 1.2em;
         }
         #bt-deck-save-msg.success { color: var(--void-accent); }
         #bt-deck-save-msg.error   { color: #f87171; }
 
-        /* ── Right: history (narrow, content-sized track) ── */
+        /* ── Right panel ── */
         #bt-right-col {
-            padding: 28px 0 0 12px;
-            min-width: 0;
-            box-sizing: border-box;
+            padding: 24px 14px 0 14px;
+            min-width: 0; box-sizing: border-box;
             border-left: 1px solid rgba(255,255,255,0.05);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
+            display: flex; flex-direction: column; gap: 0;
         }
         .bt-panel {
-            background: none;
-            border: none;
-            border-radius: 0;
-            padding: 0 0 24px;
+            padding: 0 0 14px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 14px;
         }
+        .bt-panel:last-child { border-bottom: none; margin-bottom: 0; }
         .bt-panel-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 16px;
-            padding-bottom: 10px;
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px; padding-bottom: 8px;
             border-bottom: 1px solid rgba(255,255,255,0.07);
         }
         .bt-panel-title {
-            font-size: 0.58rem;
-            font-weight: 800;
-            letter-spacing: 0.28em;
-            text-transform: uppercase;
-            color: var(--void-accent);
+            font-size: 0.58rem; font-weight: 800; letter-spacing: 0.28em;
+            text-transform: uppercase; color: var(--void-accent);
         }
+        .bt-panel-icon {
+            font-size: 0.7rem; color: var(--void-accent); opacity: 0.45;
+        }
+
+        /* Empty / placeholder message */
+        .bt-empty-msg {
+            font-size: 0.58rem; color: var(--void-muted); opacity: 0.5;
+            text-align: center; padding: 14px 0; font-style: italic;
+        }
+
+        /* History rows */
         .bt-history-row {
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px;
+            padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
         }
         .bt-history-row:last-child { border-bottom: none; }
         .bt-history-vs {
-            font-size: 0.57rem; font-weight: 700;
-            letter-spacing: 0.1em; text-transform: uppercase;
-            color: var(--void-muted);
+            font-size: 0.56rem; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--void-muted);
         }
         .bt-history-result {
-            font-family: 'Outfit', sans-serif;
-            font-size: 0.75rem; font-weight: 900;
-            letter-spacing: 0.1em; text-transform: uppercase;
-            margin-top: 2px;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
         }
-        .bt-history-result.win  { color: var(--void-accent); }
-        .bt-history-result.loss { color: #f87171; }
-        .bt-history-result.draw { color: rgba(255,255,255,0.35); }
+        .bt-history-label {
+            font-family: 'Outfit', sans-serif; font-size: 0.7rem; font-weight: 900;
+            letter-spacing: 0.12em; text-transform: uppercase; line-height: 1;
+        }
+        .bt-history-result.win  .bt-history-label { color: var(--void-accent); }
+        .bt-history-result.loss .bt-history-label { color: #f87171; }
+        .bt-history-result.draw .bt-history-label { color: rgba(255,255,255,0.35); }
+        .bt-history-mmr {
+            font-family: 'Outfit', sans-serif; font-size: 0.55rem; font-weight: 800;
+            letter-spacing: 0.06em; line-height: 1;
+        }
+        .bt-history-mmr.pos { color: rgba(var(--void-accent-rgb), 0.85); }
+        .bt-history-mmr.neg { color: rgba(248,113,113,0.85); }
+        .bt-history-mmr.zero { color: rgba(255,255,255,0.3); }
 
+        /* Record stat grid */
         .bt-stat-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            text-align: center;
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center;
         }
+        .bt-stat-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
         .bt-stat-val {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.55rem; font-weight: 900;
-            line-height: 1;
+            font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 900; line-height: 1;
         }
         .bt-stat-val.wins   { color: var(--void-accent); }
         .bt-stat-val.losses { color: #f87171; }
         .bt-stat-val.draws  { color: rgba(255,255,255,0.35); }
+        .bt-stat-val.rank   {
+            color: rgba(255,255,255,0.8);
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
         .bt-stat-label {
-            font-size: 0.5rem; font-weight: 800;
-            letter-spacing: 0.2em; text-transform: uppercase;
-            color: var(--void-muted); margin-top: 4px;
+            font-size: 0.46rem; font-weight: 800; letter-spacing: 0.2em;
+            text-transform: uppercase; color: var(--void-muted);
         }
 
-        /* ── Picker modal ── */
-        #bt-picker {
+        /* ── Battle Leaderboard ── */
+        .bt-lb-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .bt-lb-row:last-child { border-bottom: none; }
+        .bt-lb-rank {
+            font-family: 'Outfit', sans-serif; font-size: 0.58rem;
+            font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;
+            flex-shrink: 0; width: 22px; text-align: center;
+        }
+        .bt-lb-info { flex: 1; min-width: 0; }
+        .bt-lb-name {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em;
+            color: var(--void-text); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        .bt-lb-record {
+            display: flex; align-items: center; gap: 4px; margin-top: 2px;
+        }
+        .bt-lb-w  { font-size: 0.5rem; font-weight: 800; color: var(--void-accent); }
+        .bt-lb-l  { font-size: 0.5rem; font-weight: 800; color: #f87171; }
+        .bt-lb-d  { font-size: 0.5rem; font-weight: 800; color: rgba(255,255,255,0.35); }
+        .bt-lb-tier {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.5rem; font-weight: 900;
+            letter-spacing: 0.08em; text-transform: uppercase;
+        }
+        .bt-lb-sep { font-size: 0.5rem; color: rgba(255,255,255,0.15); }
+        .bt-lb-deck {
+            position: relative;
+            display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+        }
+        .bt-lb-deck-slot {
+            width: 26px; height: 36px;
+            flex-shrink: 0;
+        }
+        .bt-lb-deck-card {
+            width: 100%; height: 100%;
+            border-radius: 5px;
+            object-fit: cover; display: block;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.06) inset,
+                0 2px 6px rgba(0,0,0,0.45),
+                0 0 0 1px rgba(0,0,0,0.4);
+            background: #0a0d14;
+            cursor: help;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .bt-lb-deck:hover .bt-lb-deck-card {
+            box-shadow:
+                0 0 0 1px rgba(var(--void-accent-rgb), 0.3) inset,
+                0 3px 9px rgba(0,0,0,0.55),
+                0 0 0 1px rgba(0,0,0,0.4);
+        }
+        .bt-lb-deck-empty {
+            width: 100%; height: 100%;
+            border-radius: 5px;
+            background:
+                linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.05) inset,
+                0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        /* Full-deck hover tooltip */
+        .bt-deck-tip {
+            position: absolute;
+            bottom: calc(100% + 12px);
+            right: 0;
+            width: 360px;
+            background: #0d1117;
+            border: 1px solid rgba(var(--void-accent-rgb), 0.25);
+            border-radius: 14px;
+            padding: 12px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(4px);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 700;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--void-accent-rgb),0.05);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .bt-lb-deck:hover .bt-deck-tip {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .bt-deck-tip-card {
+            display: flex; flex-direction: column; gap: 6px;
+            min-width: 0;
+        }
+        .bt-deck-tip-img-wrap {
+            position: relative; aspect-ratio: 5/7;
+            border-radius: 8px; overflow: hidden;
+            background: #0a0d14;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.07) inset;
+        }
+        .bt-deck-tip-img-wrap img {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        .bt-deck-tip-img-empty {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,0.15);
+            font-size: 0.55rem; font-weight: 700;
+            letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        .bt-deck-tip-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900; font-size: 0.6rem;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--void-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .bt-deck-tip-stats {
+            display: flex; gap: 4px; flex-wrap: wrap;
+        }
+        .bt-deck-tip-stat {
+            display: inline-flex; align-items: center; gap: 2px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.5rem; font-weight: 800;
+            letter-spacing: 0.04em; text-transform: uppercase;
+        }
+        .bt-deck-tip-stat.atk { color: #f87171; }
+        .bt-deck-tip-stat.def { color: #60a5fa; }
+        .bt-deck-tip-stat.hp  { color: var(--void-accent); }
+        .bt-deck-tip-traits {
+            display: flex; flex-direction: column; gap: 4px;
+            margin-top: 2px; padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .bt-deck-tip-trait {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 0.02em;
+            color: rgba(255,255,255,0.7);
+        }
+        .bt-deck-tip-trait-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.15);
+            flex-shrink: 0;
+            font-size: 0.6rem;
+        }
+        .bt-deck-tip-trait-icon img { width: 9px; height: 9px; object-fit: contain; }
+        .bt-deck-tip-trait.genesis { color: var(--void-accent); }
+        .bt-deck-tip-trait.genesis .bt-deck-tip-trait-icon {
+            border-color: rgba(var(--void-accent-rgb), 0.5);
+        }
+        .bt-lb-no-deck {
+            font-size: 0.48rem; color: var(--void-muted); opacity: 0.5; font-style: italic;
+        }
+
+        /* ── Confirm Make Active modal ── */
+        #bt-confirm-active {
             position: fixed; inset: 0;
-            background: rgba(0,0,0,0.82);
-            backdrop-filter: blur(10px);
-            z-index: 400;
+            background: rgba(5,7,10,0.92);
+            backdrop-filter: blur(20px);
+            z-index: 9100;
             display: flex; align-items: center; justify-content: center;
             padding: 24px;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        #bt-confirm-active.open { opacity: 1; pointer-events: all; }
+        #bt-confirm-active-inner {
+            background: var(--void-bg, #0a0a0f);
+            border: 1px solid rgba(var(--void-accent-rgb), 0.22);
+            border-radius: 18px;
+            width: 100%; max-width: 380px;
+            padding: 28px 26px 22px;
+            display: flex; flex-direction: column; align-items: center; gap: 14px;
+            text-align: center;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--void-accent-rgb),0.05);
+            transform: translateY(8px);
+            transition: transform 0.25s ease;
+        }
+        #bt-confirm-active.open #bt-confirm-active-inner { transform: translateY(0); }
+        #bt-confirm-active-title {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900; font-size: 0.95rem;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--void-text);
+            margin: 0;
+        }
+        #bt-confirm-active-body {
+            font-size: 0.68rem;
+            line-height: 1.55;
+            color: var(--void-muted);
+            margin: 0;
+            max-width: 280px;
+        }
+        #bt-confirm-active-body #bt-confirm-active-target,
+        #bt-confirm-active-body #bt-confirm-active-current {
+            color: var(--void-accent);
+            font-weight: 700;
+        }
+        #bt-confirm-active-actions {
+            display: flex; gap: 10px; margin-top: 6px; width: 100%;
+        }
+        #bt-confirm-active-actions button {
+            flex: 1;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.62rem; font-weight: 900;
+            letter-spacing: 0.16em; text-transform: uppercase;
+            padding: 11px 14px;
+            border-radius: 11px;
+            cursor: pointer;
+            transition: all 0.18s;
+        }
+        #bt-confirm-active-cancel {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.55);
+        }
+        #bt-confirm-active-cancel:hover {
+            background: rgba(255,255,255,0.04);
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.22);
+        }
+        #bt-confirm-active-confirm {
+            background: rgba(var(--void-accent-rgb), 0.14);
+            border: 1px solid rgba(var(--void-accent-rgb), 0.5);
+            color: var(--void-accent);
+        }
+        #bt-confirm-active-confirm:hover:not(:disabled) {
+            background: rgba(var(--void-accent-rgb), 0.22);
+            border-color: rgba(var(--void-accent-rgb), 0.65);
+        }
+        #bt-confirm-active-confirm:disabled {
+            opacity: 0.45; cursor: not-allowed;
+        }
+
+        /* ── Picker modal (matching collection detail style) ── */
+        #bt-picker {
+            position: fixed; inset: 0;
+            background: rgba(5,7,10,0.92);
+            backdrop-filter: blur(20px);
+            z-index: 9000;
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.25s;
+        }
+        #bt-picker.open {
+            opacity: 1; pointer-events: all;
         }
         #bt-picker-inner {
             background: var(--void-bg, #0a0a0f);
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 20px;
-            width: 100%; max-width: 820px;
-            /* Give a definite height so flex:1 on the grid can expand */
-            height: min(85vh, 720px);
+            width: 100%; max-width: 1040px;
+            height: min(85vh, 760px);
             display: flex; flex-direction: column;
             overflow: hidden;
-            box-shadow: 0 32px 80px rgba(0,0,0,0.7);
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--void-accent-rgb),0.05);
         }
         #bt-picker-head {
             padding: 20px 24px 16px;
@@ -575,74 +696,137 @@
             display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
         }
         #bt-picker-head h4 {
-            font-family: 'Outfit', sans-serif;
-            font-weight: 900; font-size: 1rem;
+            font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.1rem;
             text-transform: uppercase; letter-spacing: 0.05em;
         }
-        #bt-picker-head p {
-            font-size: 0.58rem; color: var(--void-muted); margin-top: 2px;
-        }
+        #bt-picker-head p { font-size: 0.58rem; color: var(--void-muted); margin-top: 4px; }
         #bt-picker-close {
-            width: 38px; height: 38px; flex-shrink: 0;
-            border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
-            background: rgba(255,255,255,0.04); color: var(--void-text);
-            cursor: pointer; font-size: 1.1rem;
-            transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+            width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+            color: var(--void-text); cursor: pointer; font-size: 1.1rem;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
         }
-        #bt-picker-close:hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.35); }
-        #bt-picker-search-bar {
-            padding: 12px 24px;
+        #bt-picker-close:hover { background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.3); }
+        #bt-picker-filters {
+            padding: 14px 24px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.01);
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .bt-filter-row {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .bt-filter-row-end {
+            margin-left: auto;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .bt-filter-chip {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.58rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            padding: 5px 11px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: transparent;
+            color: var(--void-muted);
+            cursor: pointer;
+            transition: all 0.18s;
+            white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .bt-filter-chip:hover {
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.03);
+        }
+        .bt-filter-chip.active {
+            color: var(--void-accent);
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.1);
+        }
+        .bt-filter-chip[data-rarity].active {
+            color: var(--bt-rarity-color);
+            border-color: var(--bt-rarity-color);
+            background: color-mix(in srgb, var(--bt-rarity-color) 12%, transparent);
+        }
+        .bt-filter-chip img {
+            width: 12px; height: 12px; object-fit: contain;
+        }
+        .bt-filter-label {
+            font-size: 0.48rem; font-weight: 800;
+            letter-spacing: 0.2em; text-transform: uppercase;
+            color: var(--void-muted); opacity: 0.6;
+            padding-right: 4px;
+        }
+        #bt-picker-search-toggle {
+            width: 30px; height: 30px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.02);
+            color: var(--void-muted);
+            cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.8rem;
+            line-height: 1;
+            transition: all 0.18s;
+            flex-shrink: 0;
+        }
+        /* Boxicons glyphs inherit a tall line-height and render slightly low; force the
+           glyph to a centered block so it sits dead-centre in the circle. */
+        #bt-picker-search-toggle i { display: block; line-height: 1; }
+        #bt-picker-search-toggle:hover {
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.22);
+            background: rgba(255,255,255,0.05);
+        }
+        #bt-picker-search-toggle.active {
+            color: var(--void-accent);
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.1);
         }
         .bt-search-input {
-            width: 100%;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.07);
-            border-radius: 12px;
-            padding: 10px 16px 10px 38px;
-            font-size: 0.7rem; font-weight: 600;
-            color: var(--void-text);
-            outline: none;
-            transition: border-color 0.2s;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 999px;
+            padding: 6px 14px; font-size: 0.7rem; font-weight: 600;
+            color: var(--void-text); outline: none;
+            transition: width 0.25s ease, border-color 0.2s, padding 0.25s ease, opacity 0.2s;
+            font-family: 'Space Grotesk', sans-serif;
+            width: 220px;
+        }
+        .bt-search-input.collapsed {
+            width: 0; padding-left: 0; padding-right: 0;
+            border-color: transparent; opacity: 0;
+            pointer-events: none;
         }
         .bt-search-input::placeholder { color: var(--void-muted); }
-        .bt-search-input:focus { border-color: rgba(var(--void-accent-rgb), 0.35); }
-        .bt-search-wrap { position: relative; }
-        .bt-search-wrap i {
-            position: absolute; left: 13px; top: 50%;
-            transform: translateY(-50%);
-            color: var(--void-muted); font-size: 0.7rem;
-        }
+        .bt-search-input:focus { border-color: rgba(var(--void-accent-rgb), 0.4); box-shadow: 0 0 0 3px rgba(var(--void-accent-rgb),0.06); }
         #bt-picker-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-            gap: 12px;
-            padding: 20px 24px;
+            grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+            gap: 14px; padding: 20px 24px;
             overflow-y: auto; flex: 1;
+            align-content: start;
         }
         .bt-picker-card {
             display: flex; flex-direction: column; gap: 6px;
             cursor: pointer; border-radius: 10px; padding: 5px;
-            border: 1px solid transparent;
-            transition: all 0.18s;
+            border: 1px solid transparent; transition: all 0.18s;
         }
         .bt-picker-card:hover {
             background: rgba(var(--void-accent-rgb), 0.05);
-            border-color: rgba(var(--void-accent-rgb), 0.25);
+            border-color: rgba(var(--void-accent-rgb), 0.3);
+            transform: translateY(-2px);
         }
         .bt-picker-img-wrap {
-            position: relative;
-            aspect-ratio: 5/7;
-            border-radius: 8px; overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.06);
+            position: relative; aspect-ratio: 5/7; border-radius: 8px;
+            overflow: hidden; border: 1px solid rgba(255,255,255,0.07);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
         }
         .bt-picker-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .bt-picker-name {
-            font-size: 0.5rem; font-weight: 700;
-            letter-spacing: 0.08em; text-transform: uppercase;
-            color: var(--void-muted);
-            text-align: center; overflow: hidden;
-            text-overflow: ellipsis; white-space: nowrap;
+            font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--void-muted);
+            text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .bt-picker-stats {
             display: flex; justify-content: center; gap: 6px;
@@ -653,22 +837,19 @@
 
         /* ── Loading / auth ── */
         #bt-loading, #bt-signin {
-            position: fixed; inset: 0;
-            background: var(--void-bg, #0a0a0f);
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
+            position: fixed; inset: 0; background: var(--void-bg, #0a0a0f);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
             gap: 16px; z-index: 200; text-align: center; padding: 24px;
         }
         .bt-spin {
             width: 36px; height: 36px;
             border: 2px solid rgba(var(--void-accent-rgb), 0.15);
             border-top-color: var(--void-accent);
-            border-radius: 50%;
-            animation: bt-spin 0.8s linear infinite;
+            border-radius: 50%; animation: bt-spin 0.8s linear infinite;
         }
         @keyframes bt-spin { to { transform: rotate(360deg); } }
 
-        /* Stack / hide sidebars only on small screens (was 1024px — too wide, looked “broken” on common laptop widths) */
+        /* ── Nav pill links ── */
         @media (max-width: 768px) {
             #bt-layout { grid-template-columns: 1fr; }
             #bt-traits-col, #bt-right-col { display: none !important; }
@@ -696,86 +877,7 @@
     </a>
 </div>
 
-<!-- Nav -->
-<nav class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl hidden" id="bt-nav">
-    <div class="w-full px-8 h-20 flex items-center justify-between">
-        <a href="/" class="flex items-center gap-2 group cursor-pointer" style="text-decoration:none;">
-            <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
-                <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
-            </div>
-            <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
-        </a>
-        <div class="flex items-center gap-3">
-            <a id="bt-back-link" href="/dashboard"
-               class="flex items-center gap-1.5 text-[0.62rem] font-black uppercase tracking-widest text-void-muted hover:text-void-text transition-colors"
-               style="text-decoration:none;">
-                <i class="bx bx-chevron-left" style="font-size:0.55rem;"></i>
-                <span id="bt-back-label">Back to Binder</span>
-            </a>
-            <div id="nav-user-preview" class="hidden items-center">
-                <span id="nav-username" class="hidden">---</span>
-                <span id="nav-user-role" class="hidden">Collector</span>
-                <div id="nav-user-menu-root" class="relative">
-                    <button type="button" id="nav-user-menu-trigger"
-                        class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
-                        aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
-                        <span class="relative inline-block">
-                            <img id="nav-avatar" src="" alt="" class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
-                        </span>
-                        <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
-                    </button>
-                    <div id="nav-user-menu" class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden" role="menu">
-                        <div class="border-b border-white/5">
-                            <button type="button" id="nav-user-identity-toggle"
-                                class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
-                                aria-expanded="false" aria-controls="nav-user-team-panel">
-                                <img id="nav-user-menu-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
-                                <div class="min-w-0 flex-1">
-                                    <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
-                                    <div class="flex items-center gap-2 mt-1 flex-wrap">
-                                        <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
-                                        <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
-                                    </div>
-                                </div>
-                                <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
-                                    <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
-                                </span>
-                            </button>
-                            <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
-                                <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
-                                <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
-                            </div>
-                        </div>
-                        <div class="px-4 py-3 border-b border-white/5">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="min-w-0">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
-                                    <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
-                                </div>
-                                <button type="button" id="nav-user-menu-copy-code"
-                                    class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
-                            </div>
-                        </div>
-                        <div class="p-1.5">
-                            <button type="button" id="nav-user-menu-settings" role="menuitem"
-                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
-                                <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
-                                <span class="flex flex-col leading-tight normal-case">
-                                    <span class="uppercase tracking-widest">Account settings</span>
-                                    <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
-                                </span>
-                            </button>
-                            <button type="button" id="nav-user-menu-logout" role="menuitem"
-                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
-                                <i class="bx bx-log-out w-4 text-center"></i> Log out
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</nav>
+<!-- Nav — injected by /streamer-nav.js -->
 
 <!-- Main layout -->
 <div id="bt-root" class="hidden" style="padding-top:80px;">
@@ -888,8 +990,6 @@
                     <div class="trait-tip-desc">After dying, comes back to life with <strong>1 health</strong>.</div>
                 </div>
             </div>
-
-
         </aside>
 
         <!-- Center: Deck Builder -->
@@ -897,8 +997,7 @@
 
             <!-- Heading -->
             <div id="bt-heading">
-                <p id="bt-creator-label"></p>
-                <h1>⚔ Battle <span>Arena</span></h1>
+                <h1>Battle <span>Arena</span></h1>
                 <p>Build your 3-card deck and challenge other collectors.</p>
             </div>
 
@@ -933,46 +1032,66 @@
                 </div>
 
                 <div id="bt-deck-actions">
-                    <button type="button" id="bt-save-deck-btn">Save deck</button>
+                    <div id="bt-deck-actions-row">
+                        <button type="button" id="bt-revert-deck-btn" class="hidden">Revert</button>
+                        <button type="button" id="bt-save-deck-btn">Save Deck</button>
+                    </div>
                     <p id="bt-deck-save-msg" class="hidden" aria-live="polite"></p>
                 </div>
 
-                <!-- bt-battle-msg kept for JS feedback if battle flow returns -->
                 <p id="bt-battle-msg" style="display:none;"></p>
             </div>
 
         </main>
 
-        <!-- Right: History + Record -->
+        <!-- Right: Record + History + Leaderboard -->
         <aside id="bt-right-col">
 
-            <div class="bt-panel">
-                <div class="bt-panel-header">
-                    <span class="bt-panel-title">Battle History</span>
-                    <i class="bx bx-history" style="font-size:0.6rem;color:var(--void-accent);opacity:0.5;"></i>
-                </div>
-                <div id="bt-history-list">
-                    <p style="font-size:0.6rem;color:var(--void-muted);opacity:0.5;text-align:center;padding:16px 0;font-style:italic;">No battles yet.</p>
-                </div>
-            </div>
-
+            <!-- Your Record -->
             <div class="bt-panel">
                 <div class="bt-panel-header">
                     <span class="bt-panel-title">Your Record</span>
+                    <i class="bx bx-bar-chart-alt-2 bt-panel-icon"></i>
                 </div>
                 <div class="bt-stat-grid">
-                    <div>
+                    <div class="bt-stat-cell">
                         <div id="bt-stat-wins" class="bt-stat-val wins">—</div>
                         <div class="bt-stat-label">Wins</div>
                     </div>
-                    <div>
+                    <div class="bt-stat-cell">
                         <div id="bt-stat-losses" class="bt-stat-val losses">—</div>
                         <div class="bt-stat-label">Losses</div>
                     </div>
-                    <div>
+                    <div class="bt-stat-cell">
                         <div id="bt-stat-draws" class="bt-stat-val draws">—</div>
                         <div class="bt-stat-label">Draws</div>
                     </div>
+                    <div class="bt-stat-cell">
+                        <div id="bt-stat-rank" class="bt-stat-val rank">—</div>
+                        <div class="bt-stat-label">Rank</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Battle History -->
+            <div class="bt-panel">
+                <div class="bt-panel-header">
+                    <span class="bt-panel-title">Battle History</span>
+                    <i class="bx bx-history bt-panel-icon"></i>
+                </div>
+                <div id="bt-history-list">
+                    <p class="bt-empty-msg">No battles yet.</p>
+                </div>
+            </div>
+
+            <!-- Battle Leaderboard -->
+            <div class="bt-panel">
+                <div class="bt-panel-header">
+                    <span class="bt-panel-title">Top Battlers</span>
+                    <i class="bx bx-trophy bt-panel-icon"></i>
+                </div>
+                <div id="bt-lb-list">
+                    <p class="bt-empty-msg">Loading…</p>
                 </div>
             </div>
 
@@ -980,20 +1099,50 @@
     </div>
 </div>
 
+<!-- Confirm Make Active Modal -->
+<div id="bt-confirm-active" onclick="if(event.target===this)window._btCancelActivate()">
+    <div id="bt-confirm-active-inner">
+        <h4 id="bt-confirm-active-title">Make this your active deck?</h4>
+        <p id="bt-confirm-active-body">
+            <span id="bt-confirm-active-target">Battle Deck 1</span> will be used for any incoming battles.<br>
+            <span id="bt-confirm-active-current-wrap" class="hidden">
+                Currently active: <span id="bt-confirm-active-current">—</span>.
+            </span>
+        </p>
+        <div id="bt-confirm-active-actions">
+            <button type="button" id="bt-confirm-active-cancel" onclick="window._btCancelActivate()">Cancel</button>
+            <button type="button" id="bt-confirm-active-confirm" onclick="window._btConfirmActivate()">Make Active</button>
+        </div>
+    </div>
+</div>
+
 <!-- Card Picker Modal -->
-<div id="bt-picker" class="hidden">
+<div id="bt-picker" onclick="if(event.target===this)window._btClosePicker()">
     <div id="bt-picker-inner">
         <div id="bt-picker-head">
             <div>
-                    <h4>Choose a Card — Slot <span id="bt-picker-slot-label">1</span></h4>
-                        <p>Select a card from your collection · Press <kbd style="font-family:monospace;font-size:0.55rem;padding:1px 5px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:rgba(255,255,255,0.06);">ESC</kbd> to close</p>
+                <h4>Choose a Card — Slot <span id="bt-picker-slot-label">1</span></h4>
+                <p>Select a card from your collection · Press <kbd style="font-family:monospace;font-size:0.55rem;padding:1px 5px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:rgba(255,255,255,0.06);">ESC</kbd> to close</p>
             </div>
             <button id="bt-picker-close" onclick="window._btClosePicker()"><i class="bx bx-x"></i></button>
         </div>
-        <div id="bt-picker-search-bar">
-            <div class="bt-search-wrap">
-                <i class="bx bxs-search"></i>
-                <input id="bt-picker-search" class="bt-search-input" type="text" placeholder="Search by name or trait…">
+        <div id="bt-picker-filters">
+            <div class="bt-filter-row" id="bt-rarity-row">
+                <span class="bt-filter-label">Rarity</span>
+                <button class="bt-filter-chip" data-rarity="legendary" style="--bt-rarity-color:#fbbf24">Legendary</button>
+                <button class="bt-filter-chip" data-rarity="epic"      style="--bt-rarity-color:#a855f7">Epic</button>
+                <button class="bt-filter-chip" data-rarity="rare"      style="--bt-rarity-color:#3faaff">Rare</button>
+                <button class="bt-filter-chip" data-rarity="uncommon"  style="--bt-rarity-color:#34d399">Uncommon</button>
+                <button class="bt-filter-chip" data-rarity="common"    style="--bt-rarity-color:#94a3b8">Common</button>
+                <div class="bt-filter-row-end">
+                    <input id="bt-picker-search" class="bt-search-input collapsed" type="text" placeholder="Search name…" autocomplete="off">
+                    <button type="button" id="bt-picker-search-toggle" title="Search by name" aria-label="Toggle search">
+                        <i class="bx bx-search"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="bt-filter-row" id="bt-trait-row">
+                <span class="bt-filter-label">Traits</span>
             </div>
         </div>
         <div id="bt-picker-grid"></div>
@@ -1001,6 +1150,7 @@
 </div>
 
 <script src="/nav-user-menu.js"></script>
+<script src="/nav-notifications.js"></script>
 <script src="/streamer-nav.js"></script>
 <script src="/battle.js"></script>
 </body>
