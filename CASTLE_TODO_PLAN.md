@@ -28,7 +28,7 @@ Status legend:
 ## Pack Opening Improvements
 
 - [x] **Display rules (1→1, 2→2, 3+→max 3).** Pack pile now shows only as many images as owned (max 3) in both binder ([binder.html](public/binder.html) `setPackTab`) and my-collection ([my-collection.js](public/my-collection.js) `loadPendingPacks`).
-- [ ] **Reduce pack-opening hitbox size.** No deliberate hitbox sizing found; the drag/click target is likely the whole stack.
+- [x] **Reduce pack-opening hitbox size.** Moved `cursor: pointer` from wrapper to image, added click handler to image only ([pack-opening.html:130](public/pack-opening.html#L130), [pack-opening.js:886-887](public/pack-opening.js#L886-L887)).
 - [~] **Convert card images to PNGs where appropriate.** High-fidelity Genesis visuals + cache-busting landed (commit `db48243`); confirm remaining raster paths.
 - [x] **Remove "drag to inspect".** Dead drag handler removed; hint reworded to "Tap card to flip".
 - [x] **Click cards to flip.** Tap detection added to the reveal: tap an un-revealed card to flip it up, tap a revealed card to flip to its back and back again ([pack-opening.js](public/pack-opening.js)).

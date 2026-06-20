@@ -35,7 +35,6 @@
   let currentStreamerId = '';
   let openedPackIds     = [];
   let mergeMode         = false;
-  let inspecting        = false;
 
   // ── Embed mode (iframe inside binder modal) ───────────────────────────────
   const _urlParams      = new URLSearchParams(window.location.search);
@@ -84,6 +83,9 @@
 
   // ── Rarity helpers ────────────────────────────────────────────────────────
   const RARITY_RANK = { common:0, uncommon:1, rare:2, epic:3, legendary:4, secret:5 };
+  // Estimated fragments from burning a card (mirrors the Magic Dust page formula).
+  const FRAG_MULT = { legendary:4, epic:3, rare:2, common:1 };
+  function fragValue(r) { return 5 * (FRAG_MULT[(r||'common').toLowerCase()] || 1); }
   function rarityKey(r)  { return (r||'common').toLowerCase().replace(/\s+/g,''); }
   function rarityClass(r) {
     const k = rarityKey(r);
@@ -127,10 +129,12 @@
   }
 
   // ── Pack chip ─────────────────────────────────────────────────────────────
-  function updatePackChip() {
+  // Pass `overrideRem` to show the count that will remain after the current batch is
+  // opened (so the final pack reads "0"/hidden while it is being opened, not "1 remaining").
+  function updatePackChip(overrideRem) {
     const chip = document.getElementById('pack-chip');
     if (!chip) return;
-    const rem = pendingPacks.length - currentPackIdx;
+    const rem = (typeof overrideRem === 'number') ? overrideRem : (pendingPacks.length - currentPackIdx);
     if (rem > 0) {
       chip.textContent = `${rem} pack${rem!==1?'s':''} remaining`;
       chip.style.display = 'block';
@@ -369,15 +373,21 @@
     const btn = document.querySelector('.lobby-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
 
-    // Auto-merge same set always; toggle extends to all packs from same streamer
+    // "Choose your set" packs open one at a time with the viewer's chosen set — never merged.
     let packsToOpen;
-    if (mergeMode) {
+    if (pack.roll_on_open) {
+      packsToOpen = [pack];
+    } else if (mergeMode) {
       const sk = getStreamerKey(pack);
       packsToOpen = sk ? pendingPacks.filter(p => getStreamerKey(p) === sk) : [pack];
     } else {
       const setKey = getSetKey(pack);
       packsToOpen  = setKey ? pendingPacks.filter(p => getSetKey(p) === setKey) : [pack];
     }
+
+    // Reflect the batch we're about to open immediately, so the chip counts down
+    // during the open/reveal animation instead of lagging until the results screen.
+    updatePackChip(Math.max(0, pendingPacks.length - packsToOpen.length));
 
     const allCards = [];
     openedPackIds  = [];
@@ -387,7 +397,8 @@
       try {
         const r = await fetch(`${BACKEND}/api/packs/${p.id}/open`, {
           method: 'POST', credentials: 'include',
-          headers: { 'X-CSRF-Token': csrfToken },
+          headers: { 'X-CSRF-Token': csrfToken, 'Content-Type': 'application/json' },
+          body: p.roll_on_open ? JSON.stringify({ set_id: _chosenSetId || 'surprise' }) : '{}',
         });
         if (!r.ok) throw new Error(await r.text());
         const data = await r.json();
@@ -701,6 +712,22 @@
       actions.classList.add('show');
     }
 
+    // Duplicate marker: the card stays in the collection, but flag it so the user can
+    // choose to burn the extra for fragments via the dust button.
+    const dupBadge = document.getElementById('rev-dup-badge');
+    const dustBtn  = document.getElementById('btn-dust');
+    if (dupBadge) {
+      if (card.is_duplicate) {
+        const frag = document.getElementById('rev-dup-frag');
+        if (frag) frag.textContent = `· +${fragValue(card.rarity)} if burned`;
+        dupBadge.classList.remove('hide');
+        if (dustBtn) dustBtn.title = `Burn duplicate for +${fragValue(card.rarity)} fragments`;
+      } else {
+        dupBadge.classList.add('hide');
+        if (dustBtn) dustBtn.title = 'Burn for fragments';
+      }
+    }
+
     // Reveal inspect hint after first flip
     const hint = document.getElementById('rev-swipe-hint');
     if (hint) hint.classList.remove('hide');
@@ -727,6 +754,7 @@
     if (info)       info.classList.remove('show');
     if (actions)    actions.classList.remove('show');
     if (badge)      badge.classList.remove('show');
+    document.getElementById('rev-dup-badge')?.classList.add('hide');
     if (hint)       hint.classList.add('hide');
     if (bottomBtns) bottomBtns.classList.remove('show');
     closeCardDetails();
@@ -759,71 +787,19 @@
     if (el) flyCardAway(el, -1);
   };
 
-  // ── Stack drag-to-inspect (grab and drag to flip card to its back) ─────────
-  function attachStackSwipe() {
-    const screen = document.getElementById('s-reveal');
-    if (!screen) return;
+  // Top card in the reveal stack.
+  function topRevCard() {
+    return document.getElementById('rev-stage')
+      ?.querySelector(`.rev-card[data-idx="${currentCardIdx}"]`) || null;
+  }
 
-    let sx = 0, dragging = false, dragEl = null, innerEl = null;
-
-    function topEl() {
-      return document.getElementById('rev-stage')
-        ?.querySelector(`.rev-card[data-idx="${currentCardIdx}"]`) || null;
-    }
-
-    screen.addEventListener('pointerdown', (e) => {
-      // Never intercept button/link clicks
-      if (e.target.closest('button, a')) return;
-      const top = topEl();
-      if (!top || !top.classList.contains('flipped')) return;
-      dragEl  = top;
-      innerEl = top.querySelector('.rev-inner');
-      sx      = e.clientX;
-      dragging   = true;
-      inspecting = true;
-      if (innerEl) innerEl.style.transition = 'none';
-      dragEl.setPointerCapture(e.pointerId);
-    });
-
-    screen.addEventListener('pointermove', (e) => {
-      if (!dragging || !dragEl || !innerEl) return;
-      const dx    = e.clientX - sx;
-      const angle = 180 + Math.max(-180, Math.min(180, dx * 0.7));
-      innerEl.style.transform = `rotateY(${angle}deg)`;
-    });
-
-    screen.addEventListener('pointerup', () => {
-      if (!dragging || !dragEl || !innerEl) return;
-      dragging   = false;
-      inspecting = false;
-      const target = innerEl;
-      // Snap back to face-up with a spring animation
-      target.style.transition = 'transform .55s cubic-bezier(.16,1,.3,1)';
-      target.style.transform  = 'rotateY(180deg)';
-      // Clear inline styles once settled so CSS class owns the state
-      setTimeout(() => {
-        if (target.style.transform === 'rotateY(180deg)') {
-          target.style.transition = '';
-          target.style.transform  = '';
-        }
-      }, 580);
-      dragEl = null; innerEl = null;
-    });
-
-    screen.addEventListener('pointercancel', () => {
-      if (dragEl && innerEl) {
-        innerEl.style.transition = 'transform .55s cubic-bezier(.16,1,.3,1)';
-        innerEl.style.transform  = 'rotateY(180deg)';
-        setTimeout(() => {
-          if (innerEl && innerEl.style.transform === 'rotateY(180deg)') {
-            innerEl.style.transition = '';
-            innerEl.style.transform  = '';
-          }
-        }, 580);
-      }
-      dragging = false; inspecting = false;
-      dragEl = null; innerEl = null;
-    });
+  // Click-to-flip: an un-revealed top card flips face-up; a revealed one toggles
+  // to its card-back for inspection (and back again). Replaces the old drag gesture.
+  function toggleTopCardFlip() {
+    const el = topRevCard();
+    if (!el) return;
+    if (!el.classList.contains('flipped')) { flipTopCard(); return; }
+    el.classList.toggle('show-back');
   }
 
   // ── Tilt on the top card — only while pointer is held, not on hover ────────
@@ -831,7 +807,7 @@
     const screen = document.getElementById('s-reveal');
     if (!screen) return;
 
-    let held = false;
+    let held = false, downX = 0, downY = 0, moved = false;
 
     function applyTilt(cx, cy) {
       if (!held) return;
@@ -860,13 +836,23 @@
       if (tiltEl) tiltEl.style.transform = '';
     }
 
-    // Only start tilt on non-button press — prevent native drag
+    // Only start tilt on non-button press — prevent native drag. Track movement so a
+    // press that doesn't move is treated as a click (flip), not a tilt drag.
     screen.addEventListener('pointerdown', (e) => {
-      if (!e.target.closest('button, a')) { held = true; e.preventDefault(); }
+      if (!e.target.closest('button, a')) {
+        held = true; moved = false; downX = e.clientX; downY = e.clientY; e.preventDefault();
+      }
     });
-    screen.addEventListener('pointerup',     () => { held = false; resetTilt(); });
+    screen.addEventListener('pointerup', (e) => {
+      const wasHeld = held, wasTap = !moved;
+      held = false; resetTilt();
+      if (wasHeld && wasTap && !e.target.closest('button, a')) toggleTopCardFlip();
+    });
     screen.addEventListener('pointercancel', () => { held = false; resetTilt(); });
-    screen.addEventListener('pointermove',   (e) => applyTilt(e.clientX, e.clientY));
+    screen.addEventListener('pointermove',   (e) => {
+      if (held && (Math.abs(e.clientX - downX) > 6 || Math.abs(e.clientY - downY) > 6)) moved = true;
+      applyTilt(e.clientX, e.clientY);
+    });
     screen.addEventListener('mouseleave',    () => { held = false; resetTilt(); });
   }
 
@@ -896,6 +882,9 @@
       wrap.style.transform = '';
       wrap.style.animationPlayState = '';
     }
+
+    const img = document.getElementById('lobby-img');
+    if (img) img.addEventListener('click', beginOpen);
 
     wrap.addEventListener('mousemove',  (e) => applyLobbyTilt(e.clientX, e.clientY));
     wrap.addEventListener('mouseleave', resetLobbyTilt);
@@ -951,12 +940,19 @@
     const swipeHint = document.getElementById('rev-swipe-hint');
     if (swipeHint) swipeHint.classList.add('hide');
 
+    const n = currentCards.length;
     const countEl = document.getElementById('res-count');
-    if (countEl) countEl.textContent = currentCards.length;
+    if (countEl) countEl.textContent = n;
 
     const grid = document.getElementById('res-grid');
     if (!grid) return;
     grid.innerHTML = '';
+
+    // Scale tiles + title to the haul size so big merge-opens fit without endless scroll.
+    const cardW = n <= 5 ? 112 : n <= 12 ? 96 : n <= 24 ? 78 : n <= 40 ? 64 : 54;
+    grid.style.setProperty('--res-card-w', `${cardW}px`);
+    const results = document.getElementById('s-results');
+    if (results) results.style.setProperty('--res-title-scale', n > 24 ? '0.72' : n > 12 ? '0.85' : '1');
 
     const sorted = [...currentCards].sort((a, b) =>
       (RARITY_RANK[rarityKey(b.rarity)] ?? 0) - (RARITY_RANK[rarityKey(a.rarity)] ?? 0)
@@ -978,6 +974,13 @@
       rar.textContent = card.rarity || 'Common';
 
       el.appendChild(img); el.appendChild(name); el.appendChild(rar);
+      if (card.is_duplicate) {
+        el.classList.add('res-card--dup');
+        const dup = document.createElement('div');
+        dup.className = 'res-dup-tag';
+        dup.textContent = 'DUP';
+        el.appendChild(dup);
+      }
       grid.appendChild(el);
     });
 
@@ -1085,7 +1088,56 @@
         countEl.textContent = totalStreamer;
       }
     }
+
+    setupSetPicker(pack);
   }
+
+  // ── Choose-your-set picker (deferred-roll packs) ──────────────────────────
+  let _chosenSetId = null;
+  async function setupSetPicker(pack) {
+    const picker  = document.getElementById('lobby-set-picker');
+    const openBtn = document.querySelector('.lobby-btn');
+    const mergeRow = document.getElementById('merge-toggle-row');
+    if (!pack.roll_on_open) {
+      if (picker) { picker.classList.add('hidden'); picker.innerHTML = ''; }
+      if (openBtn) openBtn.style.display = '';
+      return;
+    }
+    // Choose-your-set: replace the plain Open button with a set picker.
+    if (openBtn)  openBtn.style.display = 'none';
+    if (mergeRow) mergeRow.style.display = 'none';
+    if (!picker) return;
+
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    picker.classList.remove('hidden');
+    picker.innerHTML = '<div class="lsp-title">Loading sets…</div>';
+    const slug = pack.streamer?.username || pack.streamer_username || FILTER_STREAMER || '';
+    let sets = [];
+    try {
+      const r = await fetch(`${BACKEND}/api/sets?streamer=${encodeURIComponent(slug)}`, { credentials: 'include' });
+      if (r.ok) { const all = await r.json(); sets = (Array.isArray(all) ? all : []).filter(s => s.is_active || s.is_always_active); }
+    } catch (_) {}
+
+    const surpriseTile = `<button class="lsp-tile lsp-surprise" onclick="pickSetAndOpen('surprise')"><div class="lsp-noimg"><i class="fa-solid fa-dice"></i></div><span>Surprise me</span></button>`;
+    if (!sets.length) {
+      picker.innerHTML = `<div class="lsp-title">Open your pack</div><div class="lsp-grid">${surpriseTile}</div>`;
+      return;
+    }
+    const tiles = sets.map(s => {
+      const img = s.pack_image_url || s.icon_url || '';
+      return `<button class="lsp-tile" onclick="pickSetAndOpen('${esc(s.id)}')">
+        ${img ? `<img src="${esc(img)}" alt="">` : '<div class="lsp-noimg"></div>'}
+        <span>${esc(s.name || 'Set')}</span>
+      </button>`;
+    }).join('');
+    picker.innerHTML = `<div class="lsp-title">Choose a set to open</div><div class="lsp-grid">${tiles}${surpriseTile}</div>`;
+  }
+  window.pickSetAndOpen = function (setId) {
+    _chosenSetId = setId;
+    beginOpen();
+  };
 
   // ── Reveal toast ─────────────────────────────────────────────────────────
   function showRevealToast(msg, type) {
@@ -1106,6 +1158,8 @@
     const isOn = btn.classList.toggle('fav-on');
     const icon = btn.querySelector('i');
     if (icon) { icon.className = isOn ? 'fa-solid fa-heart' : 'fa-regular fa-heart'; }
+    // Glow the revealed card itself, not just the button.
+    topRevCard()?.classList.toggle('is-fav', isOn);
     try {
       await fetch(`${BACKEND}/api/cards/${card.id}/favourite`, {
         method: isOn ? 'POST' : 'DELETE',
