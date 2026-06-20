@@ -212,6 +212,21 @@
       background: rgba(var(--void-accent-rgb),0.15);
       border-color: rgba(var(--void-accent-rgb),0.3);
     }
+    /* Star a user binder to pin it to the front of the shelf. */
+    .tb-shelf-tile-star {
+      display: none; position: absolute; top: 2px; left: 2px; z-index: 10;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer; align-items: center; justify-content: center;
+      font-size: 0.62rem; color: rgba(255,255,255,0.6); line-height: 1;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tb-shelf-tile:hover .tb-shelf-tile-star { display: flex; }
+    .tb-shelf-tile-star:hover { color: #fbbf24; }
+    .tb-shelf-tile-star.is-fav {
+      display: flex; color: #fbbf24;
+      background: rgba(251,191,36,0.15); border-color: rgba(251,191,36,0.4);
+    }
     #tb-show-hidden-btn {
       width: 20px; height: 20px; border-radius: 5px; flex-shrink: 0;
       border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);
@@ -955,6 +970,7 @@
     .bp-pack-card {
       flex: 1; display: flex; flex-direction: column; gap: 8px;
       text-decoration: none; cursor: pointer; transition: transform 0.2s;
+      background: none; border: none; padding: 0; font: inherit; color: inherit;
     }
     .bp-pack-card:hover { transform: translateY(-4px); }
     .bp-pack-img-wrap {
@@ -1620,7 +1636,7 @@
               <img id="rp-pack-img" class="rp-pack-img" src="" alt="Booster Pack">
             </div>
           </div>
-          <div class="rp-pack-label">Buy<br>Packs</div>
+          <div class="rp-pack-label">Get<br>Packs</div>
         </button>
       </div>
     </div>
@@ -1718,6 +1734,16 @@
         <button class="move-card-btn" id="move-card-cancel" onclick="closeMoveCardModal()">Cancel</button>
         <button class="move-card-btn" id="move-card-confirm" onclick="confirmMoveCard()">Move Card</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Set Selector for Reward Packs -->
+  <div id="set-selector-modal" class="fixed inset-0 z-[1000] bg-black/80 backdrop-blur hidden flex items-center justify-center p-4" onclick="if(event.target===this)closeSetSelector()">
+    <div class="bg-void-bg border border-white/10 rounded-2xl max-w-md w-full p-6">
+      <h3 class="text-lg font-black uppercase tracking-tight mb-2">Choose a Set</h3>
+      <p class="text-sm text-void-muted mb-6">Select which set to open from:</p>
+      <div id="set-selector-list" class="space-y-2 mb-6 max-h-64 overflow-y-auto"></div>
+      <button onclick="closeSetSelector()" class="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold uppercase tracking-wider transition-colors">Cancel</button>
     </div>
   </div>
 
@@ -1910,6 +1936,7 @@
   <script src="/nav-user-menu.js"></script>
   <script src="/nav-notifications.js"></script>
   <script src="/streamer-nav.js"></script>
+  <script src="/checkout-modal.js"></script>
   <script>
   (function () {
     'use strict';
@@ -2030,6 +2057,7 @@
         ).trim().toLowerCase() || null;
 
         loadHiddenDefaults();
+        loadFavouriteBinders();
 
         if (activeStreamerSlug) {
           const [pageRes, packsRes] = await Promise.allSettled([
@@ -2210,6 +2238,7 @@
 
     function renderLeftPacks(sets, pendingPacks, slug) {
       _leftPackSets     = sets;
+      _availableSets    = sets;  // For set selector modal
       _leftPendingPacks = Array.isArray(pendingPacks) ? pendingPacks : [];
       _leftSlug         = slug;
       const streamerDbId = streamerData?.id || null;
@@ -2225,6 +2254,15 @@
       const countEl   = document.getElementById('left-pack-count');
       const openLabel = document.getElementById('left-pack-open-label');
       const n = _leftPendingCount;
+      // Pack pile shows at most 3 images, and only as many as the user actually owns:
+      // 1 owned -> front only, 2 -> front + 1 behind, 3+ -> full stack of 3.
+      const showBack1 = n >= 2, showBack2 = n >= 3;
+      ['left-pack-img-back1', 'rp-back1'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.display = showBack1 ? '' : 'none';
+      });
+      ['left-pack-img-back2', 'rp-back2'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.display = showBack2 ? '' : 'none';
+      });
       if (countEl) { countEl.textContent = n; countEl.classList.toggle('hidden', n === 0); }
       if (openLabel) {
         openLabel.innerHTML = n > 0
@@ -2248,18 +2286,73 @@
 
     function rp_packAction() {
       const slug = _leftSlug || activeStreamerSlug || streamerData?.username || null;
-      openPackModal(slug);
+      const firstPack = _leftPendingPacks && _leftPendingPacks.length > 0 ? _leftPendingPacks[0] : null;
+      openPackModal(slug, firstPack);
     }
 
-    function openPackModal(slug) {
+    let _pendingSetSelectionPack = null;
+    let _availableSets = [];
+
+    function openPackModal(slug, pack = null) {
+      // If pack needs set selection (Twitch reward), show selector first
+      if (pack && pack.roll_on_open && _availableSets.length > 0) {
+        _pendingSetSelectionPack = pack;
+        showSetSelector();
+        return;
+      }
+
       const modal = document.getElementById('pack-modal');
       const frame = document.getElementById('pack-modal-frame');
       if (!modal || !frame) return;
       const params = new URLSearchParams({ embed: '1' });
       if (slug) params.set('streamer', slug);
+      if (pack?.id) params.set('pack_id', pack.id);
       frame.src = '/pack-opening.html?' + params.toString();
       modal.classList.add('open');
       document.body.style.overflow = 'hidden';
+    }
+
+    function showSetSelector() {
+      const modal = document.getElementById('set-selector-modal');
+      const list = document.getElementById('set-selector-list');
+      if (!modal || !list) return;
+
+      list.innerHTML = _availableSets.map(set => `
+        <button onclick="selectSetAndOpen('${set.id}')"
+          class="w-full text-left p-3 bg-white/5 hover:bg-void-accent/20 border border-white/10 rounded-lg transition-colors">
+          <div class="font-bold">${set.name}</div>
+          <div class="text-xs text-void-muted">${set.card_count || 0} cards</div>
+        </button>
+      `).join('');
+
+      modal.classList.remove('hidden');
+    }
+
+    function selectSetAndOpen(setId) {
+      const modal = document.getElementById('set-selector-modal');
+      if (modal) modal.classList.add('hidden');
+
+      const packModal = document.getElementById('pack-modal');
+      const frame = document.getElementById('pack-modal-frame');
+      if (!packModal || !frame) return;
+
+      const params = new URLSearchParams({ embed: '1' });
+      if (_pendingSetSelectionPack?.streamer?.username) {
+        params.set('streamer', _pendingSetSelectionPack.streamer.username);
+      }
+      if (setId) params.set('set_id', setId);
+      if (_pendingSetSelectionPack?.id) params.set('pack_id', _pendingSetSelectionPack.id);
+
+      frame.src = '/pack-opening.html?' + params.toString();
+      packModal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      _pendingSetSelectionPack = null;
+    }
+
+    function closeSetSelector() {
+      const modal = document.getElementById('set-selector-modal');
+      if (modal) modal.classList.add('hidden');
+      _pendingSetSelectionPack = null;
     }
 
     function closePackModal() {
@@ -2294,11 +2387,10 @@
           const raw  = pickPackUrl(modalSlug, s.pack_image_url) || fallback;
           const img  = escapeHTML(raw);
           const name = escapeHTML(s.name || 'Pack');
-          const dest = escapeHTML(_leftSlug ? '/' + _leftSlug : '#');
-          return `<a class="bp-pack-card" href="${dest}">
+          return `<button type="button" class="bp-pack-card" onclick="binderBuyPack()">
             <div class="bp-pack-img-wrap"><img src="${img}" alt="${name}" loading="lazy"></div>
             <div class="bp-pack-info"><span class="bp-pack-name">${name}</span></div>
-          </a>`;
+          </button>`;
         }).join('');
       }
       modal.classList.add('open');
@@ -2313,6 +2405,28 @@
 
     window.openBuyPacksModal  = openBuyPacksModal;
     window.closeBuyPacksModal = closeBuyPacksModal;
+
+    // Selecting a pack opens the themed in-page checkout (Stripe Payment Element).
+    window.binderBuyPack = function () {
+      const sid = streamerData?.id;
+      if (!currentUser) { showToast('Sign in to buy packs', 'error'); return; }
+      if (!sid) { showToast('No creator context found', 'error'); return; }
+      if (typeof window.openCheckout !== 'function') { showToast('Checkout is unavailable right now', 'error'); return; }
+      closeBuyPacksModal();
+      window.openCheckout({
+        streamerId: sid,
+        creatorName: streamerData?.brand_name || streamerData?.username,
+        onSuccess: () => {
+          // Webhook grants asynchronously — refresh pending packs shortly after.
+          setTimeout(() => {
+            fetch(`${BACKEND}/api/packs/pending`, { credentials: 'include' })
+              .then(r => r.ok ? r.json() : [])
+              .then(packs => renderLeftPacks(_leftPackSets, Array.isArray(packs) ? packs : [], _leftSlug))
+              .catch(() => {});
+          }, 2500);
+        },
+      });
+    };
 
     /* ── CSRF + fetch ── */
     async function ensureCsrf() {
@@ -2620,6 +2734,26 @@
       }).catch(() => {});
     }
 
+    /* ── Starred (favourite) binders — show first on the shelf ── */
+    let favouriteBinders = new Set();
+    function loadFavouriteBinders() {
+      const arr = currentUser?.profile_settings?.ui_prefs?.favourite_binders;
+      favouriteBinders = new Set(Array.isArray(arr) ? arr : []);
+    }
+    function saveFavouriteBinders() {
+      if (!currentUser) return;
+      const updated = [...favouriteBinders];
+      if (!currentUser.profile_settings) currentUser.profile_settings = {};
+      if (!currentUser.profile_settings.ui_prefs) currentUser.profile_settings.ui_prefs = {};
+      currentUser.profile_settings.ui_prefs.favourite_binders = updated;
+      fetch(`${BACKEND}/api/user/ui-prefs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ favourite_binders: updated })
+      }).catch(() => {});
+    }
+
     function getBinderName(id) {
       if (id === 'all')          return 'All Cards';
       if (id === 'favourites')   return 'Favourites';
@@ -2638,7 +2772,9 @@
         { id: 'all',          name: 'All Cards',   count: userCollection.length,                                accentRgb: sbAccentRgb },
         { id: 'favourites',   name: 'Favourites',  count: userCollection.filter(c => c.is_favourite).length,   accentRgb: '250,204,21' },
         { id: 'collectables', name: 'Collectables',count: userCollection.filter(c => !c.is_tradeable).length,  accentRgb: '168,85,247' },
-        ...userBinders.map(b => ({ id: b.id, name: b.name, count: b.user_binder_cards?.length || 0, accentRgb: sbAccentRgb })),
+        ...[...userBinders]
+          .sort((a, b) => (favouriteBinders.has(b.id) ? 1 : 0) - (favouriteBinders.has(a.id) ? 1 : 0))
+          .map(b => ({ id: b.id, name: b.name, count: b.user_binder_cards?.length || 0, accentRgb: sbAccentRgb })),
       ];
 
       // A default binder is one the user can hide (everything except 'all')
@@ -2648,6 +2784,7 @@
       tiles.forEach((tile) => {
         const isUserBinder = typeof tile.id !== 'string' || !['all','favourites','collectables'].includes(tile.id) && !tile.id.startsWith('__set__:');
         const isHidden = hiddenDefaults.has(tile.id);
+        const isFav = favouriteBinders.has(tile.id);
         const canHide = isHideable(tile.id) && !isUserBinder;
         const isActiveOpen = _binderOpened && String(tile.id) === String(activeBinder);
         const div = document.createElement('div');
@@ -2667,6 +2804,7 @@
               </div>
               <div class="binder-card-count">${tile.count}</div>
             </div>
+            ${isUserBinder ? `<button class="tb-shelf-tile-star${isFav ? ' is-fav' : ''}" title="${isFav ? 'Unstar binder' : 'Star binder (show first)'}"><i class="bx ${isFav ? 'bxs-star' : 'bx-star'}"></i></button>` : ''}
             ${isUserBinder ? `<button class="tb-shelf-tile-del" title="Delete binder"><i class="bx bx-trash"></i></button>` : ''}
             ${canHide ? `<button class="tb-shelf-tile-hide" title="${isHidden ? 'Show binder' : 'Hide binder'}"><i class="bx ${isHidden ? 'bx-show' : 'bx-hide'}"></i></button>` : ''}
           </div>
@@ -2686,6 +2824,13 @@
           div.querySelector('.tb-shelf-tile-del')?.addEventListener('click', e => {
             e.stopPropagation();
             deleteBinder(tile.id);
+          });
+          div.querySelector('.tb-shelf-tile-star')?.addEventListener('click', e => {
+            e.stopPropagation();
+            if (favouriteBinders.has(tile.id)) favouriteBinders.delete(tile.id);
+            else favouriteBinders.add(tile.id);
+            saveFavouriteBinders();
+            renderShelfTiles();
           });
         }
         if (canHide) {
