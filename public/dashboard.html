@@ -1571,6 +1571,16 @@
                                     <input type="date" id="dash-promo-expires-at"
                                         class="w-full bg-[rgba(5,7,10,0.6)] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:border-void-accent/60 focus:outline-none transition-colors">
                                 </div>
+                                <div>
+                                    <label for="dash-promo-rerun-fee" class="text-[8px] font-black uppercase tracking-widest text-void-muted mb-2 block">Rerun Fee (USD) <span class="normal-case font-normal opacity-50">(0 = free)</span></label>
+                                    <input type="number" id="dash-promo-rerun-fee" min="0" step="0.01" placeholder="e.g. 5.00"
+                                        class="w-full bg-[rgba(5,7,10,0.6)] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:border-void-accent/60 focus:outline-none transition-colors">
+                                </div>
+                                <div>
+                                    <label for="dash-promo-rerun-cooldown" class="text-[8px] font-black uppercase tracking-widest text-void-muted mb-2 block">Rerun Cooldown (days) <span class="normal-case font-normal opacity-50">(0 = no limit)</span></label>
+                                    <input type="number" id="dash-promo-rerun-cooldown" min="0" placeholder="e.g. 7"
+                                        class="w-full bg-[rgba(5,7,10,0.6)] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:border-void-accent/60 focus:outline-none transition-colors">
+                                </div>
                             </div>
                             <button type="button" id="dash-promo-generate-btn" onclick="dashGeneratePromoCode()"
                                 class="py-3 px-8 bg-void-accent text-void-bg rounded-xl text-[10px] font-black uppercase tracking-[.15em] hover:brightness-110 transition-all disabled:opacity-40 disabled:pointer-events-none">
@@ -2972,6 +2982,10 @@
                             var usageLabel = c.max_uses != null ? (c.uses + ' / ' + c.max_uses + ' uses') : (c.uses + ' uses');
                             var expiry = c.expires_at ? 'expires ' + new Date(c.expires_at).toLocaleDateString() : 'no expiry';
                             var rewardLabel = isPack ? 'Pack (5 cards)' : esc(card.name || 'Unknown card');
+                            var feeLabel = c.rerun_fee_cents ? '$' + (c.rerun_fee_cents / 100).toFixed(2) + '/rerun' : 'free';
+                            var cooldownLabel = c.rerun_cooldown_days ? c.rerun_cooldown_days + 'd cooldown' : 'no cooldown';
+                            var canLaunch = c.rerun_fee_cents > 0;
+                            var launchBtn = canLaunch ? '<button type="button" onclick="dashLaunchPromoCode(\'' + esc(c.id) + '\')" class="text-[8px] font-black uppercase tracking-widest text-void-accent hover:text-void-accent/80 transition-colors px-3 py-1 bg-void-accent/10 rounded">Launch</button>' : '';
                             return '<div class="flex items-center gap-4 p-4 bg-white/[0.03] rounded-2xl border border-white/[0.04]">' +
                                 '<div class="min-w-0 flex-1">' +
                                 '<div class="flex items-center gap-2.5 mb-1">' +
@@ -2979,8 +2993,12 @@
                                 '<button type="button" onclick="dashCopyPromoCode(\'' + esc(c.code) + '\')" class="text-white/25 hover:text-white transition-colors" title="Copy"><i class="bx bx-copy text-xs"></i></button>' +
                                 '</div>' +
                                 '<p class="text-[8px] font-bold uppercase tracking-widest text-void-muted/60">' + rewardLabel + ' &nbsp;&middot;&nbsp; ' + esc(usageLabel) + ' &nbsp;&middot;&nbsp; ' + esc(expiry) + '</p>' +
+                                '<p class="text-[7px] font-bold uppercase tracking-widest text-void-muted/40 mt-1">' + feeLabel + ' &nbsp;&middot;&nbsp; ' + cooldownLabel + ' (' + c.run_count + ' run' + (c.run_count !== 1 ? 's' : '') + ')</p>' +
                                 '</div>' +
-                                '<button type="button" onclick="dashDeactivatePromoCode(\'' + esc(c.id) + '\')" class="shrink-0 text-[8px] font-black uppercase tracking-widest text-void-muted/40 hover:text-red-400 transition-colors">Remove</button>' +
+                                '<div class="shrink-0 flex items-center gap-2">' +
+                                launchBtn +
+                                '<button type="button" onclick="dashDeactivatePromoCode(\'' + esc(c.id) + '\')" class="text-[8px] font-black uppercase tracking-widest text-void-muted/40 hover:text-red-400 transition-colors">Remove</button>' +
+                                '</div>' +
                                 '</div>';
                         }).join('');
                     } catch (e) {
@@ -3001,6 +3019,8 @@
                     if (rewardType === 'card' && !cardId) { toast('Select a card first', 'error'); return; }
                     var maxUsesRaw = (document.getElementById('dash-promo-max-uses') || {}).value || '';
                     var expiresAtRaw = (document.getElementById('dash-promo-expires-at') || {}).value || '';
+                    var rerunFeeRaw = (document.getElementById('dash-promo-rerun-fee') || {}).value || '';
+                    var rerunCooldownRaw = (document.getElementById('dash-promo-rerun-cooldown') || {}).value || '';
                     var btn = document.getElementById('dash-promo-generate-btn');
                     if (btn) btn.disabled = true;
                     try {
@@ -3009,6 +3029,8 @@
                         if (rewardType === 'pack') body.set_id = setId;
                         if (maxUsesRaw) body.max_uses = parseInt(maxUsesRaw, 10);
                         if (expiresAtRaw) body.expires_at = expiresAtRaw;
+                        if (rerunFeeRaw) body.rerun_fee_cents = Math.round(parseFloat(rerunFeeRaw) * 100);
+                        if (rerunCooldownRaw) body.rerun_cooldown_days = parseInt(rerunCooldownRaw, 10);
                         var res = await fetch(BACKEND_URL + '/api/creator/promo-codes', {
                             method: 'POST', credentials: 'include',
                             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken || '' },
@@ -3027,12 +3049,32 @@
                         if (setSel) setSel.selectedIndex = 0;
                         document.getElementById('dash-promo-max-uses').value = '';
                         document.getElementById('dash-promo-expires-at').value = '';
+                        document.getElementById('dash-promo-rerun-fee').value = '';
+                        document.getElementById('dash-promo-rerun-cooldown').value = '';
                         window.dashLoadPromoCodes();
                     } catch (e) {
                         toast(e.message || 'Failed to generate', 'error');
                     } finally {
                         if (btn) btn.disabled = false;
                     }
+                };
+
+                window.dashLaunchPromoCode = async function (id) {
+                    if (!confirm('Launch this promo? The rerun fee will be charged.')) return;
+                    try {
+                        var res = await fetch(BACKEND_URL + '/api/creator/promo-codes/' + encodeURIComponent(id) + '/launch', {
+                            method: 'POST', credentials: 'include',
+                            headers: { 'X-CSRF-Token': window.csrfToken || '' }
+                        });
+                        var data = await res.json().catch(function () { return {}; });
+                        if (!res.ok) {
+                            if (res.status === 429) throw new Error(data.error || 'Cannot rerun yet due to cooldown');
+                            if (res.status === 402) throw new Error(data.error || 'Payment failed');
+                            throw new Error(data.error || 'Failed to launch');
+                        }
+                        toast('Promo launched! Run #' + data.run_count, 'success');
+                        window.dashLoadPromoCodes();
+                    } catch (e) { toast(e.message || 'Could not launch promo', 'error'); }
                 };
 
                 window.dashDeactivatePromoCode = async function (id) {
