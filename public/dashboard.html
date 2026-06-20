@@ -971,6 +971,20 @@
                                         <div class="saas-toggle"><input type="checkbox"
                                                 id="settings-trading-toggle"><span class="slider"></span></div>
                                     </label>
+                                    <label
+                                        class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:border-void-accent/30 transition-all">
+                                        <div class="flex items-center gap-3">
+                                            <i class="bx bxs-tv text-void-accent w-5"></i>
+                                            <div>
+                                                <span class="font-bold text-sm">On-stream reveal for non-account viewers</span>
+                                                <p class="text-[10px] text-void-muted">When someone without a Castle account
+                                                    earns a pack, reveal it on your OBS overlay. Off = prompt them to make
+                                                    an account instead. (Account holders always pick their own set on the site.)</p>
+                                            </div>
+                                        </div>
+                                        <div class="saas-toggle"><input type="checkbox"
+                                                id="settings-obs-reveal-toggle"><span class="slider"></span></div>
+                                    </label>
                                 </div>
                                 <div class="border-t border-white/10 mt-6 pt-6 space-y-4">
                                     <div>
@@ -1541,7 +1555,7 @@
                             </div>
                             <div id="dash-promo-set-section" class="hidden">
                                 <label class="text-[8px] font-black uppercase tracking-widest text-void-muted mb-2 block">Draw Pool <span class="normal-case font-normal opacity-50">(optional — leave blank for all cards)</span></label>
-                                <select id="dash-promo-set-select">
+                                <select id="dash-promo-set-select" class="w-full bg-[rgba(5,7,10,0.6)] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:border-void-accent/60 focus:outline-none transition-colors">
                                     <option value="">All active cards (any rarity)</option>
                                 </select>
                                 <p class="text-[9px] text-void-muted mt-2">5 random cards per redemption.</p>
