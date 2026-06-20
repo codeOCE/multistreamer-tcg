@@ -1593,7 +1593,12 @@
             </div>
             <div class="sf-right" id="sf-streamer-cell">
               <div class="sf-streamer-text">
-                <span class="sf-streamer-name" id="sf-streamer-name">—</span>
+                <div class="flex items-center gap-2">
+                  <span class="sf-streamer-name" id="sf-streamer-name">—</span>
+                  <button onclick="openStreamerSettings()" class="text-void-muted hover:text-void-text transition-colors p-1" title="Streamer settings">
+                    <i class="bx bx-cog text-lg"></i>
+                  </button>
+                </div>
                 <span class="sf-streamer-sub">Creator</span>
               </div>
               <div class="sf-streamer-avatar-placeholder" id="sf-streamer-avatar-wrap">
@@ -1734,6 +1739,50 @@
         <button class="move-card-btn" id="move-card-cancel" onclick="closeMoveCardModal()">Cancel</button>
         <button class="move-card-btn" id="move-card-confirm" onclick="confirmMoveCard()">Move Card</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Streamer Settings Modal -->
+  <div id="streamer-settings-modal" class="fixed inset-0 z-[1000] bg-black/80 backdrop-blur hidden flex items-center justify-center p-4" onclick="if(event.target===this)closeStreamerSettings()">
+    <div class="bg-void-bg border border-white/10 rounded-2xl max-w-md w-full p-6 space-y-6">
+      <h3 class="text-lg font-black uppercase tracking-tight">Settings</h3>
+
+      <div>
+        <label class="text-xs font-black uppercase tracking-widest text-void-muted block mb-2">Sort by</label>
+        <select id="streamer-sort-select" onchange="applyStreamerSettings()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+          <option value="name">Name</option>
+          <option value="rarity">Rarity</option>
+          <option value="date">Date Acquired</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="text-xs font-black uppercase tracking-widest text-void-muted block mb-2">Filter Rarity</label>
+        <select id="streamer-rarity-select" onchange="applyStreamerSettings()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+          <option value="">All Rarities</option>
+          <option value="Legendary">Legendary</option>
+          <option value="Epic">Epic</option>
+          <option value="Rare">Rare</option>
+          <option value="Common">Common</option>
+        </select>
+      </div>
+
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input type="checkbox" id="streamer-hide-owned" onchange="applyStreamerSettings()" class="w-4 h-4">
+        <span class="text-sm text-void-muted">Hide cards I own</span>
+      </label>
+
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input type="checkbox" id="streamer-hide-locked" onchange="applyStreamerSettings()" class="w-4 h-4">
+        <span class="text-sm text-void-muted">Hide locked cards</span>
+      </label>
+
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input type="checkbox" id="streamer-notifications" checked onchange="applyStreamerSettings()" class="w-4 h-4">
+        <span class="text-sm text-void-muted">Notifications from this creator</span>
+      </label>
+
+      <button onclick="closeStreamerSettings()" class="w-full py-2 bg-void-accent/20 hover:bg-void-accent/30 border border-void-accent/30 rounded-xl text-sm font-bold uppercase tracking-wider transition-colors">Done</button>
     </div>
   </div>
 
@@ -2353,6 +2402,53 @@
       const modal = document.getElementById('set-selector-modal');
       if (modal) modal.classList.add('hidden');
       _pendingSetSelectionPack = null;
+    }
+
+    let _streamerSettings = {};
+
+    function openStreamerSettings() {
+      const modal = document.getElementById('streamer-settings-modal');
+      if (modal) modal.classList.remove('hidden');
+      // Load saved settings for this streamer
+      const streamerKey = streamerData?.id || 'default';
+      _streamerSettings = JSON.parse(sessionStorage.getItem(`streamer_settings_${streamerKey}`) || '{}');
+
+      const sortSel = document.getElementById('streamer-sort-select');
+      const raritySel = document.getElementById('streamer-rarity-select');
+      const hideOwnedChk = document.getElementById('streamer-hide-owned');
+      const hideLockedChk = document.getElementById('streamer-hide-locked');
+      const notifChk = document.getElementById('streamer-notifications');
+
+      if (sortSel) sortSel.value = _streamerSettings.sortBy || 'name';
+      if (raritySel) raritySel.value = _streamerSettings.filterRarity || '';
+      if (hideOwnedChk) hideOwnedChk.checked = _streamerSettings.hideOwned || false;
+      if (hideLockedChk) hideLockedChk.checked = _streamerSettings.hideLocked || false;
+      if (notifChk) notifChk.checked = _streamerSettings.notifications !== false;
+    }
+
+    function closeStreamerSettings() {
+      const modal = document.getElementById('streamer-settings-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function applyStreamerSettings() {
+      const sortSel = document.getElementById('streamer-sort-select');
+      const raritySel = document.getElementById('streamer-rarity-select');
+      const hideOwnedChk = document.getElementById('streamer-hide-owned');
+      const hideLockedChk = document.getElementById('streamer-hide-locked');
+      const notifChk = document.getElementById('streamer-notifications');
+
+      _streamerSettings = {
+        sortBy: sortSel?.value || 'name',
+        filterRarity: raritySel?.value || '',
+        hideOwned: hideOwnedChk?.checked || false,
+        hideLocked: hideLockedChk?.checked || false,
+        notifications: notifChk?.checked !== false
+      };
+
+      const streamerKey = streamerData?.id || 'default';
+      sessionStorage.setItem(`streamer_settings_${streamerKey}`, JSON.stringify(_streamerSettings));
+      // TODO: Apply filtering/sorting to card grid
     }
 
     function closePackModal() {
