@@ -1,0 +1,292 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Features | Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/dashboard.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <script src="/castle-prefs.js"></script>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased selection:bg-void-accent/30">
+    <div class="saas-bg-glow"></div>
+    <div id="toast-container"></div>
+
+    <nav id="app-navbar" class="fixed top-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl">
+        <div class="w-full px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-2 group cursor-pointer" onclick="window.location.href='/'">
+                <div
+                    class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <div class="flex flex-col">
+                    <span
+                        class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span
+                            class="text-void-accent">TCG</span></span>
+                </div>
+            </div>
+
+            <div class="hidden md:flex items-center bg-white/[0.04] border border-white/5 p-1 rounded-2xl shadow-xl backdrop-blur-md">
+                <a href="/dashboard"
+                    class="flex items-center gap-1.5 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap text-void-muted hover:text-void-text hover:bg-white/[0.04]">
+                    <i class="bx bxs-dashboard text-xs"></i>Creator Dashboard
+                </a>
+                <a href="/dashboard?section=card-studio"
+                    class="flex items-center gap-1.5 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap text-void-muted hover:text-void-text hover:bg-white/[0.04]">
+                    <i class="bx bxs-palette text-xs"></i>Card Studio
+                </a>
+                <a href="/dashboard?section=stream-features"
+                    class="flex items-center gap-1.5 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap text-void-accent bg-void-accent/10">
+                    <i class="bx bxs-cog text-xs"></i>Stream Features
+                </a>
+            </div>
+
+            <div class="flex items-center gap-6">
+                <div id="nav-user-preview" class="flex items-center gap-4" role="status" aria-label="User Profile">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Creator</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-void-accent/50"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt=""
+                                    class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
+                            </span>
+                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "
+                                aria-hidden="true"></i>
+                        </button>
+                        <div id="nav-user-menu"
+                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                            role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:bg-white/[0.04]"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt=""
+                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg" width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"
+                                                aria-hidden="true"></span>
+                                            <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap"
+                                        class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron"
+                                            class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"
+                                            aria-hidden="true"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                        <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0" aria-hidden="true"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Opens viewer settings</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="bx bx-log-out w-4 text-center" aria-hidden="true"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard-container relative z-10">
+        <div class="dashboard-grid">
+
+            <aside class="dashboard-sidebar">
+                <button onclick="switchTab('overlays')" id="tab-overlays" class="dashboard-tab-btn active">
+                    <i class="bx bxs-layer w-5"></i> Overlays
+                </button>
+                <button onclick="switchTab('queue')" id="tab-queue" class="dashboard-tab-btn">
+                    <i class="bx bxs-detail w-5"></i> Queue System
+                </button>
+                <button onclick="switchTab('channel-points')" id="tab-channel-points" class="dashboard-tab-btn">
+                    <i class="bx bxs-coin-stack w-5"></i> Channel Points
+                </button>
+            </aside>
+
+            <div class="dashboard-content-area space-y-8">
+
+                <header class="mb-8 pb-8 border-b border-white/5">
+                    <h1 class="text-4xl font-display font-black uppercase italic tracking-tight text-white">
+                        Stream Features</h1>
+                </header>
+
+                <!-- Overlays tab -->
+                <section id="content-overlays" class="tab-content active">
+                    <div class="glass-card flex flex-col items-center justify-center py-20 text-center space-y-6">
+                        <i class="bx bxs-layer text-5xl text-void-accent/20"></i>
+                        <div>
+                            <h3 class="text-xl font-black uppercase italic tracking-tight">Overlays</h3>
+                            <p class="text-xs text-void-muted mt-2 max-w-sm mx-auto">Configure OBS overlays for pack openings, battles, and card displays on your stream.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Queue System tab -->
+                <section id="content-queue" class="tab-content">
+                    <div class="glass-card flex flex-col items-center justify-center py-20 text-center space-y-6">
+                        <i class="bx bxs-detail text-5xl text-void-accent/20"></i>
+                        <div>
+                            <h3 class="text-xl font-black uppercase italic tracking-tight">Queue System</h3>
+                            <p class="text-xs text-void-muted mt-2 max-w-sm mx-auto">Manage the pack opening and battle queue for your stream.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Channel Points tab -->
+                <section id="content-channel-points" class="tab-content">
+                    <div class="glass-card flex flex-col items-center justify-center py-20 text-center space-y-6">
+                        <i class="bx bxs-coin-stack text-5xl text-void-accent/20"></i>
+                        <div>
+                            <h3 class="text-xl font-black uppercase italic tracking-tight">Channel Points</h3>
+                            <p class="text-xs text-void-muted mt-2 max-w-sm mx-auto">Set up Twitch channel point rewards for pack openings, battles, and more.</p>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </main>
+
+    <script src="/castle-auth-origin.js"></script>
+    <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
+    <script>
+        // ── Bootstrap ──
+        const BACKEND_URL =
+            typeof getCastleBackendOrigin === 'function'
+                ? getCastleBackendOrigin()
+                : (window.__CASTLE_BACKEND__ || '');
+
+        function showToast(msg, type) {
+            const c = document.getElementById('toast-container');
+            if (!c) return;
+            const t = document.createElement('div');
+            t.className = `toast toast-${type || 'info'}`;
+            t.textContent = msg;
+            c.appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 3500);
+        }
+
+        // ── Tab switching ──
+        function switchTab(name) {
+            document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.dashboard-tab-btn').forEach(b => b.classList.remove('active'));
+            const content = document.getElementById('content-' + name);
+            const btn = document.getElementById('tab-' + name);
+            if (content) content.classList.add('active');
+            if (btn) btn.classList.add('active');
+        }
+        window.switchTab = switchTab;
+
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            const n = parseInt(hex, 16);
+            return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+        }
+
+        function applyAccent(color) {
+            if (!color) return;
+            document.documentElement.style.setProperty('--void-accent', color);
+            document.documentElement.style.setProperty('--void-accent-rgb', hexToRgb(color));
+        }
+
+        // ── Auth bootstrap ──
+        async function bootstrap() {
+            try {
+                const res = await fetch(BACKEND_URL + '/api/me', { credentials: 'include', cache: 'no-store' });
+                if (!res.ok) { window.location.href = '/login?next=' + encodeURIComponent('/dashboard?section=stream-features'); return; }
+                const u = await res.json();
+                if (!u || !u.username) { window.location.href = '/login?next=' + encodeURIComponent('/dashboard?section=stream-features'); return; }
+
+                window.currentUser = u;
+
+                if (!u.is_creator) {
+                    window.location.href = '/my-collection';
+                    return;
+                }
+
+                // Fetch streamer profile for branding
+                try {
+                    const pRes = await fetch(BACKEND_URL + '/api/creator/profile', { credentials: 'include' });
+                    if (pRes.ok) {
+                        const profile = await pRes.json();
+                        if (profile && profile.id) {
+                            u.streamer = profile;
+                            const color = profile.binder_color || profile.brand_color_primary;
+                            applyAccent(color);
+                            const displayName = (profile.display_name && String(profile.display_name).trim()) || profile.username || u.display_name;
+                            if (displayName) u.display_name = displayName;
+                        }
+                    }
+                } catch (_) { /* ignore */ }
+
+                // Populate nav
+                const navUsername = document.getElementById('nav-username');
+                const navAvatar = document.getElementById('nav-avatar');
+                const navMenuName = document.getElementById('nav-user-menu-name');
+                const navMenuAvatar = document.getElementById('nav-user-menu-avatar');
+                const navMenuRole = document.getElementById('nav-user-menu-role');
+                const navCastleCode = document.getElementById('nav-user-menu-castle-code');
+
+                if (navUsername) navUsername.textContent = u.display_name || u.username || '---';
+                if (navAvatar) navAvatar.src = u.avatar_url || '';
+                if (navMenuName) navMenuName.textContent = u.display_name || u.username || '—';
+                if (navMenuAvatar) navMenuAvatar.src = u.avatar_url || '';
+                if (navMenuRole) navMenuRole.textContent = 'Creator';
+                if (navCastleCode) navCastleCode.textContent = u.castle_code || '—';
+
+                // Init nav menu
+                if (typeof initNavUserMenu === 'function') initNavUserMenu();
+            } catch (err) {
+                console.error('[StreamFeatures] Bootstrap failed:', err);
+                window.location.href = '/login?next=' + encodeURIComponent('/dashboard?section=stream-features');
+            }
+        }
+
+        bootstrap();
+    </script>
+</body>
+
+</html>

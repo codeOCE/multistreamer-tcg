@@ -1,0 +1,1643 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Centre · Castle TCG</title>
+
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        :root {
+            --page-accent: var(--void-accent);
+            --page-accent-rgb: var(--void-accent-rgb);
+        }
+
+        /* ── Entry animation ── */
+        @keyframes tr-rise {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .tr-rise   { animation: tr-rise 0.5s var(--ease-premium) both; }
+        .tr-rise-1 { animation-delay: 0.04s; }
+        .tr-rise-2 { animation-delay: 0.10s; }
+        .tr-rise-3 { animation-delay: 0.18s; }
+
+        /* ── Page shell ── */
+        #tr-root {
+            min-height: 100vh;
+            padding-top: 80px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Inner container ── */
+        #tr-inner {
+            flex: 1;
+            max-width: 1920px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 36px 48px 60px;
+            display: flex;
+            gap: 32px;
+            align-items: flex-start;
+        }
+
+        /* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */
+        #tr-sidebar {
+            width: 230px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 96px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .tr-back-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            text-decoration: none;
+            padding: 8px 10px;
+            border-radius: 10px;
+            transition: color 0.2s, background 0.2s;
+            margin-bottom: 4px;
+        }
+        .tr-back-link:hover { color: var(--void-text); background: rgba(255,255,255,0.04); }
+
+        .tr-section-label {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            padding: 10px 10px 6px;
+        }
+
+        .tr-nav-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 9px 12px;
+            border-radius: 10px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+            transition: color 0.2s, background 0.2s;
+        }
+        .tr-nav-btn:hover { color: var(--void-text); background: rgba(255,255,255,0.04); }
+        .tr-nav-btn.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            background: rgba(var(--page-accent-rgb), 0.08);
+        }
+        .tr-nav-btn i { font-size: 1rem; flex-shrink: 0; opacity: 0.7; }
+
+        .tr-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.05);
+            margin: 8px 0;
+        }
+
+        /* Expandable filter panels */
+        .tr-expand {
+            overflow: hidden;
+            max-height: 0;
+            box-sizing: border-box;      /* include padding so collapsed height is truly 0 (no clipped pill peeking) */
+            opacity: 0;
+            visibility: hidden;
+            transition: max-height 0.28s ease, opacity 0.2s ease, visibility 0s linear 0.28s;
+        }
+        .tr-expand.open {
+            max-height: 600px;
+            opacity: 1;
+            visibility: visible;
+            transition: max-height 0.28s ease, opacity 0.2s ease;
+        }
+
+        /* Always-visible search bar (no dropdown) */
+        .tr-search-wrap { position: relative; margin: 2px 0 6px; }
+        .tr-search-wrap > i {
+            position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+            font-size: 0.9rem; color: var(--void-muted); pointer-events: none;
+        }
+        .tr-search-wrap .tr-search-field { padding-left: 32px; }
+
+        .tr-search-field {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 10px;
+            font-size: 0.72rem;
+            color: var(--void-text);
+            outline: none;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+        .tr-search-field::placeholder { color: var(--void-muted); }
+        .tr-search-field:focus { border-color: rgba(var(--page-accent-rgb), 0.4); }
+
+        .tr-trait-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 4px 0 2px;
+        }
+        .tr-trait-chip {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 3px 9px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: transparent;
+            color: var(--void-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tr-trait-chip:hover { color: var(--void-text); border-color: rgba(255,255,255,0.2); }
+        .tr-trait-chip.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            border-color: rgba(var(--page-accent-rgb), 0.4);
+            background: rgba(var(--page-accent-rgb), 0.08);
+        }
+
+        /* Auth status / sign-in nudge */
+        #tr-auth-status {
+            font-size: 0.65rem;
+            line-height: 1.5;
+            color: var(--void-muted);
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.05);
+            margin-top: 4px;
+        }
+
+        /* ── MAIN CONTENT ─────────────────────────────────────────────────── */
+        #tr-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* Page header */
+        #tr-header {
+            margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+        #tr-header-left { flex-shrink: 0; }
+
+        /* Conveyor belt — horizontal strip to the right of the title */
+        #tr-belt-wrap {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            height: 100px;
+            -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+            mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+        }
+        #tr-belt-track {
+            display: flex;
+            gap: 10px;
+            width: max-content;
+            animation: belt-scroll 60s linear infinite;
+        }
+        #tr-belt-track:empty { display: none; }
+        @keyframes belt-scroll {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-50%); }
+        }
+        .tr-belt-card {
+            flex-shrink: 0;
+            height: 100px;
+            width: 71px; /* 5:7 ratio */
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .tr-belt-card:hover { transform: scale(1.08); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .tr-belt-card.peek-active { transform: scale(1.12) !important; box-shadow: 0 0 0 2px #fff, 0 8px 32px rgba(0,0,0,0.6) !important; }
+        .tr-belt-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+        #tr-page-label {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.8);
+            margin-bottom: 6px;
+        }
+
+        #tr-page-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: clamp(1.6rem, 3vw, 2.4rem);
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            color: var(--void-text);
+            line-height: 1;
+            margin: 0 0 12px;
+        }
+
+        #tr-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tr-sort-btn {
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px;
+            padding: 5px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tr-sort-btn:hover { color: var(--void-text); background: rgba(255,255,255,0.05); }
+        .tr-sort-btn.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            background: rgba(var(--page-accent-rgb), 0.08);
+            border-color: rgba(var(--page-accent-rgb), 0.3);
+        }
+
+        /* Card grid */
+        #tr-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 22px;
+        }
+        @media (max-width: 1600px) { #tr-grid { grid-template-columns: repeat(5, 1fr); } }
+        @media (max-width: 1300px) { #tr-grid { grid-template-columns: repeat(4, 1fr); } }
+        @media (max-width: 900px)  { #tr-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 600px)  { #tr-grid { grid-template-columns: repeat(2, 1fr); } }
+
+        /* Market card tile */
+        .tr-card {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            cursor: pointer;
+        }
+
+        .tr-card-img {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 5/7;
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            transition: transform 0.25s var(--ease-premium), box-shadow 0.25s var(--ease-premium), border-color 0.2s;
+        }
+        .tr-card:hover .tr-card-img {
+            transform: translateY(-6px);
+            border-color: rgba(var(--page-accent-rgb), 0.25);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(var(--page-accent-rgb), 0.15);
+        }
+        .tr-card-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .tr-card-img .tr-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: rgba(255,255,255,0.08);
+        }
+        .tr-mine-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(var(--page-accent-rgb), 0.9);
+            color: #000;
+            font-size: 0.5rem;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 3px 7px;
+            border-radius: 5px;
+        }
+
+        .tr-card-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .tr-card-traits {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .tr-trait-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+            border: 1.5px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .tr-trait-dot img { width: 12px; height: 12px; object-fit: contain; }
+        .tr-card-name {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--void-text);
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            letter-spacing: 0.02em;
+        }
+        .tr-card-rarity {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        .tr-card-lister {
+            font-size: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-align: center;
+            color: var(--void-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            margin-top: 1px;
+        }
+        .tr-card-lister--own { color: var(--void-accent); opacity: 0.85; }
+
+        /* Empty / loading state */
+        .tr-empty {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 80px 0;
+            color: var(--void-muted);
+        }
+        .tr-empty i { font-size: 2.5rem; opacity: 0.25; }
+        .tr-empty span { font-size: 0.75rem; font-weight: 600; }
+
+        /* Pagination */
+        #tr-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 36px;
+        }
+        .tr-page-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.07);
+            color: var(--void-muted);
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+        .tr-page-btn:hover:not(:disabled) { color: var(--void-text); background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.12); }
+        .tr-page-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+        #tr-page-indicator {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: var(--void-muted);
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* ── MODALS ──────────────────────────────────────────────────────── */
+        .tr-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(12px);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+        .tr-modal-overlay.open { display: flex; opacity: 1; }
+
+        .tr-modal {
+            background: var(--void-bg-alt);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 32px;
+            width: 90%;
+            max-width: 780px;
+            height: 82vh;
+            max-height: 82vh;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Pager controls inside modals */
+        .tr-modal-pager {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 10px 0 2px;
+            flex-shrink: 0;
+        }
+        .tr-pager-btn {
+            width: 30px; height: 30px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+        }
+        .tr-pager-btn:hover:not(:disabled) { color: var(--void-text); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.07); }
+        .tr-pager-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+        .tr-pager-info {
+            font-size: 0.58rem; font-weight: 800;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--void-muted); min-width: 56px; text-align: center;
+        }
+
+        .tr-modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: var(--void-muted);
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .tr-modal-close:hover { color: var(--void-text); background: rgba(255,255,255,0.1); }
+
+        .tr-modal-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: rgba(var(--page-accent-rgb), 1);
+            margin: 0 0 4px;
+            flex-shrink: 0;
+        }
+        .tr-modal-sub {
+            font-size: 0.75rem;
+            color: var(--void-muted);
+            margin: 0 0 24px;
+            flex-shrink: 0;
+        }
+
+        /* Picker filters (search + trait chips above the grid) */
+        .tr-picker-filters {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            flex-shrink: 0;
+        }
+        .tr-picker-search {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            font-size: 0.78rem;
+            color: var(--void-text);
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+        }
+        .tr-picker-search::placeholder { color: var(--void-muted); }
+        .tr-picker-search:focus { border-color: rgba(var(--page-accent-rgb), 0.45); }
+        .tr-picker-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .tr-picker-count {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            padding: 4px 2px 0;
+        }
+
+        /* Card picker grid inside modals */
+        .tr-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 14px;
+            flex: 1;
+            min-height: 0;
+            align-content: start;
+            overflow-y: auto;
+        }
+        .tr-picker-card {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            background: rgba(255,255,255,0.03);
+            border: 1.5px solid rgba(255,255,255,0.06);
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+        .tr-picker-card:hover { transform: scale(1.04); border-color: rgba(255,255,255,0.15); }
+        .tr-picker-copies {
+            position: absolute;
+            top: 5px; right: 5px;
+            background: rgba(0,0,0,0.75);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 99px;
+            padding: 2px 7px;
+            font-size: 0.52rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            color: #fff;
+            backdrop-filter: blur(4px);
+        }
+        .tr-picker-card.selected {
+            border-color: rgba(var(--page-accent-rgb), 0.9);
+            box-shadow: 0 0 0 3px rgba(var(--page-accent-rgb), 0.25), 0 8px 24px rgba(0,0,0,0.5);
+            transform: scale(1.04);
+        }
+        .tr-picker-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .tr-picker-rarity {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.85));
+            padding: 10px 4px 4px;
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        /* Hover overlay — revealed on :hover with card name + trait chips */
+        .tr-picker-hover {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 10px 8px;
+            gap: 6px;
+            background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0) 100%);
+            opacity: 0;
+            transition: opacity 0.18s ease;
+            pointer-events: none;
+        }
+        .tr-picker-card:hover .tr-picker-hover,
+        .tr-picker-card.selected .tr-picker-hover { opacity: 1; }
+        .tr-picker-card:hover .tr-picker-rarity,
+        .tr-picker-card.selected .tr-picker-rarity { opacity: 0; }
+        .tr-picker-rarity { transition: opacity 0.18s ease; }
+        .tr-picker-hover-name {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #fff;
+            line-height: 1.15;
+            letter-spacing: 0.01em;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+        .tr-picker-hover-rarity {
+            font-size: 0.5rem;
+            font-weight: 900;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+        .tr-picker-hover-traits {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .tr-picker-hover-trait {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #fff;
+        }
+        .tr-picker-hover-trait img {
+            width: 10px;
+            height: 10px;
+            object-fit: contain;
+        }
+
+        /* Deck-style picker tiles (List a Card) — image with name/rarity below,
+           trait pips overlaid, stacked-by-card copies badge. Mirrors the battle deck. */
+        .tr-deck-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            cursor: pointer;
+            border-radius: 10px;
+            padding: 5px;
+            border: 1px solid transparent;
+            transition: all 0.18s;
+        }
+        .tr-deck-card:hover {
+            background: rgba(var(--page-accent-rgb), 0.05);
+            border-color: rgba(var(--page-accent-rgb), 0.3);
+            transform: translateY(-2px);
+        }
+        .tr-deck-card.selected {
+            background: rgba(var(--page-accent-rgb), 0.08);
+            border-color: rgba(var(--page-accent-rgb), 0.5);
+        }
+        .tr-deck-card--static { cursor: default; }
+        .tr-deck-card--static:hover { transform: none; background: transparent; border-color: transparent; }
+        /* Trade pile per-card actions */
+        .tr-pile-actions { display: flex; gap: 5px; margin-top: 2px; }
+        .tr-pile-btn {
+            flex: 1; padding: 4px 6px; border-radius: 7px;
+            font-size: 0.52rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+            cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+        }
+        .tr-pile-btn--list { color: rgba(var(--page-accent-rgb),1); border-color: rgba(var(--page-accent-rgb),0.4); background: rgba(var(--page-accent-rgb),0.1); }
+        .tr-pile-btn--list:hover { background: rgba(var(--page-accent-rgb),0.2); }
+        .tr-pile-btn--remove { color: var(--void-muted); border-color: rgba(255,255,255,0.1); background: transparent; }
+        .tr-pile-btn--remove:hover { color: #fca5a5; border-color: rgba(239,68,68,0.4); }
+        .tr-pile-btn--listed { color: var(--void-muted); border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); cursor: default; }
+        .tr-deck-img-wrap {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.07);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+        }
+        .tr-deck-card.selected .tr-deck-img-wrap {
+            border-color: rgba(var(--page-accent-rgb), 0.9);
+            box-shadow: 0 0 0 2px rgba(var(--page-accent-rgb), 0.35), 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .tr-deck-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .tr-deck-img-fallback {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .tr-deck-img-fallback i { font-size: 2rem; color: rgba(255,255,255,0.1); }
+        .tr-deck-name {
+            font-size: 0.55rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tr-deck-rarity {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        .tr-deck-copies {
+            position: absolute;
+            top: 5px; right: 5px;
+            background: rgba(0,0,0,0.75);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 99px;
+            padding: 2px 7px;
+            font-size: 0.52rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            color: #fff;
+            backdrop-filter: blur(4px);
+        }
+        .tr-deck-traits {
+            position: absolute;
+            bottom: 7px; left: 7px;
+            display: flex; gap: 3px; flex-wrap: wrap;
+            z-index: 2;
+        }
+        .tr-deck-pip {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.72);
+            border: 1px solid rgba(255,255,255,0.18);
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+            font-size: 0.55rem; font-weight: 800; color: #fff; text-transform: uppercase;
+        }
+        .tr-deck-pip img { width: 14px; height: 14px; object-fit: contain; }
+        /* Group header that clusters all copies of one card together in the picker grid */
+        .tr-deck-group-header {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; gap: 8px;
+            margin: 10px 2px 2px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.62rem; font-weight: 800;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--void-text);
+        }
+        .tr-deck-group-header::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+        .tr-deck-group-header span {
+            color: var(--void-muted); font-size: 0.55rem; font-weight: 800;
+            padding: 1px 7px; border-radius: 99px;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+        }
+        .tr-deck-group-header span::before { content: '×'; }
+
+        /* Battle-style picker filter bar (List a Card / Make an Offer popups) */
+        .tr-modal.tr-modal-wide { max-width: 1040px; }
+        .tr-picker-filterbar {
+            display: flex; flex-direction: column; gap: 10px;
+            margin-bottom: 16px; padding-bottom: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            flex-shrink: 0;
+        }
+        .bt-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .bt-filter-row-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+        .bt-filter-label {
+            font-size: 0.48rem; font-weight: 800; letter-spacing: 0.2em;
+            text-transform: uppercase; color: var(--void-muted); opacity: 0.6; padding-right: 4px;
+        }
+        .bt-filter-chip {
+            font-family: 'Outfit', sans-serif; font-size: 0.58rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 11px;
+            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+            background: transparent; color: var(--void-muted); cursor: pointer;
+            transition: all 0.18s; white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .bt-filter-chip:hover { color: var(--void-text); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.03); }
+        .bt-filter-chip.active {
+            color: rgba(var(--page-accent-rgb),1);
+            border-color: rgba(var(--page-accent-rgb),0.45);
+            background: rgba(var(--page-accent-rgb),0.1);
+        }
+        .bt-filter-chip[data-rarity].active {
+            color: var(--bt-rarity-color); border-color: var(--bt-rarity-color);
+            background: color-mix(in srgb, var(--bt-rarity-color) 14%, transparent);
+        }
+        .bt-filter-chip img { width: 12px; height: 12px; object-fit: contain; }
+        .bt-picker-search-toggle {
+            width: 30px; height: 30px; border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.02);
+            color: var(--void-muted); cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.8rem; line-height: 1; transition: all 0.18s; flex-shrink: 0;
+        }
+        /* Boxicons glyphs inherit a tall line-height and render slightly low; force the
+           glyph to a centered block so it sits dead-centre in the circle. */
+        .bt-picker-search-toggle i { display: block; line-height: 1; }
+        .bt-picker-search-toggle:hover { color: var(--void-text); border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.05); }
+        .bt-picker-search-toggle.active {
+            color: rgba(var(--page-accent-rgb),1);
+            border-color: rgba(var(--page-accent-rgb),0.45);
+            background: rgba(var(--page-accent-rgb),0.1);
+        }
+        .bt-search-input {
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 999px; padding: 6px 14px; font-size: 0.7rem; font-weight: 600;
+            color: var(--void-text); outline: none;
+            transition: width 0.25s ease, border-color 0.2s, padding 0.25s ease, opacity 0.2s;
+            font-family: 'Space Grotesk', sans-serif; width: 200px;
+        }
+        .bt-search-input.collapsed { width: 0; padding-left: 0; padding-right: 0; border-color: transparent; opacity: 0; pointer-events: none; }
+        .bt-search-input::placeholder { color: var(--void-muted); }
+        .bt-search-input:focus { border-color: rgba(var(--page-accent-rgb),0.4); box-shadow: 0 0 0 3px rgba(var(--page-accent-rgb),0.06); }
+
+        /* Modal actions row */
+        .tr-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 8px;
+            flex-shrink: 0;
+        }
+
+        /* Buttons */
+        .tr-btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            background: rgba(var(--page-accent-rgb), 1);
+            color: #000;
+            font-size: 0.7rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .tr-btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
+        .tr-btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        .tr-btn-ghost {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            background: transparent;
+            color: var(--void-muted);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .tr-btn-ghost:hover { color: var(--void-text); border-color: rgba(255,255,255,0.18); }
+
+        .tr-btn-danger {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            background: transparent;
+            color: #ef4444;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border: 1px solid rgba(239,68,68,0.2);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tr-btn-danger:hover { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.4); }
+
+        /* ── Card Detail Modal ── */
+        .tr-detail-modal { max-width: 820px; padding: 0; overflow: hidden; }
+
+        .tr-detail-layout {
+            display: flex;
+            min-height: 420px;
+        }
+
+        .tr-detail-img-col {
+            width: 260px;
+            flex-shrink: 0;
+            background: rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 24px;
+        }
+
+        .tr-detail-img-wrap {
+            width: 100%;
+            aspect-ratio: 5/7;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+            background: rgba(255,255,255,0.04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tr-detail-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .tr-detail-info-col {
+            flex: 1;
+            min-width: 0;
+            padding: 36px 32px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .tr-detail-set {
+            font-size: 0.52rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        .tr-detail-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: var(--void-text);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .tr-detail-rarity-pill {
+            display: inline-block;
+            width: fit-content;
+            font-size: 0.55rem;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 99px;
+            border: 1px solid currentColor;
+            opacity: 0.85;
+        }
+
+        .tr-detail-traits {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .tr-detail-trait {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 99px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.04);
+            font-size: 0.58rem;
+            font-weight: 700;
+            color: var(--void-text);
+        }
+
+        .tr-detail-trait img {
+            width: 12px;
+            height: 12px;
+            object-fit: contain;
+            border-radius: 2px;
+        }
+
+        .tr-detail-lister {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .tr-detail-lister img {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: rgba(255,255,255,0.1);
+            flex-shrink: 0;
+        }
+
+        .tr-detail-lister-text {
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: var(--void-muted);
+        }
+
+        .tr-detail-lister-text strong {
+            color: var(--void-text);
+            font-weight: 800;
+        }
+
+        @media (max-width: 640px) {
+            .tr-detail-layout { flex-direction: column; }
+            .tr-detail-img-col { width: 100%; padding: 24px; }
+            .tr-detail-img-col .tr-detail-img-wrap { max-width: 180px; margin: 0 auto; }
+            .tr-detail-info-col { padding: 20px; }
+            .tr-detail-name { font-size: 1.2rem; }
+        }
+
+        /* Offer rows inside "offers received" modal */
+        .tr-offer-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            margin-bottom: 10px;
+            transition: border-color 0.2s;
+        }
+        .tr-offer-row:hover { border-color: rgba(255,255,255,0.1); }
+        .tr-offer-row img {
+            width: 44px;
+            height: 62px;
+            object-fit: cover;
+            border-radius: 6px;
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.03);
+        }
+        .tr-offer-info { flex: 1; min-width: 0; }
+        .tr-offer-name { font-size: 0.8rem; font-weight: 700; color: var(--void-text); }
+        .tr-offer-meta { font-size: 0.65rem; color: var(--void-muted); margin-top: 2px; }
+
+        .tr-btn-accept {
+            padding: 8px 16px;
+            background: rgba(var(--page-accent-rgb), 0.12);
+            color: rgba(var(--page-accent-rgb), 1);
+            border: 1px solid rgba(var(--page-accent-rgb), 0.3);
+            border-radius: 8px;
+            font-size: 0.65rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .tr-btn-accept:hover { background: rgba(var(--page-accent-rgb), 0.22); }
+        .tr-btn-accept:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .tr-offer-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+        .tr-btn-decline {
+            padding: 8px 16px;
+            background: rgba(239,68,68,0.08);
+            color: #f87171;
+            border: 1px solid rgba(239,68,68,0.28);
+            border-radius: 8px;
+            font-size: 0.65rem; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+            cursor: pointer; flex-shrink: 0; transition: all 0.2s; white-space: nowrap;
+        }
+        .tr-btn-decline:hover { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.45); }
+        .tr-btn-decline:disabled { opacity: 0.4; cursor: not-allowed; }
+        #tr-my-offers-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+
+        /* Toast */
+        #tr-toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            background: var(--void-bg-alt);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--void-text);
+            padding: 11px 22px;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            z-index: 99999;
+            opacity: 0;
+            transition: opacity 0.25s, transform 0.25s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #tr-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #tr-toast.success { border-color: rgba(var(--page-accent-rgb), 0.5); }
+        #tr-toast.error   { border-color: rgba(239,68,68,0.5); color: #fca5a5; }
+
+        /* Loading state */
+        #tr-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            min-height: calc(100vh - 80px);
+            color: var(--void-muted);
+        }
+        #tr-loading i { font-size: 1.5rem; opacity: 0.4; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+            #tr-inner { flex-direction: column; padding: 20px 16px 40px; }
+            #tr-sidebar { width: 100%; position: static; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+            #tr-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+<body class="bg-void-bg text-void-text antialiased">
+<div class="saas-bg-glow"></div>
+
+<!-- Nav — injected by /streamer-nav.js -->
+
+<!-- ── Loading ── -->
+<div id="tr-loading">
+    <i class="bx bx-loader-alt"></i>
+    <span style="font-size:0.65rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;">Loading</span>
+</div>
+
+<!-- ── Root (hidden until ready) ── -->
+<div id="tr-root" class="hidden">
+    <div id="tr-inner">
+
+        <!-- LEFT SIDEBAR -->
+        <aside id="tr-sidebar" class="tr-rise tr-rise-1">
+            <div class="tr-section-label">Browse</div>
+
+            <div class="tr-search-wrap">
+                <i class="bx bx-search"></i>
+                <input type="text" class="tr-search-field" id="tr-search-input" placeholder="Search card name..." oninput="tOnSearch(this.value)">
+            </div>
+
+            <button class="tr-nav-btn" id="tr-btn-traits" onclick="tToggleTraits()">
+                <i class="bx bx-filter-alt"></i> Traits
+                <i class="bx bx-chevron-down" id="tr-traits-chevron" style="margin-left:auto;font-size:0.85rem;"></i>
+            </button>
+            <div class="tr-expand" id="tr-traits-panel" style="padding:0 4px 6px;">
+                <div class="tr-trait-grid" id="tr-trait-chips"></div>
+            </div>
+
+            <button class="tr-nav-btn" id="tr-btn-rarity" onclick="tToggleRarity()">
+                <i class="bx bx-star"></i> Rarity
+                <i class="bx bx-chevron-down" id="tr-rarity-chevron" style="margin-left:auto;font-size:0.85rem;"></i>
+            </button>
+            <div class="tr-expand" id="tr-rarity-panel" style="padding:0 4px 6px;">
+                <div class="tr-trait-grid">
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="legendary" onclick="tSetRarity('legendary')" style="color:#fbbf24;border-color:rgba(251,191,36,0.3);">Legendary</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="epic"      onclick="tSetRarity('epic')"      style="color:#a855f7;border-color:rgba(168,85,247,0.3);">Epic</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="rare"      onclick="tSetRarity('rare')"      style="color:#3faaff;border-color:rgba(63,170,255,0.3);">Rare</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="uncommon"  onclick="tSetRarity('uncommon')"  style="color:#34d399;border-color:rgba(52,211,153,0.3);">Uncommon</button>
+                    <button class="tr-rarity-chip tr-trait-chip" data-rarity="common"    onclick="tSetRarity('common')"    style="color:#64748b;border-color:rgba(100,116,139,0.3);">Common</button>
+                </div>
+            </div>
+
+            <button class="tr-nav-btn" id="tr-btn-set" onclick="tToggleSet()">
+                <i class="bx bx-collection"></i> Set
+                <i class="bx bx-chevron-down" id="tr-set-chevron" style="margin-left:auto;font-size:0.85rem;"></i>
+            </button>
+            <div class="tr-expand" id="tr-set-panel" style="padding:0 4px 6px;">
+                <div class="tr-trait-grid" id="tr-set-chips"></div>
+            </div>
+
+            <button class="tr-nav-btn" id="tr-btn-clear" onclick="tClearFilters()">
+                <i class="bx bx-x-circle"></i> Clear filters
+            </button>
+
+            <div class="tr-divider"></div>
+
+            <div class="tr-section-label">Actions</div>
+
+            <button class="tr-nav-btn" id="tr-btn-list" onclick="tOpenListModal()">
+                <i class="bx bx-plus-circle"></i> List a card
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-mine" onclick="tViewMyListings()">
+                <i class="bx bxs-layer"></i> <span id="tr-mine-label">Your listings</span>
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-my-offers" onclick="tOpenMyOffers()">
+                <i class="bx bx-paper-plane"></i> Your Offers
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-pile" onclick="tOpenTradePile()">
+                <i class="bx bxs-collection"></i> Your Trade Pile
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-direct" onclick="tOpenDirectTrades()">
+                <i class="bx bx-transfer-alt"></i> Direct Trades
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-find-traders" onclick="tOpenWishlistMatches()" style="color:var(--void-accent)">
+                <i class="bx bx-search-alt-2"></i> Find Traders
+            </button>
+
+            <div id="tr-auth-status" class="hidden"></div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main id="tr-main" class="tr-rise tr-rise-2">
+            <div id="tr-header">
+                <div id="tr-header-left">
+                    <div id="tr-page-label">Trading Centre</div>
+                    <h1 id="tr-page-title">Market</h1>
+                    <div id="tr-controls">
+                        <span style="font-size:0.55rem;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:var(--void-muted);margin-right:2px;">Sort:</span>
+                        <button class="tr-sort-btn active" data-sort="recent" onclick="tSetSort('recent')">Recent</button>
+                        <button class="tr-sort-btn" data-sort="rarity_high" onclick="tSetSort('rarity_high')">Rarity ↑</button>
+                        <button class="tr-sort-btn" data-sort="rarity_low" onclick="tSetSort('rarity_low')">Rarity ↓</button>
+                    </div>
+                </div>
+                <div id="tr-belt-wrap">
+                    <div id="tr-belt-track"></div>
+                </div>
+            </div>
+
+            <div id="tr-grid">
+                <div class="tr-empty"><i class="bx bx-loader-alt" style="animation:spin 0.8s linear infinite;"></i><span>Loading listings…</span></div>
+            </div>
+
+            <div id="tr-pagination">
+                <button class="tr-page-btn" id="tr-prev-btn" onclick="tPrevPage()" disabled title="Previous page"><i class="bx bx-chevron-left"></i></button>
+                <span id="tr-page-indicator"></span>
+                <button class="tr-page-btn" id="tr-next-btn" onclick="tNextPage()" disabled title="Next page"><i class="bx bx-chevron-right"></i></button>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- ── List a Card Modal ── -->
+<div class="tr-modal-overlay" id="tr-list-modal" onclick="if(event.target===this)tCloseModal('tr-list-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-list-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title" id="tr-list-title">List Cards</p>
+        <p class="tr-modal-sub" id="tr-list-sub">Tap to select one or more cards to put on the market.</p>
+        <div class="tr-picker-filterbar" id="tr-list-filters">
+            <div class="bt-filter-row" id="tr-list-rarity-row">
+                <span class="bt-filter-label">Rarity</span>
+                <button class="bt-filter-chip" data-rarity="legendary" style="--bt-rarity-color:#fbbf24">Legendary</button>
+                <button class="bt-filter-chip" data-rarity="epic"      style="--bt-rarity-color:#a855f7">Epic</button>
+                <button class="bt-filter-chip" data-rarity="rare"      style="--bt-rarity-color:#3faaff">Rare</button>
+                <button class="bt-filter-chip" data-rarity="uncommon"  style="--bt-rarity-color:#34d399">Uncommon</button>
+                <button class="bt-filter-chip" data-rarity="common"    style="--bt-rarity-color:#94a3b8">Common</button>
+                <div class="bt-filter-row-end">
+                    <input id="tr-list-search" class="bt-search-input collapsed" type="text" placeholder="Search name…" autocomplete="off">
+                    <button type="button" id="tr-list-search-toggle" class="bt-picker-search-toggle" title="Search by name" aria-label="Toggle search"><i class="bx bx-search"></i></button>
+                </div>
+            </div>
+            <div class="bt-filter-row" id="tr-list-trait-row">
+                <span class="bt-filter-label">Traits</span>
+            </div>
+            <div class="tr-picker-count" id="tr-list-count"></div>
+        </div>
+        <div class="tr-picker-grid" id="tr-list-grid"></div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-list-modal')">Cancel</button>
+            <button class="tr-btn-primary" id="tr-list-confirm" disabled onclick="tConfirmList()">List Selected</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Make an Offer Modal ── -->
+<div class="tr-modal-overlay" id="tr-offer-modal" onclick="if(event.target===this)tCloseModal('tr-offer-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-offer-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Make an Offer</p>
+        <p class="tr-modal-sub" id="tr-offer-sub">Choose one of your cards to offer in exchange.</p>
+        <div class="tr-picker-filterbar" id="tr-offer-filters">
+            <div class="bt-filter-row" id="tr-offer-rarity-row">
+                <span class="bt-filter-label">Rarity</span>
+                <button class="bt-filter-chip" data-rarity="legendary" style="--bt-rarity-color:#fbbf24">Legendary</button>
+                <button class="bt-filter-chip" data-rarity="epic"      style="--bt-rarity-color:#a855f7">Epic</button>
+                <button class="bt-filter-chip" data-rarity="rare"      style="--bt-rarity-color:#3faaff">Rare</button>
+                <button class="bt-filter-chip" data-rarity="uncommon"  style="--bt-rarity-color:#34d399">Uncommon</button>
+                <button class="bt-filter-chip" data-rarity="common"    style="--bt-rarity-color:#94a3b8">Common</button>
+                <div class="bt-filter-row-end">
+                    <input id="tr-offer-search" class="bt-search-input collapsed" type="text" placeholder="Search name…" autocomplete="off">
+                    <button type="button" id="tr-offer-search-toggle" class="bt-picker-search-toggle" title="Search by name" aria-label="Toggle search"><i class="bx bx-search"></i></button>
+                </div>
+            </div>
+            <div class="bt-filter-row" id="tr-offer-trait-row">
+                <span class="bt-filter-label">Traits</span>
+            </div>
+            <div class="tr-picker-count" id="tr-offer-count"></div>
+        </div>
+        <div class="tr-picker-grid" id="tr-offer-grid"></div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-offer-modal')">Cancel</button>
+            <button class="tr-btn-primary" id="tr-offer-confirm" disabled onclick="tConfirmOffer()">Submit Offer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Offers Received Modal ── -->
+<div class="tr-modal-overlay" id="tr-offers-modal" onclick="if(event.target===this)tCloseModal('tr-offers-modal')">
+    <div class="tr-modal">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-offers-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Offers Received</p>
+        <p class="tr-modal-sub" id="tr-offers-sub">Accept an offer to complete the trade.</p>
+        <div id="tr-offers-list"></div>
+        <div class="tr-modal-actions" style="margin-top:8px;">
+            <button class="tr-btn-danger" id="tr-cancel-listing-btn" onclick="tCancelMyListing()"><i class="bx bx-x-circle"></i> Cancel Listing</button>
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-offers-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Your Offers Modal (outgoing offers you've made) ── -->
+<div class="tr-modal-overlay" id="tr-my-offers-modal" onclick="if(event.target===this)tCloseModal('tr-my-offers-modal')">
+    <div class="tr-modal">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-my-offers-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Your Offers</p>
+        <p class="tr-modal-sub">Offers you've made on other players' listings. Retract any that are still pending.</p>
+        <div id="tr-my-offers-list"></div>
+        <div class="tr-modal-actions" style="margin-top:8px;">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-my-offers-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Your Trade Pile Modal ── -->
+<div class="tr-modal-overlay" id="tr-pile-modal" onclick="if(event.target===this)tCloseModal('tr-pile-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-pile-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Your Trade Pile</p>
+        <p class="tr-modal-sub">Every card you've marked as tradeable in your binder.</p>
+        <div class="tr-picker-count" id="tr-pile-count" style="margin-bottom:12px"></div>
+        <div class="tr-picker-grid" id="tr-pile-grid"></div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-pile-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Wishlist matches modal -->
+<div class="tr-modal-overlay" id="tr-wishlist-modal" onclick="if(event.target===this)tCloseModal('tr-wishlist-modal')">
+    <div class="tr-modal" style="max-width:520px;width:100%">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-wishlist-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Find Traders</p>
+        <p class="tr-modal-sub">Players who own something you want and want something you own.</p>
+        <div id="tr-wishlist-list" class="tr-picker-grid" style="grid-template-columns:1fr;gap:8px;max-height:420px;overflow-y:auto"></div>
+    </div>
+</div>
+
+<!-- ── Direct Trades (peer-to-peer via Castle Code) ── -->
+<style>
+    .tr-direct-bar {
+        display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+        justify-content: space-between; margin-bottom: 18px;
+    }
+    .tr-direct-mycode {
+        display: flex; align-items: center; gap: 10px;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 12px; padding: 8px 14px;
+    }
+    .tr-direct-mycode-label {
+        font-size: 0.5rem; font-weight: 800; letter-spacing: 0.18em;
+        text-transform: uppercase; color: var(--void-muted);
+    }
+    .tr-direct-mycode-value {
+        font-size: 0.85rem; font-weight: 900; letter-spacing: 0.18em;
+        color: var(--void-accent); font-family: 'Space Grotesk', monospace;
+    }
+    .tr-direct-copy {
+        background: none; border: none; color: var(--void-muted); cursor: pointer;
+        font-size: 0.9rem; transition: color 0.15s;
+    }
+    .tr-direct-copy:hover { color: var(--void-accent); }
+    .tr-direct-start { display: flex; gap: 8px; align-items: center; }
+    .tr-direct-input {
+        background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 10px; padding: 9px 12px; color: var(--void-text);
+        font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
+        font-family: 'Space Grotesk', monospace; width: 190px; outline: none;
+        transition: border-color 0.15s;
+    }
+    .tr-direct-input:focus { border-color: var(--void-accent); }
+    .tr-direct-list { display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; }
+    .tr-direct-row {
+        background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 16px; padding: 16px;
+    }
+    .tr-direct-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .tr-direct-party { display: flex; align-items: center; gap: 12px; }
+    .tr-direct-avatar { width: 40px; height: 40px; border-radius: 11px; object-fit: cover; }
+    .tr-direct-dir {
+        font-size: 0.5rem; font-weight: 800; letter-spacing: 0.18em;
+        text-transform: uppercase; color: var(--void-muted);
+    }
+    .tr-direct-name {
+        font-size: 0.85rem; font-weight: 900; font-style: italic;
+        text-transform: uppercase; letter-spacing: 0.02em; color: var(--void-text);
+    }
+    .tr-direct-status {
+        font-size: 0.5rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+        padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+    }
+    .tr-direct-swap {
+        display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center;
+        padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .tr-direct-side-label {
+        font-size: 0.48rem; font-weight: 800; letter-spacing: 0.16em;
+        text-transform: uppercase; color: var(--void-muted); margin-bottom: 8px;
+    }
+    .tr-direct-thumbs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tr-direct-thumb {
+        width: 38px; height: 53px; object-fit: cover; border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+    .tr-direct-thumb--empty {
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(255,255,255,0.04); font-size: 0.55rem; color: var(--void-muted); text-transform: uppercase;
+    }
+    .tr-direct-empty-cards { font-size: 0.7rem; color: var(--void-muted); opacity: 0.5; }
+    .tr-direct-swap-icon { font-size: 1.3rem; color: var(--void-accent); opacity: 0.7; }
+    .tr-direct-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .tr-direct-actions button { flex: 1; }
+    .tr-builder-section { margin-bottom: 16px; }
+    .tr-builder-section-head {
+        display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+    }
+    .tr-builder-section-head > span:first-child {
+        font-size: 0.55rem; font-weight: 800; letter-spacing: 0.16em;
+        text-transform: uppercase; color: var(--void-text);
+    }
+    #tr-builder-modal .tr-picker-grid { max-height: 36vh; }
+    .tr-picker-grid--readonly { opacity: 0.85; }
+</style>
+
+<div class="tr-modal-overlay" id="tr-direct-modal" onclick="if(event.target===this)tCloseModal('tr-direct-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-direct-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Direct Trades</p>
+        <p class="tr-modal-sub">Trade one-to-one with another collector using their Castle Code. They can counter your offer before either side confirms.</p>
+        <div class="tr-direct-bar">
+            <div class="tr-direct-mycode">
+                <span class="tr-direct-mycode-label">Your Castle Code</span>
+                <span id="tr-direct-mycode" class="tr-direct-mycode-value">…</span>
+                <button class="tr-direct-copy" onclick="tCopyMyCode()" title="Copy code"><i class="bx bxs-copy"></i></button>
+            </div>
+            <div class="tr-direct-start">
+                <input id="tr-direct-code-input" class="tr-direct-input" type="text" placeholder="Their code…" maxlength="16" autocomplete="off">
+                <button class="tr-btn-primary" onclick="tStartTrade()">Start Trade</button>
+            </div>
+        </div>
+        <div id="tr-direct-list" class="tr-direct-list"></div>
+    </div>
+</div>
+
+<!-- ── Trade Builder Modal (initiate / counter) ── -->
+<div class="tr-modal-overlay" id="tr-builder-modal" onclick="if(event.target===this)tCloseModal('tr-builder-modal')">
+    <div class="tr-modal tr-modal-wide">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-builder-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title" id="tr-builder-title">Propose Trade</p>
+        <p class="tr-modal-sub" id="tr-builder-sub">Pick the card(s) you want to offer.</p>
+        <div class="tr-builder-section">
+            <div class="tr-builder-section-head">
+                <span id="tr-builder-mine-label">Your Offer</span>
+                <span class="tr-picker-count" id="tr-builder-mine-count"></span>
+            </div>
+            <div class="tr-picker-grid" id="tr-builder-mine-grid"></div>
+        </div>
+        <div class="tr-builder-section" id="tr-builder-theirs-section" style="display:none">
+            <div class="tr-builder-section-head">
+                <span id="tr-builder-theirs-label">Their Cards</span>
+            </div>
+            <div class="tr-picker-grid tr-picker-grid--readonly" id="tr-builder-theirs-grid"></div>
+        </div>
+        <div class="tr-modal-actions">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-builder-modal')">Cancel</button>
+            <button class="tr-btn-primary" id="tr-builder-send" disabled onclick="tSendTrade()">Send Trade Offer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Card Inspect Modal (ported from binder: 3D flip + holographic + tilt) ── -->
+<div id="card-detail-modal" class="fixed inset-0 z-[2000] hidden card-detail-modal-backdrop overflow-y-auto overflow-x-hidden">
+    <button type="button" onclick="tCloseInspect()" aria-label="Close" class="fixed top-5 right-5 z-[2010] w-10 h-10 rounded-full border border-white/10 bg-black/30 backdrop-blur-md hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-colors duration-200">
+        <i class="bx bx-x text-base"></i>
+    </button>
+    <div class="min-h-full w-full flex items-center justify-center p-6 pt-16 pb-10 sm:p-10" onclick="if(event.target===this) tCloseInspect()">
+        <div class="card-detail-modal-layout void-fade w-full max-w-[min(100%,38rem)] lg:max-w-[min(100%,46rem)] mx-auto grid grid-cols-1 lg:grid-cols-[auto_minmax(0,19rem)] gap-6 lg:gap-8 lg:items-center" onclick="event.stopPropagation()">
+            <div class="card-detail-art-col flex justify-center lg:justify-start items-center shrink-0">
+                <div id="card-detail-flip-scene" class="card-detail-flip-scene card-detail-foil-drag-only outline-none select-none" tabindex="0" role="button" aria-label="Card — tap to flip; drag to tilt" aria-pressed="false">
+                    <div class="card-detail-tilt-wrap">
+                        <div class="card-detail-flip-track">
+                            <div class="card-detail-face card-detail-face--front">
+                                <div class="card-detail-card-face absolute inset-0">
+                                    <img id="card-detail-image" src="" alt="" class="absolute inset-0 h-full w-full object-cover block z-0 pointer-events-none">
+                                    <div id="card-detail-holo-layer" class="holo-layer holo-layer--card-detail hidden" aria-hidden="true"></div>
+                                    <div id="card-detail-holo-shine" class="holo-shine holo-shine--card-detail hidden" aria-hidden="true"></div>
+                                    <div class="card-detail-sparkle" aria-hidden="true"></div>
+                                </div>
+                            </div>
+                            <div class="card-detail-face card-detail-face--back">
+                                <img id="card-detail-back-image" src="/Castle_Default_Cardback.png" alt="" class="h-full w-full object-contain object-center block pointer-events-none" draggable="false">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-detail-body flex flex-col min-w-0 gap-4 lg:max-h-[min(70vh,548px)] lg:overflow-y-auto lg:pr-1 custom-scrollbar">
+                <header class="space-y-2">
+                    <div id="card-detail-rarity" class="card-detail-rarity-label leading-none" data-rarity="common"></div>
+                    <h3 id="card-detail-name" class="font-display text-xl sm:text-2xl font-bold uppercase tracking-tight text-white leading-tight"></h3>
+                    <div class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-snug text-void-muted/90">
+                        <span class="inline-flex items-baseline gap-1"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">Set</span> <span id="card-detail-set" class="text-void-text/85 font-semibold">—</span></span>
+                        <span class="text-white/12 px-0.5 select-none" aria-hidden="true">·</span>
+                        <span class="inline-flex items-baseline gap-0.5"><span class="text-void-muted/50 font-semibold uppercase tracking-wider text-[10px]">No.</span> <span id="card-detail-number" class="text-void-text/85 font-semibold tabular-nums">—</span></span>
+                    </div>
+                </header>
+                <p id="card-detail-description" class="card-detail-description text-[12px] sm:text-[13px] text-void-muted/90 leading-relaxed pl-3 border-l border-white/[0.07]"></p>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="card-detail-stat-pill">
+                        <span class="card-detail-stat-label">Attack</span>
+                        <div id="card-detail-attack" class="card-detail-stat-value">0</div>
+                    </div>
+                    <div class="card-detail-stat-pill">
+                        <span class="card-detail-stat-label">Defense</span>
+                        <div id="card-detail-defense" class="card-detail-stat-value">0</div>
+                    </div>
+                </div>
+                <div id="tr-detail-traits" class="tr-detail-traits"></div>
+                <div id="tr-detail-lister" class="tr-detail-lister"></div>
+                <div class="tr-modal-actions" style="margin-top:auto;padding-top:16px;flex-wrap:wrap;">
+                    <button class="tr-btn-ghost" onclick="tCloseInspect()">Close</button>
+                    <button id="tr-detail-wishlist-btn" class="tr-btn-ghost" onclick="tDetailWishlist()" title="Add to wishlist"><i class="bx bx-heart"></i> Wishlist</button>
+                    <button id="tr-detail-filter-btn" class="tr-btn-ghost" onclick="tDetailFilter()" title="Filter market by this card"><i class="bx bx-filter-alt"></i> Filter</button>
+                    <button id="tr-detail-cancel-btn" class="tr-btn-danger" style="display:none" onclick="tDetailCancel()">Cancel Listing</button>
+                    <button id="tr-detail-offer-btn" class="tr-btn-primary" onclick="tDetailOffer()">Send Offer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Card Catalog Modal ── -->
+<div class="tr-modal-overlay" id="tr-catalog-modal" onclick="if(event.target===this)tCloseModal('tr-catalog-modal')">
+    <div class="tr-modal" style="max-width:1000px;">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-catalog-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">All Cards</p>
+        <p class="tr-modal-sub" id="tr-catalog-count"></p>
+        <div class="tr-picker-grid" id="tr-catalog-grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr));"></div>
+        <div class="tr-modal-pager" id="tr-catalog-pager">
+            <button class="tr-pager-btn" onclick="tCatalogPagePrev()"><i class="bx bx-chevron-left"></i></button>
+            <span class="tr-pager-info" id="tr-catalog-page-info"></span>
+            <button class="tr-pager-btn" onclick="tCatalogPageNext()"><i class="bx bx-chevron-right"></i></button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="tr-toast"></div>
+
+<script src="/nav-user-menu.js"></script>
+<script src="/nav-notifications.js"></script>
+<script src="/streamer-nav.js"></script>
+<script src="/trading.js"></script>
+</body>
+</html>

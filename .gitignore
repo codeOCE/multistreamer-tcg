@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Cloudflare Workers / Wrangler
+.wrangler/
+dist/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# Custom Project Folders
+/not needed/
+tests/output/
+/migrations/
+/migration-package/
+
+# OS/Editor Files
+.DS_Store
+.vscode/
+Thumbs.db
+*.log
+*.bak
+*.bak2
+
+# MRQ Local Config
+.mrq.json
+# Local MCP config (contains secrets)
+.mcp.json
+# Added by code-review-graph
+.code-review-graph/

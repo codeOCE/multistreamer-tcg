@@ -1,0 +1,1006 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Account settings · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <style>
+        .hidden {
+            display: none !important;
+        }
+
+        /* Fixed nav is h-20 (5rem); pad below it + notch safe area */
+        #st-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 16px;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px) + 0.75rem);
+            box-sizing: border-box;
+        }
+
+        .st-spinner {
+            width: 32px;
+            height: 32px;
+            border: 2px solid rgba(var(--void-accent-rgb), 0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%;
+            animation: st-spin 0.7s linear infinite;
+        }
+
+        @keyframes st-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #st-signin {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 20px;
+            text-align: center;
+            padding: 40px;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px) + 2.5rem);
+            box-sizing: border-box;
+        }
+
+        #st-signin .big-icon {
+            font-size: 4rem;
+            opacity: 0.08;
+        }
+
+        /* Aligned with my-collection body width; slightly wider for settings forms */
+        #st-main {
+            width: 100%;
+            max-width: min(1040px, calc(100vw - 32px));
+            box-sizing: border-box;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px) + 1.25rem);
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow"></div>
+    <div id="toast-container"></div>
+
+    <nav class="fixed top-0 left-0 right-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl pt-[env(safe-area-inset-top,0px)]"
+        aria-label="Main">
+        <div class="w-full px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 group cursor-pointer">
+                <div
+                    class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt=""
+                        class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <span
+                    class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span
+                        class="text-void-accent">TCG</span></span>
+            </a>
+            <div class="flex items-center gap-3">
+                <div id="nav-user-preview" class="hidden items-center">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Collector</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt=""
+                                    class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
+                            </span>
+                            <i
+                                class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors "></i>
+                        </button>
+                        <div id="nav-user-menu"
+                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                            role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt=""
+                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg"
+                                        width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name"
+                                            class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons"
+                                                class="flex items-center gap-1 shrink-0"></span>
+                                            <span id="nav-user-menu-role"
+                                                class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap"
+                                        class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron"
+                                            class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel"
+                                    class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p
+                                        class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">
+                                        Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p
+                                            class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">
+                                            Castle code</p>
+                                        <p id="nav-user-menu-castle-code"
+                                            class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span
+                                            class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle
+                                            code, blocks, security</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="bx bx-log-out w-4 text-center"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="st-loading">
+        <div class="st-spinner"></div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading account…</p>
+    </div>
+
+    <div id="st-signin" class="hidden">
+        <div class="big-icon"><i class="bx bxs-cog"></i></div>
+        <h1 class="font-display font-black text-2xl uppercase tracking-tight">Account settings</h1>
+        <p class="text-sm text-void-muted max-w-md">Sign in to manage your Castle code, linked platforms, and security.
+        </p>
+        <a href="/auth/twitch?role=viewer" data-castle-oauth
+            class="saas-button rounded-xl px-8 py-3 text-[0.65rem] mt-2">
+            <i class="bx bxl-twitch mr-2"></i>Sign in
+        </a>
+        <a href="/" class="text-xs text-void-muted hover:text-void-accent mt-4">← Back to home</a>
+    </div>
+
+    <main id="st-main" class="hidden w-full mx-auto px-4 sm:px-6 lg:px-8 pb-24 sm:pb-32">
+        <div class="void-fade space-y-8 sm:space-y-10">
+            <header class="space-y-5 border-b border-white/5 pb-6">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-void-muted mb-1">Settings</p>
+                    <h1
+                        class="text-3xl sm:text-4xl md:text-5xl font-display font-black uppercase italic tracking-tighter leading-tight">
+                        Account</h1>
+                    <p class="text-void-muted text-sm mt-2 max-w-prose leading-relaxed">Castle code, team access, linked
+                        platforms, and account security.</p>
+                </div>
+                <div role="tablist" aria-label="Account sections" class="overflow-x-auto">
+                    <div
+                        class="flex min-w-full gap-0.5 p-1 rounded-xl bg-black/30 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                        <button type="button" data-profile-tab="channels"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-void-accent text-void-text bg-void-accent/10">Channels &amp; Connections</button>
+                        <button type="button" data-profile-tab="transactions"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">History</button>
+                        <button type="button" data-profile-tab="security"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Security &amp; Privacy</button>
+                        <button type="button" data-profile-tab="accessibility"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Accessibility</button>
+                        <button type="button" data-profile-tab="notifications"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Notifications</button>
+                        <button type="button" data-profile-tab="upgrade"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Upgrade</button>
+                        <button type="button" data-profile-tab="redeem"
+                            class="profile-settings-tab flex-1 whitespace-nowrap px-4 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Redeem</button>
+                    </div>
+                </div>
+            </header>
+
+            <div id="profile-panel-channels" class="profile-settings-panel space-y-6 sm:space-y-8">
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3 mb-5">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Identity</div>
+                        <i class="bx bxs-id-card text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+                    <div class="flex items-center gap-4 sm:gap-5">
+                        <div class="relative shrink-0">
+                            <img id="viewer-settings-avatar" src="" alt=""
+                                class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-white/10 bg-white/[0.03] shadow-lg shadow-black/40 ring-1 ring-white/[0.08]" />
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-wrap items-center gap-2 mb-1">
+                                <h2 id="viewer-settings-display-name"
+                                    class="text-xl sm:text-2xl font-display font-black text-white uppercase italic tracking-tight leading-none truncate pr-1">
+                                    —</h2>
+                                <span id="viewer-settings-role-badge"
+                                    class="text-[10px] font-black uppercase tracking-[0.18em] px-3.5 py-1.5 rounded-full border bg-white/[0.06] text-void-muted border-white/10">Collector</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="text-[9px] font-black uppercase tracking-[0.18em] text-void-muted mr-1">
+                                    Castle code</div>
+                                <span id="viewer-settings-castle-code"
+                                    class="font-mono text-sm font-bold tracking-[0.16em] text-void-accent">…</span>
+                                <button type="button" id="viewer-settings-copy-code"
+                                    class="ml-1 shrink-0 w-7 h-7 rounded-lg bg-white/[0.06] border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent hover:border-void-accent/35 transition-colors"
+                                    title="Copy code">
+                                    <i class="bx bxs-copy text-[10px]" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-4">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Channels you
+                            manage</div>
+                        <i class="bx bxs-group text-[10px] text-void-accent opacity-50"
+                            aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Creator channels where you are mod or editor.</p>
+                    <div id="viewer-settings-team-list" class="space-y-2"></div>
+                    <p id="viewer-settings-team-empty" class="text-xs text-void-muted/80 italic py-2 hidden">You don’t
+                        manage any channels yet.</p>
+                </div>
+
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Linked platforms
+                        </div>
+                        <i class="bx bxs-plug text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed max-w-2xl">Each connection shows its status, what
+                        Castle uses it for, and connect or disconnect — similar to Twitch’s own settings.</p>
+                    <div id="viewer-settings-connections"></div>
+                </div>
+
+            </div>
+
+            <div id="profile-panel-transactions" class="profile-settings-panel hidden space-y-8">
+                <div
+                    class="p-16 sm:p-20 text-center flex flex-col items-center justify-center space-y-5 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
+                    <div
+                        class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
+                        <i class="bx bxs-receipt" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="text-xl font-display font-black uppercase italic text-void-text tracking-tight">
+                        Transaction history</h3>
+                    <p class="text-void-muted text-xs max-w-md leading-relaxed">Pack purchases and payments will appear
+                        here in a future update.</p>
+                </div>
+            </div>
+
+            <div id="profile-panel-security" class="profile-settings-panel hidden space-y-8 lg:space-y-10">
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Block drops</div>
+                        <i class="bx bxs-block text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">You won’t receive new card drops from blocked
+                        creator channels. Existing cards stay in your collection.</p>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="viewer-block-streamer-input"
+                            placeholder="Creator username (e.g. codeoce)" autocomplete="off"
+                            class="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-void-text placeholder:text-void-muted/50 focus:outline-none focus:border-void-accent/40 focus:ring-1 focus:ring-void-accent/20" />
+                        <button type="button" id="viewer-block-streamer-btn"
+                            class="px-6 py-3 rounded-xl bg-void-accent text-void-bg font-black text-[9px] uppercase tracking-widest shadow-lg shadow-void-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0">Block
+                            channel</button>
+                    </div>
+                    <div id="viewer-blocked-list" class="space-y-2 min-h-[2rem]"></div>
+                </div>
+
+                <div class="glass-panel rounded-2xl border border-red-500/20 bg-red-950/20 p-5 sm:p-7 space-y-4">
+                    <div class="flex justify-between items-end border-b border-red-500/20 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-red-400">Danger zone</div>
+                        <i class="bx bxs-error text-[10px] text-red-400/80" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Deleting your account permanently removes your
+                        Castle profile, collection, and settings. <span class="text-red-300/90 font-semibold">There is
+                            no data recovery.</span> This does not delete content on Twitch or Kick.</p>
+                    <button type="button" id="viewer-open-delete-account-modal"
+                        class="px-6 py-3 rounded-xl border border-red-500/50 bg-red-600/15 text-red-300 text-[10px] font-black uppercase tracking-widest hover:bg-red-600/25 transition-colors">Delete
+                        my account</button>
+                </div>
+
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Privacy</div>
+                        <i class="bx bxs-shield text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Public profile -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Public profile</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Allow anyone to view your Castle
+                                profile page.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-profile-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="profile_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Show collection -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show collection</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display your card collection,
+                                stats, and sets to visitors.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-collection-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="collection_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Appear on leaderboards -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Appear on leaderboards</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Show your username in streamer and
+                                global leaderboards.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-show-on-leaderboard" role="switch"
+                            aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="show_on_leaderboard">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Show wishlist -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show wishlist</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Let visitors see which cards you
+                                are looking for.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-wishlist-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="wishlist_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Show trade code -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show trade code</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display your trade code on your
+                                public profile so others can initiate trades.</p>
+                        </div>
+                        <button type="button" id="privacy-toggle-trade-code-public" role="switch" aria-checked="true"
+                            class="privacy-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-privacy-key="trade_code_public">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── ACCESSIBILITY PANEL ── -->
+            <div id="profile-panel-accessibility" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+
+                <!-- Appearance -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Appearance</div>
+                        <i class="bx bx-palette text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Light mode -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Light mode</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Switch to a light colour scheme across
+                                the platform.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-light-mode" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_light_mode">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+
+                    <!-- Colourblind mode -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Colourblind mode</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Adjusts card and UI colours for
+                                better visibility. Coming soon.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-colorblind" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none opacity-50 cursor-not-allowed"
+                            data-pref-key="castle_pref_colorblind" disabled>
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card Display -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Card display
+                        </div>
+                        <i class="bx bxs-layer text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Holographic foil -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Holographic foil effect</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Iridescent shader that reacts to
+                                mouse movement on rare cards.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-foil" role="switch" aria-checked="true"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_foil">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-black transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Card tilt -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">3D card tilt</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Tilts cards in 3D when you hover over
+                                them in the detail modal.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-tilt" role="switch" aria-checked="true"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_tilt">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-black transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Collection defaults -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Collection
+                            defaults</div>
+                        <i class="bx bxs-id-card text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Default sort -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Default sort order</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">How your collection is sorted when
+                                you first open it.</p>
+                        </div>
+                        <div class="void-dropdown shrink-0" data-select-id="pref-default-sort" style="min-width:148px">
+                            <select id="pref-default-sort" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <option value="newest">Newest first</option>
+                                <option value="oldest">Oldest first</option>
+                                <option value="rarity">Rarity</option>
+                                <option value="name">Name</option>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">Newest first</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
+                    </div>
+
+                    <!-- Show duplicates -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Show duplicate count</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display a badge on cards you own
+                                multiple copies of.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-dupes" role="switch" aria-checked="true"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_dupes">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-black transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Motion & Safety -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Motion &amp;
+                            Safety</div>
+                        <i class="bx bx-accessibility text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Reduce motion -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Reduce motion</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Minimises animations and transitions
+                                across the platform.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-reduce-motion" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_reduce_motion">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+
+                    <!-- Disable all animations -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Disable all animations</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Removes all transitions, effects, and
+                                motion — more aggressive than reduce motion.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-no-animations" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_no_animations">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+
+                    <!-- Photosensitivity mode -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Photosensitivity mode</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Disables holographic foil, 3D tilt,
+                                and any flashing effects on cards. Recommended for photosensitive users.</p>
+                        </div>
+                        <button type="button" id="pref-toggle-photosensitivity" role="switch" aria-checked="false"
+                            class="pref-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-white/[0.08] transition-colors focus:outline-none"
+                            data-pref-key="castle_pref_photosensitivity">
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Regional -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-6 space-y-5">
+                    <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Regional</div>
+                        <i class="bx bx-globe text-xs text-void-accent/60" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Timezone -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Timezone</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Used for drop schedules and event timestamps.</p>
+                        </div>
+                        <div class="void-dropdown shrink-0" data-select-id="regional-timezone" style="min-width:248px">
+                            <select id="regional-timezone" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <optgroup label="North America">
+                                    <option value="America/New_York">Eastern Time (ET)</option>
+                                    <option value="America/Chicago">Central Time (CT)</option>
+                                    <option value="America/Denver">Mountain Time (MT)</option>
+                                    <option value="America/Phoenix">Arizona (no DST)</option>
+                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                                    <option value="America/Anchorage">Alaska</option>
+                                    <option value="Pacific/Honolulu">Hawaii</option>
+                                    <option value="America/Toronto">Toronto</option>
+                                    <option value="America/Halifax">Halifax</option>
+                                    <option value="America/St_Johns">St. John's</option>
+                                    <option value="America/Vancouver">Vancouver</option>
+                                    <option value="America/Winnipeg">Winnipeg</option>
+                                    <option value="America/Edmonton">Edmonton</option>
+                                    <option value="America/Mexico_City">Mexico City</option>
+                                    <option value="America/Monterrey">Monterrey</option>
+                                    <option value="America/Guatemala">Guatemala City</option>
+                                    <option value="America/Panama">Panama City</option>
+                                    <option value="America/Havana">Havana</option>
+                                    <option value="America/Jamaica">Kingston</option>
+                                    <option value="America/Puerto_Rico">Puerto Rico</option>
+                                </optgroup>
+                                <optgroup label="South America">
+                                    <option value="America/Bogota">Bogotá</option>
+                                    <option value="America/Lima">Lima</option>
+                                    <option value="America/Caracas">Caracas</option>
+                                    <option value="America/La_Paz">La Paz</option>
+                                    <option value="America/Guyana">Georgetown</option>
+                                    <option value="America/Asuncion">Asunción</option>
+                                    <option value="America/Santiago">Santiago</option>
+                                    <option value="America/Sao_Paulo">São Paulo</option>
+                                    <option value="America/Fortaleza">Fortaleza</option>
+                                    <option value="America/Manaus">Manaus</option>
+                                    <option value="America/Argentina/Buenos_Aires">Buenos Aires</option>
+                                    <option value="America/Montevideo">Montevideo</option>
+                                    <option value="America/Noronha">Fernando de Noronha</option>
+                                </optgroup>
+                                <optgroup label="Europe">
+                                    <option value="Atlantic/Reykjavik">Reykjavik</option>
+                                    <option value="Europe/London">London</option>
+                                    <option value="Europe/Dublin">Dublin</option>
+                                    <option value="Europe/Lisbon">Lisbon</option>
+                                    <option value="Europe/Paris">Paris</option>
+                                    <option value="Europe/Berlin">Berlin</option>
+                                    <option value="Europe/Amsterdam">Amsterdam</option>
+                                    <option value="Europe/Brussels">Brussels</option>
+                                    <option value="Europe/Madrid">Madrid</option>
+                                    <option value="Europe/Rome">Rome</option>
+                                    <option value="Europe/Zurich">Zurich</option>
+                                    <option value="Europe/Vienna">Vienna</option>
+                                    <option value="Europe/Prague">Prague</option>
+                                    <option value="Europe/Budapest">Budapest</option>
+                                    <option value="Europe/Warsaw">Warsaw</option>
+                                    <option value="Europe/Stockholm">Stockholm</option>
+                                    <option value="Europe/Oslo">Oslo</option>
+                                    <option value="Europe/Copenhagen">Copenhagen</option>
+                                    <option value="Europe/Helsinki">Helsinki</option>
+                                    <option value="Europe/Tallinn">Tallinn</option>
+                                    <option value="Europe/Riga">Riga</option>
+                                    <option value="Europe/Vilnius">Vilnius</option>
+                                    <option value="Europe/Kyiv">Kyiv</option>
+                                    <option value="Europe/Bucharest">Bucharest</option>
+                                    <option value="Europe/Athens">Athens</option>
+                                    <option value="Europe/Sofia">Sofia</option>
+                                    <option value="Europe/Minsk">Minsk</option>
+                                    <option value="Europe/Istanbul">Istanbul</option>
+                                    <option value="Europe/Moscow">Moscow</option>
+                                    <option value="Europe/Samara">Samara</option>
+                                    <option value="Europe/Kaliningrad">Kaliningrad</option>
+                                </optgroup>
+                                <optgroup label="Africa">
+                                    <option value="Atlantic/Azores">Azores</option>
+                                    <option value="Atlantic/Cape_Verde">Cape Verde</option>
+                                    <option value="Africa/Abidjan">Abidjan</option>
+                                    <option value="Africa/Algiers">Algiers</option>
+                                    <option value="Africa/Tunis">Tunis</option>
+                                    <option value="Africa/Casablanca">Casablanca</option>
+                                    <option value="Africa/Lagos">Lagos</option>
+                                    <option value="Africa/Khartoum">Khartoum</option>
+                                    <option value="Africa/Cairo">Cairo</option>
+                                    <option value="Africa/Johannesburg">Johannesburg</option>
+                                    <option value="Africa/Harare">Harare</option>
+                                    <option value="Africa/Nairobi">Nairobi</option>
+                                    <option value="Africa/Addis_Ababa">Addis Ababa</option>
+                                    <option value="Africa/Dar_es_Salaam">Dar es Salaam</option>
+                                </optgroup>
+                                <optgroup label="Middle East">
+                                    <option value="Asia/Beirut">Beirut</option>
+                                    <option value="Asia/Damascus">Damascus</option>
+                                    <option value="Asia/Jerusalem">Jerusalem</option>
+                                    <option value="Asia/Amman">Amman</option>
+                                    <option value="Asia/Baghdad">Baghdad</option>
+                                    <option value="Asia/Kuwait">Kuwait City</option>
+                                    <option value="Asia/Riyadh">Riyadh</option>
+                                    <option value="Asia/Qatar">Doha</option>
+                                    <option value="Asia/Bahrain">Bahrain</option>
+                                    <option value="Asia/Muscat">Muscat</option>
+                                    <option value="Asia/Tehran">Tehran</option>
+                                    <option value="Asia/Yerevan">Yerevan</option>
+                                    <option value="Asia/Baku">Baku</option>
+                                    <option value="Asia/Tbilisi">Tbilisi</option>
+                                </optgroup>
+                                <optgroup label="Asia">
+                                    <option value="Asia/Dubai">Dubai</option>
+                                    <option value="Asia/Kabul">Kabul</option>
+                                    <option value="Asia/Karachi">Karachi</option>
+                                    <option value="Asia/Tashkent">Tashkent</option>
+                                    <option value="Asia/Almaty">Almaty</option>
+                                    <option value="Asia/Bishkek">Bishkek</option>
+                                    <option value="Asia/Kolkata">Kolkata</option>
+                                    <option value="Asia/Colombo">Colombo</option>
+                                    <option value="Asia/Kathmandu">Kathmandu</option>
+                                    <option value="Asia/Dhaka">Dhaka</option>
+                                    <option value="Asia/Rangoon">Yangon</option>
+                                    <option value="Asia/Bangkok">Bangkok</option>
+                                    <option value="Asia/Ho_Chi_Minh">Ho Chi Minh City</option>
+                                    <option value="Asia/Phnom_Penh">Phnom Penh</option>
+                                    <option value="Asia/Vientiane">Vientiane</option>
+                                    <option value="Asia/Jakarta">Jakarta</option>
+                                    <option value="Asia/Makassar">Makassar</option>
+                                    <option value="Asia/Jayapura">Jayapura</option>
+                                    <option value="Asia/Singapore">Singapore</option>
+                                    <option value="Asia/Kuala_Lumpur">Kuala Lumpur</option>
+                                    <option value="Asia/Manila">Manila</option>
+                                    <option value="Asia/Hong_Kong">Hong Kong</option>
+                                    <option value="Asia/Taipei">Taipei</option>
+                                    <option value="Asia/Shanghai">Shanghai</option>
+                                    <option value="Asia/Seoul">Seoul</option>
+                                    <option value="Asia/Tokyo">Tokyo</option>
+                                    <option value="Asia/Vladivostok">Vladivostok</option>
+                                    <option value="Asia/Magadan">Magadan</option>
+                                    <option value="Asia/Kamchatka">Kamchatka</option>
+                                    <option value="Asia/Novosibirsk">Novosibirsk</option>
+                                    <option value="Asia/Krasnoyarsk">Krasnoyarsk</option>
+                                    <option value="Asia/Irkutsk">Irkutsk</option>
+                                    <option value="Asia/Yakutsk">Yakutsk</option>
+                                </optgroup>
+                                <optgroup label="Australia &amp; Pacific">
+                                    <option value="Australia/Perth">Perth</option>
+                                    <option value="Australia/Darwin">Darwin</option>
+                                    <option value="Australia/Brisbane">Brisbane</option>
+                                    <option value="Australia/Adelaide">Adelaide</option>
+                                    <option value="Australia/Sydney">Sydney</option>
+                                    <option value="Australia/Melbourne">Melbourne</option>
+                                    <option value="Australia/Hobart">Hobart</option>
+                                    <option value="Australia/Lord_Howe">Lord Howe Island</option>
+                                    <option value="Pacific/Port_Moresby">Port Moresby</option>
+                                    <option value="Pacific/Guam">Guam</option>
+                                    <option value="Pacific/Palau">Palau</option>
+                                    <option value="Pacific/Auckland">Auckland</option>
+                                    <option value="Pacific/Chatham">Chatham Islands</option>
+                                    <option value="Pacific/Fiji">Fiji</option>
+                                    <option value="Pacific/Tongatapu">Tonga</option>
+                                    <option value="Pacific/Apia">Samoa</option>
+                                    <option value="Pacific/Fakaofo">Tokelau</option>
+                                    <option value="Pacific/Tahiti">Tahiti</option>
+                                    <option value="Pacific/Marquesas">Marquesas Islands</option>
+                                    <option value="Pacific/Gambier">Gambier Islands</option>
+                                    <option value="Pacific/Pago_Pago">American Samoa</option>
+                                    <option value="Pacific/Niue">Niue</option>
+                                    <option value="Pacific/Midway">Midway Island</option>
+                                </optgroup>
+                                <optgroup label="Other">
+                                    <option value="UTC">UTC</option>
+                                </optgroup>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">Eastern Time (ET)</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
+                    </div>
+
+                    <!-- Language -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Language</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Platform display language preference.</p>
+                        </div>
+                        <div class="void-dropdown shrink-0" data-select-id="regional-language" style="min-width:132px">
+                            <select id="regional-language" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <option value="en">English</option>
+                                <option value="es">Español</option>
+                                <option value="pt">Português</option>
+                                <option value="fr">Français</option>
+                                <option value="de">Deutsch</option>
+                                <option value="ja">日本語</option>
+                                <option value="ko">한국어</option>
+                                <option value="zh">中文</option>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">English</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
+                    </div>
+
+                    <!-- Currency -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Currency</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Display prices in your local currency.</p>
+                        </div>
+                        <div class="void-dropdown shrink-0" data-select-id="regional-currency" style="min-width:132px">
+                            <select id="regional-currency" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                <option value="usd">USD ($)</option>
+                                <option value="eur">EUR (€)</option>
+                                <option value="gbp">GBP (£)</option>
+                                <option value="cad">CAD (C$)</option>
+                                <option value="aud">AUD (A$)</option>
+                                <option value="jpy">JPY (¥)</option>
+                                <option value="brl">BRL (R$)</option>
+                                <option value="mxn">MXN ($)</option>
+                                <option value="sek">SEK (kr)</option>
+                                <option value="nok">NOK (kr)</option>
+                                <option value="dkk">DKK (kr)</option>
+                                <option value="chf">CHF (Fr)</option>
+                                <option value="nzd">NZD (NZ$)</option>
+                                <option value="sgd">SGD (S$)</option>
+                                <option value="krw">KRW (₩)</option>
+                                <option value="inr">INR (₹)</option>
+                            </select>
+                            <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="void-dropdown-label">USD ($)</span>
+                                <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                            </button>
+                            <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ── NOTIFICATIONS PANEL ── -->
+            <div id="profile-panel-notifications" class="profile-settings-panel hidden space-y-6">
+
+                <!-- In-app notifications -->
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">In-app notifications</div>
+                        <i class="bx bxs-bell text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- Card drops -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Card drops</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Alert when you receive a new card from a Channel Points drop.</p>
+                        </div>
+                        <button type="button" id="notif-toggle-card-drops" role="switch" aria-checked="true"
+                            class="notification-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-notif-key="card_drops">
+                            <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Trade activity -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Trade activity</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Incoming trade requests, offers, completions, and rejections.</p>
+                        </div>
+                        <button type="button" id="notif-toggle-trades" role="switch" aria-checked="true"
+                            class="notification-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-notif-key="trades">
+                            <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+
+                    <!-- Achievement unlocks -->
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-void-text">Achievement unlocks</p>
+                            <p class="text-[11px] text-void-muted leading-relaxed">Notify when you earn a new achievement or badge.</p>
+                        </div>
+                        <button type="button" id="notif-toggle-achievements" role="switch" aria-checked="true"
+                            class="notification-toggle shrink-0 relative w-11 h-6 rounded-full border border-white/15 bg-void-accent transition-colors focus:outline-none"
+                            data-notif-key="achievements">
+                            <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/60 transition-transform translate-x-5"></span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+<!-- ── UPGRADE PANEL ── -->
+            <div id="profile-panel-upgrade" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+                <div id="viewer-settings-upgrade-card"
+                    class="glass-panel rounded-2xl border border-void-accent/20 bg-void-accent/[0.04] p-5 sm:p-7 space-y-4 shadow-[0_0_40px_-12px_rgba(var(--void-accent-rgb),0.35)]">
+                    <div class="flex justify-between items-end border-b border-void-accent/15 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-accent">Upgrade to
+                            creator</div>
+                        <i class="bx bxs-magic-wand text-[10px] text-void-accent opacity-70"
+                            aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Run your own channel on Castle: mint cards,
+                        packs, and Channel Point drops. Pricing will apply later — for now you can try the full setup.
+                    </p>
+                    <a id="viewer-settings-upgrade-btn" href="/onboarding"
+                        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Start
+                        creator setup</a>
+                </div>
+                <div id="viewer-settings-already-creator"
+                    class="hidden p-16 sm:p-20 text-center flex flex-col items-center justify-center space-y-5 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
+                    <div
+                        class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
+                        <i class="bx bxs-crown" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="text-xl font-display font-black uppercase italic text-void-text tracking-tight">
+                        You're a creator</h3>
+                    <p class="text-void-muted text-xs max-w-md leading-relaxed">Your channel is already set up. Manage
+                        your cards, packs, and drops from the dashboard.</p>
+                    <a href="/dashboard"
+                        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Go
+                        to dashboard</a>
+                </div>
+            </div>
+
+            <!-- ── REDEEM PANEL ── -->
+            <div id="profile-panel-redeem" class="profile-settings-panel hidden space-y-6 sm:space-y-8">
+                <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-5 sm:p-7 space-y-5">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Redeem a code
+                        </div>
+                        <i class="bx bxs-gift text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-xs text-void-muted leading-relaxed">Have a promo or gift code? Enter it below to
+                        claim your reward.</p>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="redeem-code-input" placeholder="Enter code (e.g. CASTLE2025)"
+                            autocomplete="off"
+                            class="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-void-text placeholder:text-void-muted/50 focus:outline-none focus:border-void-accent/40 focus:ring-1 focus:ring-void-accent/20 uppercase tracking-widest" />
+                        <button type="button" id="redeem-code-btn"
+                            class="px-6 py-3 rounded-xl bg-void-accent text-void-bg font-black text-[9px] uppercase tracking-widest shadow-lg shadow-void-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0">Redeem</button>
+                    </div>
+                    <div id="redeem-result" class="hidden"></div>
+                </div>
+            </div>
+
+            <!-- Global saved indicator — shown by flashSavedNotice() from any tab -->
+            <p id="pref-saved-notice"
+                class="hidden text-[10px] font-black uppercase tracking-widest text-void-accent text-center py-1">
+                Preferences saved</p>
+
+            <div id="viewer-delete-account-modal"
+                class="fixed inset-0 z-[4000] hidden flex items-center justify-center p-6 bg-void-bg/90 backdrop-blur-md">
+                <div
+                    class="glass-panel max-w-lg w-full rounded-2xl border border-white/10 border-red-500/25 p-8 space-y-6 shadow-2xl shadow-black/50">
+                    <div class="flex justify-between items-end border-b border-white/10 pb-3">
+                        <h4 class="text-lg font-display font-black uppercase italic tracking-tight text-red-400">Delete
+                            forever</h4>
+                        <i class="bx bxs-skull text-sm text-red-400/60" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-sm text-void-muted leading-relaxed">This cannot be undone. Type <span
+                            class="font-mono text-sm text-white bg-white/5 px-1.5 py-0.5 rounded border border-white/10">DELETE
+                            MY CASTLE ACCOUNT</span> below to confirm.</p>
+                    <input type="text" id="viewer-delete-confirm-input" autocomplete="off"
+                        placeholder="DELETE MY CASTLE ACCOUNT"
+                        class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-void-text focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20" />
+                    <div class="flex flex-col sm:flex-row gap-3 justify-end pt-2">
+                        <button type="button" id="viewer-delete-cancel-btn"
+                            class="saas-button-secondary px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest">Cancel</button>
+                        <button type="button" id="viewer-delete-submit-btn"
+                            class="px-6 py-3 rounded-xl bg-red-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-500 shadow-lg shadow-red-900/30 transition-colors">Delete
+                            forever</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/castle-auth-origin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var b = typeof window.__CASTLE_BACKEND__ === 'string' ? window.__CASTLE_BACKEND__ : '';
+            if (!b) return;
+            document.querySelectorAll('a[data-castle-oauth]').forEach(function (a) {
+                var h = a.getAttribute('href');
+                if (h && h.charAt(0) === '/') a.href = b + h;
+            });
+        });
+    </script>
+    <script src="/viewer-account-settings.js"></script>
+    <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
+    <script src="/castle-nav.js"></script>
+    <script src="/settings.js"></script>
+</body>
+
+</html>

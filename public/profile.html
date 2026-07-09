@@ -1,0 +1,2492 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Castle TCG · Profile</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <style>
+        .hidden { display: none !important; }
+        body { min-height: 100vh; }
+
+        /* ── Page frame ── */
+        #pf-page {
+            max-width: 1340px;
+            margin: 0 auto;
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px));
+            padding-bottom: 80px;
+        }
+
+        /* ── Entrance animations ── */
+        @keyframes pf-rise {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .pf-rise   { animation: pf-rise 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+        .pf-rise-1 { animation-delay: 0.04s; }
+        .pf-rise-2 { animation-delay: 0.14s; }
+        .pf-rise-3 { animation-delay: 0.24s; }
+
+        /* ══════════════════════════════
+           STEAM-STYLE BANNER
+        ══════════════════════════════ */
+        #pf-banner {
+            position: relative;
+            height: 210px;
+            overflow: hidden;
+            background: #050c10;
+        }
+        #pf-banner-bg {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 60% 120% at 8% 55%,  rgba(var(--void-accent-rgb),0.09) 0%, transparent 58%),
+                radial-gradient(ellipse 40% 80% at 85% 20%,  rgba(var(--void-accent-rgb),0.05) 0%, transparent 52%),
+                radial-gradient(ellipse 30% 60% at 50% 100%, rgba(var(--void-accent-rgb),0.04) 0%, transparent 50%),
+                linear-gradient(160deg, #050c10 0%, #030709 50%, var(--void-bg) 100%);
+        }
+        /* scan-line texture */
+        #pf-banner-bg::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                transparent 2px,
+                rgba(0,0,0,0.07) 2px,
+                rgba(0,0,0,0.07) 4px
+            );
+            pointer-events: none;
+        }
+        /* vertical grid lines */
+        #pf-banner-deco {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                rgba(var(--void-accent-rgb),0.025) 0px,
+                rgba(var(--void-accent-rgb),0.025) 1px,
+                transparent 1px,
+                transparent 90px
+            );
+            pointer-events: none;
+        }
+        /* bottom fade — tall enough to darken behind the overlapping identity bar */
+        #pf-banner::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 160px;
+            background: linear-gradient(to bottom,
+                transparent 0%,
+                rgba(5,7,10,0.55) 40%,
+                rgba(5,7,10,0.88) 75%,
+                var(--void-bg) 100%
+            );
+            pointer-events: none;
+        }
+        /* Castle mark watermark */
+        #pf-banner-mark {
+            position: absolute;
+            right: 40px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 96px;
+            height: 96px;
+            opacity: 0.035;
+            pointer-events: none;
+            user-select: none;
+        }
+        /* Accent line at bottom of banner */
+        #pf-banner-accent {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(var(--void-accent-rgb),0.3) 30%,
+                rgba(var(--void-accent-rgb),0.5) 50%,
+                rgba(var(--void-accent-rgb),0.3) 70%,
+                transparent 100%
+            );
+        }
+        /* Simplified banner mode: show only image */
+        #pf-banner-bg,
+        #pf-banner-deco,
+        #pf-banner-mark,
+        #pf-banner-accent {
+            display: none;
+        }
+        #pf-banner::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 175px;
+            background: linear-gradient(
+                to bottom,
+                rgba(5, 7, 10, 0) 0%,
+                rgba(5, 7, 10, 0.08) 28%,
+                rgba(5, 7, 10, 0.22) 48%,
+                rgba(5, 7, 10, 0.46) 68%,
+                rgba(5, 7, 10, 0.72) 86%,
+                rgba(5, 7, 10, 0.9) 100%
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+        /* Right-side scrim: mutes the banner's baked-in brand mark and gives the
+           castle code / action buttons a clean dark field to sit on. */
+        #pf-banner::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(255deg,
+                rgba(5, 7, 10, 0.82) 0%,
+                rgba(5, 7, 10, 0.40) 20%,
+                rgba(5, 7, 10, 0.0) 44%
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* ══════════════════════════════
+           IDENTITY BAR — overlaps banner bottom
+        ══════════════════════════════ */
+        #pf-identity-bar {
+            padding: 0 24px 22px;
+            border-bottom: 1px solid rgba(var(--void-accent-rgb),0.12);
+            margin-bottom: 18px;
+            margin-top: -76px;
+            position: relative;
+            z-index: 2;
+        }
+        #pf-identity-inner {
+            display: flex;
+            align-items: flex-end;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        /* Avatar */
+        #pf-avatar-block {
+            position: relative;
+            flex-shrink: 0;
+            margin-top: -20px;
+            z-index: 2;
+        }
+        #pf-avatar {
+            width: 104px;
+            height: 104px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(var(--void-accent-rgb),0.55);
+            box-shadow:
+                0 0 0 1px rgba(0,0,0,0.5),
+                0 16px 44px rgba(0,0,0,0.65),
+                0 0 24px rgba(var(--void-accent-rgb),0.08);
+            background: #0a0c10;
+            display: block;
+        }
+        #pf-avatar.creator-border { border-color: rgba(var(--void-accent-rgb), 0.8); }
+
+        /* Info block */
+        #pf-info-block {
+            flex: 1;
+            min-width: 220px;
+            padding-bottom: 2px;
+        }
+        #pf-name-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 7px;
+        }
+        #pf-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(1.6rem, 4vw, 2.2rem);
+            line-height: 1;
+            letter-spacing: -0.03em;
+            text-transform: uppercase;
+            color: var(--void-text);
+        }
+        /* Status label, not a button: no border/hover, default cursor, leading dot. */
+        #pf-role-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.53rem;
+            font-weight: 800;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            padding: 3px 4px;
+            border: none;
+            background: transparent;
+            color: var(--void-muted);
+            cursor: default;
+            user-select: none;
+        }
+        #pf-role-badge.creator { color: var(--void-accent); }
+
+        /* XP / Level bar */
+        #pf-xp-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .pf-xp-lvl {
+            font-size: 0.52rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(var(--void-accent-rgb),0.85);
+            white-space: nowrap;
+        }
+        #pf-xp-bar {
+            flex: 1;
+            max-width: 200px;
+            height: 5px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.07);
+            overflow: hidden;
+            position: relative;
+        }
+        #pf-xp-fill {
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: 0%;
+            background: linear-gradient(90deg, rgba(87,203,222,0.75), rgba(var(--void-accent-rgb),1));
+            border-radius: 3px;
+            transition: width 1s cubic-bezier(0.16,1,0.3,1);
+        }
+
+
+        /* Profile title (shown under username) */
+        #pf-title-display {
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-accent);
+            opacity: 0.85;
+            margin-bottom: 6px;
+        }
+
+        /* Status line */
+        #pf-status-line {
+            font-size: 0.52rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            font-weight: 700;
+            padding: 5px 10px;
+            border-left: 2px solid rgba(var(--void-accent-rgb),0.5);
+            background: rgba(var(--void-accent-rgb),0.04);
+            border-radius: 0 6px 6px 0;
+            max-width: 480px;
+        }
+        #pf-status-line strong { color: var(--void-text); }
+
+        /* Actions */
+        #pf-hero-actions {
+            margin-left: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+            padding-bottom: 4px;
+            flex-shrink: 0;
+        }
+        .pf-code-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pf-code-label {
+            font-size: 0.49rem;
+            font-weight: 800;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .pf-code-value {
+            font-family: 'Space Grotesk', monospace;
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--void-accent);
+        }
+        .pf-action-row { display: flex; gap: 8px; align-items: center; }
+        #pf-edit-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 13px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #pf-edit-btn:hover {
+            background: rgba(255,255,255,0.08);
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.2);
+        }
+        #pf-edit-btn.active {
+            background: rgba(var(--void-accent-rgb),0.12);
+            border-color: rgba(var(--void-accent-rgb),0.4);
+            color: var(--void-accent);
+        }
+
+        /* ══════════════════════════════
+           SECTIONS PANEL
+        ══════════════════════════════ */
+        /* ══════════════════════════════
+           INLINE WIDGET EDITORS
+        ══════════════════════════════ */
+
+        /* Per-widget hide/show button */
+        .pf-hide-btn {
+            display: none; position: absolute; top: 9px; left: 38px;
+            width: 24px; height: 24px; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 5px; color: var(--void-muted); font-size: 0.72rem;
+            cursor: pointer; z-index: 11; transition: background 0.15s, color 0.15s;
+        }
+        body.pf-editing .pf-hide-btn { display: flex; }
+        .pf-hide-btn:hover { background: rgba(var(--void-accent-rgb),0.2); color: #fff; }
+
+        /* Ghost tiles */
+        body.pf-editing .pf-widget.hidden {
+            display: flex !important; opacity: 0.38; min-height: 54px; height: auto;
+        }
+        body.pf-editing .pf-widget.hidden .pf-widget-body { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-drag-handle,
+        body.pf-editing .pf-widget.hidden .pf-width-bar,
+        body.pf-editing .pf-widget.hidden .pf-resize-handle,
+        body.pf-editing .pf-widget.hidden .pf-style-cycle { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-hide-btn { left: 9px; color: var(--void-accent); }
+        body.pf-editing .pf-widget.hidden .pf-widget-title::after {
+            content: 'hidden'; margin-left: 8px; font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 0.1em; color: var(--void-muted); opacity: 0.6;
+            vertical-align: middle; text-transform: uppercase;
+        }
+
+        /* Showcase count badge in title bar (edit mode only) */
+        .pf-sc-edit-count {
+            margin-left: auto; margin-right: 6px;
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.06em;
+            color: var(--void-muted); padding: 2px 8px; border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+        }
+        body.pf-editing .pf-sc-edit-count { display: inline-block !important; }
+
+        /* Selected showcase chips strip */
+        .pf-sc-selected-strip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 10px 14px 8px; flex-wrap: wrap; flex-shrink: 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            min-height: 52px;
+        }
+
+        /* Card results grid (showcase + wishlist) */
+        .pf-sc-results-grid {
+            flex: 1 1 auto; padding: 10px 14px 14px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+            gap: 7px; align-content: start;
+        }
+
+        #pf-wishlist-editor {
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.2);
+            color: var(--void-text);
+            font-size: 0.7rem;
+            line-height: 1.4;
+            padding: 10px;
+            outline: none;
+        }
+        #pf-wishlist-editor:focus, #pf-bio-editor:focus {
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.18);
+        }
+        #pf-achievement-picker {
+            margin-top: 4px;
+            max-height: none;
+            overflow: visible;
+            padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .pf-achievement-pick {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.6rem;
+            color: var(--void-text);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 6px 8px;
+            border-radius: 7px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .pf-achievement-pick input { accent-color: rgba(var(--void-accent-rgb),1); }
+        .pf-achievement-pick .icon { width: 18px; text-align: center; opacity: 0.9; }
+
+        /* ══════════════════════════════
+           TWO-COLUMN STEAM LAYOUT
+        ══════════════════════════════ */
+        #pf-steam-layout {
+            --pf-tile-h: 450px;            /* tallest a tile may grow before its body scrolls */
+            --pf-tile-min: 200px;          /* shortest a sparse tile may collapse to */
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0,1fr));
+            /* Rows size to content, clamped: sparse widgets collapse, full ones cap + scroll.
+               Eliminates the dead space under near-empty tiles while neighbours stay matched. */
+            grid-auto-rows: minmax(var(--pf-tile-min), var(--pf-tile-h));
+            gap: 14px;
+            padding: 0 24px;
+            align-items: stretch;
+            position: relative;
+        }
+        /* Title pinned, body scrolls; height comes from the grid track (stretch). */
+        .pf-widget {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .pf-widget > .pf-widget-title { flex: 0 0 auto; }
+        .pf-widget-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(var(--void-accent-rgb),0.35) transparent;
+        }
+        .pf-widget-body::-webkit-scrollbar { width: 7px; }
+        .pf-widget-body::-webkit-scrollbar-thumb {
+            background: rgba(var(--void-accent-rgb),0.3);
+            border-radius: 4px;
+        }
+        .pf-widget-body::-webkit-scrollbar-thumb:hover { background: rgba(var(--void-accent-rgb),0.55); }
+        .pf-widget-body::-webkit-scrollbar-track { background: transparent; }
+        /* ── Widget width tiers (4-col grid) ── */
+        .pf-widget.pf-w-1 { grid-column: span 1; }
+        .pf-widget.pf-w-2 { grid-column: span 2; }
+        .pf-widget.pf-w-3 { grid-column: span 3; }
+        .pf-widget.pf-w-4 { grid-column: span 4; }
+
+        @media (max-width: 900px) {
+            #pf-steam-layout { grid-template-columns: repeat(2, minmax(0,1fr)); padding: 0 16px; }
+            /* collapse to at most 2 columns wide */
+            .pf-widget.pf-w-2,
+            .pf-widget.pf-w-3,
+            .pf-widget.pf-w-4 { grid-column: span 2; }
+            #pf-identity-bar { padding: 0 16px 22px; margin-top: -58px; }
+            #pf-banner { height: 160px; }
+            #pf-avatar-block { margin-top: -10px; }
+            #pf-avatar { width: 86px; height: 86px; border-radius: 50%; }
+        }
+        @media (max-width: 600px) {
+            #pf-steam-layout { grid-template-columns: 1fr; }
+            .pf-widget[class*="pf-w-"] { grid-column: 1 / -1; }
+        }
+        /* Width controls only meaningful on the full 4-col grid */
+        @media (max-width: 900px) {
+            body.pf-editing .pf-width-bar,
+            body.pf-editing .pf-resize-handle { display: none; }
+        }
+
+        /* ══════════════════════════════
+           WIDGET BASE (Steam-style panels)
+        ══════════════════════════════ */
+        .pf-widget {
+            background: rgba(10,12,16,0.7);
+            border: 1px solid rgba(var(--void-accent-rgb),0.12);
+            border-radius: 14px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+            position: relative;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+        }
+        body.pf-editing .pf-widget {
+            border-color: rgba(var(--void-accent-rgb),0.28);
+            border-style: dashed;
+        }
+        .pf-widget.drag-active {
+            border-style: solid;
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.12);
+        }
+        .pf-widget.drag-over {
+            border-style: solid;
+            border-color: rgba(var(--void-accent-rgb),0.8);
+            background: rgba(var(--void-accent-rgb),0.04);
+        }
+
+        /* Drag handle */
+        .pf-drag-handle {
+            display: none;
+            position: absolute;
+            top: 9px; right: 9px;
+            width: 24px; height: 24px;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 5px;
+            color: var(--void-muted);
+            font-size: 0.62rem;
+            cursor: grab;
+            z-index: 10;
+        }
+        body.pf-editing .pf-drag-handle { display: flex; touch-action: none; }
+        .pf-drag-handle:active { cursor: grabbing; }
+
+        /* ── Edit-mode resize edge handle ── */
+        .pf-resize-handle {
+            display: none;
+            position: absolute;
+            top: 0; right: 0;
+            width: 12px; height: 100%;
+            cursor: ew-resize;
+            touch-action: none;
+            z-index: 9;
+        }
+        body.pf-editing .pf-resize-handle { display: block; }
+        .pf-resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%; right: 3px;
+            transform: translateY(-50%);
+            width: 3px; height: 36px;
+            border-radius: 3px;
+            background: rgba(var(--void-accent-rgb),0.3);
+            transition: background 0.15s, height 0.15s;
+        }
+        .pf-resize-handle:hover::after { background: rgba(var(--void-accent-rgb),0.75); height: 52px; }
+        .pf-widget.pf-resizing { outline: 2px solid rgba(var(--void-accent-rgb),0.55); outline-offset: -1px; }
+
+        /* ── Reorder drag states ── */
+        .pf-widget.pf-dragging {
+            opacity: 0.4;
+            outline: 2px dashed rgba(var(--void-accent-rgb),0.65);
+            outline-offset: -2px;
+        }
+        body.pf-grid-dragging { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+
+        /* ── Edit-mode width control bar ── */
+        .pf-width-bar {
+            display: none;
+            position: absolute;
+            top: 9px; right: 41px;
+            gap: 3px;
+            z-index: 11;
+        }
+        body.pf-editing .pf-width-bar { display: flex; }
+        .pf-width-btn {
+            min-width: 22px; height: 24px;
+            padding: 0 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 5px;
+            color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.56rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            -webkit-user-select: none; user-select: none;
+        }
+        .pf-width-btn:hover { background: rgba(var(--void-accent-rgb),0.18); color: #fff; }
+        .pf-width-btn.active {
+            background: rgba(var(--void-accent-rgb),0.28);
+            border-color: rgba(var(--void-accent-rgb),0.6);
+            color: var(--void-accent);
+        }
+
+        /* ══════════════════════════════
+           SLABS (top graded cards)
+        ══════════════════════════════ */
+        .pf-slabs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+            gap: 10px;
+            padding: 0 16px 16px;
+        }
+        .pf-slab {
+            position: relative;
+            aspect-ratio: 5 / 7;
+            border-radius: 9px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(0,0,0,0.3);
+            transition: transform 0.18s, border-color 0.18s;
+        }
+        .pf-slab:hover { transform: translateY(-3px); border-color: rgba(var(--void-accent-rgb),0.5); }
+        .pf-slab img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-slab-grade {
+            position: absolute;
+            top: 6px; left: 6px;
+            min-width: 22px;
+            padding: 2px 6px;
+            border-radius: 6px;
+            background: rgba(5,7,10,0.85);
+            border: 1px solid rgba(var(--void-accent-rgb),0.5);
+            color: var(--void-accent);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-align: center;
+            backdrop-filter: blur(4px);
+        }
+        .pf-slab-grade.genesis {
+            border-color: #ffd24a;
+            color: #ffd24a;
+            box-shadow: 0 0 8px rgba(255,210,74,0.4);
+        }
+
+        /* ══════════════════════════════
+           BINDERS
+        ══════════════════════════════ */
+        .pf-binders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            padding: 0 16px 16px;
+        }
+        .pf-binder {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(var(--void-accent-rgb),0.14);
+            border-radius: 11px;
+            padding: 10px;
+            transition: transform 0.18s, border-color 0.18s, background 0.18s;
+        }
+        a.pf-binder:hover {
+            transform: translateY(-3px);
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            background: rgba(var(--void-accent-rgb),0.05);
+        }
+        .pf-binder-previews {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            margin-bottom: 9px;
+        }
+        .pf-binder-previews img,
+        .pf-binder-slot-empty {
+            aspect-ratio: 5 / 7;
+            border-radius: 5px;
+            object-fit: cover;
+            width: 100%;
+            display: block;
+            background: rgba(0,0,0,0.35);
+        }
+        .pf-binder-slot-empty { border: 1px dashed rgba(255,255,255,0.07); }
+        .pf-binder-name {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #e8eef2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-binder-count {
+            font-size: 0.55rem;
+            color: var(--void-muted);
+            margin-top: 2px;
+        }
+
+        /* ── Widget section header ── */
+        .pf-widget-title {
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            color: var(--void-accent);
+            padding: 14px 16px 0;
+            margin-bottom: 12px;
+            border-top: 1px solid rgba(var(--void-accent-rgb),0.2);
+        }
+        /* Edit mode: drop the title flush under the toolbar pinned at the widget top. */
+        body.pf-editing .pf-widget:not(.hidden) > .pf-widget-title { margin-top: 36px; }
+
+        /* ══════════════════════════════
+           UNIFIED EDIT TOOLBAR (one bar per widget)
+           Drag anywhere on the bar to reorder; buttons set width / layout / hide.
+        ══════════════════════════════ */
+        .pf-edit-toolbar { display: none; }
+        body.pf-editing .pf-widget > .pf-edit-toolbar {
+            display: flex;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 36px;
+            align-items: center;
+            gap: 8px;
+            padding: 0 8px 0 11px;
+            background: linear-gradient(180deg, rgba(13,16,22,0.97) 0%, rgba(13,16,22,0.86) 100%);
+            border-bottom: 1px solid rgba(var(--void-accent-rgb),0.22);
+            border-radius: 13px 13px 0 0;
+            z-index: 12;
+            cursor: grab;
+            -webkit-user-select: none; user-select: none;
+        }
+        body.pf-editing .pf-widget.pf-dragging > .pf-edit-toolbar,
+        body.pf-editing .pf-widget > .pf-edit-toolbar:active { cursor: grabbing; }
+        .pf-tb-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+        .pf-tb-grip { color: var(--void-muted); font-size: 0.85rem; flex-shrink: 0; }
+        .pf-tb-name {
+            font-family: 'Outfit', sans-serif; font-weight: 800;
+            font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+            color: var(--void-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pf-tb-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+        /* Width segmented control */
+        .pf-tb-seg {
+            display: inline-flex;
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px; overflow: hidden;
+        }
+        .pf-tb-segbtn {
+            min-width: 26px; height: 24px; padding: 0 7px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: transparent; border: none;
+            border-right: 1px solid rgba(255,255,255,0.08);
+            color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.58rem; font-weight: 700;
+            cursor: pointer; transition: background 0.12s, color 0.12s;
+        }
+        .pf-tb-segbtn:last-child { border-right: none; }
+        .pf-tb-segbtn:hover { background: rgba(var(--void-accent-rgb),0.16); color: #fff; }
+        .pf-tb-segbtn.active { background: rgba(var(--void-accent-rgb),0.30); color: #fff; }
+
+        /* Layout / hide pill buttons */
+        .pf-tb-btn {
+            height: 24px; padding: 0 9px;
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px; color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.54rem; font-weight: 700;
+            letter-spacing: 0.07em; text-transform: uppercase;
+            cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+        }
+        .pf-tb-btn i { font-size: 0.82rem; }
+        .pf-tb-btn.pf-tb-icon { padding: 0; width: 26px; justify-content: center; }
+        .pf-tb-btn:hover {
+            background: rgba(var(--void-accent-rgb),0.16); color: #fff;
+            border-color: rgba(var(--void-accent-rgb),0.4);
+        }
+
+        /* Collapsed (hidden) widgets: toolbar IS the tile — compact, in-flow. */
+        body.pf-editing .pf-widget.hidden { align-self: start; opacity: 0.6; }
+        body.pf-editing .pf-widget.hidden > .pf-edit-toolbar {
+            position: relative;
+            background: rgba(13,16,22,0.7);
+            border-radius: 13px;
+            border-bottom: none;
+        }
+        body.pf-editing .pf-widget.hidden > .pf-widget-title,
+        body.pf-editing .pf-widget.hidden > .pf-widget-body { display: none !important; }
+        body.pf-editing .pf-widget.hidden .pf-tb-name { color: var(--void-accent); }
+        .pf-tb-btn.pf-tb-show {
+            background: rgba(var(--void-accent-rgb),0.12);
+            border-color: rgba(var(--void-accent-rgb),0.4);
+            color: var(--void-accent);
+        }
+        /* Old scattered controls are replaced by the toolbar — keep them out. */
+        body.pf-editing .pf-drag-handle,
+        body.pf-editing .pf-width-bar,
+        body.pf-editing .pf-style-cycle,
+        body.pf-editing .pf-hide-btn,
+        body.pf-editing .pf-resize-handle { display: none !important; }
+
+        /* ══════════════════════════════
+           SHOWCASE CAROUSEL
+        ══════════════════════════════ */
+        #pf-showcase-inner {
+            position: relative;
+            height: 372px;
+            perspective: 1300px;
+            padding-bottom: 6px;
+        }
+        .pf-showcase-slot {
+            position: absolute;
+            width: 190px; height: 266px;
+            border-radius: 10px;
+            overflow: hidden;
+            top: 50%;
+            transition: all 0.6s cubic-bezier(0.16,1,0.3,1);
+            cursor: pointer;
+            background: #0d0f14;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+        }
+        .pf-showcase-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-showcase-slot[data-pos="center"] {
+            left: 50%; transform: translateX(-50%) translateY(-50%) scale(1.1);
+            z-index: 10;
+            box-shadow: 0 0 50px 6px rgba(var(--void-accent-rgb),0.22), 0 25px 60px rgba(0,0,0,0.7);
+        }
+        .pf-showcase-slot[data-pos="right1"] { left: calc(50% + 205px); transform: translateX(-50%) translateY(-53%) rotateY(-22deg) scale(0.82); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="right2"] { left: calc(50% + 370px); transform: translateX(-50%) translateY(-57%) rotateY(-38deg) scale(0.62); z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="left1"]  { left: calc(50% - 205px); transform: translateX(-50%) translateY(-53%) rotateY(22deg)  scale(0.82); z-index: 7; opacity: 0.75; }
+        .pf-showcase-slot[data-pos="left2"]  { left: calc(50% - 370px); transform: translateX(-50%) translateY(-57%) rotateY(38deg)  scale(0.62); z-index: 4; opacity: 0.38; }
+        .pf-showcase-slot[data-pos="hidden"] { left: 50%; transform: translateX(-50%) translateY(-60%) scale(0.4); z-index: 1; opacity: 0; pointer-events: none; }
+
+        .pf-showcase-slot[data-pos="center"][data-rarity="Legendary"] { box-shadow: 0 0 48px 8px rgba(251,191,36,0.3),  0 20px 48px rgba(0,0,0,0.6); }
+        .pf-showcase-slot[data-pos="center"][data-rarity="Epic"]      { box-shadow: 0 0 48px 8px rgba(168,85,247,0.28), 0 20px 48px rgba(0,0,0,0.6); }
+        .pf-showcase-slot[data-pos="center"][data-rarity="Rare"]      { box-shadow: 0 0 40px 4px rgba(63,170,255,0.25), 0 20px 48px rgba(0,0,0,0.6); }
+
+        .pf-showcase-empty {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,0.07); font-size: 2.5rem;
+        }
+        #pf-dots { display: flex; justify-content: center; gap: 5px; margin-top: 8px; padding-bottom: 8px; }
+        /* Showcase view toggle */
+        .pf-showcase-view-btn {
+            margin-left: auto;
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+            color: var(--void-muted);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .pf-showcase-view-btn:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+        /* Static grid view */
+        #pf-showcase-grid-view {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            padding: 0 14px 16px;
+        }
+        .pf-showcase-grid-card {
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            aspect-ratio: 5 / 7;
+            background: #0d0f14;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .pf-showcase-grid-card:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 12px 32px rgba(0,0,0,0.6); }
+        .pf-showcase-grid-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.1); transition: all 0.3s; cursor: pointer; }
+        .pf-dot.active { width: 16px; border-radius: 2px; background: rgba(var(--void-accent-rgb),0.75); }
+
+        /* ══════════════════════════════
+           STATS WIDGET
+        ══════════════════════════════ */
+        /* Stat-cell grid that fills the tile; 1 col at 1/4, 2 cols at 1/2 */
+        #pf-stats-rows {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-auto-rows: 1fr;
+            gap: 7px;
+            padding: 2px 14px 12px;
+            min-height: 0;
+        }
+        #widget-stats.pf-w-2 #pf-stats-rows { grid-template-columns: 1fr 1fr; }
+        .pf-stat-row {
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 3px;
+            padding: 6px 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.025);
+            overflow: hidden;
+        }
+        .pf-stat-row > span:first-child {
+            font-size: 0.5rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 800;
+            color: var(--void-muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+        }
+        .pf-stat-row .val {
+            font-family: 'Space Grotesk', monospace;
+            font-size: 1.4rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--void-text);
+        }
+        #widget-stats.pf-w-2 .pf-stat-row .val { font-size: 1.85rem; }
+        #pf-stats-footer { padding: 0 14px 12px; flex: 0 0 auto; }
+
+        /* ══════════════════════════════
+           TROPHY CABINET
+        ══════════════════════════════ */
+        #pf-trophy-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 7px;
+            padding: 0 14px 16px;
+        }
+        .pf-trophy-slot {
+            aspect-ratio: 5/7;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(255,255,255,0.02);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+        .pf-trophy-slot:hover { transform: translateY(-3px); }
+        .pf-trophy-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-trophy-slot.legendary { border-color: rgba(251,191,36,0.4); box-shadow: 0 0 10px rgba(251,191,36,0.14); }
+        .pf-trophy-slot.epic      { border-color: rgba(168,85,247,0.35); box-shadow: 0 0 10px rgba(168,85,247,0.12); }
+        .pf-trophy-slot.rare      { border-color: rgba(63,170,255,0.3);  box-shadow: 0 0 10px rgba(63,170,255,0.10); }
+        .pf-trophy-slot.empty { cursor: default; }
+        .pf-trophy-slot.empty::after {
+            content: '';
+            position: absolute; inset: 0;
+            border: 2px dashed rgba(255,255,255,0.05);
+            border-radius: 9px;
+        }
+        .pf-rarity-pip {
+            position: absolute; top: 4px; right: 4px;
+            width: 5px; height: 5px; border-radius: 50%;
+        }
+        .pf-rarity-pip.legendary { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
+        .pf-rarity-pip.epic      { background: #a855f7; box-shadow: 0 0 4px #a855f7; }
+        .pf-rarity-pip.rare      { background: #3faaff; box-shadow: 0 0 4px #3faaff; }
+
+        /* ══════════════════════════════
+           LATEST PACK PULL
+        ══════════════════════════════ */
+        #pf-latest-inner { padding: 6px 14px 16px; }
+        .pf-latest-card {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            cursor: pointer;
+            transition: background 0.15s;
+            border-radius: 5px;
+        }
+        .pf-latest-card:last-child { border-bottom: none; }
+        .pf-latest-card:hover { background: rgba(255,255,255,0.03); padding-left: 5px; }
+        .pf-latest-thumb {
+            width: 30px; height: 42px;
+            border-radius: 4px;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: #0d0f14;
+        }
+        .pf-latest-info { min-width: 0; flex: 1; }
+        .pf-latest-name {
+            font-size: 0.63rem;
+            font-weight: 700;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-latest-meta {
+            font-size: 0.49rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-top: 2px;
+        }
+        .pf-rarity-dot-sm { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+        /* ══════════════════════════════
+           WISHLIST
+        ══════════════════════════════ */
+        #pf-wishlist-list {
+            padding: 0 16px 16px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+            gap: 10px;
+        }
+        .pf-wishlist-card {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 9px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: #0d0f14;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .pf-wishlist-card:hover { transform: translateY(-2px); }
+        .pf-wishlist-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-wishlist-card-overlay {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%);
+            padding: 18px 6px 5px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .pf-wishlist-card:hover .pf-wishlist-card-overlay { opacity: 1; }
+        .pf-wishlist-card-name {
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #fff;
+            line-height: 1.3;
+        }
+        .pf-wishlist-card-set {
+            font-size: 0.42rem;
+            color: rgba(var(--void-accent-rgb),0.85);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-top: 1px;
+        }
+        .pf-wishlist-empty {
+            grid-column: 1 / -1;
+            padding: 8px 4px 6px;
+            color: var(--void-muted);
+            font-size: 0.63rem;
+            font-style: italic;
+        }
+
+        /* ── Wishlist picker (in sections panel) ── */
+        #pf-wishlist-search-wrap { position: relative; margin-bottom: 8px; }
+        /* Wishlist creator picker */
+        .pf-wl-creators {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            margin-bottom: 10px;
+        }
+        .pf-wl-creator {
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.03);
+            color: var(--void-muted);
+            font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .pf-wl-creator:hover { color: var(--void-text); border-color: rgba(255,255,255,0.25); }
+        .pf-wl-creator.active {
+            color: #fff;
+            background: var(--c, rgba(var(--void-accent-rgb),0.85));
+            border-color: var(--c, rgba(var(--void-accent-rgb),1));
+        }
+        #pf-wishlist-search-wrap { margin-bottom: 8px; }
+        #pf-wishlist-search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.2);
+            color: var(--void-text);
+            font-size: 0.68rem;
+            outline: none;
+        }
+        #pf-wishlist-search-input:focus {
+            border-color: rgba(var(--void-accent-rgb),0.5);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.18);
+        }
+        #pf-wishlist-search-results,
+        #pf-sc-results {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            margin-bottom: 8px;
+            min-height: 0;
+        }
+        #pf-sc-status, #pf-wishlist-search-status, #pf-banner-picker-status {
+            font-size: 0.55rem; color: var(--void-muted); font-style: italic;
+            min-height: 1em; margin: 2px 0 6px;
+        }
+        #pf-sc-status.error {
+            color: #ff6b6b; font-style: normal; font-weight: 700;
+            animation: pf-sc-shake 0.3s;
+        }
+        @keyframes pf-sc-shake {
+            0%,100% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            75% { transform: translateX(3px); }
+        }
+
+        /* Showcase selected strip */
+        #pf-sc-selected {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            margin-bottom: 10px;
+        }
+        .pf-sc-selected-empty { font-size: 0.55rem; color: var(--void-muted); font-style: italic; padding: 2px 0; }
+        .pf-sc-chip {
+            position: relative;
+            width: 44px; aspect-ratio: 5/7;
+            border-radius: 6px; overflow: hidden;
+            border: 1px solid rgba(var(--void-accent-rgb),0.4);
+            background: #0d0f14;
+        }
+        .pf-sc-chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-sc-chip-x {
+            position: absolute; top: 2px; right: 2px;
+            width: 16px; height: 16px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.7); border: none; color: #fff;
+            font-size: 0.7rem; cursor: pointer; line-height: 1;
+        }
+        .pf-sc-chip-x:hover { background: rgba(255,80,80,0.85); }
+
+        /* Binder selector rows (toggle + drag reorder) */
+        #pf-binders-selector { display: flex; flex-direction: column; gap: 6px; }
+        .pf-binder-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 10px; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(255,255,255,0.03);
+        }
+        .pf-binder-row.dragging { opacity: 0.5; border-color: rgba(var(--void-accent-rgb),0.6); }
+        .pf-binder-row-grip { color: var(--void-muted); cursor: grab; font-size: 0.9rem; flex-shrink: 0; }
+        .pf-binder-row-name {
+            flex: 1; min-width: 0;
+            font-size: 0.66rem; font-weight: 700; color: var(--void-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pf-binder-row-name small { display: block; font-size: 0.78em; font-weight: 600; color: var(--void-muted); }
+        .pf-mini-switch { position: relative; display: inline-flex; flex-shrink: 0; cursor: pointer; }
+        .pf-mini-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .pf-mini-switch input:checked ~ .pf-switch { background: rgba(var(--void-accent-rgb),0.85); border-color: rgba(var(--void-accent-rgb),1); }
+        .pf-mini-switch input:checked ~ .pf-switch::after { transform: translateX(16px); background: #fff; }
+        .pf-wl-result {
+            position: relative;
+            aspect-ratio: 5/7;
+            border-radius: 7px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: #0d0f14;
+            transition: border-color 0.15s;
+        }
+        .pf-wl-result img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-wl-result:hover { border-color: rgba(var(--void-accent-rgb),0.5); }
+        .pf-wl-result.selected { border-color: rgba(var(--void-accent-rgb),0.9); box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.2); }
+        .pf-wl-result-check {
+            position: absolute; top: 3px; right: 3px;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: rgba(var(--void-accent-rgb),1);
+            display: none;
+            align-items: center; justify-content: center;
+            font-size: 8px; color: #000;
+        }
+        .pf-wl-result.selected .pf-wl-result-check { display: flex; }
+        .pf-wl-result-name {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
+            padding: 12px 4px 3px;
+            font-size: 0.4rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #fff;
+            line-height: 1.2;
+        }
+        #pf-wishlist-search-status {
+            font-size: 0.52rem;
+            color: var(--void-muted);
+            font-style: italic;
+            margin-bottom: 6px;
+            min-height: 1em;
+        }
+        #pf-wishlist-current-label {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-bottom: 5px;
+        }
+        #pf-wishlist-current {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .pf-wl-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px 3px 6px;
+            border-radius: 100px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.25);
+            background: rgba(var(--void-accent-rgb),0.07);
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            cursor: pointer;
+        }
+        .pf-wl-chip:hover { border-color: rgba(255,100,100,0.4); background: rgba(255,100,100,0.07); }
+        .pf-wl-chip i { font-size: 0.6rem; color: var(--void-muted); }
+
+        /* ══════════════════════════════
+           ACHIEVEMENTS
+        ══════════════════════════════ */
+        /* fill the tile so the summary can pin to the bottom */
+        #pf-achievements-grid {
+            flex: 1; min-height: 0;
+            display: flex; flex-direction: column;
+            padding: 0 14px 14px;
+        }
+        .pf-ach-showcase { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+        /* Icon grid with name + creator under each tile */
+        .pf-ach-icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+            gap: 12px 10px;
+            align-content: start;
+        }
+        /* showcase grid scrolls; summary stays pinned below it */
+        .pf-ach-showcase > .pf-ach-icon-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 2px 6px; }
+        .pf-ach-tile { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px; }
+        .pf-ach-icon {
+            width: 100%; aspect-ratio: 1;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(var(--void-accent-rgb),0.08);
+            border: 1px solid rgba(255,255,255,0.07);
+            font-size: 1.65rem; line-height: 1;
+            transition: transform 0.15s, border-color 0.15s, background 0.15s;
+        }
+        .pf-ach-tile:hover .pf-ach-icon {
+            transform: translateY(-2px);
+            border-color: rgba(var(--void-accent-rgb),0.55);
+            background: rgba(var(--void-accent-rgb),0.14);
+        }
+        .pf-ach-tile-name {
+            font-size: 0.5rem; font-weight: 700; color: var(--void-text); line-height: 1.25;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .pf-ach-tile-creator {
+            font-size: 0.44rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--void-muted);
+            max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        /* Summary stat row — spread out, pinned to the bottom */
+        .pf-ach-summary {
+            flex: 0 0 auto;
+            display: flex; justify-content: space-between; gap: 12px;
+            margin-top: 12px; padding-top: 14px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        .pf-ach-summary .stat .num {
+            font-family: 'Outfit', sans-serif; font-weight: 900; line-height: 1;
+            font-size: 1.85rem; color: var(--void-text);
+        }
+        .pf-ach-summary .stat .num span { font-size: 0.9rem; color: var(--void-muted); margin-left: 1px; }
+        .pf-ach-summary .stat .lbl {
+            margin-top: 5px;
+            font-size: 0.46rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* Grouped-by-creator alternate */
+        #widget-achievements .pf-ach-grouped { display: none; }
+        #widget-achievements[data-layout="grouped"] .pf-ach-showcase { display: none; }
+        #widget-achievements[data-layout="grouped"] .pf-ach-grouped { display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; overflow-y: auto; }
+        .pf-ach-group-head {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 0.55rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-accent); margin-bottom: 9px;
+        }
+        .pf-ach-group-head i { font-size: 0.8rem; opacity: 0.85; }
+        .pf-ach-group-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pf-ach-group-count {
+            margin-left: auto; flex-shrink: 0;
+            background: rgba(var(--void-accent-rgb),0.15);
+            color: var(--void-accent);
+            border-radius: 999px; padding: 2px 8px;
+            font-size: 0.5rem; letter-spacing: 0.05em;
+        }
+        .pf-achievements-empty {
+            color: var(--void-muted); font-size: 0.63rem;
+            font-style: italic; padding: 4px 2px;
+        }
+
+        /* ══════════════════════════════
+           BIO WIDGET
+        ══════════════════════════════ */
+        #pf-bio-content {
+            padding: 4px 14px 16px;
+            font-size: 0.68rem;
+            line-height: 1.65;
+            color: var(--void-muted);
+            white-space: pre-wrap;
+        }
+        #pf-bio-content.empty::after {
+            content: 'No bio set yet.';
+            opacity: 0.45;
+            font-style: italic;
+        }
+
+        /* ══════════════════════════════
+           COLLECTION BREAKDOWN
+        ══════════════════════════════ */
+        /* Proportion bars that fill the tile height */
+        #pf-rarity-bars {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-evenly;
+            gap: 10px;
+            padding: 6px 16px 16px;
+            min-height: 0;
+        }
+        .pf-rarity-row { display: flex; flex-direction: column; gap: 7px; }
+        .pf-rarity-top { display: flex; justify-content: space-between; align-items: baseline; }
+        .pf-rarity-lbl {
+            font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        .pf-rarity-cnt {
+            font-family: 'Space Grotesk', monospace; font-size: 1.05rem; font-weight: 700;
+            color: var(--void-text); display: flex; align-items: baseline; gap: 6px;
+        }
+        .pf-rarity-pct { font-size: 0.5rem; font-weight: 700; color: var(--void-muted); }
+        .pf-rarity-track { height: 10px; border-radius: 5px; background: rgba(255,255,255,0.06); overflow: hidden; }
+        .pf-rarity-fill { height: 100%; width: 0%; border-radius: 5px; transition: width 0.9s cubic-bezier(0.16,1,0.3,1); }
+        #widget-rarity-chart.pf-w-2 .pf-rarity-track { height: 13px; }
+        #widget-rarity-chart.pf-w-2 .pf-rarity-cnt { font-size: 1.3rem; }
+
+        /* ══════════════════════════════
+           BATTLE RECORD
+        ══════════════════════════════ */
+        /* Centered, filling: hero win-rate + big W/L + bar */
+        #pf-battle-inner {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 16px;
+            padding: 8px 18px 18px;
+            min-height: 0;
+        }
+        .pf-battle-hero { text-align: center; }
+        .pf-battle-rate-big {
+            font-family: 'Outfit', sans-serif; font-weight: 900; line-height: 1;
+            font-size: 3.4rem; color: var(--void-text);
+        }
+        .pf-battle-rate-big span { font-size: 1.4rem; color: var(--void-muted); margin-left: 2px; }
+        .pf-battle-rate-sub {
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase;
+            color: var(--void-muted); margin-top: 6px;
+        }
+        .pf-battle-numbers {
+            display: flex; align-items: center; justify-content: center; gap: 26px;
+        }
+        .pf-battle-stat { text-align: center; }
+        .pf-battle-num {
+            font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.9rem; line-height: 1;
+        }
+        .pf-battle-lbl {
+            font-size: 0.48rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase;
+            color: var(--void-muted); margin-top: 5px;
+        }
+        .pf-battle-divider { font-size: 1.3rem; color: rgba(255,255,255,0.08); font-weight: 900; }
+        .pf-battle-bar-track {
+            height: 8px; border-radius: 4px; background: rgba(168,85,247,0.18);
+            overflow: hidden; margin-bottom: 7px;
+        }
+        .pf-battle-bar-fill {
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg, rgba(var(--void-accent-rgb),0.7), rgba(var(--void-accent-rgb),1));
+            width: 0%; transition: width 1s cubic-bezier(0.16,1,0.3,1);
+        }
+        .pf-battle-rate {
+            display: flex; justify-content: space-between;
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        .pf-battle-rate .win { color: rgba(var(--void-accent-rgb),0.9); }
+        .pf-battle-rate .lose { color: rgba(168,85,247,0.8); }
+        #widget-battle-record.pf-w-2 .pf-battle-rate-big { font-size: 4.3rem; }
+        #widget-battle-record.pf-w-2 .pf-battle-num { font-size: 2.4rem; }
+        .pf-battle-empty {
+            padding: 16px 0 8px; text-align: center; font-size: 0.62rem;
+            font-style: italic; color: var(--void-muted); opacity: 0.6;
+        }
+
+        /* ══════════════════════════════
+           SUPPORTED CREATORS
+        ══════════════════════════════ */
+        /* Avatar tiles; columns scale with widget width */
+        #pf-creators-inner { flex: 1; display: flex; padding: 4px 14px 16px; min-height: 0; }
+        .pf-creators-grid {
+            flex: 1;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-auto-rows: minmax(54px, 1fr);
+            gap: 8px;
+        }
+        #widget-creators.pf-w-2 .pf-creators-grid { grid-template-columns: repeat(2, 1fr); }
+        #widget-creators.pf-w-3 .pf-creators-grid { grid-template-columns: repeat(3, 1fr); }
+        #widget-creators.pf-w-4 .pf-creators-grid { grid-template-columns: repeat(4, 1fr); }
+        .pf-creator-chip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 11px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(255,255,255,0.03);
+            overflow: hidden;
+        }
+        .pf-creator-av {
+            width: 34px; height: 34px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 0.95rem;
+            color: #fff; flex-shrink: 0;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+        }
+        .pf-creator-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .pf-creator-name {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-creator-count {
+            font-size: 0.5rem;
+            font-weight: 700;
+            color: var(--void-muted);
+        }
+
+        /* ══════════════════════════════
+           CARD SETS
+        ══════════════════════════════ */
+        /* Set cards in a grid; columns scale with widget width */
+        #pf-sets-inner {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-auto-rows: minmax(48px, 1fr);
+            gap: 8px;
+            padding: 4px 14px 16px;
+            min-height: 0;
+        }
+        #widget-sets.pf-w-2 #pf-sets-inner { grid-template-columns: repeat(2, 1fr); }
+        #widget-sets.pf-w-3 #pf-sets-inner { grid-template-columns: repeat(3, 1fr); }
+        #widget-sets.pf-w-4 #pf-sets-inner { grid-template-columns: repeat(4, 1fr); }
+        .pf-set-row {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.025);
+            overflow: hidden;
+        }
+        .pf-set-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+        .pf-set-name {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pf-set-code {
+            font-size: 0.44rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            opacity: 0.6;
+            margin-top: -2px;
+        }
+        .pf-set-bar-wrap {
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.06);
+            overflow: hidden;
+        }
+        .pf-set-bar-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, rgba(var(--void-accent-rgb),0.6), rgba(var(--void-accent-rgb),1));
+            transition: width 1s cubic-bezier(0.16,1,0.3,1);
+        }
+        .pf-set-count {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: rgba(var(--void-accent-rgb),0.9);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* ══════════════════════════════
+           WIDGET LAYOUT VARIANTS
+        ══════════════════════════════ */
+        /* Style system controls showcase mode; hide its built-in toggle */
+        #pf-showcase-view-toggle { display: none; }
+
+        /* Tile layout-cycle button (edit mode) */
+        .pf-style-cycle {
+            display: none;
+            position: absolute;
+            top: 9px; left: 9px;
+            width: 24px; height: 24px;
+            align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 5px;
+            color: var(--void-muted);
+            font-size: 0.72rem;
+            cursor: pointer; z-index: 11;
+            transition: background 0.15s, color 0.15s;
+        }
+        body.pf-editing .pf-style-cycle { display: flex; }
+        .pf-style-cycle:hover { background: rgba(var(--void-accent-rgb),0.2); color: #fff; }
+
+        /* Edit mode: block widget content clicks */
+        body.pf-editing .pf-widget-body { pointer-events: none; }
+
+        /* Ghost tiles: hidden widgets shown as collapsed placeholders in edit mode */
+        body.pf-editing .pf-widget.hidden {
+            display: flex !important;
+            opacity: 0.38;
+            min-height: 54px;
+            height: auto;
+        }
+        body.pf-editing .pf-widget.hidden .pf-widget-body { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-drag-handle,
+        body.pf-editing .pf-widget.hidden .pf-width-bar,
+        body.pf-editing .pf-widget.hidden .pf-resize-handle,
+        body.pf-editing .pf-widget.hidden .pf-style-cycle { display: none; }
+        body.pf-editing .pf-widget.hidden .pf-widget-title::after {
+            content: 'hidden';
+            margin-left: 8px; font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 0.1em; color: var(--void-muted);
+            opacity: 0.6; vertical-align: middle; text-transform: uppercase;
+        }
+
+        /* Styles tab UI (drawer) */
+        #pf-styles-list { display: flex; flex-direction: column; gap: 10px; }
+        .pf-style-card {
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.025);
+        }
+        .pf-style-name {
+            font-size: 0.66rem; font-weight: 800; letter-spacing: 0.04em;
+            color: var(--void-text); margin-bottom: 9px;
+        }
+        .pf-style-axis { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+        .pf-style-axis-lbl {
+            flex: 0 0 48px;
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .pf-seg-group {
+            flex: 1; display: flex; gap: 4px;
+            background: rgba(0,0,0,0.25); border-radius: 8px; padding: 3px;
+        }
+        .pf-seg {
+            flex: 1; padding: 6px 4px; border: none; cursor: pointer;
+            background: transparent; color: var(--void-muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.54rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+            border-radius: 6px; transition: background 0.15s, color 0.15s;
+        }
+        .pf-seg:hover { color: var(--void-text); }
+        .pf-seg.active { background: rgba(var(--void-accent-rgb),0.85); color: #fff; }
+
+        /* ── Layout variants ── */
+        #widget-stats[data-layout="rows"] #pf-stats-rows { grid-template-columns: 1fr !important; gap: 0; }
+        #widget-stats[data-layout="rows"] .pf-stat-row {
+            flex-direction: row; align-items: baseline; justify-content: space-between;
+            border: none; border-bottom: 1px solid rgba(255,255,255,0.05);
+            border-radius: 0; background: transparent; padding: 0 12px;
+        }
+        #widget-stats[data-layout="rows"] .pf-stat-row .val { font-size: 1.05rem; }
+        #widget-stats[data-layout="rows"] .pf-stat-row > span:first-child { font-size: 0.55rem; }
+
+        #widget-rarity-chart[data-layout="pills"] #pf-rarity-bars {
+            flex-direction: row; flex-wrap: wrap; align-content: center; gap: 8px;
+        }
+        #widget-rarity-chart[data-layout="pills"] .pf-rarity-row {
+            flex: 1 1 44%; flex-direction: row; align-items: center; justify-content: space-between;
+            gap: 8px; background: rgba(255,255,255,0.04); padding: 14px 12px; border-radius: 10px;
+        }
+        #widget-rarity-chart[data-layout="pills"] .pf-rarity-track { display: none; }
+
+        #widget-latest[data-layout="gallery"] #pf-latest-inner {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(54px,1fr));
+            gap: 8px; align-content: start;
+        }
+        #widget-latest[data-layout="gallery"] .pf-latest-card {
+            flex-direction: column; padding: 0; border: none; gap: 0; border-radius: 7px; overflow: hidden;
+        }
+        #widget-latest[data-layout="gallery"] .pf-latest-card:hover { padding-left: 0; background: none; }
+        #widget-latest[data-layout="gallery"] .pf-latest-info,
+        #widget-latest[data-layout="gallery"] .pf-latest-card .pf-rarity-dot-sm { display: none; }
+        #widget-latest[data-layout="gallery"] .pf-latest-thumb { width: 100%; height: auto; aspect-ratio: 5/7; }
+
+        #widget-wishlist[data-layout="list"] #pf-wishlist-list { grid-template-columns: 1fr; gap: 6px; }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card {
+            aspect-ratio: auto; height: 46px; display: flex; align-items: center; border-radius: 8px;
+        }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card img { width: 33px; height: 100%; flex-shrink: 0; }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card-overlay {
+            position: static; opacity: 1; background: none; padding: 0 10px; flex: 1; min-width: 0;
+        }
+        #widget-wishlist[data-layout="list"] .pf-wishlist-card-name {
+            color: var(--void-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+
+        #widget-battle-record[data-layout="compact"] .pf-battle-hero,
+        #widget-battle-record[data-layout="compact"] .pf-battle-bar-track,
+        #widget-battle-record[data-layout="compact"] .pf-battle-rate { display: none; }
+
+        #widget-binders[data-layout="list"] .pf-binders-grid { grid-template-columns: 1fr; }
+        #widget-binders[data-layout="list"] .pf-binder {
+            display: flex; flex-direction: row; align-items: center; gap: 12px;
+        }
+        #widget-binders[data-layout="list"] .pf-binder-previews { width: 56px; flex: 0 0 56px; margin-bottom: 0; }
+        #widget-binders[data-layout="list"] .pf-binder-name { flex: 1; min-width: 0; }
+
+        #widget-slabs[data-layout="list"] .pf-slabs-grid { grid-template-columns: 1fr; }
+        #widget-slabs[data-layout="list"] .pf-slab {
+            aspect-ratio: auto; height: 50px; display: flex; align-items: center; padding-right: 8px;
+        }
+        #widget-slabs[data-layout="list"] .pf-slab img { width: 36px; height: 100%; flex: 0 0 36px; }
+        #widget-slabs[data-layout="list"] .pf-slab-grade { position: static; margin-left: auto; }
+
+        /* ══════════════════════════════
+           RARITY DRILL-DOWN MODAL
+        ══════════════════════════════ */
+        .pf-rarity-row.clickable { cursor: pointer; border-radius: 8px; transition: background 0.15s; }
+        .pf-rarity-row.clickable:hover { background: rgba(255,255,255,0.04); }
+        #pf-rarity-modal {
+            position: fixed; inset: 0; z-index: 9000;
+            background: rgba(5,7,10,0.88); backdrop-filter: blur(18px);
+            display: flex; align-items: center; justify-content: center; padding: 24px;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        #pf-rarity-modal.open { opacity: 1; pointer-events: all; }
+        #pf-rarity-modal-inner {
+            width: 100%; max-width: 760px; max-height: 84vh; display: flex; flex-direction: column;
+            background: var(--void-surface, #12141c); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 18px; overflow: hidden;
+        }
+        #pf-rarity-modal-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        #pf-rarity-modal-title {
+            font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1rem;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        #pf-rarity-modal-close {
+            width: 34px; height: 34px; border-radius: 9px; border: none;
+            background: rgba(255,255,255,0.05); color: var(--void-muted); cursor: pointer; font-size: 1.1rem;
+        }
+        #pf-rarity-modal-close:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+        #pf-rarity-modal-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+            gap: 12px; padding: 18px 20px; overflow-y: auto;
+        }
+        .pf-rarity-card { display: flex; flex-direction: column; gap: 4px; }
+        .pf-rarity-card img, .pf-rarity-card-fallback {
+            width: 100%; aspect-ratio: 5/7; object-fit: cover; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.03);
+        }
+        .pf-rarity-card-name {
+            font-size: 0.6rem; font-weight: 700; color: var(--void-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pf-rarity-card-meta {
+            font-size: 0.5rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pf-rarity-modal-msg { grid-column: 1/-1; text-align: center; padding: 40px; color: var(--void-muted); font-size: 0.8rem; }
+
+        /* ══════════════════════════════
+           CARD MODAL
+        ══════════════════════════════ */
+        #pf-card-modal {
+            position: fixed; inset: 0; z-index: 9000;
+            background: rgba(5,7,10,0.88);
+            backdrop-filter: blur(18px);
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        #pf-card-modal.open { opacity: 1; pointer-events: all; }
+        #pf-modal-inner {
+            position: relative;
+            max-width: 340px; width: 100%;
+            background: rgba(10,12,16,0.98);
+            border: 1px solid rgba(var(--void-accent-rgb),0.15);
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.7);
+        }
+        #pf-modal-img { width: 100%; aspect-ratio: 5/7; object-fit: cover; display: block; }
+        #pf-modal-body { padding: 14px 18px 20px; }
+        #pf-modal-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900; font-size: 1.1rem;
+            letter-spacing: -0.02em; text-transform: uppercase;
+            color: var(--void-text); margin-bottom: 4px;
+        }
+        .pf-modal-meta { font-size: 0.56rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--void-muted); }
+        #pf-modal-close {
+            position: absolute; top: 10px; right: 10px;
+            width: 28px; height: 28px;
+            background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--void-muted); font-size: 0.72rem; transition: all 0.15s;
+        }
+        #pf-modal-close:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+
+        /* ══════════════════════════════
+           BANNER IMAGE (earned/selected)
+        ══════════════════════════════ */
+        #pf-banner-img {
+            position: absolute;
+            inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            object-position: center;
+            display: block;
+            z-index: 1;
+        }
+        #pf-banner.has-banner-img #pf-banner-img { display: block; }
+        #pf-banner.has-banner-img #pf-banner-bg {
+            background:
+                radial-gradient(ellipse 60% 120% at 8% 55%,  rgba(var(--void-accent-rgb),0.14) 0%, transparent 58%),
+                radial-gradient(ellipse 40% 80% at 85% 20%,  rgba(var(--void-accent-rgb),0.08) 0%, transparent 52%),
+                radial-gradient(ellipse 30% 60% at 50% 100%, rgba(var(--void-accent-rgb),0.06) 0%, transparent 50%),
+                linear-gradient(160deg, rgba(5,12,16,0.72) 0%, rgba(3,7,9,0.62) 50%, rgba(6,9,15,0.80) 100%);
+        }
+
+        /* Banner picker (in sections panel) */
+        #pf-banner-picker {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            max-height: 160px;
+            overflow-y: auto;
+            padding-bottom: 4px;
+        }
+        .pf-banner-thumb {
+            position: relative;
+            width: 118px; height: 44px;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+            transition: border-color 0.15s;
+            background: rgba(255,255,255,0.03);
+        }
+        .pf-banner-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-banner-thumb:hover { border-color: rgba(var(--void-accent-rgb),0.5); }
+        .pf-banner-thumb.selected {
+            border-color: rgba(var(--void-accent-rgb),0.9);
+            box-shadow: 0 0 0 2px rgba(var(--void-accent-rgb),0.22);
+        }
+        .pf-banner-thumb-none {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.49rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--void-muted);
+        }
+        .pf-banner-thumb.selected.pf-banner-thumb-none { color: var(--void-accent); }
+
+        /* ══════════════════════════════
+           TRADE OFFER BUTTON (visitor)
+        ══════════════════════════════ */
+        #pf-trade-offer-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.38);
+            background: rgba(var(--void-accent-rgb),0.10);
+            color: var(--void-accent);
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #pf-trade-offer-btn:hover {
+            background: rgba(var(--void-accent-rgb),0.20);
+            border-color: rgba(var(--void-accent-rgb),0.65);
+        }
+
+        /* ══════════════════════════════
+           TITLE PICKER
+        ══════════════════════════════ */
+        #pf-title-picker {
+            max-height: 240px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 2px;
+        }
+        .pf-title-category-header {
+            font-size: 0.42rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: rgba(var(--void-accent-rgb), 0.65);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-top: 4px;
+        }
+        .pf-title-category-header:first-child { padding-top: 0; }
+        .pf-title-category-header::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(var(--void-accent-rgb), 0.1);
+        }
+        .pf-title-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+        .pf-title-item {
+            position: relative;
+            padding: 8px 10px 7px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255,255,255,0.02);
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+            user-select: none;
+            overflow: hidden;
+        }
+        .pf-title-item.unlocked:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.35);
+            background: rgba(var(--void-accent-rgb), 0.06);
+        }
+        .pf-title-item.selected {
+            border-color: rgba(var(--void-accent-rgb), 0.65) !important;
+            background: rgba(var(--void-accent-rgb), 0.1) !important;
+            box-shadow: 0 0 14px rgba(var(--void-accent-rgb), 0.1);
+        }
+        .pf-title-item.locked { opacity: 0.25; cursor: not-allowed; }
+        .pf-title-item-status {
+            position: absolute;
+            top: 6px; right: 7px;
+            font-size: 0.55rem;
+            color: var(--void-muted);
+            line-height: 1;
+        }
+        .pf-title-item.selected .pf-title-item-status { color: var(--void-accent); }
+        .pf-title-item-name {
+            font-size: 0.6rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            line-height: 1.2;
+            padding-right: 14px;
+            margin-bottom: 3px;
+        }
+        .pf-title-item.selected .pf-title-item-name { color: var(--void-accent); }
+        .pf-title-item-desc {
+            font-size: 0.44rem;
+            color: var(--void-muted);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            line-height: 1.3;
+            opacity: 0.75;
+        }
+
+        /* ── Loading / Not found ── */
+        #pf-loading, #pf-not-found {
+            min-height: 70vh;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 14px; text-align: center; padding: 40px;
+        }
+        .pf-spinner {
+            width: 34px; height: 34px;
+            border: 2px solid rgba(var(--void-accent-rgb),0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%;
+            animation: pf-spin 0.75s linear infinite;
+        }
+        @keyframes pf-spin { to { transform: rotate(360deg); } }
+
+        /* ══════════════════════════════
+           SHOWCASE EDIT GRID
+        ══════════════════════════════ */
+        #pf-showcase-edit-grid { display: none; }
+        body.pf-editing #pf-showcase-inner,
+        body.pf-editing #pf-dots,
+        body.pf-editing #pf-showcase-grid-view { display: none !important; }
+        body.pf-editing #pf-showcase-edit-grid {
+            display: flex !important;
+            flex-direction: row;
+            gap: 8px;
+            padding: 12px 14px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(var(--void-accent-rgb),0.3) transparent;
+        }
+        .pf-sc-edit-slot {
+            flex: 0 0 auto;
+            width: 72px;
+            aspect-ratio: 5/7;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        .pf-sc-edit-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-sc-edit-slot-x {
+            position: absolute; top: 4px; right: 4px;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.72); border: none; color: #fff;
+            font-size: 0.75rem; cursor: pointer; line-height: 1;
+            opacity: 0; transition: opacity 0.15s;
+        }
+        .pf-sc-edit-slot:hover .pf-sc-edit-slot-x { opacity: 1; }
+        .pf-sc-edit-slot-x:hover { background: rgba(220,50,50,0.85); }
+        .pf-sc-edit-empty {
+            flex: 0 0 auto;
+            width: 72px;
+            aspect-ratio: 5/7;
+            border: 2px dashed rgba(var(--void-accent-rgb),0.3);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--void-muted);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .pf-sc-edit-empty:hover {
+            border-color: rgba(var(--void-accent-rgb),0.7);
+            color: var(--void-accent);
+        }
+
+        /* ══════════════════════════════
+           WISHLIST ADD BUTTON
+        ══════════════════════════════ */
+        #pf-wishlist-add-btn { display: none; }
+        body.pf-editing #pf-wishlist-add-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            margin: 0 10px 12px;
+            padding: 7px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(var(--void-accent-rgb),0.35);
+            background: rgba(var(--void-accent-rgb),0.08);
+            color: var(--void-accent);
+            font-size: 0.6rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        body.pf-editing #pf-wishlist-add-btn:hover {
+            background: rgba(var(--void-accent-rgb),0.18);
+            border-color: rgba(var(--void-accent-rgb),0.6);
+        }
+
+        /* Wishlist X overlays (edit mode) */
+        .pf-wishlist-card-remove {
+            position: absolute; top: 4px; right: 4px;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.72); border: none; color: #fff;
+            font-size: 0.75rem; cursor: pointer; line-height: 1;
+            opacity: 0; transition: opacity 0.15s; z-index: 5;
+        }
+        body.pf-editing .pf-wishlist-card:hover .pf-wishlist-card-remove { opacity: 1; }
+        .pf-wishlist-card-remove:hover { background: rgba(220,50,50,0.85); }
+
+        /* ══════════════════════════════
+           BINDERS SELECTOR (edit mode)
+        ══════════════════════════════ */
+        body.pf-editing #widget-binders #pf-binders-inner { display: none !important; }
+        body.pf-editing #widget-binders #pf-binders-selector {
+            display: flex !important;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px 10px 12px;
+            overflow-y: auto;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        #widget-binders #pf-binders-selector { display: none; }
+
+        /* ══════════════════════════════
+           COMPACT CARD PICKER
+        ══════════════════════════════ */
+        #pf-compact-picker {
+            position: fixed; inset: 0; z-index: 9600;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+            background: rgba(3,5,8,0.7);
+            backdrop-filter: blur(12px);
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.18s;
+        }
+        #pf-compact-picker.open { opacity: 1; pointer-events: all; }
+        #pf-compact-picker-inner {
+            width: 100%; max-width: 480px;
+            height: min(580px, 88vh);
+            background: #0d0f14;
+            border: 1px solid rgba(var(--void-accent-rgb),0.2);
+            border-radius: 18px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7);
+            overflow: hidden;
+        }
+        #pf-cp-head {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            flex-shrink: 0;
+        }
+        #pf-cp-title {
+            flex: 1; font-family: 'Outfit', sans-serif; font-weight: 900;
+            font-size: 0.8rem; letter-spacing: 0.04em; color: var(--void-text);
+        }
+        #pf-cp-close {
+            width: 28px; height: 28px; border-radius: 7px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+            color: var(--void-muted); font-size: 1rem; cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #pf-cp-close:hover { background: rgba(255,255,255,0.1); color: var(--void-text); }
+        #pf-cp-creators {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            padding: 10px 14px 8px; flex-shrink: 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        #pf-cp-search {
+            margin: 8px 14px 0; flex-shrink: 0;
+            padding: 8px 12px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.3); color: var(--void-text);
+            font-size: 0.68rem; font-family: 'Space Grotesk', sans-serif; outline: none;
+        }
+        #pf-cp-search.hidden { display: none; }
+        #pf-cp-search:focus { border-color: rgba(var(--void-accent-rgb),0.5); }
+        #pf-cp-status {
+            font-size: 0.52rem; color: var(--void-muted); font-style: italic;
+            padding: 4px 14px 0; min-height: 1em; flex-shrink: 0;
+        }
+        #pf-cp-grid {
+            flex: 0 0 auto;
+            overflow-x: auto; overflow-y: hidden;
+            display: flex; flex-direction: row;
+            gap: 8px;
+            padding: 10px 14px 14px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(var(--void-accent-rgb),0.3) transparent;
+        }
+        #pf-cp-grid .pf-wl-result {
+            flex: 0 0 90px;
+            width: 90px;
+        }
+
+        /* ── Save indicator ──────────────────────────────────────────────────── */
+        #pf-save-indicator {
+            position: fixed; top: 88px; right: 16px; z-index: 9500;
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 14px; border-radius: 10px;
+            background: #0d0f14;
+            border: 1px solid rgba(var(--void-accent-rgb),0.25);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+            color: var(--void-muted);
+            opacity: 0; pointer-events: none;
+            transform: translateY(-6px);
+            transition: opacity 0.18s, transform 0.18s;
+        }
+        #pf-save-indicator.visible {
+            opacity: 1; pointer-events: all; transform: translateY(0);
+        }
+        #pf-save-indicator .pf-si-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--void-accent); flex-shrink: 0;
+        }
+        #pf-save-indicator.saving .pf-si-dot {
+            animation: pf-si-pulse 0.9s ease-in-out infinite;
+        }
+        #pf-save-indicator.saved { border-color: rgba(52,211,153,0.35); }
+        #pf-save-indicator.saved .pf-si-dot { background: #34d399; animation: none; }
+        #pf-save-indicator.saved #pf-si-label { color: #34d399; }
+        @keyframes pf-si-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.7); }
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow"></div>
+    <div id="pf-save-indicator">
+        <span class="pf-si-dot"></span>
+        <span id="pf-si-label">Saving…</span>
+    </div>
+    <div id="toast-container"></div>
+
+    <!-- NAV -->
+    <nav class="fixed top-0 left-0 right-0 w-full z-[500] border-b border-white/5 bg-void-bg/40 backdrop-blur-2xl pt-[env(safe-area-inset-top,0px)]" aria-label="Main">
+        <div class="w-full px-4 sm:px-8 min-h-[5rem] h-20 flex items-center justify-between">
+            <a href="/my-collection" class="flex items-center gap-2 group cursor-pointer">
+                <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl shadow-2xl shadow-void-accent/10 transition-all group-hover:bg-void-accent/20 overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36">
+                </div>
+                <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+            </a>
+            <div class="flex items-center gap-3">
+                <div id="nav-user-preview" class="hidden items-center">
+                    <span id="nav-username" class="hidden">---</span>
+                    <span id="nav-user-role" class="hidden">Collector</span>
+                    <div id="nav-user-menu-root" class="relative">
+                        <button type="button" id="nav-user-menu-trigger"
+                            class="group flex items-center gap-1.5 rounded-2xl p-0.5 pr-2 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all focus:outline-none"
+                            aria-expanded="false" aria-haspopup="true" aria-controls="nav-user-menu">
+                            <span class="relative inline-block">
+                                <img id="nav-avatar" src="" alt=""
+                                    class="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover bg-void-bg">
+                            </span>
+                            <i class="bx bx-chevron-down text-[10px] text-void-muted group-hover:text-void-text transition-colors"></i>
+                        </button>
+                        <div id="nav-user-menu"
+                            class="hidden absolute right-0 top-full mt-2 w-[min(100vw-2rem,20rem)] rounded-2xl border border-white/10 bg-void-bg shadow-2xl shadow-black/50 z-[600] overflow-hidden"
+                            role="menu">
+                            <div class="border-b border-white/5">
+                                <button type="button" id="nav-user-identity-toggle"
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors focus:outline-none"
+                                    aria-expanded="false" aria-controls="nav-user-team-panel">
+                                    <img id="nav-user-menu-avatar" src="" alt=""
+                                        class="w-11 h-11 rounded-full object-cover border border-white/10 shrink-0 bg-void-bg"
+                                        width="44" height="44">
+                                    <div class="min-w-0 flex-1">
+                                        <p id="nav-user-menu-name" class="text-sm font-bold text-white tracking-tight truncate">—</p>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span id="nav-user-platform-icons" class="flex items-center gap-1 shrink-0"></span>
+                                            <span id="nav-user-menu-role" class="text-[10px] font-black uppercase tracking-widest text-void-muted/95">—</span>
+                                        </div>
+                                    </div>
+                                    <span id="nav-user-team-chevron-wrap" class="hidden shrink-0 rounded-lg border border-white/15 bg-white/[0.07] p-1.5 shadow-inner">
+                                        <i id="nav-user-team-chevron" class="bx bx-chevron-down text-void-accent text-sm leading-none block transition-transform duration-200"></i>
+                                    </span>
+                                </button>
+                                <div id="nav-user-team-panel" class="hidden border-t border-white/5 bg-zinc-950 px-2 py-2 max-h-[min(50vh,14rem)] overflow-y-auto">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-void-muted px-2 pt-1 pb-2">Team channels</p>
+                                    <div id="nav-user-team-list" class="space-y-0.5 pb-1"></div>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 border-b border-white/5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[9px] font-black uppercase tracking-widest text-void-muted mb-0.5">Castle code</p>
+                                        <p id="nav-user-menu-castle-code" class="font-mono text-sm font-bold text-white tracking-wider">—</p>
+                                    </div>
+                                    <button type="button" id="nav-user-menu-copy-code"
+                                        class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-void-accent transition-colors">Copy</button>
+                                </div>
+                            </div>
+                            <div class="p-1.5">
+                                <button type="button" id="nav-user-menu-settings" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-void-text hover:bg-white/5 transition-colors">
+                                    <i class="bx bxs-cog text-void-muted w-4 text-center shrink-0"></i>
+                                    <span class="flex flex-col leading-tight normal-case">
+                                        <span class="uppercase tracking-widest">Account settings</span>
+                                        <span class="text-[9px] font-semibold text-void-muted tracking-normal mt-0.5">Castle code, blocks, security</span>
+                                    </span>
+                                </button>
+                                <button type="button" id="nav-user-menu-logout" role="menuitem"
+                                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-[11px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-colors">
+                                    <i class="bx bx-log-out w-4 text-center"></i> Log out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- LOADING -->
+    <div id="pf-loading">
+        <div class="pf-spinner"></div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading profile…</p>
+    </div>
+
+    <!-- NOT FOUND -->
+    <div id="pf-not-found" class="hidden">
+        <div class="text-6xl opacity-10"><i class="bx bxs-ghost"></i></div>
+        <h1 class="font-display font-black text-2xl uppercase italic tracking-tight">Profile not found</h1>
+        <p class="text-sm text-void-muted max-w-sm">This Castle profile doesn't exist yet, or the username may have changed.</p>
+        <a href="/" class="text-xs text-void-accent hover:underline mt-2">← Back to home</a>
+    </div>
+
+    <!-- MAIN PAGE -->
+    <main id="pf-page" class="hidden">
+
+        <!-- ░░ STEAM-STYLE BANNER ░░ -->
+        <div id="pf-banner" class="pf-rise pf-rise-1 has-banner-img">
+            <img id="pf-banner-img" src="/default_banner.png" alt="">
+            <div id="pf-banner-bg"></div>
+            <div id="pf-banner-deco"></div>
+            <img id="pf-banner-mark" src="https://cdn.codeoce.com/logo/logo_white.png" alt="">
+            <div id="pf-banner-accent"></div>
+        </div>
+
+        <!-- ░░ IDENTITY BAR ░░ -->
+        <div id="pf-identity-bar" class="pf-rise pf-rise-1">
+            <div id="pf-identity-inner">
+
+                <!-- Avatar -->
+                <div id="pf-avatar-block">
+                    <img id="pf-avatar" src="" alt="Avatar">
+                </div>
+
+                <!-- Info -->
+                <div id="pf-info-block">
+                    <div id="pf-name-row">
+                        <h1 id="pf-name">—</h1>
+                        <span id="pf-role-badge"><i class="bx bxs-user" style="font-size:8px"></i> <span id="pf-role-text">Collector</span></span>
+                    </div>
+                    <p id="pf-status-line" style="margin-bottom:8px;">—</p>
+                    <div id="pf-xp-row">
+                        <span class="pf-xp-lvl">Lvl <span id="pf-level">1</span></span>
+                        <div id="pf-xp-bar"><div id="pf-xp-fill"></div></div>
+                        <span class="pf-xp-lvl" id="pf-xp-next-label">Lvl 2</span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div id="pf-hero-actions">
+                    <div class="pf-code-row">
+                        <span class="pf-code-label">Castle code</span>
+                        <span id="pf-code" class="pf-code-value">—</span>
+                        <button id="pf-copy-code" class="w-5 h-5 rounded flex items-center justify-center bg-white/[0.05] border border-white/10 text-void-muted hover:text-void-accent transition-colors" title="Copy code">
+                            <i class="bx bxs-copy" style="font-size:9px"></i>
+                        </button>
+                    </div>
+                    <div class="pf-action-row">
+                        <button id="pf-trade-offer-btn" class="hidden">
+                            <i class="bx bxs-transfer" style="font-size:10px"></i>
+                            <span>Send Trade Offer</span>
+                        </button>
+                        <button id="pf-edit-btn">
+                            <i class="bx bxs-pencil" style="font-size:10px"></i>
+                            <span id="pf-edit-label">Edit layout</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- ░░ PROFILE WIDGET GRID (4-col) ░░ -->
+        <div id="pf-steam-layout" class="pf-rise pf-rise-2">
+
+                <!-- STATS -->
+                <div class="pf-widget" id="widget-stats" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title" id="pf-stats-title">Castle Stats</div>
+                    <div id="pf-stats-rows"></div>
+                    <div id="pf-stats-footer"></div>
+                </div>
+
+                <!-- WISHLIST -->
+                <div class="pf-widget" id="widget-wishlist" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Wishlist</div>
+                    <div id="pf-wishlist-list"></div>
+                    <button id="pf-wishlist-add-btn" class="pf-wishlist-add-btn">+ Add Cards</button>
+                </div>
+
+                <!-- COLLECTION BREAKDOWN -->
+                <div class="pf-widget" id="widget-rarity-chart" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Collection Breakdown</div>
+                    <div id="pf-rarity-bars"></div>
+                </div>
+
+                <!-- SHOWCASE -->
+                <div class="pf-widget" id="widget-showcase" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title" id="pf-showcase-title" style="display:flex;align-items:center;">
+                        <span id="pf-showcase-title-text">—'s Collection</span>
+                        <button id="pf-showcase-view-toggle" class="pf-showcase-view-btn" title="Switch to grid"><i class="bx bx-grid-alt"></i></button>
+                        <span id="pf-sc-count" class="pf-sc-edit-count hidden">0 / 10</span>
+                    </div>
+                    <div id="pf-showcase-inner"></div>
+                    <div id="pf-dots"></div>
+                    <div id="pf-showcase-grid-view" class="hidden"></div>
+                    <div id="pf-showcase-edit-grid"></div>
+                </div>
+
+                <!-- LATEST PACK PULL -->
+                <div class="pf-widget" id="widget-latest" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Latest Pack Pull</div>
+                    <div id="pf-latest-inner"></div>
+                </div>
+
+                <!-- ACHIEVEMENTS -->
+                <div class="pf-widget" id="widget-achievements" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Pinned Achievements</div>
+                    <div id="pf-achievements-grid"></div>
+                </div>
+
+                <!-- BATTLE RECORD -->
+                <div class="pf-widget" id="widget-battle-record" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Battle Record</div>
+                    <div id="pf-battle-inner"></div>
+                </div>
+
+                <!-- BINDERS -->
+                <div class="pf-widget" id="widget-binders" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Binders</div>
+                    <div id="pf-binders-inner"></div>
+                    <div id="pf-binders-selector"></div>
+                </div>
+
+                <!-- SLABS -->
+                <div class="pf-widget" id="widget-slabs" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Top Slabs</div>
+                    <div id="pf-slabs-inner"></div>
+                </div>
+
+                <!-- TRINKETS -->
+                <div class="pf-widget" id="widget-trinkets" draggable="false">
+                    <span class="pf-drag-handle" aria-hidden="true"><i class="bx bxs-dots-vertical"></i></span>
+                    <div class="pf-widget-title">Trinkets</div>
+                    <div id="pf-trinkets-inner"></div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- RARITY DRILL-DOWN MODAL (Collection Breakdown click) -->
+    <div id="pf-rarity-modal" role="dialog" aria-modal="true" onclick="if(event.target===this)closeRarityCards()">
+        <div id="pf-rarity-modal-inner">
+            <div id="pf-rarity-modal-head">
+                <h3 id="pf-rarity-modal-title">Cards</h3>
+                <button id="pf-rarity-modal-close" aria-label="Close" onclick="closeRarityCards()"><i class="bx bx-x"></i></button>
+            </div>
+            <div id="pf-rarity-modal-grid"></div>
+        </div>
+    </div>
+
+    <!-- CARD MODAL -->
+    <div id="pf-card-modal" role="dialog" aria-modal="true">
+        <div id="pf-modal-inner">
+            <button id="pf-modal-close" aria-label="Close"><i class="bx bx-x"></i></button>
+            <img id="pf-modal-img" src="" alt="">
+            <div id="pf-modal-body">
+                <div id="pf-modal-name">—</div>
+                <div class="pf-modal-meta" id="pf-modal-meta">—</div>
+                <button id="pf-pin-btn" class="hidden w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all font-black uppercase tracking-widest text-[9px]">
+                    <i class="bx bxs-pin"></i>
+                    <span id="pf-pin-label">Pin to Showcase</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- COMPACT CARD PICKER -->
+    <div id="pf-compact-picker" role="dialog" aria-modal="true">
+        <div id="pf-compact-picker-inner">
+            <div id="pf-cp-head">
+                <span id="pf-cp-title">Add Card</span>
+                <button id="pf-cp-close" aria-label="Close"><i class="bx bx-x"></i></button>
+            </div>
+            <div id="pf-cp-creators" class="pf-wl-creators"></div>
+            <input type="text" id="pf-cp-search" placeholder="Filter cards…" autocomplete="off" class="hidden">
+            <div id="pf-cp-status"></div>
+            <div id="pf-cp-grid"></div>
+        </div>
+    </div>
+
+    <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
+    <script src="/castle-nav.js"></script>
+    <script src="/castle-auth-origin.js"></script>
+    <script src="/profile.js?v=20260615a"></script>
+</body>
+</html>

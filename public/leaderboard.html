@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        :root {
+            --page-accent: var(--void-accent);
+            --page-accent-rgb: var(--void-accent-rgb);
+        }
+
+        body::before { opacity: 0.06; }
+
+        .hidden { display: none !important; }
+
+        /* ── Loading / Not found ── */
+        #lb-loading {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        .lb-spinner {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(var(--page-accent-rgb), 0.2);
+            border-top-color: rgba(var(--page-accent-rgb), 0.8);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #lb-not-found {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            text-align: center;
+            padding: 40px;
+        }
+
+        /* ── Fade-in ── */
+        @keyframes lb-rise {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .lb-rise   { animation: lb-rise 0.5s var(--ease-premium, cubic-bezier(0.16,1,0.3,1)) both; }
+        .lb-rise-1 { animation-delay: 0.04s; }
+        .lb-rise-2 { animation-delay: 0.10s; }
+        .lb-rise-3 { animation-delay: 0.18s; }
+
+        /* ── Page wrapper ── */
+        #lb-main {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding: clamp(88px, 12vw, 112px) clamp(16px, 4vw, 48px) 80px;
+        }
+        /* Hero + tab switcher stay narrower & centered; the board uses the full width */
+        #lb-hero, #lb-tabs {
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* ── Hero ── */
+        #lb-hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 6px;
+            margin-bottom: 32px;
+        }
+        #lb-eyebrow {
+            font-size: 0.6rem;
+            font-weight: 800;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+        }
+        #lb-creator-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(2.4rem, 7vw, 4.5rem);
+            line-height: 0.9;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            color: var(--void-text);
+        }
+        #lb-subtitle {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 300;
+            font-size: clamp(0.7rem, 1.5vw, 0.9rem);
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-top: 4px;
+        }
+
+        /* ── Tab switcher ── */
+        #lb-tabs {
+            display: flex;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px;
+            padding: 4px;
+            gap: 4px;
+            margin-bottom: 24px;
+        }
+        .lb-tab-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lb-tab-btn:hover {
+            color: var(--void-text);
+            background: rgba(255,255,255,0.04);
+        }
+        .lb-tab-btn.active {
+            color: rgba(var(--page-accent-rgb), 1);
+            background: rgba(var(--page-accent-rgb), 0.1);
+        }
+        .lb-tab-btn i { font-size: 0.85rem; }
+
+        /* ── Board panel ── */
+        #lb-board {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        #lb-board-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        #lb-board-title {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+        }
+        #lb-board-count {
+            font-size: 0.55rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* ── Rows ── */
+        #lb-list { padding: 8px 0; }
+
+        .lb-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            transition: background 0.15s;
+        }
+        .lb-row:hover { background: rgba(255,255,255,0.025); }
+        .lb-row.lb-row-me {
+            background: rgba(var(--page-accent-rgb), 0.06);
+        }
+
+        .lb-rank {
+            font-size: 0.65rem;
+            font-weight: 800;
+            color: var(--void-muted);
+            width: 28px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .lb-rank-1 { color: #fbbf24; font-size: 0.9rem; }
+        .lb-rank-2 { color: #94a3b8; font-size: 0.85rem; }
+        .lb-rank-3 { color: #d97706; font-size: 0.85rem; }
+
+        .lb-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .lb-avatar-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(var(--page-accent-rgb), 0.12);
+            color: rgba(var(--page-accent-rgb), 0.9);
+            font-size: 0.6rem;
+            font-weight: 800;
+        }
+
+        .lb-name {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--void-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .lb-row.lb-row-me .lb-name {
+            color: rgba(var(--page-accent-rgb), 1);
+        }
+
+        .lb-score {
+            font-size: 0.65rem;
+            font-weight: 800;
+            color: var(--void-muted);
+            letter-spacing: 0.05em;
+            flex-shrink: 0;
+            text-align: right;
+        }
+        .lb-score-val {
+            font-size: 0.85rem;
+            color: var(--void-text);
+            display: block;
+        }
+
+        /* ── Empty / no data ── */
+        .lb-empty {
+            text-align: center;
+            padding: 40px 20px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        /* ── Divider between top-3 and rest ── */
+        .lb-tier-divider {
+            height: 1px;
+            margin: 4px 20px;
+            background: rgba(255,255,255,0.04);
+        }
+
+        /* ── "You" badge ── */
+        .lb-you-badge {
+            font-size: 0.45rem;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.9);
+            background: rgba(var(--page-accent-rgb), 0.12);
+            border: 1px solid rgba(var(--page-accent-rgb), 0.25);
+            border-radius: 6px;
+            padding: 2px 6px;
+            flex-shrink: 0;
+        }
+
+        /* ── Sortable collection table ── */
+        .lb-table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        table.lb-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .lb-table thead th {
+            padding: clamp(8px, 1.4vw, 12px) clamp(4px, 1vw, 8px);
+            font-size: clamp(0.45rem, 1.2vw, 0.55rem);
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            white-space: nowrap;
+            text-align: center;
+        }
+        .lb-table thead th.lb-col-num {
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.15s;
+        }
+        .lb-table thead th.lb-col-num:hover { color: var(--void-text); }
+        .lb-table th.lb-col-rank { width: clamp(28px, 6vw, 40px); }
+        .lb-table th.lb-col-name { text-align: left; padding-left: clamp(8px, 2vw, 14px); }
+        .lb-table th.lb-sort-active { color: rgba(var(--page-accent-rgb), 1); }
+        .lb-sort-arrow { font-size: 0.5rem; margin-left: 3px; vertical-align: middle; }
+
+        .lb-table tbody td {
+            padding: clamp(7px, 1.3vw, 10px) clamp(4px, 1vw, 8px);
+            text-align: center;
+            font-size: clamp(0.72rem, 1.8vw, 0.85rem);
+            font-weight: 700;
+            color: var(--void-text);
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            white-space: nowrap;
+        }
+        .lb-table tbody tr:last-child td { border-bottom: none; }
+        .lb-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
+        .lb-table tbody tr.lb-row-me td { background: rgba(var(--page-accent-rgb), 0.06); }
+        .lb-table td.lb-col-sorted { background: rgba(var(--page-accent-rgb), 0.045); }
+
+        .lb-cell-rank {
+            color: var(--void-muted);
+            font-size: clamp(0.62rem, 1.6vw, 0.72rem);
+            font-weight: 800;
+            text-align: center;
+        }
+        .lb-cell-rank.lb-rank-1 { color: #fbbf24; font-size: clamp(0.78rem, 2vw, 0.95rem); }
+        .lb-cell-rank.lb-rank-2 { color: #94a3b8; font-size: clamp(0.74rem, 1.9vw, 0.9rem); }
+        .lb-cell-rank.lb-rank-3 { color: #d97706; font-size: clamp(0.74rem, 1.9vw, 0.9rem); }
+
+        .lb-cell-name { text-align: left; padding-left: clamp(8px, 2vw, 14px) !important; }
+        .lb-name-inner { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .lb-name-txt {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: clamp(0.68rem, 1.7vw, 0.78rem);
+            font-weight: 700;
+            max-width: clamp(80px, 22vw, 180px);
+        }
+        .lb-table .lb-avatar { width: 26px; height: 26px; }
+        .lb-row-me .lb-name-txt { color: rgba(var(--page-accent-rgb), 1); }
+
+        /* Value colours */
+        .lb-cell-points { color: rgba(var(--page-accent-rgb), 1); font-weight: 800; }
+        .lb-r-legendary { color: #fbbf24; }
+        .lb-r-epic      { color: #c084fc; }
+        .lb-r-rare      { color: #60a5fa; }
+        .lb-r-uncommon  { color: #4ade80; }
+        .lb-r-common    { color: var(--void-text); }
+        .lb-c-win       { color: #4ade80; }
+        .lb-c-loss      { color: #f87171; }
+        .lb-zero        { color: rgba(255,255,255,0.18); font-weight: 600; }
+
+        /* Active deck column (battles) */
+        .lb-table th.lb-col-deck { text-align: center; cursor: default; white-space: nowrap; }
+        .lb-cell-deck { text-align: center; }
+        .lb-deck {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(3px, 0.8vw, 5px);
+        }
+        .lb-deck-slot {
+            display: inline-flex;
+            width: clamp(20px, 4.6vw, 28px);
+            height: clamp(28px, 6.4vw, 39px);
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            flex-shrink: 0;
+        }
+        .lb-deck-slot img { width: 100%; height: 100%; object-fit: cover; }
+        .lb-deck { cursor: pointer; }
+        .lb-deck-empty { color: var(--void-muted); font-size: 0.62rem; font-weight: 700; }
+
+        /* Active deck hover popover */
+        #lb-deck-tip {
+            position: fixed;
+            z-index: 720;
+            display: none;
+            pointer-events: none;
+            background: var(--void-bg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+        }
+        #lb-deck-tip.show { display: block; animation: lb-fade 0.12s ease both; }
+        .lb-tip-title {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .lb-tip-cards { display: flex; gap: 10px; }
+        .lb-tip-card { width: clamp(76px, 18vw, 100px); }
+        .lb-tip-card img,
+        .lb-tip-card .lb-tip-noimg {
+            width: 100%;
+            aspect-ratio: 5 / 7;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1.5px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05);
+            display: block;
+        }
+        .lb-tip-name {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            text-align: center;
+            color: var(--void-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .lb-tip-stats {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 4px;
+            font-size: 0.64rem;
+            font-weight: 800;
+        }
+        .lb-tip-atk { color: #f87171; }
+        .lb-tip-def { color: #60a5fa; }
+        .lb-tip-stats i { font-size: 0.72rem; margin-right: 1px; vertical-align: -1px; }
+        .lb-swords { width: 0.78rem; height: 0.78rem; margin-right: 2px; vertical-align: -2px; }
+        .lb-tip-pips {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 5px;
+        }
+        .lb-tip-pip {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 0.58rem;
+            color: var(--void-text);
+        }
+        .lb-tip-pip img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Viewer's own "your position" row (shown when outside the top 100) */
+        .lb-viewer-sep td {
+            padding: 0;
+            height: clamp(6px, 1.4vw, 10px);
+            border: none;
+            background: transparent;
+        }
+        .lb-row-viewer td {
+            border-top: 1px dashed rgba(var(--page-accent-rgb), 0.45);
+            border-bottom: none;
+            background: rgba(var(--page-accent-rgb), 0.09) !important;
+        }
+        .lb-row-viewer .lb-cell-rank { color: rgba(var(--page-accent-rgb), 1); }
+
+        /* ── Info button ── */
+        #lb-info-btn {
+            position: fixed;
+            top: clamp(74px, 10vw, 94px);
+            right: clamp(14px, 4vw, 40px);
+            z-index: 450;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: rgba(var(--page-accent-rgb), 0.85);
+            font-size: clamp(1.3rem, 3vw, 1.6rem);
+            line-height: 1;
+            cursor: pointer;
+            transition: color 0.2s, transform 0.2s;
+        }
+        #lb-info-btn:hover {
+            color: rgba(var(--page-accent-rgb), 1);
+            transform: scale(1.1);
+        }
+
+        /* ── Info modal ── */
+        #lb-info-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 700;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: clamp(16px, 4vw, 40px);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(6px);
+        }
+        #lb-info-modal.open { display: flex; animation: lb-fade 0.2s ease both; }
+        @keyframes lb-fade { from { opacity: 0; } to { opacity: 1; } }
+
+        .lb-info-card {
+            position: relative;
+            width: min(100%, 460px);
+            max-height: 86vh;
+            overflow-y: auto;
+            background: var(--void-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 18px;
+            padding: clamp(22px, 5vw, 32px);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+            animation: lb-rise 0.28s var(--ease-premium, cubic-bezier(0.16,1,0.3,1)) both;
+        }
+        .lb-info-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+            color: var(--void-muted);
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .lb-info-close:hover { color: var(--void-text); background: rgba(255,255,255,0.08); }
+
+        .lb-info-eyebrow {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.85);
+        }
+        #lb-info-title {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(1.5rem, 5vw, 2rem);
+            letter-spacing: -0.03em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            margin: 2px 0 18px;
+            line-height: 0.95;
+        }
+        .lb-info-section { margin-top: 18px; }
+        .lb-info-section h3 {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(var(--page-accent-rgb), 0.95);
+            margin-bottom: 6px;
+        }
+        .lb-info-section h3 i { font-size: 0.95rem; }
+        .lb-info-section p {
+            font-size: clamp(0.78rem, 2vw, 0.85rem);
+            line-height: 1.5;
+            color: var(--void-muted);
+        }
+        .lb-info-section p strong { color: var(--void-text); font-weight: 700; }
+
+        .lb-info-weights {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .lb-info-weights > div {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.025);
+            border: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .lb-info-weights > div span { letter-spacing: 0.04em; }
+        .lb-info-weights > div b { color: var(--void-text); font-weight: 800; }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow" id="lb-bg-glow"></div>
+
+    <!-- Nav — injected by /streamer-nav.js -->
+
+    <!-- Loading state -->
+    <div id="lb-loading">
+        <div class="lb-spinner"></div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading Leaderboard</p>
+    </div>
+
+    <!-- Not found state -->
+    <div id="lb-not-found" class="hidden">
+        <p class="text-7xl font-black opacity-10">?</p>
+        <h1 class="text-2xl font-black uppercase tracking-widest">Creator Not Found</h1>
+        <p class="text-void-muted text-sm">This creator doesn't exist or hasn't set up Castle TCG yet.</p>
+        <a href="/" class="saas-button rounded-xl px-6 py-3 text-xs mt-4">Back to Castle</a>
+    </div>
+
+    <!-- Main content -->
+    <div id="lb-main" class="hidden">
+
+        <!-- Hero -->
+        <div id="lb-hero" class="lb-rise lb-rise-1">
+            <p id="lb-eyebrow">Leaderboard</p>
+            <h1 id="lb-creator-name">---</h1>
+            <p id="lb-subtitle">Community Rankings</p>
+        </div>
+
+        <!-- Tab switcher -->
+        <div id="lb-tabs" class="lb-rise lb-rise-2">
+            <button class="lb-tab-btn active" id="lb-tab-collection" onclick="window._lbSetTab('collection')">
+                <i class="bx bx-book-alt"></i>
+                Collection
+            </button>
+            <button class="lb-tab-btn" id="lb-tab-battles" onclick="window._lbSetTab('battles')">
+                <i class="bx bxs-bolt"></i>
+                Battles
+            </button>
+        </div>
+
+        <!-- Board panel -->
+        <div id="lb-board" class="lb-rise lb-rise-3">
+            <div id="lb-board-header">
+                <span id="lb-board-title">Collection Leaderboard</span>
+                <span id="lb-board-count"></span>
+            </div>
+            <div id="lb-list"></div>
+        </div>
+
+    </div>
+
+    <!-- Info button (top-left, under the nav) -->
+    <button id="lb-info-btn" class="hidden" type="button" aria-label="How the leaderboard works"
+        title="How the leaderboard works" onclick="window._lbOpenInfo()">
+        <i class="bx bx-info-circle"></i>
+    </button>
+
+    <!-- Info modal -->
+    <div id="lb-info-modal" role="dialog" aria-modal="true" aria-labelledby="lb-info-title" onclick="window._lbCloseInfo(event)">
+        <div class="lb-info-card" onclick="event.stopPropagation()">
+            <button class="lb-info-close" type="button" aria-label="Close" onclick="window._lbCloseInfo()">
+                <i class="bx bx-x"></i>
+            </button>
+
+            <p class="lb-info-eyebrow" id="lb-info-eyebrow">Collection</p>
+            <h2 id="lb-info-title">How it works</h2>
+
+            <div id="lb-info-body"></div>
+        </div>
+    </div>
+
+    <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
+    <script src="/streamer-nav.js"></script>
+    <script src="/leaderboard.js"></script>
+</body>
+</html>

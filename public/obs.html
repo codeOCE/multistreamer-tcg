@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Castle TCG - OBS Overlay</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+        }
+
+        body {
+            overflow: hidden;
+            background: transparent !important;
+            font-family: 'Segoe UI', sans-serif;
+            width: 100%;
+            height: 100%;
+            min-height: 100dvh;
+            margin: 0;
+        }
+
+        #stage {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            perspective: 1200px;
+            pointer-events: none;
+            background: transparent;
+        }
+
+        /*
+         * Vertical optical centering lives on a WRAPPER, not #pack-scene.
+         * .shaking / .brutalist-jitter animate `transform` on #pack-scene and would
+         * override translateY(-105px), causing a jump down/up mid-animation.
+         */
+        #obs-pack-offset {
+            transform: translateY(-105px);
+            background: transparent;
+        }
+
+        /* pack-scene: 400×560 */
+        #pack-scene {
+            position: relative;
+            width: 400px;
+            height: 560px;
+            background: transparent;
+        }
+
+        /* Pack body — z-index ABOVE card so the card hides inside it */
+        #pack-face {
+            position: absolute;
+            inset: 0;
+            z-index: 8;
+            transform: translateY(210px);
+            transition: opacity 0.6s ease;
+        }
+
+        #pack-face img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: center;
+            display: block;
+            /* Allow PNG alpha to show through to OBS */
+            background: transparent;
+        }
+
+        /* Shine sweep */
+        #pack-face::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.1) 50%, transparent 60%);
+            background-size: 200% 200%;
+            animation: shine-sweep 3s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        @keyframes shine-sweep {
+            0% {
+                background-position: -200% 0;
+            }
+
+            100% {
+                background-position: 200% 0;
+            }
+        }
+
+        /* Tear cap — top 10%, tears off upward */
+        #tear-cap {
+            position: absolute;
+            top: 210px;
+            left: 0;
+            right: 0;
+            height: 10%;
+            overflow: hidden;
+            z-index: 10;
+            transition: transform 0.7s cubic-bezier(0.5, 0, 0.25, 1), opacity 0.5s ease;
+        }
+
+        #tear-cap img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 1000%;
+            object-fit: contain;
+            object-position: top center;
+            background: transparent;
+        }
+
+        /* On rip: tear cap flies off, pack body clips the torn top strip away */
+        .ripping #tear-cap {
+            transform: translateY(-230%) rotate(-9deg) translateX(-10px);
+            opacity: 0;
+        }
+
+        /* Clip pack body so the top 10% (where tear was) is now an open hole */
+        .ripping #pack-face {
+            clip-path: inset(10% 0 0 0);
+        }
+
+        /* 3D card flipper — z-index BELOW pack so card hides inside pack body */
+        #card-flipper {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 250px;
+            height: 350px;
+            margin-left: -125px;
+            margin-top: -175px;
+            z-index: 6;
+            transform-style: preserve-3d;
+            opacity: 0;
+            /* JS drives all transforms */
+        }
+
+        .card-face {
+            position: absolute;
+            inset: 0;
+            border-radius: 14px;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            overflow: hidden;
+        }
+
+        /* Card back */
+        #card-back {
+            background-image: url('https://cdn.codeoce.com/branding/default-card-back-light.png');
+            background-size: cover;
+            background-position: center;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+        }
+
+
+        .back-card {
+            font-size: 48px;
+            filter: drop-shadow(0 0 14px rgba(52, 211, 153, .5));
+        }
+
+        .back-text {
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: .28em;
+            color: rgba(255, 255, 255, .25);
+            text-transform: uppercase;
+        }
+
+        /* Card front — pre-rotated 180° */
+        #card-front {
+            transform: rotateY(180deg);
+        }
+
+        #card-front img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        /* Shake */
+        @keyframes pack-shake {
+
+            0%,
+            100% {
+                transform: rotate(0deg) translateX(0);
+            }
+
+            20% {
+                transform: rotate(-2.5deg) translateX(-5px);
+            }
+
+            40% {
+                transform: rotate(2.5deg) translateX(5px);
+            }
+
+            60% {
+                transform: rotate(-2deg) translateX(-3px);
+            }
+
+            80% {
+                transform: rotate(2deg) translateX(3px);
+            }
+        }
+
+        .shaking {
+            animation: pack-shake .11s linear infinite;
+        }
+
+        /* Cosmic Effects */
+        .cosmic-glow {
+            filter: drop-shadow(0 0 20px #3faaff) drop-shadow(0 0 40px #a855f7) !important;
+        }
+
+        /* Brutalist Effects */
+        .brutalist-jitter {
+            animation: brutalist-jitter 0.1s steps(2) infinite;
+        }
+
+        @keyframes brutalist-jitter {
+            0% { transform: translate(5px, -5px) skew(5deg); }
+            50% { transform: translate(-5px, 5px) skew(-5deg); }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="stage">
+        <div id="obs-pack-offset">
+        <div id="pack-scene">
+
+            
+            <div id="pack-face">
+                <img src="https://cdn.codeoce.com/branding/default-pack.png" alt="Pack">
+            </div>
+
+            
+            <div id="tear-cap">
+                <img src="/default_pack.png" alt="">
+            </div>
+
+            
+            <div id="card-flipper">
+                <div class="card-face" id="card-back"></div>
+                <div class="card-face" id="card-front">
+                    <img id="card-img" src="" alt="">
+                </div>
+            </div>
+
+        </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script>
+        const API_URL = window.location.origin;
+        const urlParams = new URLSearchParams(window.location.search);
+        const STREAMER = urlParams.get('streamer');
+        const TOKEN = urlParams.get('token');
+        const PREVIEW_STYLE = urlParams.get('preview');
+
+        if (!STREAMER && !PREVIEW_STYLE) {
+            document.body.style.cssText = 'background:rgba(0,0,0,.9)';
+            document.body.innerHTML = '<p style="color:white;padding:24px;font-family:sans-serif">⛔ Invalid overlay URL. Missing streamer or token parameter.</p>';
+            throw new Error('Missing streamer or token');
+        }
+
+        let isAnimating    = false;
+        let skipRequested  = false;
+        let streamerConfig = null;
+        let supabaseClient = null;
+        let realtimeChannel = null;
+        let isPaused = false;
+
+        async function initOverlay() {
+            if (PREVIEW_STYLE) {
+                streamerConfig = { pack_animation_style: PREVIEW_STYLE };
+                setInterval(() => playReveal({ image_url: '', user_card_id: 'mock_preview' }), 8000);
+                setTimeout(() => playReveal({ image_url: '', user_card_id: 'mock_preview' }), 500);
+                return;
+            }
+
+            // ── ONE-TIME INIT: validate token + get realtime config ──
+            let initData;
+            try {
+                const res = await fetch(`${API_URL}/api/obs/init?streamer=${STREAMER}&token=${TOKEN}`);
+                if (res.status === 403) {
+                    document.body.style.cssText = 'background:rgba(0,0,0,.9)';
+                    document.body.innerHTML = '<p style="color:red;padding:24px;font-family:sans-serif">⛔ Invalid token. Please regenerate your overlay URL.</p>';
+                    return;
+                }
+                initData = await res.json();
+            } catch (e) {
+                console.error('[OBS] Init fetch failed:', e);
+                return;
+            }
+
+            streamerConfig = initData;
+            isPaused = !!initData.obs_paused;
+            applyBranding(initData);
+
+            // ── SUPABASE REALTIME: subscribe to streamers row changes (skip + pause signals) ──
+            // Zero ongoing Worker subrequests — WebSocket direct to Supabase.
+            const supabase = window.supabase.createClient(initData.supabase_url, initData.supabase_anon_key);
+            supabaseClient = supabase;
+
+            realtimeChannel = supabase.channel('obs-overlay-signals')
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'streamers',
+                    filter: `id=eq.${initData.streamer_id}`
+                }, (payload) => {
+                    const row = payload.new;
+                    // Skip signal — fires animation skip, then the Worker clears it via normal flow
+                    if (row.obs_skip_signal && isAnimating) {
+                        skipRequested = true;
+                        // Acknowledge: clear the skip signal via the existing endpoint
+                        fetch(`${API_URL}/api/obs/signal?streamer=${STREAMER}&token=${TOKEN}`).catch(() => {});
+                    }
+                    // Pause/resume
+                    if (typeof row.obs_paused === 'boolean') {
+                        isPaused = row.obs_paused;
+                        if (!isPaused && !isAnimating) poll();
+                    }
+                })
+                .subscribe();
+
+            // ── QUEUE POLL: only runs between animations (not on a fixed timer) ──
+            poll();
+        }
+
+        function applyBranding(streamer) {
+            const packFaceImg = document.querySelector('#pack-face img');
+            const tearCapImg  = document.querySelector('#tear-cap img');
+            if (streamer.pack_image_url) {
+                const cbUrl = streamer.pack_image_url + (streamer.pack_image_url.includes('?') ? '&' : '?') + 'cb=' + Date.now();
+                if (packFaceImg) packFaceImg.src = cbUrl;
+                if (tearCapImg)  tearCapImg.src  = cbUrl;
+            }
+            if (streamer.card_back_url) {
+                const cardBack = document.getElementById('card-back');
+                if (cardBack) {
+                    cardBack.style.backgroundImage = `url(${streamer.card_back_url})`;
+                    cardBack.style.backgroundSize = 'cover';
+                    cardBack.style.backgroundPosition = 'center';
+                    cardBack.innerHTML = '';
+                }
+            }
+            const backText = document.querySelector('.back-text');
+            if (backText && streamer.brand_name) backText.textContent = streamer.brand_name;
+        }
+
+        async function poll() {
+            if (isAnimating || isPaused) return;
+            try {
+                const res = await fetch(`${API_URL}/api/obs/next?streamer=${STREAMER}&token=${TOKEN}`);
+                if (res.status === 403) {
+                    document.body.style.cssText = 'background:rgba(0,0,0,.9)';
+                    document.body.innerHTML = '<p style="color:red;padding:24px;font-family:sans-serif">⛔ Invalid token. Please regenerate your overlay URL.</p>';
+                    return;
+                }
+                const data = await res.json();
+                if (data && data.cards) {
+                    await playReveal(data.cards);
+                    // After animation finishes, immediately check for the next card
+                    poll();
+                } else {
+                    // No card in queue — wait 2s then check again (much slower than 1s poll, saves requests)
+                    setTimeout(poll, 2000);
+                }
+            } catch (e) {
+                console.error('[OBS] Poll error:', e);
+                setTimeout(poll, 5000);
+            }
+        }
+
+        initOverlay();
+
+        // pack-scene is 560px tall, card is 350px tall centred → card top at 105px
+        // Tear hole starts at 10% = 56px from top
+        // We want card to START hidden inside pack (below tear line) and slide up through it.
+        //
+        // translateY offset so card top aligns with the tear hole edge (56px):
+        //   card centre normally at 280px, card top = 280 - 175 = 105px
+        //   to push card top down to 56px+350=406px start → translateY = 406-105 = +301px
+        //   then slide to translateY = -60px so card sticks mostly out above the pack
+
+        async function playReveal(card) {
+            isAnimating   = true;
+            skipRequested = false;
+            try {
+            const scene = document.getElementById('pack-scene');
+            const packFace = document.getElementById('pack-face');
+            const flipper = document.getElementById('card-flipper');
+            const cardImg = document.getElementById('card-img');
+            const animStyle = streamerConfig?.pack_animation_style || 'style1';
+
+            cardImg.removeAttribute('src');
+            // Card URL is applied after pack fade-in so art doesn't show through transparent pack PNG
+
+            // ── AUDIO ──
+            const audio = new Audio('/packopensound.wav');
+            audio.load();
+            if (PREVIEW_STYLE) audio.muted = true;
+
+            // ── CONSUME IMMEDIATELY ──
+            if (!PREVIEW_STYLE) {
+                fetch(`${API_URL}/api/obs/consume?streamer=${STREAMER}&token=${TOKEN}&id=${card.user_card_id}`, { method: 'POST' });
+            }
+
+            // ── RESET visual state ──
+            scene.style.opacity = '0';
+            scene.style.transition = 'none';
+            scene.classList.remove('ripping', 'shaking', 'brutalist-jitter');
+            flipper.classList.remove('cosmic-glow');
+            packFace.style.opacity = '1';
+            packFace.style.transform = 'translateY(210px)';
+            packFace.style.transition = '';
+
+            flipper.style.zIndex = '6';
+            /* opacity 0 until phase 4 — avoids card/back showing through transparent pack art */
+            setFlip(flipper, { opacity: 0, rotateY: 0, translateY: 300, scale: 1, transition: 'none' });
+            await wait(50);
+
+            // PHASE 1 — Pack fades in first (whole scene invisible until now)
+            scene.style.transition = 'opacity 0.5s ease';
+            scene.style.opacity = '1';
+            audio.play().catch(e => console.warn('Audio play failed:', e));
+            await skippableWait(700);
+
+            // Load card art while flipper is still invisible (shake/rip gives decode time)
+            await preloadCardImage(cardImg, card.image_url || '');
+
+            // PHASE 2 — Shake
+            scene.classList.add('shaking');
+            await skippableWait(950);
+            scene.classList.remove('shaking');
+            await skippableWait(200);
+
+            // PHASE 3 — Top tears off
+            scene.classList.add('ripping');
+            await skippableWait(800);
+
+            // PHASE 4 — Card reveal (flipper becomes visible here)
+            if (!skipRequested) {
+                if (animStyle === 'style2') { // COSMIC BURST
+                    setFlip(flipper, {
+                        opacity: 1, rotateY: 360, translateY: -120, scale: 1.2,
+                        transition: 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                    });
+                    await skippableWait(600);
+                    
+                    flipper.style.zIndex = '20';
+                    flipper.classList.add('cosmic-glow');
+                    setFlip(flipper, {
+                        opacity: 1, rotateY: 720, translateY: 150, scale: 1.5,
+                        transition: 'transform 1.0s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                    });
+                    await skippableWait(1000);
+
+                } else if (animStyle === 'style3') { // BRUTALIST
+                    scene.classList.add('brutalist-jitter');
+                    setFlip(flipper, {
+                        opacity: 1, rotateY: 0, translateY: -100, scale: 1,
+                        transition: 'transform 0.4s steps(4)'
+                    });
+                    await skippableWait(400);
+                    
+                    flipper.style.zIndex = '20';
+                    setFlip(flipper, {
+                        opacity: 1, rotateY: 180, translateY: 150, scale: 1.3,
+                        transition: 'transform 0.3s steps(3)'
+                    });
+                    await skippableWait(300);
+                    scene.classList.remove('brutalist-jitter');
+                    await skippableWait(400);
+
+                } else { // STYLE 1 / STANDARD
+                    setFlip(flipper, {
+                        opacity: 1, rotateY: 0, translateY: -100, scale: 1,
+                        transition: 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)'
+                    });
+                    await skippableWait(900);
+
+                    flipper.style.zIndex = '20';
+                    setFlip(flipper, {
+                        opacity: 1, rotateY: 0, translateY: 150, scale: 1.3,
+                        transition: 'transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                    });
+                    await skippableWait(800);
+
+                    setFlip(flipper, {
+                        opacity: 1, rotateY: 180, translateY: 150, scale: 1.3,
+                        transition: 'transform 1.1s cubic-bezier(0.4, 0, 0.2, 1)'
+                    });
+                }
+
+                // PHASE 5 — Pack drops away
+                packFace.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 1, 1), opacity 0.4s ease';
+                packFace.style.transform = 'translateY(900px)';
+                packFace.style.opacity = '0';
+                await skippableWait(750);
+
+                // PHASE 6 — Hold on revealed card
+                await skippableWait(5000);
+            }
+
+            // PHASE 7 — Fade whole scene (always runs, even on skip)
+            scene.style.transition = 'opacity 0.3s ease';
+            scene.style.opacity = '0';
+            await wait(350);
+
+            scene.classList.remove('ripping', 'brutalist-jitter');
+            flipper.classList.remove('cosmic-glow');
+            } finally {
+                skipRequested = false;
+                isAnimating   = false;
+            }
+        }
+
+        function setFlip(el, { opacity, rotateY, translateY, scale, transition }) {
+            el.style.transition = transition;
+            el.style.opacity = opacity;
+            el.style.transform = `rotateY(${rotateY}deg) translateY(${translateY}px) scale(${scale})`;
+        }
+
+        /** Set card image src after pack is visible; wait so phase 4 doesn't flash a loading frame */
+        function preloadCardImage(img, url) {
+            if (!url || !String(url).trim()) {
+                img.removeAttribute('src');
+                return Promise.resolve();
+            }
+            img.src = url;
+            return new Promise((resolve) => {
+                const finish = () => {
+                    if (img.decode && typeof img.decode === 'function') {
+                        img.decode().then(resolve).catch(resolve);
+                    } else resolve();
+                };
+                if (img.complete && img.naturalWidth > 0) finish();
+                else {
+                    img.onload = () => finish();
+                    img.onerror = () => resolve();
+                }
+            });
+        }
+
+        function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        // Like wait(), but resolves immediately if skipRequested is set
+        function skippableWait(ms) {
+            return new Promise(resolve => {
+                const end = Date.now() + ms;
+                const check = () => {
+                    if (skipRequested || Date.now() >= end) resolve();
+                    else setTimeout(check, 50);
+                };
+                setTimeout(check, 50);
+            });
+        }
+    </script>
+</body>
+
+</html>

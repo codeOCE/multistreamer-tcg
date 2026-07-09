@@ -1,0 +1,940 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEST MODE | Streamer Onboarding</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+
+    <link rel="stylesheet" href="/tailwind-built.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/onboarding.css">
+    <style>
+        .test-banner {
+            background: repeating-linear-gradient(45deg, #facc15, #facc15 10px, #000 10px, #000 20px);
+            color: #000;
+            font-weight: 900;
+            text-align: center;
+            padding: 4px;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .debug-panel {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased min-h-screen flex flex-col">
+
+    <div class="saas-bg-glow"></div>
+    <div class="test-banner">Playground — UI flow only; nothing here is saved to the database</div>
+
+    <!-- Header -->
+    <header class="w-full border-b border-white/5 bg-void-bg/60 backdrop-blur-2xl">
+        <div class="max-w-4xl mx-auto px-5 md:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-11 h-11 bg-void-accent/10 flex items-center justify-center rounded-2xl overflow-hidden p-1.5">
+                    <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="40" height="40">
+                </div>
+                <span class="text-lg font-display font-black uppercase tracking-tight text-void-text leading-none">Castle<span class="text-void-accent">TCG</span></span>
+                <span id="header-role" class="text-[10px] font-black uppercase tracking-[0.2em] text-void-muted ml-2 hidden sm:inline">Creator</span>
+            </div>
+            <div class="flex items-center gap-6">
+                <button onclick="resetTestState()"
+                    class="text-[10px] uppercase font-black text-yellow-400 hover:text-yellow-300 transition-colors flex items-center gap-2">
+                    <i class="bx bx-undo"></i> Reset Flow
+                </button>
+                <a href="/"
+                    class="text-void-muted hover:text-void-text transition-colors text-[10px] uppercase tracking-widest font-black flex items-center gap-2">
+                    <i class="bx bx-left-arrow-alt text-xs"></i> Exit
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex items-center justify-center px-6 py-8">
+        <div class="max-w-4xl w-full onboarding-container">
+
+            <!-- Progress Bar -->
+            <div id="progress-stepper" class="mb-6 flex items-center justify-between px-4 hidden">
+                <div class="flex flex-col items-center gap-2 group">
+                    <div id="dot-1" class="step-indicator active">1</div>
+                    <span
+                        class="text-[10px] uppercase tracking-tighter text-void-accent font-bold">Initialization</span>
+                </div>
+                <div id="line-1" class="progress-line"></div>
+                <div class="flex flex-col items-center gap-2">
+                    <div id="dot-2" class="step-indicator">2</div>
+                    <span class="text-[10px] uppercase tracking-tighter text-void-muted">Configuration</span>
+                </div>
+                <div id="line-2" class="progress-line"></div>
+                <div class="flex flex-col items-center gap-2">
+                    <div id="dot-3" class="step-indicator">3</div>
+                    <span class="text-[10px] uppercase tracking-tighter text-void-muted">Deployment</span>
+                </div>
+            </div>
+
+            <!-- Role Picker (If not determined) -->
+            <div id="role-picker" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl text-center flex flex-col gap-4">
+                <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Choose your path.</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                    <button onclick="selectRole('creator')"
+                        class="p-5 rounded-xl bg-white/5 border border-white/10 hover:border-void-accent/50 transition-all group text-left">
+                        <div
+                            class="w-12 h-12 rounded-xl bg-void-accent/20 flex items-center justify-center text-void-accent text-2xl mb-4">
+                            <i class="bx bxs-magic-wand"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">I'm a Creator</h3>
+                        <p class="text-sm text-void-muted leading-relaxed">Build your collection, design cards, and
+                            engage your community.</p>
+                    </button>
+                    <button onclick="selectRole('collector')"
+                        class="p-5 rounded-xl bg-white/5 border border-white/10 hover:border-void-accent/50 transition-all group text-left">
+                        <div
+                            class="w-12 h-12 rounded-xl bg-void-accent/20 flex items-center justify-center text-void-accent text-2xl mb-4">
+                            <i class="bx bxs-package"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">I'm a Collector</h3>
+                        <p class="text-sm text-void-muted leading-relaxed">Follow your favorite streamers, collect rare
+                            cards, and battle others.</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dynamic Steps Container -->
+            <div id="steps-container" class="relative">
+
+                <!-- CREATOR STEPS -->
+                <div id="creator-steps" class="hidden">
+
+                    <div id="c-step-username" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Claim Your Castle URL</h2>
+                            <p class="text-void-muted text-sm leading-snug">Your Kick username <strong id="slug-kick-name" class="text-void-text"></strong> is already taken on Castle. Choose a unique URL for your page — it must include your Kick username so viewers can find you.</p>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-xs text-void-muted font-semibold uppercase tracking-wide">Your Castle URL</label>
+                                <div class="flex items-center gap-2 bg-void-surface border border-void-border rounded-xl px-3 py-2" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);">
+                                    <span class="text-void-muted text-sm shrink-0">castle.gg/</span>
+                                    <input id="slug-input" type="text" maxlength="30" autocomplete="off" spellcheck="false"
+                                        class="flex-1 bg-transparent text-void-text text-sm outline-none min-w-0"
+                                        placeholder="yourname_kick" />
+                                </div>
+                                <p id="slug-feedback" class="text-xs mt-1 hidden"></p>
+                            </div>
+                            <button id="slug-claim-btn" onclick="claimSlug()" class="btn-void py-3 px-8 rounded-xl text-sm w-full" disabled>Claim URL</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 1: Intro / How it Works -->
+                    <div id="c-step-1" class="step-card active animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">How Castle TCG Works</h2>
+                            <p class="text-void-muted text-sm leading-snug shrink-0">Castle TCG lets your community Collect, Trade &amp; Battle with your unique digital trading cards. You handle the cards, we'll handle the rest!</p>
+                            <ul class="space-y-3">
+                                <li class="flex items-start gap-3">
+                                    <div
+                                        class="mt-1 w-5 h-5 rounded-full bg-void-accent/20 flex items-center justify-center text-void-accent flex-shrink-0">
+                                        <i class="bx bxs-check text-[10px]"></i>
+                                    </div>
+                                    <p class="text-sm text-void-muted">Viewers can earn cards through Subs, Bits, Channel Points &amp; more.</p>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <div
+                                        class="mt-1 w-5 h-5 rounded-full bg-void-accent/20 flex items-center justify-center text-void-accent flex-shrink-0">
+                                        <i class="bx bxs-check text-[10px]"></i>
+                                    </div>
+                                    <p class="text-sm text-void-muted">Packs can be opened and shown live on stream with our OBS overlays, or by the user on their own Castle account.</p>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <div
+                                        class="mt-1 w-5 h-5 rounded-full bg-void-accent/20 flex items-center justify-center text-void-accent flex-shrink-0">
+                                        <i class="bx bxs-check text-[10px]"></i>
+                                    </div>
+                                    <p class="text-sm text-void-muted">Your community can collect, trade, battle and flex, all while supporting you.</p>
+                                </li>
+                            </ul>
+                            <div class="pt-3 mt-1 border-t border-white/5 flex flex-col gap-3">
+                                <div class="flex flex-col gap-1">
+                                    <label class="text-xs text-void-muted font-semibold uppercase tracking-wide">Referral Code <span class="normal-case font-normal opacity-60">(optional)</span></label>
+                                    <div class="flex gap-2">
+                                        <input id="referral-code-input" type="text" maxlength="30" autocomplete="off" spellcheck="false"
+                                            placeholder="Enter a creator's Castle code"
+                                            class="flex-1 h-10 px-3 rounded-xl input-void text-sm" />
+                                        <div id="referral-status" class="hidden w-8 h-10 flex items-center justify-center text-sm shrink-0"></div>
+                                    </div>
+                                    <p id="referral-feedback" class="text-xs hidden"></p>
+                                </div>
+                                <div class="flex justify-end">
+                                    <button onclick="saveReferralAndContinue()" class="btn-void py-3 px-8 rounded-xl text-sm group">
+                                        Let's Go <i class="bx bx-chevron-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: TOS -->
+                    <div id="c-step-2" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Terms of Service</h2>
+                            <div id="tos-scroll"
+                                class="bg-white/5 border border-white/10 rounded-xl p-4 text-sm text-void-muted leading-snug custom-scrollbar max-h-[min(12rem,32dvh)] overflow-y-auto">
+                                <p class="mb-4 font-bold text-void-text">By signing in with Twitch and using Castle TCG
+                                    you agree to:</p>
+                                <ul class="space-y-2 mb-6 ml-4 list-disc marker:text-void-accent">
+                                    <li>Follow platform rules</li>
+                                    <li>Not exploit bugs or cheats</li>
+                                    <li>Not use bots or automated tools</li>
+                                    <li>Not sell cards for real money outside the platform</li>
+                                    <li>Treat other users respectfully</li>
+                                </ul>
+                                <p class="mb-4">All cards and items in Castle TCG are virtual digital items with no
+                                    real-world value.</p>
+                                <p class="mb-4">Your Twitch account will be used to create and manage your profile.</p>
+                                <p class="mb-4">You must be 13 years or older to use the platform.</p>
+                                <p class="text-[10px] opacity-60">By continuing, you agree to our <a href="/tos"
+                                        target="_blank" class="text-void-accent hover:underline">Full Terms of
+                                        Service</a> and <a href="/privacy" target="_blank"
+                                        class="text-void-accent hover:underline">Privacy Policy</a>.</p>
+                            </div>
+                            <p id="tos-scroll-hint" class="tos-scroll-hint">Scroll to read before agreeing</p>
+                            <label id="tos-label" class="flex items-center gap-3 cursor-pointer group tos-label-locked">
+                                <div class="relative">
+                                    <input type="checkbox" id="tos-check" class="sr-only" disabled>
+                                    <div class="checkbox-visual">
+                                        <i class="bx bxs-check text-xs"></i>
+                                    </div>
+                                </div>
+                                <span class="text-sm text-void-text font-medium">I have read and agree to the Terms of
+                                    Service</span>
+                            </label>
+                            <div id="tos-error" class="error-text hidden mb-0 -mt-2 ml-9">Please accept the Terms of
+                                Service to
+                                continue.</div>
+                            <div class="flex justify-between items-center gap-3 pt-3 mt-1 border-t border-white/5">
+                                <button onclick="prevStep(1)"
+                                    class="text-void-muted hover:text-void-text uppercase text-xs font-bold tracking-widest">Back</button>
+                                <button onclick="saveTOS()"
+                                    class="btn-void py-3 px-8 rounded-xl text-sm group">Continue</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Connect Platforms -->
+                    <div id="c-step-3" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Connect Platforms</h2>
+                            <p class="text-void-muted text-sm leading-snug shrink-0">Link your accounts to enable automated rewards and sync.</p>
+                            <div class="space-y-3">
+                                <div
+                                    class="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/5">
+                                    <div class="flex items-center gap-4">
+                                        <div
+                                            class="w-10 h-10 rounded-lg bg-[#9146FF]/20 flex items-center justify-center text-[#9146FF] text-xl">
+                                            <i class="bx bxl-twitch"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-void-text">Twitch</h4>
+                                            <p id="twitch-status-text" class="text-xs text-void-muted">Connected</p>
+                                        </div>
+                                    </div>
+                                    <button id="twitch-connect-btn" type="button" disabled
+                                        class="px-4 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-void-text text-xs font-bold uppercase tracking-widest">Active</button>
+                                </div>
+                                <div
+                                    class="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/5 opacity-50">
+                                    <div class="flex items-center gap-4">
+                                        <div
+                                            class="w-10 h-10 rounded-lg bg-[#00e701]/20 flex items-center justify-center text-[#00e701] text-xl">
+                                            <i class="bx bxs-k"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-void-text">Kick</h4>
+                                            <p class="text-xs text-void-muted">Coming Soon</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/5 opacity-50">
+                                    <div class="flex items-center gap-4">
+                                        <div
+                                            class="w-10 h-10 rounded-lg bg-[#FF0000]/20 flex items-center justify-center text-[#FF0000] text-xl">
+                                            <i class="bx bxl-youtube"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-void-text">YouTube</h4>
+                                            <p class="text-xs text-void-muted">Coming Soon</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center gap-3 pt-3 mt-1 border-t border-white/5">
+                                <button onclick="prevStep(2)"
+                                    class="text-void-muted hover:text-void-text uppercase text-xs font-bold tracking-widest">Back</button>
+                                <button onclick="nextStep(4)"
+                                    class="btn-void py-3 px-8 rounded-xl text-sm group">Continue</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Branding -->
+                    <div id="c-step-4" class="hidden animate-step">
+                        <div class="w-full space-y-4">
+                                <div
+                                    class="step-card p-5 md:p-6 rounded-3xl border border-white/5 bg-void-bg/50 backdrop-blur-xl">
+                                    <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0 mb-2">
+                                        Branding & Aesthetics</h2>
+                                    <p class="text-void-muted mb-8 text-sm">Don't worry, you can always change these
+                                        settings later in your creator dashboard.</p>
+
+                                    <div class="space-y-6">
+                                        <div class="flex flex-row flex-wrap items-stretch gap-4 min-w-0">
+                                        <div id="brand-name-group" class="min-w-0 flex-1 basis-[min(100%,18rem)] sm:basis-auto flex flex-col">
+                                            <label
+                                                class="text-[10px] uppercase tracking-[0.2em] font-black text-void-muted mb-2 block">Collection
+                                                Identity <span class="text-void-accent">*</span></label>
+                                            <input type="text" id="brand-name"
+                                                class="w-full h-14 min-h-14 box-border px-4 rounded-2xl input-void text-base leading-none"
+                                                placeholder="e.g. CodeOCE's Collection">
+                                        </div>
+
+                                        <div class="flex flex-col shrink-0 min-w-0 sm:min-w-[14rem]">
+                                            <label
+                                                class="text-[10px] uppercase tracking-[0.2em] font-black text-void-muted block mb-2">Brand
+                                                Color</label>
+                                            <div
+                                                class="flex h-14 min-h-14 box-border items-center gap-3 px-3 rounded-2xl bg-white/[0.03] border border-white/5 group hover:border-white/10 transition-all relative">
+                                                <div class="relative flex-shrink-0 group/swatch">
+                                                    <div id="color-preview-swatch"
+                                                        class="w-10 h-10 rounded-lg border-2 border-white/20 shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95 ring-2 ring-black/50"
+                                                        style="background-color: #3faaff; box-shadow: 0 0 20px rgba(63, 170, 255, 0.25);">
+                                                    </div>
+                                                    <div
+                                                        class="absolute -bottom-2 -right-2 w-8 h-8 bg-void-bg border border-white/20 rounded-xl flex items-center justify-center text-xs text-void-accent shadow-lg pointer-events-none group-hover/swatch:scale-110 transition-transform">
+                                                        <i class="bx bxs-palette"></i>
+                                                    </div>
+                                                    <!-- Custom Picker Popover -->
+                                                    <div id="void-picker-popover"
+                                                        class="inner-void-picker absolute left-0 top-full mt-4 z-50 bg-[#0a0a0c] border border-white/10 rounded-3xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] hidden w-[280px] space-y-4 backdrop-blur-2xl transition-all duration-200 opacity-0 scale-95">
+                                                        <div id="sat-val-container"
+                                                            class="w-full aspect-square rounded-xl relative cursor-crosshair overflow-hidden border border-white/5"
+                                                            style="background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent), #3faaff;">
+                                                            <div id="sat-val-pointer"
+                                                                class="w-4 h-4 rounded-full border-2 border-white shadow-lg absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                                                                style="left: 100%; top: 0%;"></div>
+                                                        </div>
+                                                        <div id="hue-container"
+                                                            class="w-full h-4 rounded-full relative cursor-pointer border border-white/5"
+                                                            style="background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);">
+                                                            <div id="hue-pointer"
+                                                                class="w-2 h-full bg-white rounded-full shadow-md absolute -translate-x-1/2 pointer-events-none"
+                                                                style="left: 50%;"></div>
+                                                        </div>
+                                                        <div class="flex items-center justify-between gap-4 pt-2">
+                                                            <div class="flex-1 flex flex-col gap-1">
+                                                                <span
+                                                                    class="text-[8px] uppercase tracking-widest font-black text-void-muted/50">Preview</span>
+                                                                <div id="picker-mini-swatch"
+                                                                    class="h-8 rounded-lg border border-white/10"
+                                                                    style="background: #3faaff;"></div>
+                                                            </div>
+                                                            <button id="close-picker"
+                                                                class="px-6 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] uppercase tracking-widest font-black text-white transition-colors">Apply</button>
+                                                        </div>
+                                                    </div>
+                                                    <input type="color" id="binder-color" value="#3faaff"
+                                                        class="hidden">
+                                                </div>
+                                                <div class="flex flex-1 min-w-0 items-center gap-2 border-l border-white/10 pl-3">
+                                                    <span class="sr-only">Hex code</span>
+                                                    <span class="text-lg font-mono text-void-muted/30 shrink-0">#</span>
+                                                    <input type="text" id="binder-color-hex" value="00F2FE" aria-label="Color hex code"
+                                                        class="bg-transparent border-none p-0 h-full text-lg font-mono font-bold text-white focus:outline-none focus:ring-0 uppercase placeholder-white/10 w-full min-w-0 leading-none tracking-wider"
+                                                        placeholder="000000">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        </div>
+                                            <p class="text-[10px] text-void-muted/60 italic px-2">Tap the color box to
+                                                open the palette.</p>
+
+                                <div id="branding-preview-container" class="hidden w-full min-w-0 flex flex-col shrink-0 min-h-0">
+                                    <div class="text-[10px] uppercase tracking-[0.2em] font-black text-void-muted mb-1.5 shrink-0">Live Preview</div>
+                                    <!-- Browser chrome wrapper -->
+                                    <div class="w-full bg-[#080a0e] border border-white/10 rounded-xl overflow-hidden shadow-2xl shrink-0">
+                                        <!-- Address bar -->
+                                        <div class="flex items-center gap-2 px-3 py-2 border-b border-white/[0.05]">
+                                            <div class="flex gap-1.5 shrink-0">
+                                                <div class="w-2.5 h-2.5 rounded-full bg-white/[0.08]"></div>
+                                                <div class="w-2.5 h-2.5 rounded-full bg-white/[0.08]"></div>
+                                                <div class="w-2.5 h-2.5 rounded-full bg-white/[0.08]"></div>
+                                            </div>
+                                            <div class="flex-1 mx-2 bg-white/[0.04] rounded-md px-2 py-1 text-[7px] text-white/25 truncate font-mono">tcg.creatorcastle.gg/<span id="preview-tb-url-slug">my-collection</span></div>
+                                        </div>
+                                        <!-- Scaled site viewport -->
+                                        <div class="preview-tb-viewport">
+                                            <div class="preview-tb-site">
+                                                <!-- Nav -->
+                                                <div class="preview-tb-nav">
+                                                    <div class="preview-tb-nav-mark" id="preview-tb-nav-mark"></div>
+                                                    <div class="preview-tb-nav-creator" id="preview-tb-creator-name">MY COLLECTION</div>
+                                                    <div class="preview-tb-nav-links">
+                                                        <span class="preview-tb-nav-link preview-tb-nav-link--active" id="preview-tb-nav-link-active">Binder</span>
+                                                        <span class="preview-tb-nav-link">Battle</span>
+                                                        <span class="preview-tb-nav-link">Profile</span>
+                                                    </div>
+                                                    <div class="preview-tb-nav-right">
+                                                        <div class="preview-tb-nav-avatar" id="preview-tb-nav-avatar"></div>
+                                                    </div>
+                                                </div>
+                                                <!-- 3-col body -->
+                                                <div class="preview-tb-cols">
+                                                    <!-- Left sidebar -->
+                                                    <div class="preview-tb-left">
+                                                        <div class="preview-tb-sec-title">Binders</div>
+                                                        <div class="preview-tb-tab preview-tb-tab--active" id="preview-tb-active-tab">
+                                                            <div class="preview-tb-bar" id="preview-tb-bar"></div>
+                                                            <div class="preview-tb-dot" id="preview-tb-dot"></div>
+                                                            <span class="preview-tb-name" id="preview-tb-binder-name">My Binder</span>
+                                                            <span class="preview-tb-count">18</span>
+                                                        </div>
+                                                        <div class="preview-tb-tab">
+                                                            <div class="preview-tb-dot preview-tb-dot--dim"></div>
+                                                            <span class="preview-tb-name preview-tb-name--dim">Rare Cards</span>
+                                                            <span class="preview-tb-count">6</span>
+                                                        </div>
+                                                        <div class="preview-tb-tab">
+                                                            <div class="preview-tb-dot preview-tb-dot--dim"></div>
+                                                            <span class="preview-tb-name preview-tb-name--dim">Foils</span>
+                                                            <span class="preview-tb-count">3</span>
+                                                        </div>
+                                                        <div class="preview-tb-divider"></div>
+                                                        <div class="preview-tb-new-binder-btn" id="preview-tb-new-binder-btn">+ New Binder</div>
+                                                    </div>
+                                                    <!-- Center book area -->
+                                                    <div class="preview-tb-center">
+                                                        <div class="preview-tb-center-hdr">
+                                                            <div class="preview-tb-center-title">My Binder</div>
+                                                            <div class="preview-tb-arrows">
+                                                                <div class="preview-tb-arrow">&#8249;</div>
+                                                                <div class="preview-tb-arrow">&#8250;</div>
+                                                            </div>
+                                                            <div class="preview-tb-share-btn" id="preview-tb-share-btn">Share</div>
+                                                        </div>
+                                                        <div class="preview-tb-book-wrap">
+                                                            <div class="preview-tb-book">
+                                                                <div class="preview-tb-page preview-tb-page--left">
+                                                                    <div class="preview-tb-grid">
+                                                                        <div class="preview-tb-slot preview-tb-slot--filled"></div>
+                                                                        <div class="preview-tb-slot preview-tb-slot--filled"></div>
+                                                                        <div class="preview-tb-slot preview-tb-slot--rare" id="preview-tb-slot-rare"></div>
+                                                                        <div class="preview-tb-slot preview-tb-slot--filled"></div>
+                                                                        <div class="preview-tb-slot preview-tb-slot--filled"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot preview-tb-slot--filled"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                    </div>
+                                                                    <div class="preview-tb-pgnum preview-tb-pgnum--right">1</div>
+                                                                </div>
+                                                                <div class="preview-tb-spine" id="preview-tb-spine"></div>
+                                                                <div class="preview-tb-page preview-tb-page--right">
+                                                                    <div class="preview-tb-grid">
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot preview-tb-slot--filled"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot preview-tb-slot--filled"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                        <div class="preview-tb-slot"></div>
+                                                                    </div>
+                                                                    <div class="preview-tb-pgnum preview-tb-pgnum--left">2</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <!-- Right panel -->
+                                                    <div class="preview-tb-right">
+                                                        <div class="preview-tb-profile-card">
+                                                            <div class="preview-tb-profile-avatar" id="preview-tb-profile-avatar"></div>
+                                                            <div class="preview-tb-profile-name" id="preview-tb-profile-name">Creator</div>
+                                                            <div class="preview-tb-profile-sub">Castle TCG</div>
+                                                        </div>
+                                                        <div class="preview-tb-stats">
+                                                            <div class="preview-tb-stat">
+                                                                <span class="preview-tb-stat-val">27</span>
+                                                                <span class="preview-tb-stat-lbl">Cards</span>
+                                                            </div>
+                                                            <div class="preview-tb-stat">
+                                                                <span class="preview-tb-stat-val">6</span>
+                                                                <span class="preview-tb-stat-lbl">Rares</span>
+                                                            </div>
+                                                            <div class="preview-tb-stat">
+                                                                <span class="preview-tb-stat-val">3</span>
+                                                                <span class="preview-tb-stat-lbl">Foils</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                    <div class="flex justify-between items-center gap-3 pt-3 mt-1 border-t border-white/5 w-full">
+                                        <button onclick="prevStep(3)"
+                                            class="text-void-muted hover:text-void-text uppercase text-xs font-bold tracking-widest">Back</button>
+                                        <button onclick="saveBranding()"
+                                            class="btn-void py-3 px-8 rounded-xl text-sm group">
+                                            Save & Continue <i
+                                                class="bx bx-chevron-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 6: Trading -->
+                    <div id="c-step-6" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Community Trading</h2>
+                            <p class="text-void-muted mb-8 leading-relaxed">Foster a vibrant economy and healthy demand for your cards by allowing viewers to trade. Trading encourages community interaction and helps collectors complete sets, fill binders and build strong battle decks.</p>
+
+                            <div class="bg-void-accent/5 border border-void-accent/20 rounded-2xl p-6 mb-8">
+                                <h4 class="font-bold text-void-accent mb-2 flex items-center gap-2">
+                                    <i class="bx bxs-hand-right"></i> Why it's worth it
+                                </h4>
+                                <p class="text-sm text-void-muted leading-relaxed">Trading keeps the 'TCG' spirit alive. It creates bonds between viewers, adds value to your cards and lots of hype to big pulls.</p>
+                            </div>
+
+                            <label class="checkbox-custom">
+                                <div class="flex items-center gap-4">
+                                    <div
+                                        class="w-12 h-12 rounded-xl bg-void-accent/20 flex items-center justify-center text-void-accent text-xl">
+                                        <i class="bx bx-refresh"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold">Enable Trading</h4>
+                                        <p class="text-xs text-void-muted">Trading is limited to your community only. Cards from different creators cannot be traded.</p>
+                                    </div>
+                                </div>
+                                <input type="checkbox" id="toggle-trading" class="sr-only peer" checked>
+                                <div class="checkbox-visual">
+                                    <i class="bx bxs-check text-xs"></i>
+                                </div>
+                            </label>
+
+                            <div class="flex justify-between items-center gap-3 pt-3 mt-1 border-t border-white/5">
+                                <button onclick="prevStep(4)"
+                                    class="text-void-muted hover:text-void-text uppercase text-xs font-bold tracking-widest">Back</button>
+                                <button onclick="nextStep(7)"
+                                    class="btn-void py-3 px-8 rounded-xl text-sm group">Continue</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 7: Collection Methods -->
+                    <div id="c-step-7" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">How will your viewers earn cards?</h2>
+                            <p class="text-void-muted text-sm leading-snug shrink-0">This can be changed at any time in your Settings.</p>
+
+                            <div class="space-y-5">
+                                <div id="collection-twitch-section">
+                                    <div class="flex items-center gap-2 mb-2 px-0.5">
+                                        <i class="bx bxl-twitch text-[#9146FF] text-base" aria-hidden="true"></i>
+                                        <span class="text-[10px] font-black uppercase tracking-widest text-void-muted">Twitch</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                        <label class="checkbox-custom">
+                                            <div class="flex items-center gap-4">
+                                                <div class="text-2xl">🎟️</div>
+                                                <div>
+                                                    <h4 class="font-bold">Subscriptions</h4>
+                                                    <p class="text-[10px] text-void-muted">New sub / Renewals</p>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" name="method" value="subs" checked class="sr-only">
+                                            <div class="checkbox-visual">
+                                                <i class="bx bxs-check text-xs"></i>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-custom">
+                                            <div class="flex items-center gap-4">
+                                                <i class="bx bxs-diamond text-3xl shrink-0" style="color: var(--source-twitch-bits)" aria-hidden="true"></i>
+                                                <div>
+                                                    <h4 class="font-bold">Bits / Cheers</h4>
+                                                    <p class="text-[10px] text-void-muted">Configurable threshold</p>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" name="method" value="bits" checked class="sr-only">
+                                            <div class="checkbox-visual">
+                                                <i class="bx bxs-check text-xs"></i>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-custom md:col-span-2">
+                                            <div class="flex items-center gap-4">
+                                                <div class="text-2xl">🪙</div>
+                                                <div>
+                                                    <h4 class="font-bold">Channel Points</h4>
+                                                    <p class="text-[10px] text-void-muted">Twitch redemptions</p>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" name="method" value="channel_points" checked class="sr-only">
+                                            <div class="checkbox-visual">
+                                                <i class="bx bxs-check text-xs"></i>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="collection-kick-section" class="border-t border-white/5 pt-5">
+                                    <div class="flex items-center gap-2 mb-2 px-0.5">
+                                        <img src="/kick-mark.svg" alt="" width="16" height="16" class="w-4 h-4 shrink-0 opacity-90" />
+                                        <span class="text-[10px] font-black uppercase tracking-widest text-void-muted">Kick</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                                        <label class="checkbox-custom">
+                                            <div class="flex items-center gap-4">
+                                                <div class="text-2xl">🎟️</div>
+                                                <div>
+                                                    <h4 class="font-bold">Subscriptions</h4>
+                                                    <p class="text-[10px] text-void-muted">New / renewal</p>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" name="method" value="kick_subscriptions" checked class="sr-only">
+                                            <div class="checkbox-visual">
+                                                <i class="bx bxs-check text-xs"></i>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-custom">
+                                            <div class="flex items-center gap-4">
+                                                <div class="text-2xl">🎁</div>
+                                                <div>
+                                                    <h4 class="font-bold">Gifts</h4>
+                                                    <p class="text-[10px] text-void-muted">Sub gifts &amp; kicks</p>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" name="method" value="kick_gifts" checked class="sr-only">
+                                            <div class="checkbox-visual">
+                                                <i class="bx bxs-check text-xs"></i>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-custom">
+                                            <div class="flex items-center gap-4">
+                                                <div class="text-2xl">⭐</div>
+                                                <div>
+                                                    <h4 class="font-bold">Rewards</h4>
+                                                    <p class="text-[10px] text-void-muted">Channel rewards</p>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" name="method" value="kick_rewards" checked class="sr-only">
+                                            <div class="checkbox-visual">
+                                                <i class="bx bxs-check text-xs"></i>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="border-t border-white/5 pt-5">
+                                    <div class="flex items-center gap-2 mb-2 px-0.5">
+                                        <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" width="16" height="16" class="brand-castle-mark w-4 h-4 shrink-0 object-contain" style="filter: drop-shadow(0 0 5px rgba(0, 242, 254, 0.4))" />
+                                        <span class="text-[10px] font-black uppercase tracking-widest" style="color: var(--source-castle-site)">Website</span>
+                                    </div>
+                                    <label class="checkbox-custom">
+                                        <div class="flex items-center gap-4">
+                                            <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 p-1.5 border border-[rgba(0,242,254,0.25)]" style="background: rgba(0, 242, 254, 0.08)">
+                                                <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full object-contain" width="24" height="24" />
+                                            </div>
+                                            <div>
+                                                <h4 class="font-bold">Website &amp; checkout</h4>
+                                                <p class="text-[10px] text-void-muted">Direct buy / events</p>
+                                            </div>
+                                        </div>
+                                        <input type="checkbox" name="method" value="website" checked class="sr-only">
+                                        <div class="checkbox-visual">
+                                            <i class="bx bxs-check text-xs"></i>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center gap-3 pt-3 mt-1 border-t border-white/5">
+                                <button onclick="prevStep(6)"
+                                    class="text-void-muted hover:text-void-text uppercase text-xs font-bold tracking-widest">Back</button>
+                                <button onclick="saveCollectionMethods()"
+                                    class="btn-void py-3 px-8 rounded-xl text-sm group">Continue</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 8: OBS Pack Opening -->
+                    <div id="c-step-8" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Pack Opening Overlay</h2>
+                            <p class="text-void-muted text-sm leading-snug shrink-0">Choose how viewers see their new cards on stream.</p>
+
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                                <div class="space-y-4">
+                                    <div class="option-card selected" onclick="selectAnimation('style1')">
+                                        <h4 class="font-bold mb-1">Standard Reveal</h4>
+                                        <p class="text-xs text-void-muted">Clean, modern card flip animation.</p>
+                                    </div>
+                                    <div class="option-card" onclick="selectAnimation('style2')">
+                                        <h4 class="font-bold mb-1">Cosmic Burst</h4>
+                                        <p class="text-xs text-void-muted">Vibrant effects and particles.</p>
+                                    </div>
+                                    <div class="option-card" onclick="selectAnimation('style3')">
+                                        <h4 class="font-bold mb-1">Brutalist</h4>
+                                        <p class="text-xs text-void-muted">Sharp, data-dense glitch style.</p>
+                                    </div>
+                                    <div class="option-card" onclick="selectAnimation('none')">
+                                        <h4 class="font-bold mb-1">Bot Reveal Only</h4>
+                                        <p class="text-xs text-void-muted">No visual on stream, only chat reveal.</p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col gap-4">
+                                    <div class="preview-display preview-display--obs">
+                                        <div id="pack-preview" class="preview-content pack-preview-obs-root relative">
+                                            <div id="pack-preview-placeholder"
+                                                class="hidden absolute inset-0 z-10 flex items-center justify-center text-void-muted opacity-70 text-center px-4 text-[10px] uppercase tracking-widest leading-relaxed">
+                                                No overlay preview. Pack opens are announced in chat only.
+                                            </div>
+                                            <div id="pack-preview-frame-wrap" class="pack-overlay-preview-viewport">
+                                                <iframe id="pack-overlay-preview-frame" title="Pack opening overlay preview"
+                                                    width="400" height="560"
+                                                    class="pack-overlay-preview-frame"
+                                                    sandbox="allow-scripts allow-same-origin"></iframe>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label
+                                            class="text-[10px] uppercase tracking-widest font-black text-void-muted block">Overlay
+                                            URL</label>
+                                        <div class="flex gap-2">
+                                            <input type="text" id="obs-pack-url" readonly value="https://..."
+                                                class="flex-grow h-11 min-h-11 box-border px-3 rounded-xl input-void text-xs font-mono">
+                                            <button onclick="copyToClipboard('obs-pack-url')"
+                                                type="button"
+                                                class="h-11 min-h-11 w-11 shrink-0 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center"><i
+                                                    class="bx bxs-copy text-sm"></i></button>
+                                        </div>
+                                        <p class="text-[11px] text-void-muted/80 leading-snug mt-2">You can copy this overlay URL anytime from your streamer dashboard settings if you need it later.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-between items-center gap-3 pt-3 mt-1 border-t border-white/5">
+                                <button onclick="prevStep(7)"
+                                    class="text-void-muted hover:text-void-text uppercase text-xs font-bold tracking-widest">Back</button>
+                                <button onclick="saveOBSStyle()"
+                                    class="btn-void py-3 px-8 rounded-xl text-sm group">Continue</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 10: Finalize Creator -->
+                    <div id="c-step-10" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl text-center">
+                        <div class="w-full flex flex-col gap-4 items-center text-center">
+                            <div
+                                class="w-16 h-16 rounded-full bg-void-accent/20 flex items-center justify-center text-void-accent text-3xl mx-auto animate-pulse shadow-[0_0_40px_rgba(63,170,255,0.25)]">
+                                <i class="bx bxs-rocket"></i>
+                            </div>
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">You're Ready to Launch!</h2>
+                            <p class="text-void-muted text-sm leading-snug max-w-md">Your collection is initialized and overlays
+                                are set. Visit the dashboard after activation to create your first card set.</p>
+
+                            <!-- Creator access (one-time; free for now) -->
+                            <div class="w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.02] p-4 flex flex-col gap-2 text-center">
+                                <div class="text-[10px] uppercase tracking-widest font-black text-void-muted">Creator Access</div>
+                                <div class="text-sm text-void-text leading-snug">Card Studio, sets &amp; custom card publishing.</div>
+                                <div class="flex items-baseline justify-center gap-2 my-1">
+                                    <span class="text-2xl font-display font-black text-void-accent">$0</span>
+                                    <span class="text-[11px] uppercase tracking-widest text-void-muted">Free for now</span>
+                                </div>
+                            </div>
+
+                            <button onclick="activateCollection()" id="btn-activate"
+                                class="w-full max-w-sm btn-void py-3 px-8 rounded-xl text-sm flex items-center justify-center gap-2">
+                                Become a Creator &amp; Launch <i class="bx bxs-bolt"></i>
+                            </button>
+                            <div id="unlock-creator-feedback" class="text-[11px] text-void-muted hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLLECTOR STEPS -->
+                <div id="collector-steps" class="hidden">
+                    <!-- Step 0: Sign in -->
+                    <div id="col-step-0" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4 items-center text-center">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Welcome to Castle TCG.</h2>
+                            <p class="text-void-muted text-sm leading-snug max-w-md">Connect your Twitch or Kick account to start collecting cards from your favorite streamers.</p>
+                            <div class="w-full max-w-md p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-4">
+                                <div class="flex items-center justify-center gap-3">
+                                    <div class="w-11 h-11 rounded-xl bg-void-accent/15 flex items-center justify-center overflow-hidden p-2 border border-white/10">
+                                        <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="36" height="36" />
+                                    </div>
+                                    <div class="text-left">
+                                        <p class="text-xs font-bold text-void-text">Sign in to Castle</p>
+                                        <p class="text-[10px] text-void-muted uppercase tracking-widest font-bold">Twitch or Kick</p>
+                                    </div>
+                                </div>
+                                <p class="text-[10px] text-void-muted leading-relaxed">Required to sync Twitch follows and use Kick features.</p>
+                                <button type="button"
+                                    onclick="window.location.href=(typeof getCastleBackendOrigin==='function'?getCastleBackendOrigin():window.location.origin)+'/auth/twitch?role=viewer'"
+                                    class="btn-void py-3 px-8 rounded-xl text-[10px] w-full">
+                                    Sign in with Twitch <i class="bx bxl-twitch ml-1"></i>
+                                </button>
+                                <button type="button"
+                                    onclick="window.location.href=(typeof getCastleBackendOrigin==='function'?getCastleBackendOrigin():window.location.origin)+'/auth/kick?role=viewer'"
+                                    class="flex items-center justify-center gap-2 w-full py-3 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-[#53FC18]/35 bg-[#53FC18]/10 text-[#b8f5c0] hover:bg-[#53FC18]/18">
+                                    <img src="/kick-mark.svg" alt="" width="20" height="20" class="w-5 h-5 shrink-0" />
+                                    <span>Sign in with Kick</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 1: Terms -->
+                    <div id="col-step-1" class="step-card active animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full max-w-lg mx-auto flex flex-col gap-4 items-center text-center">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Terms of Service.</h2>
+
+                            <div id="col-tos-scroll"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-left text-sm text-void-muted leading-snug custom-scrollbar max-h-[min(12rem,32dvh)] overflow-y-auto">
+                                <p class="mb-4 font-bold text-void-text">By using Castle TCG you agree to:</p>
+                                <ul class="space-y-2 mb-6 ml-4 list-disc marker:text-void-accent text-xs">
+                                    <li>Follow platform rules</li>
+                                    <li>Not exploit bugs or cheats</li>
+                                    <li>Not use bots or automated tools</li>
+                                    <li>Not sell cards for real money outside the platform</li>
+                                    <li>Treat other users respectfully</li>
+                                </ul>
+                                <p class="mb-4 text-xs">All cards and items in Castle TCG are virtual digital items
+                                    with no real-world value.</p>
+                                <p class="text-[10px] opacity-60">By continuing, you agree to our <a href="/tos"
+                                        target="_blank" class="text-void-accent hover:underline">TOS</a> and <a
+                                        href="/privacy" target="_blank" class="text-void-accent hover:underline">Privacy
+                                        Policy</a>.</p>
+                            </div>
+
+                            <p id="col-tos-scroll-hint" class="tos-scroll-hint">Scroll to read before agreeing</p>
+                            <label id="col-tos-label" class="flex items-center gap-3 cursor-pointer group text-left w-full max-w-md tos-label-locked">
+                                <div class="relative">
+                                    <input type="checkbox" id="col-tos-check" class="sr-only" disabled>
+                                    <div class="checkbox-visual">
+                                        <i class="bx bxs-check text-xs"></i>
+                                    </div>
+                                </div>
+                                <span class="text-xs text-void-text font-medium">I am 13+ and agree to the Terms</span>
+                            </label>
+                            <div id="col-tos-error" class="error-text hidden text-center w-full">Please accept the Terms
+                                to continue.</div>
+
+                            <div class="w-full max-w-sm pt-3 mt-1 border-t border-white/5">
+                            <button id="btn-col-tos" onclick="validateColTOS()"
+                                class="btn-void bg-void-accent hover:opacity-90 py-3 px-8 rounded-xl text-sm group w-full">
+                                Start Exploring <i
+                                    class="bx bx-chevron-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+                            </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Discovery & Follows -->
+                    <div id="col-step-2" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
+                        <div class="w-full flex flex-col gap-4">
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Bring your follows with you.</h2>
+                            <p class="text-void-muted text-sm leading-snug shrink-0">These are the creators you already follow on
+                                Twitch who are live on Castle TCG. Add them to start collecting their cards and packs.</p>
+
+                            <div id="follows-loading" class="text-center py-12">
+                                <i class="bx bx-loader-circle bx-spin text-void-accent text-3xl mb-4"></i>
+                                <p class="text-xs uppercase tracking-widest text-void-muted">Scanning Twitch Data...</p>
+                            </div>
+
+                            <div id="follows-grid"
+                                class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar hidden">
+                                <!-- Dynamic cards here -->
+                            </div>
+
+                            <div id="no-follows"
+                                class="text-center py-12 bg-white/5 rounded-2xl border border-dashed border-white/10 hidden">
+                                <i class="bx bxs-podcast text-void-muted text-4xl mb-4"></i>
+                                <p class="text-sm font-bold mb-2">No creators found yet.</p>
+                                <p class="text-xs text-void-muted mb-6">Try following more streamers or explore the
+                                    public hub.</p>
+                                <button onclick="window.location.href='/'"
+                                    class="text-void-accent uppercase tracking-widest font-bold text-[10px]">Go to
+                                    Hub</button>
+                            </div>
+
+                            <div class="flex justify-between items-center gap-3 pt-3 mt-1 border-t border-white/5">
+                                <button onclick="nextCollectorStep(1)"
+                                    class="text-void-muted hover:text-void-text font-bold uppercase tracking-widest text-xs">Back</button>
+                                <button onclick="nextCollectorStep(3)"
+                                    class="btn-void bg-void-accent hover:opacity-90 py-3 px-8 rounded-xl text-sm">Continue</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Success -->
+                    <div id="col-step-3" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl text-center">
+                        <div class="w-full flex flex-col gap-4 items-center text-center">
+                            <div
+                                class="w-16 h-16 rounded-full bg-void-accent/20 flex items-center justify-center text-void-accent text-3xl mx-auto shadow-[0_0_40px_rgba(63,170,255,0.25)]">
+                                <i class="bx bxs-check"></i>
+                            </div>
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">You're all set!</h2>
+                            <p class="text-void-muted text-sm leading-snug max-w-md">Head over to your binder to see your collection or visit a
+                                streamer's page to start earning cards.</p>
+                            <button onclick="completeCollectorOnboarding()" id="btn-col-complete"
+                                class="w-full max-w-sm btn-void bg-void-accent py-3 px-8 rounded-xl text-sm flex items-center justify-center gap-2">
+                                Get Started <i class="bx bxs-play-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <div class="debug-panel flex flex-col items-end gap-2">
+        <button onclick="testKickSlugConflict()"
+            class="text-[10px] uppercase font-bold bg-yellow-400 text-black px-3 py-2 rounded-lg hover:bg-yellow-300 transition-colors flex items-center gap-2 shadow-lg">
+            <i class="bx bxl-kickstarter"></i> Kick signs up, name taken
+        </button>
+        <button onclick="testTwitchSlugConflict()"
+            class="text-[10px] uppercase font-bold bg-yellow-400 text-black px-3 py-2 rounded-lg hover:bg-yellow-300 transition-colors flex items-center gap-2 shadow-lg">
+            <i class="bx bxl-twitch"></i> Twitch signs up, name taken
+        </button>
+    </div>
+
+    <script src="/onboarding-test.js"></script>
+</body>
+
+</html>
