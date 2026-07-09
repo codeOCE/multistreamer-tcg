@@ -1,0 +1,1264 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Collection · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        .hidden {
+            display: none !important;
+        }
+
+        /* ── Layout ── */
+        #mc-root {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding-top: 80px;
+        }
+
+        #mc-body {
+            flex: 1;
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 40px 24px 40px;
+        }
+
+        /* ── Responsive ─────────────────────────────────────────────────────── */
+
+        /* Minimum viewport for side panels: 900px center + 2×180px min-width = 1260px.
+           Use 1280px as a clean cut so there's never any overlap with the body. */
+        @media (max-width: 1279px) {
+            #mc-left,
+            #mc-right {
+                display: none;
+            }
+        }
+
+        /* 1280–1480px: panels exist but are narrow — shrink imagery to match */
+        @media (min-width: 1280px) and (max-width: 1480px) {
+            .side-pack-img {
+                width: min(140px, 72%);
+            }
+            .side-pack-stack {
+                height: min(220px, 30vh);
+                margin-bottom: 12px;
+            }
+            .side-panel {
+                min-height: min(360px, 55vh);
+                gap: 12px;
+            }
+            #mc-left {
+                padding: 0 6px;
+            }
+            #mc-right {
+                padding: 0 14px;
+            }
+        }
+
+        /* Viewport height safety: keep panels from running off short screens */
+        @media (max-height: 820px) {
+            .side-pack-stack {
+                height: min(220px, 28vh);
+                margin-bottom: 10px;
+            }
+            .side-panel {
+                min-height: min(360px, 52vh);
+            }
+        }
+
+        /* Binder grid: 3 cols when viewport is narrower than full center width */
+        @media (max-width: 860px) {
+            #mc-binders {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 24px 16px;
+            }
+            #mc-body {
+                padding: 28px 16px 40px;
+            }
+        }
+
+        /* Binder grid: 2 cols on small/mobile */
+        @media (max-width: 560px) {
+            #mc-binders {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 18px 10px;
+            }
+            #mc-body {
+                padding: 16px 12px 28px;
+            }
+            #mc-header-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            #mc-discover-btn {
+                width: 100%;
+            }
+        }
+
+        /* ── Side panels — fixed to viewport sides, centered vertically ── */
+        #mc-left {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: calc((100vw - 900px) / 2);
+            min-width: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ── Left tab slider ── */
+        #mc-left-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        #mc-left-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 99px;
+            padding: 3px;
+            gap: 2px;
+            margin-bottom: 14px;
+        }
+
+        .mc-left-tab {
+            padding: 5px 14px;
+            border-radius: 99px;
+            border: none;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 0.48rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            color: var(--void-muted);
+        }
+
+        .mc-left-tab.active {
+            background: var(--void-accent);
+            color: #000;
+        }
+
+        .mc-left-slide {
+            width: 100%;
+        }
+
+        .mc-panel-title {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-bottom: 16px;
+        }
+
+        /* ── 3D floating pack ── */
+        .pack-scene {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            cursor: pointer;
+        }
+
+        .pack-3d-wrap {
+            perspective: 900px;
+            width: 170px;
+        }
+
+        @keyframes pack-float {
+            0% {
+                transform: translateY(0px) rotateY(-10deg) rotateX(5deg);
+            }
+
+            30% {
+                transform: translateY(-14px) rotateY(8deg) rotateX(-3deg);
+            }
+
+            65% {
+                transform: translateY(-8px) rotateY(-6deg) rotateX(4deg);
+            }
+
+            100% {
+                transform: translateY(0px) rotateY(-10deg) rotateX(5deg);
+            }
+        }
+
+        @keyframes pack-shimmer {
+            0% {
+                left: -120%;
+            }
+
+            100% {
+                left: 140%;
+            }
+        }
+
+        .pack-body {
+            width: 170px;
+            height: 238px;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: pack-float 4.5s ease-in-out infinite;
+            border-radius: 10px;
+            overflow: hidden;
+            /* Deep drop shadow that moves with the float */
+            filter: drop-shadow(0 28px 22px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 18px rgba(var(--void-accent-rgb), 0.22));
+        }
+
+        .pack-scene:hover .pack-body {
+            filter: drop-shadow(0 28px 22px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 30px rgba(var(--void-accent-rgb), 0.5));
+        }
+
+        /* Moving shimmer sweep */
+        .pack-shimmer {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 40%;
+            background: linear-gradient(105deg,
+                    transparent 0%,
+                    rgba(255, 255, 255, 0.06) 40%,
+                    rgba(255, 255, 255, 0.12) 50%,
+                    rgba(255, 255, 255, 0.06) 60%,
+                    transparent 100%);
+            animation: pack-shimmer 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        /* CTA button below pack */
+        .pack-cta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pack-cta-btn {
+            padding: 10px 22px;
+            background: rgba(var(--void-accent-rgb), 0.1);
+            border: 1px solid rgba(var(--void-accent-rgb), 0.3);
+            border-radius: 12px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 0.6rem;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(var(--void-accent-rgb), 0.95);
+            cursor: pointer;
+            transition: all 0.2s;
+            background-color: transparent;
+        }
+
+        .pack-scene:hover .pack-cta-btn {
+            background: rgba(var(--void-accent-rgb), 0.18);
+            border-color: rgba(var(--void-accent-rgb), 0.55);
+            box-shadow: 0 4px 20px rgba(var(--void-accent-rgb), 0.18);
+        }
+
+        .pack-cta-sub {
+            font-size: 0.5rem;
+            color: var(--void-muted);
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        /* ── Center panel ── */
+        #mc-center {
+            min-width: 0;
+            padding: 0 16px;
+        }
+
+        #mc-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        #mc-username {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-bottom: 6px;
+        }
+
+        #mc-title {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(1.6rem, 4vw, 2.8rem);
+            letter-spacing: -0.03em;
+            text-transform: uppercase;
+            color: var(--void-text);
+            line-height: 1;
+        }
+
+        #mc-title span {
+            color: var(--void-accent);
+        }
+
+        #mc-header-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 18px auto 0;
+            max-width: 620px;
+        }
+
+        #mc-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+        }
+
+        #mc-search-wrap i {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--void-muted);
+            font-size: 0.75rem;
+        }
+
+        #mc-search {
+            width: 100%;
+            padding: 10px 16px 10px 36px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 12px;
+            font-size: 0.7rem;
+            color: var(--void-text);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #mc-search::placeholder {
+            color: var(--void-muted);
+        }
+
+        #mc-search:focus {
+            border-color: rgba(var(--void-accent-rgb), 0.35);
+        }
+
+        /* ── Binder grid ── */
+        #mc-binders {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 32px 28px;
+            margin-top: 32px;
+            align-items: start;
+        }
+
+        /* ── Binder tile ── */
+        .binder-tile {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            position: relative;
+        }
+
+        .binder-fav-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 8;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(7, 8, 13, 0.65);
+            color: rgba(255, 255, 255, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .binder-fav-btn:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+            color: #fff;
+        }
+
+        .binder-fav-btn.is-favorited {
+            color: #facc15;
+            border-color: rgba(250, 204, 21, 0.45);
+            background: rgba(250, 204, 21, 0.12);
+        }
+
+
+        .mc-action-btn {
+            padding: 8px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--void-text);
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        .mc-action-btn:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.12);
+            color: var(--void-accent);
+        }
+
+        .mc-action-btn:disabled {
+            opacity: 0.55;
+            cursor: wait;
+        }
+
+        .mc-rec-section {
+            margin-top: 18px;
+            padding: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .mc-rec-title {
+            font-size: 0.55rem;
+            font-weight: 900;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            margin-bottom: 10px;
+        }
+
+        .mc-rec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 10px;
+        }
+
+        .mc-rec-card {
+            border-radius: 10px;
+            border: 1px solid rgba(var(--binder-accent-rgb), 0.25);
+            background: rgba(var(--binder-accent-rgb), 0.08);
+            padding: 10px;
+            text-decoration: none;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .mc-rec-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(var(--binder-accent-rgb), 0.45);
+        }
+
+        .mc-rec-name {
+            font-size: 0.66rem;
+            font-weight: 800;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mc-rec-meta,
+        .mc-rec-reason,
+        .mc-rec-empty {
+            font-size: 0.52rem;
+            color: var(--void-muted);
+            margin-top: 4px;
+        }
+
+        .binder-book {
+            position: relative;
+            aspect-ratio: 3/4;
+            background: rgb(var(--binder-accent-rgb));
+            border-radius: 5px 14px 14px 5px;
+            overflow: hidden;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s;
+            box-shadow:
+                -4px 0 10px rgba(0, 0, 0, 0.45),
+                0 8px 28px rgba(0, 0, 0, 0.5),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
+        .binder-tile:hover .binder-book {
+            transform: translateY(-8px) scale(1.025);
+            box-shadow:
+                -4px 0 10px rgba(0, 0, 0, 0.45),
+                0 28px 64px rgba(0, 0, 0, 0.7),
+                0 0 40px rgba(var(--binder-accent-rgb), 0.25),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+        }
+
+        /* ── Empty binder slot ── */
+        .binder-book--empty {
+            background: transparent !important;
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 5px 14px 14px 5px;
+            box-shadow: none !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.25s, background 0.25s;
+        }
+
+        .binder-tile:hover .binder-book--empty {
+            border-color: rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.02) !important;
+            transform: none;
+            box-shadow: none !important;
+        }
+
+        .binder-empty-icon {
+            color: rgba(255, 255, 255, 0.12);
+            font-size: 1.4rem;
+            transition: color 0.25s;
+        }
+
+        .binder-tile:hover .binder-empty-icon {
+            color: rgba(255, 255, 255, 0.28);
+        }
+
+        .binder-empty .binder-label .binder-name {
+            opacity: 0.35;
+        }
+
+        /* ── Spine strip (left dark bar) ── */
+        .binder-spine-strip {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 18px;
+            background: rgba(0, 0, 0, 0.32);
+            z-index: 2;
+            /* Seam line on the right of the spine */
+            box-shadow: inset -3px 0 6px rgba(0, 0, 0, 0.4), 2px 0 0 rgba(255, 255, 255, 0.05);
+        }
+
+        /* ── Main face (everything right of the spine) ── */
+        .binder-face {
+            position: absolute;
+            left: 18px;
+            right: 0;
+            top: 0;
+            bottom: 0;
+        }
+
+        /* Woven fabric texture */
+        .binder-weave {
+            position: absolute;
+            inset: 0;
+            background-image:
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.05) 2px, rgba(0, 0, 0, 0.05) 3px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0, 0, 0, 0.05) 2px, rgba(0, 0, 0, 0.05) 3px);
+        }
+
+        /* Light sheen — simulates light hitting the top-left corner */
+        .binder-sheen {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg,
+                    rgba(255, 255, 255, 0.11) 0%,
+                    rgba(255, 255, 255, 0.03) 30%,
+                    transparent 55%,
+                    rgba(0, 0, 0, 0.1) 100%);
+        }
+
+        /* Inner stitching border */
+        .binder-stitch {
+            position: absolute;
+            inset: 9px 11px 9px 5px;
+            border: 1.5px dashed rgba(255, 255, 255, 0.13);
+            border-radius: 2px 10px 10px 2px;
+            pointer-events: none;
+        }
+
+        /* Zipper pull at top-center */
+        .binder-zipper {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 9px;
+            height: 18px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 0 0 5px 5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: none;
+            z-index: 4;
+        }
+
+        .binder-zipper::after {
+            content: '';
+            position: absolute;
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Etched / debossed brand text — color & shadow set via inline style from JS */
+        .binder-etched {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 20%;
+            padding: 0 16px;
+            text-align: center;
+        }
+
+        .binder-etch-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: clamp(0.6rem, 1.8vw, 0.9rem);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .binder-etch-handle {
+            font-size: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+
+        /* Streamer avatar — centered on the binder face, scales with tile width */
+        .binder-avatar {
+            position: absolute;
+            top: 42%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: clamp(46px, 46%, 86px);
+            height: auto;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            z-index: 5;
+        }
+
+        /* Card count — bottom-right, color set via inline style from JS */
+        .binder-card-count {
+            position: absolute;
+            bottom: 13px;
+            right: 14px;
+            font-size: 0.48rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        /* Binder label */
+        .binder-label {
+            padding: 0 4px;
+        }
+
+        .binder-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 0.78rem;
+            color: var(--void-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+        }
+
+        .binder-meta {
+            font-size: 0.58rem;
+            font-weight: 600;
+            color: var(--void-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 2px;
+        }
+
+        .binder-meta .accent-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: rgb(var(--binder-accent-rgb));
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        /* ── Empty / loading states (center) ── */
+        #mc-empty {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        #mc-empty .big-icon {
+            font-size: 3.5rem;
+            opacity: 0.08;
+            margin-bottom: 16px;
+        }
+
+        #mc-empty h2 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: -0.01em;
+        }
+
+        #mc-empty p {
+            font-size: 0.65rem;
+            color: var(--void-muted);
+            margin-top: 6px;
+            max-width: 280px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* ── Right panel (goals) ── */
+        #mc-right {
+            position: fixed;
+            right: 0;
+            top: 120px;
+            width: calc((100vw - 900px) / 2);
+            min-width: 180px;
+            max-height: calc(100vh - 144px);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            padding: 0 20px;
+        }
+
+        /* ── Reroll button + animation ── */
+        .mc-reroll-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.55rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--void-muted);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+        }
+        .mc-reroll-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--void-accent);
+            color: var(--void-text);
+            transform: translateY(-1px);
+        }
+        .mc-reroll-btn:active {
+            transform: translateY(0) scale(0.96);
+        }
+        .mc-reroll-btn i {
+            font-size: 0.6rem;
+            transition: transform 0.4s ease;
+        }
+        .mc-reroll-btn:hover i {
+            transform: rotate(90deg);
+        }
+        .mc-reroll-btn.is-spinning {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .mc-reroll-btn.is-spinning i {
+            animation: mc-reroll-spin 0.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        @keyframes mc-reroll-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        /* Slot-machine reel on the goal title while rerolling */
+        @keyframes mc-slot-shake {
+            0%, 100% { transform: translateY(-2px); }
+            50% { transform: translateY(2px); }
+        }
+        .mc-slot-rolling {
+            filter: blur(1.2px);
+            opacity: 0.8;
+            color: var(--void-accent) !important;
+            animation: mc-slot-shake 0.09s linear infinite;
+        }
+
+        /* ── Side panel ── */
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            cursor: pointer;
+            width: 100%;
+            min-height: min(420px, 60vh);
+            user-select: none;
+            background: none;
+            border: none;
+            gap: 18px;
+        }
+
+        @keyframes side-pack-float {
+
+            0%,
+            100% {
+                transform: translateY(0px) rotate(-1.5deg);
+            }
+
+            40% {
+                transform: translateY(-14px) rotate(1.5deg);
+            }
+
+            70% {
+                transform: translateY(-6px) rotate(-0.5deg);
+            }
+        }
+
+        .side-pack-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .side-pack-img {
+            width: min(210px, 80%);
+            height: auto;
+            object-fit: contain;
+            display: block;
+            border-radius: 10px;
+            filter: drop-shadow(0 20px 28px rgba(0, 0, 0, 0.7));
+            transition: filter 0.3s;
+        }
+
+        /* Animate only on hover */
+        .side-panel:hover .side-pack-img {
+            animation: side-pack-float 3.5s ease-in-out infinite;
+        }
+
+        /* Right panel: stacked packs */
+        .side-pack-stack {
+            position: relative;
+            width: min(210px, 80%);
+            height: min(295px, 38vh);
+            margin-bottom: 28px;
+        }
+
+        .side-pack-stack .side-pack-img {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            top: 0;
+            left: 0;
+        }
+
+        .side-pack-back-2 {
+            transform: rotate(-7deg) translate(-8px, 8px);
+            opacity: 0.45;
+            animation-delay: -1.4s;
+        }
+
+        .side-pack-back-1 {
+            transform: rotate(-3.5deg) translate(-4px, 4px);
+            opacity: 0.7;
+            animation-delay: -0.7s;
+        }
+
+        .side-pack-front {
+            position: relative !important;
+            transform: rotate(0deg);
+            animation-delay: 0s;
+        }
+
+        /* Pack count badge */
+        .side-pack-count {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--void-accent);
+            color: #000;
+            font-size: 0.5rem;
+            font-weight: 900;
+            border-radius: 99px;
+            padding: 2px 7px;
+            letter-spacing: 0.06em;
+        }
+
+        /* Bottom label */
+        .side-panel-label {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 0.52rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.38);
+            text-align: center;
+            line-height: 1.6;
+            margin-top: 20px;
+            flex-shrink: 0;
+        }
+
+        .pack-slot {
+            aspect-ratio: 2/3;
+            border-radius: 10px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+
+        .pack-slot:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        .pack-slot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .pack-slot-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            opacity: 0.25;
+        }
+
+        .pack-slot-placeholder i {
+            font-size: 1.4rem;
+        }
+
+        .pack-slot-placeholder span {
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        #mc-packs-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .pack-coming-soon {
+            text-align: center;
+            padding: 24px 16px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px dashed rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            margin-top: 14px;
+        }
+
+        .pack-coming-soon i {
+            font-size: 1.6rem;
+            opacity: 0.15;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .pack-coming-soon p {
+            font-size: 0.55rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+        }
+
+        .pack-coming-soon small {
+            font-size: 0.5rem;
+            color: var(--void-muted);
+            opacity: 0.5;
+            margin-top: 4px;
+            display: block;
+        }
+
+        /* ── Sign-in state ── */
+        #mc-signin {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 20px;
+            text-align: center;
+            padding: 40px;
+        }
+
+        #mc-signin .big-icon {
+            font-size: 4rem;
+            opacity: 0.08;
+        }
+
+        #mc-signin h1 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 1.8rem;
+            text-transform: uppercase;
+            letter-spacing: -0.03em;
+        }
+
+        #mc-signin p {
+            font-size: 0.7rem;
+            color: var(--void-muted);
+            max-width: 340px;
+            line-height: 1.6;
+        }
+
+        /* ── Loading spinner ── */
+        #mc-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+            gap: 16px;
+        }
+
+        .mc-spinner {
+            width: 32px;
+            height: 32px;
+            border: 2px solid rgba(var(--void-accent-rgb), 0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+
+<body class="bg-void-bg text-void-text antialiased">
+    <div class="saas-bg-glow"></div>
+
+    <!-- Navbar injected by /streamer-nav.js (same source of truth as battle, leaderboard, magic-dust, trading, /{streamer}/binder) -->
+
+    <!-- Loading -->
+    <div id="mc-loading">
+        <div class="mc-spinner"></div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading your collection…</p>
+    </div>
+
+    <!-- Not signed in -->
+    <div id="mc-signin" class="hidden">
+        <div class="big-icon"><i class="fa-solid fa-book-open"></i></div>
+        <h1>Your Collection</h1>
+        <p>Sign in to view your binders, open packs, and track your cards from every streamer.</p>
+        <a href="/" class="saas-button rounded-xl px-8 py-3 text-[0.65rem] mt-2">
+            <i class="fa-brands fa-twitch mr-2"></i>Sign In with Twitch
+        </a>
+    </div>
+
+    <!-- Main content -->
+    <div id="mc-root" class="hidden">
+        <div id="mc-body">
+
+            <!-- ── LEFT: Purchase / Open Packs ── -->
+            <div id="mc-left">
+                <div id="mc-left-inner">
+                    <div id="mc-left-tabs">
+                        <button class="mc-left-tab active" id="mc-tab-purchase" onclick="window._mcLeftTab('purchase')">Buy</button>
+                        <button class="mc-left-tab" id="mc-tab-open" onclick="window._mcLeftTab('open')">Open</button>
+                    </div>
+                    <div id="mc-left-purchase" class="mc-left-slide">
+                        <div class="side-panel" onclick="window._mcOpenPurchase()">
+                            <div class="side-pack-wrap">
+                                <img class="side-pack-img" src="https://cdn.codeoce.com/branding/default-pack.png" alt="Booster Pack">
+                            </div>
+                            <div class="side-panel-label">Get<br>Packs</div>
+                        </div>
+                    </div>
+                    <div id="mc-left-open" class="mc-left-slide hidden">
+                        <div class="side-panel" style="cursor:default">
+                            <div id="mc-packs-rings" class="side-pack-wrap">
+                                <div class="side-pack-stack">
+                                    <img class="side-pack-img side-pack-back-2" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                                    <img class="side-pack-img side-pack-back-1" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                                    <img class="side-pack-img side-pack-front" src="https://cdn.codeoce.com/branding/default-pack.png" alt="">
+                                </div>
+                                <div id="mc-pack-count" class="side-pack-count hidden">0</div>
+                            </div>
+                            <div class="side-panel-label">Unopened<br>Packs</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── CENTER: Binders ── -->
+            <div id="mc-center">
+                <div id="mc-header">
+                    <p id="mc-username"></p>
+                    <h1 id="mc-title">Your <span>Collection</span></h1>
+                    <div id="mc-header-controls">
+                        <div id="mc-search-wrap">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input id="mc-search" type="text" placeholder="Search binders…"
+                                oninput="window._mcSearch(this.value)">
+                        </div>
+                        <button id="mc-discover-btn" class="mc-action-btn" type="button" onclick="window.openDiscoverCreators && window.openDiscoverCreators()">Discover Creators</button>
+                    </div>
+                </div>
+
+                <!-- Empty -->
+                <div id="mc-empty" class="hidden">
+                    <div class="big-icon"><i class="fa-solid fa-layer-group"></i></div>
+                    <h2>No binders yet</h2>
+                    <p>Watch a stream and earn your first card to start a binder.</p>
+                </div>
+
+                <!-- Binder grid — injected by JS -->
+                <div id="mc-binders"></div>
+
+            </div>
+
+            <!-- ── RIGHT: Daily Goals ── -->
+            <div id="mc-right">
+                <div id="mc-goals-section" class="hidden">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap">
+                        <div>
+                            <h2 style="font-family:'Outfit',sans-serif;font-weight:900;font-size:1rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--void-text);margin:0">Daily Goals</h2>
+                            <p id="mc-goals-reset" style="font-size:0.6rem;color:var(--void-muted);margin-top:2px">Resets at UTC midnight</p>
+                        </div>
+                        <div id="mc-streak-badge" class="hidden" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:6px 14px;display:flex;align-items:center;gap:6px">
+                            <span style="font-size:1rem">🔥</span>
+                            <div>
+                                <div id="mc-streak-current" style="font-weight:900;font-size:0.85rem;color:var(--void-accent);line-height:1"></div>
+                                <div style="font-size:0.55rem;color:var(--void-muted);text-transform:uppercase;letter-spacing:0.1em">day streak</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="mc-goals-list" style="display:flex;flex-direction:column;gap:10px"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ══ Purchase Packs Modal ══════════════════════════════════════════════════ -->
+    <div id="mc-purchase-modal" class="hidden" onclick="if(event.target===this)window._mcClosePurchase()"
+        style="position:fixed;inset:0;z-index:900;background:rgba(7,8,13,0.88);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;padding:24px">
+        <div
+            style="background:#0d0f14;border:1px solid rgba(255,255,255,0.08);border-radius:20px;width:100%;max-width:520px;padding:32px;position:relative">
+            <button onclick="window._mcClosePurchase()"
+                style="position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.03);color:var(--void-muted);cursor:pointer;font-size:0.85rem">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2
+                style="font-family:'Outfit',sans-serif;font-weight:900;font-size:1.1rem;text-transform:uppercase;letter-spacing:-0.02em;margin-bottom:6px">
+                Get Packs</h2>
+            <p style="font-size:0.6rem;color:var(--void-muted);margin-bottom:24px">Choose a creator to get a pack from.
+                Each pack contains 5 cards.</p>
+            <div id="mc-purchase-list">
+                <!-- Injected by JS -->
+            </div>
+        </div>
+    </div>
+
+    <div id="discover-creators-modal"
+        class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1100] hidden items-center justify-center p-6"
+        role="dialog" aria-modal="true" aria-labelledby="discover-creators-title"
+        onclick="if(event.target===this&&window.closeDiscoverCreators) window.closeDiscoverCreators()">
+        <div class="glass-panel w-full max-w-5xl max-h-[85vh] flex flex-col rounded-3xl border border-white/10 overflow-hidden"
+            onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between px-6 py-5 border-b border-white/10 bg-white/[0.02]">
+                <div>
+                    <h3 id="discover-creators-title" class="text-xl sm:text-2xl font-display font-black uppercase italic tracking-tight text-white">Discover Creators</h3>
+                    <p class="text-[10px] sm:text-xs font-black uppercase tracking-widest text-void-muted mt-1">Your followed channels and mutual recommendations in one view.</p>
+                </div>
+                <button type="button" onclick="window.closeDiscoverCreators && window.closeDiscoverCreators()"
+                    class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-void-muted hover:text-white transition-all"
+                    aria-label="Close">
+                    <i class="bx bx-x text-lg"></i>
+                </button>
+            </div>
+            <div class="px-6 pt-4 pb-2 border-b border-white/5 flex items-center gap-3 flex-wrap">
+                <div class="inline-flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full p-1">
+                    <button type="button" id="discover-tab-followed"
+                        class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.22em] bg-void-accent text-void-bg">
+                        Followed
+                    </button>
+                    <button type="button" id="discover-tab-recommended"
+                        class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.22em] text-void-muted hover:text-white hover:bg-white/5 transition-all">
+                        Recommended
+                    </button>
+                </div>
+                <div class="flex-1 min-w-[180px] flex justify-end gap-3 text-[10px] text-void-muted uppercase tracking-widest">
+                    <span id="discover-followed-count" class="opacity-70"></span>
+                    <span class="opacity-30">·</span>
+                    <span id="discover-recommended-count" class="opacity-70"></span>
+                </div>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 py-4 space-y-4">
+                <div id="discover-followed-panel" class="space-y-4">
+                    <div id="discover-followed-empty" class="hidden py-12 px-8 border border-dashed border-white/5 rounded-3xl text-center bg-white/[0.01]">
+                        <p class="text-void-muted/70 text-xs font-black uppercase tracking-widest">You’re not following any Castle creators yet.</p>
+                    </div>
+                    <div id="discover-followed-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+                <div id="discover-recommended-panel" class="space-y-4 hidden">
+                    <div id="discover-recommended-empty" class="hidden py-12 px-8 border border-dashed border-white/5 rounded-3xl text-center bg-white/[0.01]">
+                        <p class="text-void-muted/70 text-xs font-black uppercase tracking-widest">No mutual recommendations yet.</p>
+                    </div>
+                    <div id="discover-recommended-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+                <div id="discover-loading" class="py-12 flex flex-col items-center justify-center space-y-4 hidden">
+                    <div class="w-10 h-10 rounded-full border-4 border-void-accent/15 border-t-void-accent animate-spin"></div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Mapping your networks…</p>
+                </div>
+                <div id="discover-error" class="hidden py-4 px-4 border border-red-500/30 rounded-2xl bg-red-500/10 text-[11px] text-red-200">
+                    Something went wrong loading discovery data. Please try again.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/nav-user-menu.js"></script>
+    <script src="/nav-notifications.js"></script>
+    <script src="/streamer-nav.js"></script>
+    <script src="/my-collection.js"></script>
+</body>
+
+</html>

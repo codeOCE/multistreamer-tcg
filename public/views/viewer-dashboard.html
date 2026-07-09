@@ -13,7 +13,7 @@
                             My Binders</div>
                         <button onclick="showCreateBinderModal()"
                             class="text-[10px] text-void-accent hover:text-white transition-all font-black uppercase group">
-                            <i class="fa-solid fa-plus-circle opacity-50 group-hover:opacity-100 mr-1"></i> New
+                            <i class="bx bxs-plus-circle opacity-50 group-hover:opacity-100 mr-1"></i> New
                         </button>
                     </div>
                     <nav id="binder-list" class="space-y-2"></nav>
@@ -32,11 +32,11 @@
                     <div class="w-full space-y-2 mt-4">
                         <button type="button" id="buy-pack-btn" onclick="buyPackCheckout()" 
                             class="hidden w-full py-4 rounded-lg bg-void-accent text-void-bg font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-void-accent/20 flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-cart-shopping"></i> Buy 5-Card Pack ($5.00)
+                            <i class="bx bxs-cart"></i> Buy 5-Card Pack ($5.00)
                         </button>
                         <button id="summon-subscribe-btn"
                             class="w-full py-3 rounded-lg bg-void-accent/10 border border-void-accent/30 text-[10px] font-black uppercase tracking-widest text-void-accent hover:bg-void-accent hover:text-void-bg transition-all">
-                            <i class="fa-solid fa-star mr-2"></i> Support Creator
+                            <i class="bx bxs-star mr-2"></i> Support Creator
                         </button>
                         <button id="summon-channel-btn"
                             class="w-full py-3 rounded-lg bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-[0_0_15px_rgba(var(--void-accent-rgb),0.3)]">
@@ -46,29 +46,38 @@
                 </div>
 
                 
-                <div class="space-y-4">
-                    <div
-                        class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted border-b border-white/10 pb-3 pl-2">
-                        Vitals</div>
-                    <div class="grid grid-cols-1 gap-4">
-                        <div class="glass-panel p-6 rounded-2xl border-white/5 bg-white/[0.02]">
-                            <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">
-                                Collection Index</div>
-                            <div class="flex items-center justify-between gap-4">
-                                <div id="stat-total" class="text-3xl font-display font-black text-white italic">
-                                    0</div>
-                                <div class="flex flex-col items-end">
-                                    <span id="stat-progress-val"
-                                        class="text-[11px] font-black text-void-accent mb-1">0%</span>
-                                    <div class="w-20 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                        <div id="stat-progress-bar"
-                                            class="h-full bg-void-accent shadow-[0_0_10px_rgba(var(--void-accent-rgb),0.5)] transition-all duration-1000"
-                                            style="width: 0%"></div>
-                                    </div>
-                                </div>
-                            </div>
+                <!-- Battle Arena widget -->
+                <div id="battle-arena-widget">
+                    <a id="battle-arena-link" href="/battle"
+                        class="group flex flex-col items-center gap-3 p-5 rounded-2xl border border-white/8 bg-white/[0.02] hover:border-void-accent/40 hover:bg-void-accent/5 transition-all cursor-pointer text-decoration-none">
+                        <div class="w-14 h-14 rounded-xl bg-void-accent/10 border border-void-accent/20 flex items-center justify-center group-hover:bg-void-accent/20 group-hover:border-void-accent/50 transition-all shadow-[0_0_20px_rgba(var(--void-accent-rgb),0.08)] group-hover:shadow-[0_0_28px_rgba(var(--void-accent-rgb),0.25)]">
+                            <i class="bx bxs-game text-xl text-void-accent/70 group-hover:text-void-accent transition-colors"></i>
                         </div>
-                    </div>
+                        <div class="text-center">
+                            <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-text group-hover:text-white transition-colors">Battle Arena</div>
+                            <div class="text-[9px] text-void-muted mt-0.5">Build decks &amp; challenge others</div>
+                        </div>
+                        <div class="text-[8px] font-black uppercase tracking-widest text-void-accent/50 group-hover:text-void-accent transition-colors flex items-center gap-1">
+                            Enter <i class="bx bx-right-arrow-alt text-[7px]"></i>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Magic Dust widget -->
+                <div id="magic-dust-widget">
+                    <a href="/magic-dust"
+                        class="group flex flex-col items-center gap-3 p-5 rounded-2xl border border-white/8 bg-white/[0.02] hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all cursor-pointer text-decoration-none">
+                        <div class="w-14 h-14 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500/20 group-hover:border-emerald-500/50 transition-all shadow-[0_0_20px_rgba(52,211,153,0.08)] group-hover:shadow-[0_0_28px_rgba(52,211,153,0.25)]">
+                            <i class="bx bxs-flame text-xl text-emerald-400/70 group-hover:text-emerald-400 transition-colors"></i>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-text group-hover:text-white transition-colors">Magic Dust</div>
+                            <div class="text-[9px] text-void-muted mt-0.5">Burn cards &bull; earn dust</div>
+                        </div>
+                        <div class="text-[8px] font-black uppercase tracking-widest text-emerald-500/50 group-hover:text-emerald-400 transition-colors flex items-center gap-1">
+                            Forge <i class="bx bx-right-arrow-alt text-[7px]"></i>
+                        </div>
+                    </a>
                 </div>
             </aside>
 
@@ -84,10 +93,21 @@
                                 BINDER</h3>
 
                             
-                            <div id="binder-actions-area" class="hidden ml-4">
+                            <div id="binder-actions-area" class="hidden ml-4 items-center gap-2">
+                                <button id="binder-privacy-toggle" type="button" onclick="toggleActiveBinderPrivacy()"
+                                    class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-void-muted text-[9px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
+                                    title="Private — click to make public">
+                                    <i id="binder-privacy-icon" class="bx bx-lock"></i>
+                                    <span id="binder-privacy-label">Private</span>
+                                </button>
+                                <button id="binder-copy-link-btn" type="button" onclick="copyBinderShareLink()"
+                                    class="hidden px-3 py-1.5 rounded-full bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center gap-2"
+                                    title="Copy share link">
+                                    <i class="bx bx-link"></i> Copy Link
+                                </button>
                                 <button onclick="shareBinderPage()"
                                     class="px-3 py-1.5 rounded-full bg-void-accent/10 border border-void-accent/20 text-void-accent text-[9px] font-black uppercase tracking-widest hover:bg-void-accent hover:text-void-bg transition-all flex items-center gap-2">
-                                    <i class="fa-solid fa-share-nodes"></i> Share
+                                    <i class="bx bxs-share"></i> Export PNG
                                 </button>
                             </div>
                         </div>
@@ -96,11 +116,11 @@
                         <div class="flex items-center gap-2">
                             <button id="prev-page-btn"
                                 class="w-8 h-8 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white transition-all disabled:opacity-20">
-                                <i class="fa-solid fa-chevron-left text-xs"></i>
+                                <i class="bx bx-chevron-left text-xs"></i>
                             </button>
                             <button id="next-page-btn"
                                 class="w-8 h-8 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white transition-all disabled:opacity-20">
-                                <i class="fa-solid fa-chevron-right text-xs"></i>
+                                <i class="bx bx-chevron-right text-xs"></i>
                             </button>
                         </div>
                     </div>
@@ -110,7 +130,7 @@
                         
                         <div class="relative w-full min-w-0 sm:flex-1 sm:max-w-xl">
                             <i
-                                class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/50 text-xs"></i>
+                                class="bx bxs-search absolute left-4 top-1/2 -translate-y-1/2 text-void-muted/50 text-xs"></i>
                             <input type="text" id="card-search" placeholder="Search cards..."
                                 class="w-full bg-white/[0.02] border border-white/5 rounded-lg py-2.5 pl-10 pr-4 text-xs font-bold text-void-text focus:ring-1 ring-void-accent/30 transition-all placeholder:text-void-muted/40">
                         </div>
@@ -125,9 +145,9 @@
                                     <option value="epic">Epic</option>
                                     <option value="legendary">Legendary</option>
                                 </select>
-                                <button type="button" class="void-dropdown-trigger rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5" aria-haspopup="listbox" aria-expanded="false">
+                                <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
                                     <span class="void-dropdown-label truncate">All Rarities</span>
-                                    <i class="fa-solid fa-chevron-down void-dropdown-chevron shrink-0 ml-2"></i>
+                                    <i class="bx bx-chevron-down void-dropdown-chevron shrink-0 ml-2"></i>
                                 </button>
                                 <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
                                     <div class="void-dropdown-option" role="option" data-value="all">All Rarities</div>
@@ -141,9 +161,9 @@
                                 <select id="set-filter" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
                                     <option value="all">All Sets</option>
                                 </select>
-                                <button type="button" class="void-dropdown-trigger rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5" aria-haspopup="listbox" aria-expanded="false">
+                                <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
                                     <span class="void-dropdown-label truncate">All Sets</span>
-                                    <i class="fa-solid fa-chevron-down void-dropdown-chevron shrink-0 ml-2"></i>
+                                    <i class="bx bx-chevron-down void-dropdown-chevron shrink-0 ml-2"></i>
                                 </button>
                                 <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
                                     <div class="void-dropdown-option" role="option" data-value="all">All Sets</div>
@@ -167,7 +187,7 @@
                 <div id="binder-share-footer" class="hidden w-full flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-0 p-6 sm:p-8 bg-[#0a0f0d] border-t border-white/5 rounded-b-2xl mt-auto">
                     <div class="flex items-center gap-3 lg:pr-8 lg:border-r border-white/10 shrink-0">
                         <div class="w-10 h-10 bg-void-accent/20 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(var(--void-accent-rgb),0.2)] overflow-hidden p-1.5">
-                            <img src="/White_Castle.png" alt="" class="brand-castle-mark w-full h-full" width="40" height="40">
+                            <img src="https://cdn.codeoce.com/logo/logo_white.png" alt="" class="brand-castle-mark w-full h-full" width="40" height="40">
                         </div>
                         <div class="flex flex-col min-w-0">
                             <span class="text-[10px] font-black text-white uppercase tracking-[0.2em]">Castle</span>
@@ -192,7 +212,7 @@
                     <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">
                             Achievements</div>
-                        <i class="fa-solid fa-trophy text-[10px] text-void-accent opacity-50"></i>
+                        <i class="bx bxs-trophy text-[10px] text-void-accent opacity-50"></i>
                     </div>
                     <div id="achievements-list" class="space-y-3">
                         
@@ -205,7 +225,7 @@
                     <div class="flex justify-between items-end border-b border-white/10 pb-3 pl-2">
                         <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Recent
                             Drops</div>
-                        <i class="fa-solid fa-clock-rotate-left text-[10px] text-void-accent opacity-50"></i>
+                        <i class="bx bx-history text-[10px] text-void-accent opacity-50"></i>
                     </div>
                     <div id="recent-drops-list" class="space-y-3"></div>
                 </div>
@@ -271,7 +291,7 @@
                             <div id="deck-slot-1" onclick="openCardPicker(1)"
                                 class="battle-deck-card-slot aspect-[5/7] rounded-sm border-2 border-dashed border-void-accent/10 flex flex-col items-center justify-center cursor-pointer hover:border-void-accent/40 hover:bg-void-accent/5 transition-all group">
                                 <i
-                                    class="fa-solid fa-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
+                                    class="bx bxs-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
                                 <span
                                     class="text-[9px] font-black text-void-accent/20 group-hover:text-void-accent/50 mt-2 transition-colors uppercase tracking-widest">Init
                                     Phase</span>
@@ -289,7 +309,7 @@
                             <div id="deck-slot-2" onclick="openCardPicker(2)"
                                 class="battle-deck-card-slot aspect-[5/7] rounded-sm border-2 border-dashed border-void-accent/10 flex flex-col items-center justify-center cursor-pointer hover:border-void-accent/40 hover:bg-void-accent/5 transition-all group">
                                 <i
-                                    class="fa-solid fa-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
+                                    class="bx bxs-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
                                 <span
                                     class="text-[9px] font-black text-void-accent/20 group-hover:text-void-accent/50 mt-2 transition-colors uppercase tracking-widest">Init
                                     Phase</span>
@@ -306,7 +326,7 @@
                             <div id="deck-slot-3" onclick="openCardPicker(3)"
                                 class="battle-deck-card-slot aspect-[5/7] rounded-sm border-2 border-dashed border-void-accent/10 flex flex-col items-center justify-center cursor-pointer hover:border-void-accent/40 hover:bg-void-accent/5 transition-all group">
                                 <i
-                                    class="fa-solid fa-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
+                                    class="bx bxs-plus text-void-accent/10 text-2xl group-hover:text-void-accent/50 transition-colors"></i>
                                 <span
                                     class="text-[9px] font-black text-void-accent/20 group-hover:text-void-accent/50 mt-2 transition-colors uppercase tracking-widest">Init
                                     Phase</span>
@@ -316,45 +336,172 @@
 
                     
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                        <div
-                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-4">
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
                             <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
-                                <img src="/Trait_Icon_-_Guard.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                                <img src="https://cdn.codeoce.com/traits/bounty-hunter-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
                             </div>
-                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Guard
-                            </div>
-                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Intercept
-                                Platform</div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Bounty Hunter</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Bounty Target</div>
                         </div>
-                        <div
-                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
                             <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
-                                <img src="/Trait_Icon_-_Absorb.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                                <img src="https://cdn.codeoce.com/traits/frost-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
                             </div>
-                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Vampire
-                            </div>
-                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Siphon
-                                Drain</div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Frost</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Chill Touch</div>
                         </div>
-                        <div
-                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
                             <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
-                                <img src="/Trait_Icon_-_Revive.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                                <img src="https://cdn.codeoce.com/traits/rage-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
                             </div>
-                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">
-                                Revive</div>
-                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Restore
-                                Loop</div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Rage</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Berserk Gain</div>
                         </div>
-                        <div
-                            class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
                             <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
-                                <img src="/Trait_Icon_-_Mimic.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                                <img src="https://cdn.codeoce.com/traits/cleanse-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
                             </div>
-                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Mimic
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Cleanse</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Purify Loop</div>
+                        </div>
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="https://cdn.codeoce.com/traits/echo-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
                             </div>
-                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Clone
-                                Process</div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Echo</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Chain Strike</div>
+                        </div>
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="https://cdn.codeoce.com/traits/mirror-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Mirror</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Cortex Shift</div>
+                        </div>
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="https://cdn.codeoce.com/traits/absorb-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Absorb</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">HP Siphon</div>
+                        </div>
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="https://cdn.codeoce.com/traits/revive-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Revive</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Auto Restore</div>
+                        </div>
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="https://cdn.codeoce.com/traits/guard-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[10px] font-black uppercase tracking-widest text-white">Guard</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Intercept</div>
+                        </div>
+                        <div class="glass-panel rounded-sm p-4 border border-white/5 text-center hover:border-void-accent/30 transition-all">
+                            <div class="h-10 w-10 mx-auto mb-2 transition-all flex items-center justify-center">
+                                <img src="https://cdn.codeoce.com/traits/mimic-icon.png" alt="" class="max-h-10 max-w-10 object-contain" />
+                            </div>
+                            <div class="text-[9px] font-black uppercase tracking-widest text-void-text">Mimic</div>
+                            <div class="text-[8px] text-void-muted/60 mt-1 uppercase tracking-tighter">Copy Phase</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 space-y-6">
+                        <div class="border-t border-white/10 pt-6">
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="w-1.5 h-6 bg-void-accent rounded-full shadow-[0_0_10px_rgba(var(--void-accent-rgb),0.5)]"></div>
+                                <h5 class="text-xs font-black uppercase tracking-widest text-white">Advanced Mechanics</h5>
+                            </div>
+                            <div class="space-y-4">
+                                <div class="flex items-start gap-4">
+                                    <div class="shrink-0 flex items-center gap-1.5 mt-0.5">
+                                        <img src="https://cdn.codeoce.com/traits/bounty-hunter-icon.png" alt="" class="w-4 h-4 object-contain">
+                                        <img src="https://cdn.codeoce.com/traits/frost-icon.png" alt="" class="w-4 h-4 object-contain">
+                                        <img src="https://cdn.codeoce.com/traits/rage-icon.png" alt="" class="w-4 h-4 object-contain">
+                                        <img src="https://cdn.codeoce.com/traits/echo-icon.png" alt="" class="w-4 h-4 object-contain">
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="text-[10px] font-black text-void-accent uppercase tracking-widest">Traits</div>
+                                        <p class="text-[9px] text-void-muted leading-relaxed mt-1">Your card's special ability. Most cards gain traits based on rarity.</p>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 pt-2">
+                                    <div class="space-y-3">
+                                        <div class="text-[9px] font-black text-white/40 uppercase tracking-widest border-b border-white/5 pb-1">Trait Library</div>
+                                        <ul class="space-y-3">
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Bounty Hunter</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">Place a Bounty on a random enemy card. If this kills it, gain its maximum stats.</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Frost</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">Chance to apply Freeze or Frostbite to an enemy when attacking.</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Rage</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">Gains 1 attack every time it takes damage.</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Cleanse</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">Gives an enemy +2/2 and removes its Traits. (Once per combat)</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Echo</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">If this attacks and kills an enemy, it attacks again.</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="space-y-3">
+                                        <div class="text-[9px] font-black text-white/40 uppercase tracking-widest border-b border-white/5 pb-1">Trait Library (Cont.)</div>
+                                        <ul class="space-y-3">
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Mirror</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">Transform into an exact copy of the card opposite this one.</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Revive</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">After dying, comes back to life with 1 health.</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Absorb</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">If this kills an enemy, gain 25% of its maximum health.</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Guard</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">Will always be attacked by enemies first.</span>
+                                            </li>
+                                            <li class="flex flex-col gap-0.5">
+                                                <span class="text-[10px] font-black text-white uppercase tracking-wider">Mimic</span>
+                                                <span class="text-[9px] text-void-muted leading-tight">Gains the Traits and Stats of the card to the left of this.</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-white/10 pt-6">
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="w-1.5 h-6 bg-amber-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
+                                <h5 class="text-xs font-black uppercase tracking-widest text-white">Status Effects</h5>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[10px] font-black text-amber-400 uppercase tracking-wider">Bounty</span>
+                                    <span class="text-[8px] text-void-muted leading-tight">A target placed over a random enemy. If the Bounty Hunter kills the targeted enemy, it gains its maximum stats.</span>
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[10px] font-black text-blue-400 uppercase tracking-wider">Freeze</span>
+                                    <span class="text-[8px] text-void-muted leading-tight">Freezes an enemy, forcing it to miss its next attack.</span>
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[10px] font-black text-cyan-400 uppercase tracking-wider">Frostbite</span>
+                                    <span class="text-[8px] text-void-muted leading-tight">Enemy takes 10% more damage for the rest of combat. Can be stacked by multiple hits.</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -390,7 +537,7 @@
                         class="flex-1 flex flex-col overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                         <div
                             class="text-center text-xs text-void-muted py-8 flex flex-col items-center my-auto">
-                            <i class="fa-solid fa-layer-group text-3xl text-white/10 mb-4"></i>
+                            <i class="bx bxs-layer text-3xl text-white/10 mb-4"></i>
                             <span>Loading decks...</span>
                         </div>
                     </div>
@@ -424,7 +571,7 @@
                     <div id="my-trade-code" class="text-xs font-black text-void-accent tracking-[0.2em]">
                         LOADING...</div>
                     <button onclick="copyTradeCode()" class="text-void-accent/40 hover:text-void-accent"><i
-                            class="fa-solid fa-copy"></i></button>
+                            class="bx bxs-copy"></i></button>
                 </div>
             </div>
             <div id="trade-list" class="space-y-6"></div>
@@ -478,43 +625,38 @@
                 <p class="text-void-muted text-sm mt-2 font-medium max-w-xl">Castle code, linked platforms, team access, and account security.</p>
             </div>
             <div class="flex flex-wrap gap-1 glass-panel p-1 rounded-xl shrink-0">
-                <button type="button" data-profile-tab="channels" class="profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-void-accent text-void-text bg-void-accent/10">Channels</button>
-                <button type="button" data-profile-tab="transactions" class="profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text">History</button>
-                <button type="button" data-profile-tab="security" class="profile-settings-tab px-6 sm:px-8 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text">Security</button>
+                <button type="button" data-profile-tab="channels" class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-void-accent text-void-text bg-void-accent/10">Channels</button>
+                <button type="button" data-profile-tab="connections" class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Connections</button>
+                <button type="button" data-profile-tab="transactions" class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">History</button>
+                <button type="button" data-profile-tab="security" class="profile-settings-tab px-5 sm:px-7 py-2.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all border border-transparent text-void-muted hover:text-void-text hover:bg-white/[0.04]">Security</button>
             </div>
         </div>
 
         <div id="profile-panel-channels" class="profile-settings-panel space-y-8 lg:space-y-10">
-            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-6">
-                <div class="flex justify-between items-end border-b border-white/10 pb-3">
-                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Identity</div>
-                    <i class="fa-solid fa-id-card-clip text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 lg:p-10">
+                <div class="flex justify-between items-end border-b border-white/10 pb-4">
+                    <div class="text-[10px] font-black uppercase tracking-[0.22em] text-void-muted">Identity</div>
+                    <i class="bx bxs-id-card text-xs text-void-accent/60" aria-hidden="true"></i>
                 </div>
-                <div class="flex flex-col sm:flex-row sm:items-start gap-6">
-                    <div class="relative shrink-0">
+                <div class="pt-7 sm:pt-8 flex flex-col sm:flex-row gap-8 sm:gap-10 lg:gap-12 sm:items-start">
+                    <div class="relative shrink-0 mx-auto sm:mx-0">
                         <img id="viewer-settings-avatar" src="" alt=""
-                            class="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-white/10 bg-white/[0.03] shadow-lg shadow-black/40 ring-1 ring-void-accent/20" />
+                            class="w-32 h-32 sm:w-36 sm:h-36 rounded-2xl object-cover border border-white/10 bg-white/[0.03] shadow-xl shadow-black/50 ring-1 ring-white/[0.08]" />
                     </div>
-                    <div class="flex-1 min-w-0 space-y-4">
-                        <div class="flex flex-wrap items-center gap-3">
-                            <h2 id="viewer-settings-display-name" class="text-2xl sm:text-3xl font-display font-black text-white uppercase italic tracking-tight truncate">—</h2>
-                            <span id="viewer-settings-role-badge" class="text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-white/5 text-void-muted border border-white/10">—</span>
+                    <div class="flex-1 min-w-0 space-y-6 sm:space-y-7 text-center sm:text-left">
+                        <div class="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                            <h2 id="viewer-settings-display-name" class="text-3xl sm:text-4xl lg:text-[2.5rem] font-display font-black text-white uppercase italic tracking-tight leading-none truncate max-w-full">—</h2>
+                            <span id="viewer-settings-role-badge" class="text-[10px] font-black uppercase tracking-[0.18em] px-3.5 py-1.5 rounded-full bg-white/[0.06] text-void-muted border border-white/10">—</span>
                         </div>
-                        <p class="text-xs text-void-muted leading-relaxed max-w-2xl">Your Castle identity and linked platforms. Castle code is your public trade handle — share it only with people you trust.</p>
-                        <div class="flex flex-wrap items-stretch gap-4 pt-1">
-                            <div class="glass-panel px-4 py-3 rounded-xl border border-white/5 flex items-center gap-4 min-w-0">
-                                <div class="min-w-0">
-                                    <div class="text-[9px] font-black text-void-muted uppercase tracking-widest mb-1">Castle code</div>
-                                    <span id="viewer-settings-castle-code" class="text-sm font-black tracking-[0.15em] text-void-accent font-mono">…</span>
-                                </div>
-                                <button type="button" id="viewer-settings-copy-code" class="shrink-0 w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent hover:border-void-accent/30 transition-colors" title="Copy code">
-                                    <i class="fa-solid fa-copy text-xs" aria-hidden="true"></i>
+                        <p class="text-[13px] sm:text-sm text-void-muted leading-[1.65] max-w-xl mx-auto sm:mx-0">Your Castle identity and linked platforms. Castle code is your public trade handle — share it only with people you trust.</p>
+                        <div class="rounded-2xl border border-white/[0.07] bg-black/45 p-5 sm:p-6 space-y-4 text-left">
+                            <div class="text-[9px] font-black uppercase tracking-[0.22em] text-void-muted">Castle code</div>
+                            <div class="flex items-center justify-between gap-4 min-w-0">
+                                <span id="viewer-settings-castle-code" class="font-mono text-lg sm:text-xl font-bold tracking-[0.18em] text-void-accent break-all min-w-0">…</span>
+                                <button type="button" id="viewer-settings-copy-code" class="shrink-0 w-11 h-11 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-void-muted hover:text-void-accent hover:border-void-accent/35 transition-colors" title="Copy code">
+                                    <i class="bx bxs-copy text-base" aria-hidden="true"></i>
                                 </button>
                             </div>
-                        </div>
-                        <div>
-                            <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted border-b border-white/10 pb-3 mb-3">Connections</div>
-                            <div id="viewer-settings-connections" class="flex flex-wrap gap-2"></div>
                         </div>
                     </div>
                 </div>
@@ -523,7 +665,7 @@
             <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-4">
                 <div class="flex justify-between items-end border-b border-white/10 pb-3">
                     <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Channels you manage</div>
-                    <i class="fa-solid fa-users-gear text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    <i class="bx bxs-group text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
                 </div>
                 <p class="text-xs text-void-muted leading-relaxed">Creator channels where you are mod or editor.</p>
                 <div id="viewer-settings-team-list" class="space-y-2"></div>
@@ -533,49 +675,30 @@
             <div id="viewer-settings-upgrade-card" class="glass-panel rounded-2xl border border-void-accent/20 bg-void-accent/[0.04] p-6 sm:p-8 space-y-4 shadow-[0_0_40px_-12px_rgba(var(--void-accent-rgb),0.35)]">
                 <div class="flex justify-between items-end border-b border-void-accent/15 pb-3">
                     <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-accent">Upgrade to creator</div>
-                    <i class="fa-solid fa-wand-magic-sparkles text-[10px] text-void-accent opacity-70" aria-hidden="true"></i>
+                    <i class="bx bxs-magic-wand text-[10px] text-void-accent opacity-70" aria-hidden="true"></i>
                 </div>
                 <p class="text-xs text-void-muted leading-relaxed">Run your own channel on Castle: mint cards, packs, and Channel Point drops. Pricing will apply later — for now you can try the full setup.</p>
                 <a id="viewer-settings-upgrade-btn" href="/onboarding"
                     class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-void-accent text-void-bg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-void-accent/25 hover:scale-[1.02] active:scale-[0.98] transition-transform">Start creator setup</a>
             </div>
 
-            <div id="viewer-settings-channel-points-panel" class="hidden glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-4">
-                <div class="flex justify-between items-end border-b border-white/10 pb-3">
-                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Twitch Channel Points</div>
-                    <i class="fa-brands fa-twitch text-[10px] text-[#9146FF] opacity-80" aria-hidden="true"></i>
-                </div>
-                <p class="text-xs text-void-muted leading-relaxed">Set your main “open pack” reward and link extra rewards to specific event cards (for example “I was here” drops).</p>
-                <button type="button" onclick="openTwitchSettings()"
-                    class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-void-text text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:border-void-accent/30 transition-all">
-                    <i class="fa-solid fa-gear text-xs" aria-hidden="true"></i>
-                    Configure Channel Points
-                </button>
-            </div>
+        </div>
 
-            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-4">
+        <div id="profile-panel-connections" class="profile-settings-panel hidden space-y-8 lg:space-y-10">
+            <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-5">
                 <div class="flex justify-between items-end border-b border-white/10 pb-3">
-                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">More connections</div>
-                    <i class="fa-solid fa-plug text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Linked platforms</div>
+                    <i class="bx bxs-plug text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
                 </div>
-                <p class="text-xs text-void-muted leading-relaxed">Link additional platforms to your Castle account.</p>
-                <div class="flex flex-wrap gap-3">
-                    <a id="viewer-settings-link-kick" href="#"
-                        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest hover:border-[#53FC18]/40 hover:text-[#53FC18] transition-colors">
-                        <img src="/kick-mark.svg" alt="" class="h-4 w-4 object-contain" /> Connect Kick
-                    </a>
-                    <button type="button" disabled
-                        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/5 bg-white/[0.02] text-[10px] font-black uppercase tracking-widest text-void-muted cursor-not-allowed opacity-50">
-                        <i class="fa-brands fa-youtube text-red-500"></i> YouTube <span class="text-[8px] normal-case font-bold">(soon)</span>
-                    </button>
-                </div>
+                <p class="text-xs text-void-muted leading-relaxed max-w-2xl">Each connection shows its status, what Castle uses it for, and connect or disconnect — similar to Twitch’s own settings.</p>
+                <div id="viewer-settings-connections"></div>
             </div>
         </div>
 
         <div id="profile-panel-transactions" class="profile-settings-panel hidden space-y-8">
             <div class="p-16 sm:p-20 text-center flex flex-col items-center justify-center space-y-5 bg-white/[0.02] border border-white/5 border-dashed rounded-[2.5rem]">
                 <div class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl">
-                    <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                    <i class="bx bxs-receipt" aria-hidden="true"></i>
                 </div>
                 <h3 class="text-xl font-display font-black uppercase italic text-void-text tracking-tight">Transaction history</h3>
                 <p class="text-void-muted text-xs max-w-md leading-relaxed">Pack purchases and payments will appear here in a future update.</p>
@@ -586,7 +709,7 @@
             <div class="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 space-y-5">
                 <div class="flex justify-between items-end border-b border-white/10 pb-3">
                     <div class="text-[11px] font-black uppercase tracking-[0.2em] text-void-muted">Block drops</div>
-                    <i class="fa-solid fa-ban text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
+                    <i class="bx bxs-block text-[10px] text-void-accent opacity-50" aria-hidden="true"></i>
                 </div>
                 <p class="text-xs text-void-muted leading-relaxed">You won’t receive new card drops from blocked creator channels. Existing cards stay in your collection.</p>
                 <div class="flex flex-col sm:flex-row gap-3">
@@ -601,7 +724,7 @@
             <div class="glass-panel rounded-2xl border border-red-500/20 bg-red-950/20 p-6 sm:p-8 space-y-4">
                 <div class="flex justify-between items-end border-b border-red-500/20 pb-3">
                     <div class="text-[11px] font-black uppercase tracking-[0.2em] text-red-400">Danger zone</div>
-                    <i class="fa-solid fa-triangle-exclamation text-[10px] text-red-400/80" aria-hidden="true"></i>
+                    <i class="bx bxs-error text-[10px] text-red-400/80" aria-hidden="true"></i>
                 </div>
                 <p class="text-xs text-void-muted leading-relaxed">Deleting your account permanently removes your Castle profile, collection, and settings. <span class="text-red-300/90 font-semibold">There is no data recovery.</span> This does not delete content on Twitch or Kick.</p>
                 <button type="button" id="viewer-open-delete-account-modal"
@@ -613,7 +736,7 @@
             <div class="glass-panel max-w-lg w-full rounded-2xl border border-white/10 border-red-500/25 p-8 space-y-6 shadow-2xl shadow-black/50">
                 <div class="flex justify-between items-end border-b border-white/10 pb-3">
                     <h4 class="text-lg font-display font-black uppercase italic tracking-tight text-red-400">Delete forever</h4>
-                    <i class="fa-solid fa-skull-crossbones text-sm text-red-400/60" aria-hidden="true"></i>
+                    <i class="bx bxs-skull text-sm text-red-400/60" aria-hidden="true"></i>
                 </div>
                 <p class="text-sm text-void-muted leading-relaxed">This cannot be undone. Type <span class="font-mono text-sm text-white bg-white/5 px-1.5 py-0.5 rounded border border-white/10">DELETE MY CASTLE ACCOUNT</span> below to confirm.</p>
                 <input type="text" id="viewer-delete-confirm-input" autocomplete="off" placeholder="DELETE MY CASTLE ACCOUNT"

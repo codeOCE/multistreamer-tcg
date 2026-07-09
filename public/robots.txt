@@ -1,0 +1,31 @@
+User-agent: *
+Allow: /
+Allow: /faq
+Allow: /terms
+Allow: /privacy
+Allow: /cookies
+
+Disallow: /api/
+Disallow: /auth/
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /my-collection
+Disallow: /card-creator
+Disallow: /card-studio
+Disallow: /stream-features
+Disallow: /pack-opening
+Disallow: /queue-control
+Disallow: /obs
+Disallow: /obs-overlay
+Disallow: /onboarding
+Disallow: /arena
+Disallow: /arena-test
+Disallow: /battle
+Disallow: /trading
+Disallow: /profile
+Disallow: /magic-dust
+Disallow: /binder
+Disallow: /binders
+Disallow: /leaderboard
+
+Sitemap: https://tcg.creatorcastle.gg/sitemap.xml

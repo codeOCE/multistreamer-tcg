@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Real gate today: bundles the Worker via esbuild and validates
+      # wrangler.jsonc bindings without deploying. Catches syntax errors,
+      # bad imports, and broken config. Does not require Cloudflare creds.
+      - name: Wrangler dry-run deploy
+        run: npx wrangler deploy --dry-run --outdir=dist
+
+      # Unit tests. Passes cleanly until tests are added; flip to a hard
+      # failure (drop --passWithNoTests) once the first suite lands.
+      - name: Test
+        run: npm test -- --run --passWithNoTests

@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Arena · Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        .hidden { display: none !important; }
+
+        /* ── Three-column page layout ── */
+        #bt-layout {
+            display: grid;
+            grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) 260px;
+            gap: 0;
+            width: 100%;
+            min-height: calc(100vh - 80px);
+            padding: 0 32px 48px 32px;
+            align-items: stretch;
+        }
+
+        /* ── Left: traits ── */
+        #bt-traits-col {
+            padding: 24px 8px 24px 0;
+            min-width: 0;
+            max-width: 280px;
+            border-right: 1px solid rgba(255,255,255,0.05);
+            overflow: visible;
+        }
+        .bt-traits-header {
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.26em;
+            text-transform: uppercase;
+            color: var(--void-muted);
+            padding: 0 14px 12px 2px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            margin-bottom: 8px;
+        }
+        .trait-row {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 14px 10px 2px;
+            border-radius: 10px;
+            transition: background 0.15s;
+            cursor: default;
+        }
+        .trait-row:hover { background: rgba(255,255,255,0.04); }
+        .trait-row img { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+        .trait-row > span {
+            font-size: 0.72rem; font-weight: 700;
+            letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-muted);
+            transition: color 0.15s;
+        }
+        .trait-row:hover > span { color: var(--void-text); }
+
+        /* ── Trait tooltip ── */
+        .trait-tip {
+            position: absolute;
+            left: calc(100% + 14px);
+            top: 50%;
+            transform: translateY(-50%) translateX(-6px);
+            width: 240px;
+            background: #0d1117;
+            border: 1px solid rgba(var(--void-accent-rgb), 0.22);
+            border-radius: 14px;
+            padding: 14px 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 600;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(var(--void-accent-rgb),0.06);
+        }
+        .trait-row:hover .trait-tip {
+            opacity: 1;
+            transform: translateY(-50%) translateX(0);
+            pointer-events: auto;
+        }
+        .trait-tip::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 50%;
+            transform: translateY(-50%) rotate(45deg);
+            width: 10px;
+            height: 10px;
+            background: #0d1117;
+            border-left: 1px solid rgba(var(--void-accent-rgb), 0.22);
+            border-bottom: 1px solid rgba(var(--void-accent-rgb), 0.22);
+        }
+        .trait-tip-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--void-accent);
+            margin-bottom: 6px;
+        }
+        .trait-tip-desc {
+            font-size: 0.62rem;
+            line-height: 1.55;
+            color: rgba(255,255,255,0.6);
+        }
+        .trait-tip-desc strong { color: var(--void-text); font-weight: 700; }
+        .trait-tip-desc em { color: rgba(255,255,255,0.45); font-style: italic; }
+        .trait-tip-kw-block {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .trait-tip-kw-item { display: flex; flex-direction: column; gap: 2px; }
+        .trait-tip-kw-label { font-size: 0.5rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; color: var(--void-accent); }
+        .trait-tip-kw-def {
+            font-size: 0.62rem; font-weight: 400;
+            line-height: 1.55; letter-spacing: normal;
+            text-transform: none;
+            color: rgba(255,255,255,0.6);
+        }
+
+        /* ── Inline keyword tooltips ── */
+        .bt-kw {
+            color: var(--void-text); font-weight: 700;
+            border-bottom: 1px dotted rgba(var(--void-accent-rgb), 0.5);
+            cursor: help; position: relative; display: inline-block;
+        }
+        .bt-kw-tip {
+            position: absolute; bottom: calc(100% + 8px); left: 50%;
+            transform: translateX(-50%); width: 200px;
+            background: #0a0d14; border: 1px solid rgba(var(--void-accent-rgb), 0.35);
+            border-radius: 10px; padding: 10px 12px;
+            font-size: 0.58rem; line-height: 1.5; color: rgba(255,255,255,0.7);
+            font-weight: 400; font-style: normal; pointer-events: none;
+            opacity: 0; transition: opacity 0.15s; z-index: 700;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.7); white-space: normal; text-align: left;
+        }
+        .bt-kw-tip strong { color: var(--void-accent); font-weight: 800; display: block; margin-bottom: 4px; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; }
+        .bt-kw:hover .bt-kw-tip { opacity: 1; }
+        .bt-kw-tip::after {
+            content: ''; position: absolute; top: 100%; left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 8px; height: 8px; margin-top: -4px;
+            background: #0a0d14;
+            border-right: 1px solid rgba(var(--void-accent-rgb), 0.35);
+            border-bottom: 1px solid rgba(var(--void-accent-rgb), 0.35);
+        }
+
+        /* ── Status glossary ── */
+        #bt-glossary {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+        .bt-glossary-header {
+            font-size: 0.5rem; font-weight: 800; letter-spacing: 0.28em;
+            text-transform: uppercase; color: var(--void-muted); padding: 0 4px 8px;
+        }
+        .bt-glossary-row { padding: 6px 4px; border-radius: 6px; }
+        .bt-glossary-term { font-size: 0.57rem; font-weight: 800; color: var(--void-accent); letter-spacing: 0.06em; display: block; margin-bottom: 2px; }
+        .bt-glossary-def { font-size: 0.55rem; line-height: 1.5; color: rgba(255,255,255,0.45); }
+
+        /* ── Center: deck builder ── */
+        #bt-center-col {
+            padding: 32px 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+        }
+
+        /* Page heading */
+        #bt-heading { text-align: center; }
+        #bt-heading h1 {
+            font-family: 'Outfit', sans-serif; font-weight: 900;
+            font-size: clamp(2rem, 4vw, 3rem); text-transform: uppercase;
+            letter-spacing: -0.02em; line-height: 1;
+        }
+        #bt-heading h1 span { color: var(--void-accent); }
+        #bt-heading p { font-size: 0.65rem; color: var(--void-muted); margin-top: 6px; }
+
+        /* Deck tabs */
+        #bt-deck-tabs {
+            display: flex; gap: 10px;
+            width: 100%; max-width: min(720px, 100%);
+        }
+        .bt-deck-tab {
+            flex: 1; padding: 10px 8px 8px;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; background: transparent;
+            color: rgba(255,255,255,0.4);
+            font-family: 'Outfit', sans-serif; font-weight: 900;
+            font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase;
+            cursor: pointer; transition: all 0.2s; text-align: center;
+            line-height: 1.4; position: relative;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+        }
+        .bt-deck-tab:hover {
+            border-color: rgba(255,255,255,0.18); color: rgba(255,255,255,0.7);
+            background: rgba(255,255,255,0.02);
+        }
+        .bt-deck-tab.active {
+            border-color: var(--void-accent); color: var(--void-accent);
+            background: rgba(var(--void-accent-rgb), 0.07);
+            box-shadow: 0 0 18px rgba(var(--void-accent-rgb), 0.1);
+        }
+        .bt-deck-toggle {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 0.44rem; font-weight: 800; letter-spacing: 0.1em;
+            text-transform: uppercase; padding: 3px 8px; border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.28);
+            background: transparent; cursor: pointer; transition: all 0.18s;
+            white-space: nowrap; font-family: inherit; line-height: 1;
+        }
+        .bt-deck-toggle:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.35);
+            color: rgba(var(--void-accent-rgb), 0.8);
+            background: rgba(var(--void-accent-rgb), 0.06);
+        }
+        .bt-deck-toggle.is-active {
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            color: var(--void-accent);
+            background: rgba(var(--void-accent-rgb), 0.12);
+            cursor: default;
+        }
+        .bt-deck-toggle .bt-toggle-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: currentColor; flex-shrink: 0; transition: all 0.18s;
+        }
+        .bt-deck-toggle:not(.is-active) .bt-toggle-dot { background: rgba(255,255,255,0.2); }
+
+        /* Card slots */
+        #bt-slots-wrap {
+            width: 100%; max-width: min(720px, 100%);
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 20px; padding: 36px 32px 32px;
+        }
+        #bt-slots {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+        }
+        .bt-slot-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        .bt-card-frame {
+            width: 100%; aspect-ratio: 5/7; border-radius: 12px;
+            border: 2px dashed rgba(var(--void-accent-rgb), 0.2);
+            background: rgba(255,255,255,0.02); overflow: hidden;
+            position: relative; cursor: pointer;
+            transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+        }
+        .bt-card-frame:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.5);
+            transform: translateY(-5px); box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+        }
+        .bt-card-frame.filled { border-style: solid; border-color: rgba(255,255,255,0.12); }
+        .bt-card-frame.filled:hover {
+            border-color: rgba(var(--void-accent-rgb), 0.6);
+            box-shadow: 0 18px 44px rgba(0,0,0,0.65), 0 0 28px rgba(var(--void-accent-rgb), 0.15);
+        }
+        .bt-card-empty-icon {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(var(--void-accent-rgb), 0.18); font-size: 2rem; transition: color 0.2s;
+        }
+        .bt-card-frame:hover .bt-card-empty-icon { color: rgba(var(--void-accent-rgb), 0.5); }
+        .bt-slot-label {
+            font-size: 0.55rem; font-weight: 800; letter-spacing: 0.22em;
+            text-transform: uppercase; color: var(--void-muted);
+        }
+
+        /* Trait pips */
+        .bt-card-trait {
+            position: absolute; bottom: 7px; left: 7px;
+            display: flex; gap: 3px; flex-wrap: wrap; z-index: 2;
+        }
+        .bt-trait-pip {
+            width: 22px; height: 22px; border-radius: 50%;
+            background: rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.18);
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .bt-trait-pip img { width: 14px; height: 14px; object-fit: contain; }
+
+        #bt-battle-msg.success { color: var(--void-accent); }
+        #bt-battle-msg.error   { color: #f87171; }
+
+        /* Save deck actions */
+        #bt-deck-actions {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 10px; margin-top: 24px; padding-top: 24px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        #bt-save-deck-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 8px; min-width: 200px; padding: 12px 28px;
+            border-radius: 12px; border: 1px solid rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.12); color: var(--void-accent);
+            font-family: 'Outfit', sans-serif; font-size: 0.65rem;
+            font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+            cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.15s, opacity 0.2s;
+        }
+        #bt-save-deck-btn:hover:not(:disabled) {
+            background: rgba(var(--void-accent-rgb), 0.2);
+            border-color: rgba(var(--void-accent-rgb), 0.65); transform: translateY(-1px);
+        }
+        #bt-save-deck-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+        #bt-save-deck-btn.is-saved {
+            border-color: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+            color: rgba(255,255,255,0.35);
+            opacity: 1;
+        }
+        #bt-save-deck-btn.is-saved:hover { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); transform: none; }
+        #bt-deck-actions-row {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        #bt-revert-deck-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 12px 22px;
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+            background: transparent; color: rgba(255,255,255,0.55);
+            font-family: 'Outfit', sans-serif; font-size: 0.65rem;
+            font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+            cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+        }
+        #bt-revert-deck-btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.04);
+            border-color: rgba(255,255,255,0.22);
+            color: var(--void-text);
+            transform: translateY(-1px);
+        }
+        #bt-revert-deck-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+        #bt-deck-save-msg {
+            font-size: 0.62rem; font-weight: 600; text-align: center; min-height: 1.2em;
+        }
+        #bt-deck-save-msg.success { color: var(--void-accent); }
+        #bt-deck-save-msg.error   { color: #f87171; }
+
+        /* ── Right panel ── */
+        #bt-right-col {
+            padding: 24px 14px 0 14px;
+            min-width: 0; box-sizing: border-box;
+            border-left: 1px solid rgba(255,255,255,0.05);
+            display: flex; flex-direction: column; gap: 0;
+        }
+        .bt-panel {
+            padding: 0 0 14px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 14px;
+        }
+        .bt-panel:last-child { border-bottom: none; margin-bottom: 0; }
+        .bt-panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px; padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .bt-panel-title {
+            font-size: 0.58rem; font-weight: 800; letter-spacing: 0.28em;
+            text-transform: uppercase; color: var(--void-accent);
+        }
+        .bt-panel-icon {
+            font-size: 0.7rem; color: var(--void-accent); opacity: 0.45;
+        }
+
+        /* Empty / placeholder message */
+        .bt-empty-msg {
+            font-size: 0.58rem; color: var(--void-muted); opacity: 0.5;
+            text-align: center; padding: 14px 0; font-style: italic;
+        }
+
+        /* History rows */
+        .bt-history-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px;
+            padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .bt-history-row:last-child { border-bottom: none; }
+        .bt-history-vs {
+            font-size: 0.56rem; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--void-muted);
+        }
+        .bt-history-result {
+            display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+        }
+        .bt-history-label {
+            font-family: 'Outfit', sans-serif; font-size: 0.7rem; font-weight: 900;
+            letter-spacing: 0.12em; text-transform: uppercase; line-height: 1;
+        }
+        .bt-history-result.win  .bt-history-label { color: var(--void-accent); }
+        .bt-history-result.loss .bt-history-label { color: #f87171; }
+        .bt-history-result.draw .bt-history-label { color: rgba(255,255,255,0.35); }
+        .bt-history-mmr {
+            font-family: 'Outfit', sans-serif; font-size: 0.55rem; font-weight: 800;
+            letter-spacing: 0.06em; line-height: 1;
+        }
+        .bt-history-mmr.pos { color: rgba(var(--void-accent-rgb), 0.85); }
+        .bt-history-mmr.neg { color: rgba(248,113,113,0.85); }
+        .bt-history-mmr.zero { color: rgba(255,255,255,0.3); }
+
+        /* Record stat grid */
+        .bt-stat-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center;
+        }
+        .bt-stat-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+        .bt-stat-val {
+            font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 900; line-height: 1;
+        }
+        .bt-stat-val.wins   { color: var(--void-accent); }
+        .bt-stat-val.losses { color: #f87171; }
+        .bt-stat-val.draws  { color: rgba(255,255,255,0.35); }
+        .bt-stat-val.rank   {
+            color: rgba(255,255,255,0.8);
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .bt-stat-label {
+            font-size: 0.46rem; font-weight: 800; letter-spacing: 0.2em;
+            text-transform: uppercase; color: var(--void-muted);
+        }
+
+        /* ── Battle Leaderboard ── */
+        .bt-lb-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .bt-lb-row:last-child { border-bottom: none; }
+        .bt-lb-rank {
+            font-family: 'Outfit', sans-serif; font-size: 0.58rem;
+            font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;
+            flex-shrink: 0; width: 22px; text-align: center;
+        }
+        .bt-lb-info { flex: 1; min-width: 0; }
+        .bt-lb-name {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em;
+            color: var(--void-text); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        .bt-lb-record {
+            display: flex; align-items: center; gap: 4px; margin-top: 2px;
+        }
+        .bt-lb-w  { font-size: 0.5rem; font-weight: 800; color: var(--void-accent); }
+        .bt-lb-l  { font-size: 0.5rem; font-weight: 800; color: #f87171; }
+        .bt-lb-d  { font-size: 0.5rem; font-weight: 800; color: rgba(255,255,255,0.35); }
+        .bt-lb-tier {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.5rem; font-weight: 900;
+            letter-spacing: 0.08em; text-transform: uppercase;
+        }
+        .bt-lb-sep { font-size: 0.5rem; color: rgba(255,255,255,0.15); }
+        .bt-lb-deck {
+            position: relative;
+            display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+        }
+        .bt-lb-deck-slot {
+            width: 26px; height: 36px;
+            flex-shrink: 0;
+        }
+        .bt-lb-deck-card {
+            width: 100%; height: 100%;
+            border-radius: 5px;
+            object-fit: cover; display: block;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.06) inset,
+                0 2px 6px rgba(0,0,0,0.45),
+                0 0 0 1px rgba(0,0,0,0.4);
+            background: #0a0d14;
+            cursor: help;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .bt-lb-deck:hover .bt-lb-deck-card {
+            box-shadow:
+                0 0 0 1px rgba(var(--void-accent-rgb), 0.3) inset,
+                0 3px 9px rgba(0,0,0,0.55),
+                0 0 0 1px rgba(0,0,0,0.4);
+        }
+        .bt-lb-deck-empty {
+            width: 100%; height: 100%;
+            border-radius: 5px;
+            background:
+                linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.05) inset,
+                0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        /* Full-deck hover tooltip */
+        .bt-deck-tip {
+            position: absolute;
+            bottom: calc(100% + 12px);
+            right: 0;
+            width: 360px;
+            background: #0d1117;
+            border: 1px solid rgba(var(--void-accent-rgb), 0.25);
+            border-radius: 14px;
+            padding: 12px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(4px);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 700;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--void-accent-rgb),0.05);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .bt-lb-deck:hover .bt-deck-tip {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .bt-deck-tip-card {
+            display: flex; flex-direction: column; gap: 6px;
+            min-width: 0;
+        }
+        .bt-deck-tip-img-wrap {
+            position: relative; aspect-ratio: 5/7;
+            border-radius: 8px; overflow: hidden;
+            background: #0a0d14;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.07) inset;
+        }
+        .bt-deck-tip-img-wrap img {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        .bt-deck-tip-img-empty {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,0.15);
+            font-size: 0.55rem; font-weight: 700;
+            letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        .bt-deck-tip-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900; font-size: 0.6rem;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--void-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .bt-deck-tip-stats {
+            display: flex; gap: 4px; flex-wrap: wrap;
+        }
+        .bt-deck-tip-stat {
+            display: inline-flex; align-items: center; gap: 2px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.5rem; font-weight: 800;
+            letter-spacing: 0.04em; text-transform: uppercase;
+        }
+        .bt-deck-tip-stat.atk { color: #f87171; }
+        .bt-deck-tip-stat.def { color: #60a5fa; }
+        .bt-deck-tip-stat.hp  { color: var(--void-accent); }
+        .bt-deck-tip-traits {
+            display: flex; flex-direction: column; gap: 4px;
+            margin-top: 2px; padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .bt-deck-tip-trait {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 0.02em;
+            color: rgba(255,255,255,0.7);
+        }
+        .bt-deck-tip-trait-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.15);
+            flex-shrink: 0;
+            font-size: 0.6rem;
+        }
+        .bt-deck-tip-trait-icon img { width: 9px; height: 9px; object-fit: contain; }
+        .bt-deck-tip-trait-trigger { color: rgba(255,255,255,0.4); font-weight: 500; }
+        .bt-deck-tip-trait.genesis { color: var(--void-accent); }
+        .bt-deck-tip-trait.genesis .bt-deck-tip-trait-icon {
+            border-color: rgba(var(--void-accent-rgb), 0.5);
+        }
+        .bt-lb-no-deck {
+            font-size: 0.48rem; color: var(--void-muted); opacity: 0.5; font-style: italic;
+        }
+
+        /* ── Confirm Make Active modal ── */
+        #bt-confirm-active {
+            position: fixed; inset: 0;
+            background: rgba(5,7,10,0.92);
+            backdrop-filter: blur(20px);
+            z-index: 9100;
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        #bt-confirm-active.open { opacity: 1; pointer-events: all; }
+        #bt-confirm-active-inner {
+            background: var(--void-bg, #0a0a0f);
+            border: 1px solid rgba(var(--void-accent-rgb), 0.22);
+            border-radius: 18px;
+            width: 100%; max-width: 380px;
+            padding: 28px 26px 22px;
+            display: flex; flex-direction: column; align-items: center; gap: 14px;
+            text-align: center;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--void-accent-rgb),0.05);
+            transform: translateY(8px);
+            transition: transform 0.25s ease;
+        }
+        #bt-confirm-active.open #bt-confirm-active-inner { transform: translateY(0); }
+        #bt-confirm-active-title {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900; font-size: 0.95rem;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--void-text);
+            margin: 0;
+        }
+        #bt-confirm-active-body {
+            font-size: 0.68rem;
+            line-height: 1.55;
+            color: var(--void-muted);
+            margin: 0;
+            max-width: 280px;
+        }
+        #bt-confirm-active-body #bt-confirm-active-target,
+        #bt-confirm-active-body #bt-confirm-active-current {
+            color: var(--void-accent);
+            font-weight: 700;
+        }
+        #bt-confirm-active-actions {
+            display: flex; gap: 10px; margin-top: 6px; width: 100%;
+        }
+        #bt-confirm-active-actions button {
+            flex: 1;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.62rem; font-weight: 900;
+            letter-spacing: 0.16em; text-transform: uppercase;
+            padding: 11px 14px;
+            border-radius: 11px;
+            cursor: pointer;
+            transition: all 0.18s;
+        }
+        #bt-confirm-active-cancel {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.55);
+        }
+        #bt-confirm-active-cancel:hover {
+            background: rgba(255,255,255,0.04);
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.22);
+        }
+        #bt-confirm-active-confirm {
+            background: rgba(var(--void-accent-rgb), 0.14);
+            border: 1px solid rgba(var(--void-accent-rgb), 0.5);
+            color: var(--void-accent);
+        }
+        #bt-confirm-active-confirm:hover:not(:disabled) {
+            background: rgba(var(--void-accent-rgb), 0.22);
+            border-color: rgba(var(--void-accent-rgb), 0.65);
+        }
+        #bt-confirm-active-confirm:disabled {
+            opacity: 0.45; cursor: not-allowed;
+        }
+
+        /* ── Picker modal (matching collection detail style) ── */
+        #bt-picker {
+            position: fixed; inset: 0;
+            background: rgba(5,7,10,0.92);
+            backdrop-filter: blur(20px);
+            z-index: 9000;
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.25s;
+        }
+        #bt-picker.open {
+            opacity: 1; pointer-events: all;
+        }
+        #bt-picker-inner {
+            background: var(--void-bg, #0a0a0f);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            width: 100%; max-width: 1040px;
+            height: min(85vh, 760px);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--void-accent-rgb),0.05);
+        }
+        #bt-picker-head {
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+        }
+        #bt-picker-head h4 {
+            font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.1rem;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        #bt-picker-head p { font-size: 0.58rem; color: var(--void-muted); margin-top: 4px; }
+        #bt-picker-close {
+            width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+            color: var(--void-text); cursor: pointer; font-size: 1.1rem;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+        }
+        #bt-picker-close:hover { background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.3); }
+        #bt-picker-filters {
+            padding: 14px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.01);
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .bt-filter-row {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .bt-filter-row-end {
+            margin-left: auto;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .bt-filter-chip {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.58rem; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            padding: 5px 11px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: transparent;
+            color: var(--void-muted);
+            cursor: pointer;
+            transition: all 0.18s;
+            white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .bt-filter-chip:hover {
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.03);
+        }
+        .bt-filter-chip.active {
+            color: var(--void-accent);
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.1);
+        }
+        .bt-filter-chip[data-rarity].active {
+            color: var(--bt-rarity-color);
+            border-color: var(--bt-rarity-color);
+            background: color-mix(in srgb, var(--bt-rarity-color) 12%, transparent);
+        }
+        .bt-filter-chip img {
+            width: 12px; height: 12px; object-fit: contain;
+        }
+        .bt-filter-label {
+            font-size: 0.48rem; font-weight: 800;
+            letter-spacing: 0.2em; text-transform: uppercase;
+            color: var(--void-muted); opacity: 0.6;
+            padding-right: 4px;
+        }
+        #bt-picker-search-toggle {
+            width: 30px; height: 30px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.02);
+            color: var(--void-muted);
+            cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.8rem;
+            line-height: 1;
+            transition: all 0.18s;
+            flex-shrink: 0;
+        }
+        /* Boxicons glyphs inherit a tall line-height and render slightly low; force the
+           glyph to a centered block so it sits dead-centre in the circle. */
+        #bt-picker-search-toggle i { display: block; line-height: 1; }
+        #bt-picker-search-toggle:hover {
+            color: var(--void-text);
+            border-color: rgba(255,255,255,0.22);
+            background: rgba(255,255,255,0.05);
+        }
+        #bt-picker-search-toggle.active {
+            color: var(--void-accent);
+            border-color: rgba(var(--void-accent-rgb), 0.45);
+            background: rgba(var(--void-accent-rgb), 0.1);
+        }
+        .bt-search-input {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 999px;
+            padding: 6px 14px; font-size: 0.7rem; font-weight: 600;
+            color: var(--void-text); outline: none;
+            transition: width 0.25s ease, border-color 0.2s, padding 0.25s ease, opacity 0.2s;
+            font-family: 'Space Grotesk', sans-serif;
+            width: 220px;
+        }
+        .bt-search-input.collapsed {
+            width: 0; padding-left: 0; padding-right: 0;
+            border-color: transparent; opacity: 0;
+            pointer-events: none;
+        }
+        .bt-search-input::placeholder { color: var(--void-muted); }
+        .bt-search-input:focus { border-color: rgba(var(--void-accent-rgb), 0.4); box-shadow: 0 0 0 3px rgba(var(--void-accent-rgb),0.06); }
+        #bt-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+            gap: 14px; padding: 20px 24px;
+            overflow-y: auto; flex: 1;
+            align-content: start;
+        }
+        .bt-picker-card {
+            display: flex; flex-direction: column; gap: 6px;
+            cursor: pointer; border-radius: 10px; padding: 5px;
+            border: 1px solid transparent; transition: all 0.18s;
+        }
+        .bt-picker-card:hover {
+            background: rgba(var(--void-accent-rgb), 0.05);
+            border-color: rgba(var(--void-accent-rgb), 0.3);
+            transform: translateY(-2px);
+        }
+        .bt-picker-img-wrap {
+            position: relative; aspect-ratio: 5/7; border-radius: 8px;
+            overflow: hidden; border: 1px solid rgba(255,255,255,0.07);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+        }
+        .bt-picker-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .bt-picker-name {
+            font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--void-muted);
+            text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .bt-picker-stats {
+            display: flex; justify-content: center; gap: 6px;
+            font-size: 0.48rem; font-weight: 800; letter-spacing: 0.06em;
+        }
+        .bt-atk { color: #f87171; }
+        .bt-def { color: #60a5fa; }
+
+        /* ── Loading / auth ── */
+        #bt-loading, #bt-signin {
+            position: fixed; inset: 0; background: var(--void-bg, #0a0a0f);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 16px; z-index: 200; text-align: center; padding: 24px;
+        }
+        .bt-spin {
+            width: 36px; height: 36px;
+            border: 2px solid rgba(var(--void-accent-rgb), 0.15);
+            border-top-color: var(--void-accent);
+            border-radius: 50%; animation: bt-spin 0.8s linear infinite;
+        }
+        @keyframes bt-spin { to { transform: rotate(360deg); } }
+
+        /* ── Nav pill links ── */
+        @media (max-width: 768px) {
+            #bt-layout { grid-template-columns: 1fr; }
+            #bt-traits-col, #bt-right-col { display: none !important; }
+            #bt-center-col { padding: 24px 16px; }
+        }
+    </style>
+    <script src="/castle-prefs.js"></script>
+</head>
+<body class="bg-void-bg text-void-text antialiased">
+<div class="saas-bg-glow"></div>
+
+<!-- Loading -->
+<div id="bt-loading">
+    <div class="bt-spin"></div>
+    <p class="text-[10px] font-black uppercase tracking-widest text-void-muted">Loading Battle Arena…</p>
+</div>
+
+<!-- Not signed in -->
+<div id="bt-signin" class="hidden">
+    <i class="bx bxs-game" style="font-size:3rem;color:rgba(255,255,255,0.08)"></i>
+    <h1 class="font-display font-black text-3xl uppercase tracking-tight">Battle Arena</h1>
+    <p class="text-[0.7rem] text-void-muted max-w-xs leading-relaxed">Sign in to build your decks and challenge other collectors.</p>
+    <a href="/" class="saas-button rounded-xl px-8 py-3 text-[0.65rem]">
+        <i class="bx bxl-twitch mr-2"></i>Sign In with Twitch
+    </a>
+</div>
+
+<!-- Nav — injected by /streamer-nav.js -->
+
+<!-- Main layout -->
+<div id="bt-root" class="hidden" style="padding-top:80px;">
+    <div id="bt-layout">
+
+        <!-- Left: Traits -->
+        <aside id="bt-traits-col">
+            <div class="bt-traits-header">Traits</div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/Genesis-Icon.png" alt=""><span>Genesis</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Genesis</div>
+                    <div class="trait-tip-desc">A rare <strong>Pristine</strong> grade — only a <strong>1% chance</strong> on mint. The highest card quality, above Legendary.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/absorb-icon.png" alt=""><span>Absorb</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Absorb</div>
+                    <div class="trait-tip-desc">If this kills an enemy, gain <strong>25%</strong> of its maximum health.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/bounty-hunter-icon.png" alt=""><span>Bounty Hunter</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Bounty Hunter</div>
+                    <div class="trait-tip-desc">Place a <strong>Bounty</strong> on a random enemy card. If this kills it, gain its maximum stats.</div>
+                    <div class="trait-tip-kw-block">
+                        <div class="trait-tip-kw-item">
+                            <span class="trait-tip-kw-label">Bounty</span>
+                            <span class="trait-tip-kw-def">A target placed on a random enemy. If the Bounty Hunter kills it, the hunter gains the enemy's maximum stats.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/cleanse-icon.png" alt=""><span>Cleanse</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Cleanse</div>
+                    <div class="trait-tip-desc">Gives an enemy <strong>+2/2</strong> and removes its <strong>Traits</strong>. <em>(Once per combat)</em></div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/echo-icon.png" alt=""><span>Echo</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Echo</div>
+                    <div class="trait-tip-desc">If this attacks and <strong>kills an enemy</strong>, it attacks again.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/frost-icon.png" alt=""><span>Frost</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Frost</div>
+                    <div class="trait-tip-desc">Chance to apply <strong>Freeze</strong> or <strong>Frostbite</strong> to an enemy when attacking.</div>
+                    <div class="trait-tip-kw-block">
+                        <div class="trait-tip-kw-item">
+                            <span class="trait-tip-kw-label">Freeze</span>
+                            <span class="trait-tip-kw-def">Forces an enemy to miss its next attack.</span>
+                        </div>
+                        <div class="trait-tip-kw-item">
+                            <span class="trait-tip-kw-label">Frostbite</span>
+                            <span class="trait-tip-kw-def">Enemy takes 10% more damage for the rest of combat. Can be stacked by multiple hits.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/guard-icon.png" alt=""><span>Guard</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Guard</div>
+                    <div class="trait-tip-desc">Will <strong>always be attacked</strong> by enemies first.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/mimic-icon.png" alt=""><span>Mimic</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Mimic</div>
+                    <div class="trait-tip-desc">Gains the <strong>Traits</strong> of the card to the left or right (depending on card creation) of this.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/mirror-icon.png" alt=""><span>Mirror</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Mirror</div>
+                    <div class="trait-tip-desc">Transform into an <strong>exact copy</strong> of the card opposite this one.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/rage-icon.png" alt=""><span>Rage</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Rage</div>
+                    <div class="trait-tip-desc">Gains <strong>1 attack</strong> every time it takes damage.</div>
+                </div>
+            </div>
+
+            <div class="trait-row">
+                <img src="https://cdn.codeoce.com/traits/revive-icon.png" alt=""><span>Revive</span>
+                <div class="trait-tip">
+                    <div class="trait-tip-name">Revive</div>
+                    <div class="trait-tip-desc">After dying, comes back to life with <strong>1 health</strong>.</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Deck Builder -->
+        <main id="bt-center-col">
+
+            <!-- Heading -->
+            <div id="bt-heading">
+                <h1>Battle <span>Arena</span></h1>
+                <p>Build your 3-card deck and challenge other collectors.</p>
+            </div>
+
+            <!-- Deck tabs -->
+            <div id="bt-deck-tabs">
+                <button class="bt-deck-tab active" data-deck-idx="0">Battle<br>Deck 1</button>
+                <button class="bt-deck-tab" data-deck-idx="1">Battle<br>Deck 2</button>
+                <button class="bt-deck-tab" data-deck-idx="2">Battle<br>Deck 3</button>
+            </div>
+
+            <!-- Card slots -->
+            <div id="bt-slots-wrap">
+                <div id="bt-slots">
+                    <div class="bt-slot-wrap">
+                        <div class="bt-card-frame" id="bt-slot-1" onclick="window._btOpenPicker(1)">
+                            <div class="bt-card-empty-icon"><i class="bx bxs-plus"></i></div>
+                        </div>
+                        <div class="bt-slot-label">Slot 1</div>
+                    </div>
+                    <div class="bt-slot-wrap">
+                        <div class="bt-card-frame" id="bt-slot-2" onclick="window._btOpenPicker(2)">
+                            <div class="bt-card-empty-icon"><i class="bx bxs-plus"></i></div>
+                        </div>
+                        <div class="bt-slot-label">Slot 2</div>
+                    </div>
+                    <div class="bt-slot-wrap">
+                        <div class="bt-card-frame" id="bt-slot-3" onclick="window._btOpenPicker(3)">
+                            <div class="bt-card-empty-icon"><i class="bx bxs-plus"></i></div>
+                        </div>
+                        <div class="bt-slot-label">Slot 3</div>
+                    </div>
+                </div>
+
+                <div id="bt-deck-actions">
+                    <div id="bt-deck-actions-row">
+                        <button type="button" id="bt-revert-deck-btn" class="hidden">Revert</button>
+                        <button type="button" id="bt-save-deck-btn">Save Deck</button>
+                    </div>
+                    <p id="bt-deck-save-msg" class="hidden" aria-live="polite"></p>
+                </div>
+
+                <p id="bt-battle-msg" style="display:none;"></p>
+            </div>
+
+        </main>
+
+        <!-- Right: Record + History + Leaderboard -->
+        <aside id="bt-right-col">
+
+            <!-- Your Record -->
+            <div class="bt-panel">
+                <div class="bt-panel-header">
+                    <span class="bt-panel-title">Your Record</span>
+                    <i class="bx bx-bar-chart-alt-2 bt-panel-icon"></i>
+                </div>
+                <div class="bt-stat-grid">
+                    <div class="bt-stat-cell">
+                        <div id="bt-stat-wins" class="bt-stat-val wins">—</div>
+                        <div class="bt-stat-label">Wins</div>
+                    </div>
+                    <div class="bt-stat-cell">
+                        <div id="bt-stat-losses" class="bt-stat-val losses">—</div>
+                        <div class="bt-stat-label">Losses</div>
+                    </div>
+                    <div class="bt-stat-cell">
+                        <div id="bt-stat-draws" class="bt-stat-val draws">—</div>
+                        <div class="bt-stat-label">Draws</div>
+                    </div>
+                    <div class="bt-stat-cell">
+                        <div id="bt-stat-rank" class="bt-stat-val rank">—</div>
+                        <div class="bt-stat-label">Rank</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Battle History -->
+            <div class="bt-panel">
+                <div class="bt-panel-header">
+                    <span class="bt-panel-title">Battle History</span>
+                    <i class="bx bx-history bt-panel-icon"></i>
+                </div>
+                <div id="bt-history-list">
+                    <p class="bt-empty-msg">No battles yet.</p>
+                </div>
+            </div>
+
+            <!-- Battle Leaderboard -->
+            <div class="bt-panel">
+                <div class="bt-panel-header">
+                    <span class="bt-panel-title">Top Battlers</span>
+                    <i class="bx bx-trophy bt-panel-icon"></i>
+                </div>
+                <div id="bt-lb-list">
+                    <p class="bt-empty-msg">Loading…</p>
+                </div>
+            </div>
+
+        </aside>
+    </div>
+</div>
+
+<!-- Confirm Make Active Modal -->
+<div id="bt-confirm-active" onclick="if(event.target===this)window._btCancelActivate()">
+    <div id="bt-confirm-active-inner">
+        <h4 id="bt-confirm-active-title">Make this your active deck?</h4>
+        <p id="bt-confirm-active-body">
+            <span id="bt-confirm-active-target">Battle Deck 1</span> will be used for any incoming battles.<br>
+            <span id="bt-confirm-active-current-wrap" class="hidden">
+                Currently active: <span id="bt-confirm-active-current">—</span>.
+            </span>
+        </p>
+        <div id="bt-confirm-active-actions">
+            <button type="button" id="bt-confirm-active-cancel" onclick="window._btCancelActivate()">Cancel</button>
+            <button type="button" id="bt-confirm-active-confirm" onclick="window._btConfirmActivate()">Make Active</button>
+        </div>
+    </div>
+</div>
+
+<!-- Card Picker Modal -->
+<div id="bt-picker" onclick="if(event.target===this)window._btClosePicker()">
+    <div id="bt-picker-inner">
+        <div id="bt-picker-head">
+            <div>
+                <h4>Choose a Card — Slot <span id="bt-picker-slot-label">1</span></h4>
+                <p>Select a card from your collection · Press <kbd style="font-family:monospace;font-size:0.55rem;padding:1px 5px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:rgba(255,255,255,0.06);">ESC</kbd> to close</p>
+            </div>
+            <button id="bt-picker-close" onclick="window._btClosePicker()"><i class="bx bx-x"></i></button>
+        </div>
+        <div id="bt-picker-filters">
+            <div class="bt-filter-row" id="bt-rarity-row">
+                <span class="bt-filter-label">Rarity</span>
+                <button class="bt-filter-chip" data-rarity="legendary" style="--bt-rarity-color:#fbbf24">Legendary</button>
+                <button class="bt-filter-chip" data-rarity="epic"      style="--bt-rarity-color:#a855f7">Epic</button>
+                <button class="bt-filter-chip" data-rarity="rare"      style="--bt-rarity-color:#3faaff">Rare</button>
+                <button class="bt-filter-chip" data-rarity="uncommon"  style="--bt-rarity-color:#34d399">Uncommon</button>
+                <button class="bt-filter-chip" data-rarity="common"    style="--bt-rarity-color:#94a3b8">Common</button>
+                <div class="bt-filter-row-end">
+                    <input id="bt-picker-search" class="bt-search-input collapsed" type="text" placeholder="Search name…" autocomplete="off">
+                    <button type="button" id="bt-picker-search-toggle" title="Search by name" aria-label="Toggle search">
+                        <i class="bx bx-search"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="bt-filter-row" id="bt-trait-row">
+                <span class="bt-filter-label">Traits</span>
+            </div>
+        </div>
+        <div id="bt-picker-grid"></div>
+    </div>
+</div>
+
+<script src="/nav-user-menu.js"></script>
+<script src="/nav-notifications.js"></script>
+<script src="/streamer-nav.js"></script>
+<script src="/battle.js"></script>
+</body>
+</html>

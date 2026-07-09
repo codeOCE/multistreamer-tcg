@@ -1,0 +1,8 @@
+name = "creatorcastle"
+compatibility_date = "2024-01-01"
+main = "worker.js"
+
+routes = [
+  { pattern = "creatorcastle.gg", custom_domain = true, zone_name = "creatorcastle.gg" },
+  { pattern = "www.creatorcastle.gg", custom_domain = true, zone_name = "creatorcastle.gg" }
+]

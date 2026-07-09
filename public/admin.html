@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="castle-public-url" content="https://tcg.creatorcastle.gg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>System Console | Castle TCG</title>
+    <link rel="icon" type="image/png" href="https://cdn.codeoce.com/logo/logo_white.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;900&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/tailwind-built.css">
+
+    <style>
+        body {
+            background: var(--void-bg, #05070a);
+            color: var(--void-text, #e7eaf0);
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        .admin-shell { max-width: 1100px; margin: 0 auto; padding: clamp(16px, 4vw, 40px) clamp(14px, 3vw, 28px) 80px; }
+
+        .admin-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap; margin-bottom: clamp(20px, 4vw, 32px);
+        }
+        .admin-head h1 {
+            font-family: 'Outfit', sans-serif; font-weight: 900;
+            font-size: clamp(1.5rem, 4vw, 2.2rem); margin: 0; letter-spacing: -0.02em;
+        }
+        .admin-head .sub { font-size: 0.7rem; color: var(--void-muted, #8b93a7); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; margin-top: 4px; }
+
+        .admin-back {
+            font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-muted); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);
+            transition: color .15s, border-color .15s;
+        }
+        .admin-back:hover { color: var(--void-text); border-color: rgba(255,255,255,0.2); }
+
+        .admin-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .admin-tab {
+            position: relative; background: none; border: none; cursor: pointer;
+            font-family: inherit; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-muted); padding: 12px 16px; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .admin-tab:hover { color: var(--void-text); }
+        .admin-tab.active { color: var(--void-accent, #a78bfa); border-bottom-color: var(--void-accent, #a78bfa); }
+        .admin-tab .pill {
+            font-size: 0.5rem; font-weight: 900; padding: 2px 7px; border-radius: 99px;
+            background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #f87171;
+        }
+
+        .admin-panel { display: none; }
+        .admin-panel.active { display: block; animation: fade .2s ease; }
+        @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+        .stat-card {
+            border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.015); border-radius: 16px;
+            padding: 18px 20px;
+        }
+        .stat-card .label { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--void-muted); }
+        .stat-card .value { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.9rem; margin-top: 6px; }
+
+        .section-title { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--void-muted); margin: 0 0 12px; }
+        .muted { color: var(--void-muted); font-size: 0.72rem; }
+
+        table.admin-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+        table.admin-table th {
+            text-align: left; font-size: 0.55rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: var(--void-muted); padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        table.admin-table td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+        table.admin-table tr:hover td { background: rgba(255,255,255,0.015); }
+
+        .btn {
+            font-family: inherit; font-size: 0.55rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+            padding: 7px 13px; border-radius: 9px; cursor: pointer; transition: filter .15s, opacity .15s;
+            border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: var(--void-text);
+        }
+        .btn:hover { filter: brightness(1.25); }
+        .btn:disabled { opacity: 0.5; cursor: default; }
+        .btn-danger { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.1); color: #f87171; }
+
+        .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+        .seg-btn {
+            font-family: inherit; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+            padding: 7px 14px; border-radius: 9px; cursor: pointer; border: none; background: none; color: var(--void-muted);
+            display: inline-flex; align-items: center; gap: 7px; transition: background .15s, color .15s;
+        }
+        .seg-btn:hover { color: var(--void-text); }
+        .seg-btn.active { background: rgba(var(--void-accent-rgb, 167,139,250), 0.16); color: var(--void-accent, #a78bfa); }
+        .seg-count { font-size: 0.55rem; font-weight: 900; padding: 1px 6px; border-radius: 99px; background: rgba(255,255,255,0.08); }
+        .seg-btn.active .seg-count { background: rgba(var(--void-accent-rgb, 167,139,250), 0.25); }
+
+        .badge { font-size: 0.5rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; display: inline-flex; align-items: center; gap: 4px; }
+        .badge-active { color: #4ade80; background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.25); }
+        .badge-inactive { color: var(--void-muted); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); }
+        .badge-kick { color: #53fc18; background: rgba(83,252,24,0.08); border: 1px solid rgba(83,252,24,0.25); }
+        .btn-accent { border-color: rgba(var(--void-accent-rgb, 167,139,250), 0.4); background: rgba(var(--void-accent-rgb, 167,139,250), 0.12); color: var(--void-accent, #a78bfa); }
+
+        .field { display: flex; flex-direction: column; gap: 5px; }
+        .field label { font-size: 0.56rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--void-muted); }
+        .field input, .field select {
+            font-family: inherit; font-size: 0.74rem; padding: 9px 11px; border-radius: 10px; color: var(--void-text);
+            background: rgba(5,7,10,0.75); border: 1.5px solid rgba(var(--void-accent-rgb, 167,139,250), 0.25);
+            color-scheme: dark; outline: none;
+        }
+        .field input:focus, .field select:focus { border-color: rgba(var(--void-accent-rgb, 167,139,250), 0.7); }
+        .field select option { background: #05070a; color: var(--void-text); }
+
+        .card-box {
+            border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.015); border-radius: 16px;
+            padding: 20px; margin-bottom: 16px;
+        }
+
+        .gate {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; padding: 24px; text-align: center;
+        }
+        .gate i { font-size: 2.4rem; color: var(--void-muted); }
+        .spinner { width: 26px; height: 26px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--void-accent, #a78bfa); border-radius: 50%; animation: spin .7s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #admin-toast {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(120%);
+            padding: 12px 20px; border-radius: 12px; font-size: 0.72rem; font-weight: 700; z-index: 999;
+            background: rgba(8,10,14,0.97); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(12px);
+            transition: transform .25s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.6); max-width: 90vw;
+        }
+        #admin-toast.show { transform: translateX(-50%) translateY(0); }
+        #admin-toast.error { border-color: rgba(239,68,68,0.4); color: #f87171; }
+        #admin-toast.success { border-color: rgba(74,222,128,0.4); color: #4ade80; }
+    </style>
+</head>
+
+<body>
+    <!-- Loading / access gate -->
+    <div id="gate" class="gate">
+        <div class="spinner"></div>
+        <div class="muted" style="text-transform:uppercase;letter-spacing:0.14em;font-weight:800">Verifying access…</div>
+    </div>
+
+    <!-- The console. admin-reports.js watches #admin-view's `hidden` class to auto-load the queue. -->
+    <div id="admin-view" class="admin-shell hidden">
+        <div class="admin-head">
+            <div>
+                <h1>System Console</h1>
+                <div class="sub" id="admin-whoami">Platform administration</div>
+            </div>
+            <a class="admin-back" href="/dashboard"><i class="bx bx-arrow-back"></i> Back to dashboard</a>
+        </div>
+
+        <div class="admin-tabs" role="tablist">
+            <button class="admin-tab active" data-tab="reports">
+                <i class="bx bx-flag"></i> Reports
+                <span class="pill hidden" id="admin-reports-count"></span>
+            </button>
+            <button class="admin-tab" data-tab="stats"><i class="bx bx-bar-chart-alt-2"></i> Overview</button>
+            <button class="admin-tab" data-tab="users"><i class="bx bx-group"></i> Users</button>
+            <button class="admin-tab" data-tab="config"><i class="bx bx-cog"></i> Config &amp; Staff</button>
+        </div>
+
+        <!-- REPORTS -->
+        <section class="admin-panel active" data-panel="reports">
+            <p class="section-title">Reported cards awaiting review</p>
+            <div id="admin-reports-list" style="display:flex;flex-direction:column;gap:10px"></div>
+        </section>
+
+        <!-- OVERVIEW STATS -->
+        <section class="admin-panel" data-panel="stats">
+            <p class="section-title">Platform overview</p>
+            <div class="stat-grid" id="admin-stats-grid">
+                <div class="stat-card"><div class="label">Total users</div><div class="value" data-stat="total_users">—</div></div>
+                <div class="stat-card"><div class="label">Active (linked)</div><div class="value" data-stat="active_users" style="color:#4ade80">—</div></div>
+                <div class="stat-card"><div class="label">Inactive (grant-only)</div><div class="value" data-stat="inactive_users" style="color:var(--void-muted)">—</div></div>
+                <div class="stat-card"><div class="label">Cards owned</div><div class="value" data-stat="total_cards">—</div></div>
+                <div class="stat-card"><div class="label">Unique cards</div><div class="value" data-stat="unique_cards">—</div></div>
+                <div class="stat-card"><div class="label">Legendaries held</div><div class="value" data-stat="legendary_count">—</div></div>
+            </div>
+            <div style="margin-top:16px"><button class="btn" onclick="adminLoadStats()"><i class="bx bx-refresh"></i> Refresh</button></div>
+        </section>
+
+        <!-- USERS -->
+        <section class="admin-panel" data-panel="users">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+                <div class="seg" role="tablist">
+                    <button class="seg-btn active" data-status="active" onclick="adminSetUserFilter('active',this)">Active <span class="seg-count" id="count-active">—</span></button>
+                    <button class="seg-btn" data-status="inactive" onclick="adminSetUserFilter('inactive',this)">Inactive <span class="seg-count" id="count-inactive">—</span></button>
+                    <button class="seg-btn" data-status="" onclick="adminSetUserFilter('',this)">All <span class="seg-count" id="count-all">—</span></button>
+                </div>
+                <button class="btn" onclick="adminLoadUsers()"><i class="bx bx-refresh"></i> Refresh</button>
+            </div>
+            <p class="muted" style="margin-top:-4px;margin-bottom:12px">Active = linked their Twitch or Kick account by logging in. Inactive = stub created by a card grant for someone who never joined.</p>
+            <div class="card-box" style="padding:0;overflow:auto">
+                <table class="admin-table">
+                    <thead><tr><th>User</th><th>Status</th><th>Castle code</th><th>Joined</th><th style="text-align:right">Actions</th></tr></thead>
+                    <tbody id="admin-users-body"><tr><td colspan="5" class="muted" style="padding:18px">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <p class="muted">Wiping a user clears all of their owned cards (moderation action). It does not delete the account.</p>
+        </section>
+
+        <!-- CONFIG & STAFF -->
+        <section class="admin-panel" data-panel="config">
+            <div class="card-box">
+                <p class="section-title">Platform staff</p>
+                <p class="muted" style="margin-top:-6px;margin-bottom:14px">Grant co-admins limited access. Full platform admins are configured via the <code>PLATFORM_ADMIN_IDS</code> environment secret, not here.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
+                    <div class="field" style="flex:1;min-width:160px"><label>Twitch ID</label><input id="staff-twitch-id" placeholder="e.g. 123456789"></div>
+                    <div class="field" style="min-width:150px"><label>Role</label>
+                        <select id="staff-role">
+                            <option value="staff">Staff (full read + card writes)</option>
+                            <option value="card_editor">Card editor (card writes only)</option>
+                            <option value="support">Support (read-only user views)</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-accent" onclick="adminAddStaff()"><i class="bx bx-plus"></i> Add / update</button>
+                </div>
+                <div class="card-box" style="padding:0;overflow:auto;margin-bottom:0">
+                    <table class="admin-table">
+                        <thead><tr><th>Member</th><th>Twitch ID</th><th>Role</th><th>Added</th><th style="text-align:right">Actions</th></tr></thead>
+                        <tbody id="admin-staff-body"><tr><td colspan="5" class="muted" style="padding:18px">Loading…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card-box">
+                <p class="section-title">System config</p>
+                <p class="muted" style="margin-top:-6px;margin-bottom:14px">Raw key/value config entries (<code>system_config</code>). Edit JSON carefully.</p>
+                <div id="admin-config-list" style="display:flex;flex-direction:column;gap:12px"><div class="muted">Loading…</div></div>
+            </div>
+        </section>
+    </div>
+
+    <div id="admin-toast"></div>
+
+    <script>
+    (function () {
+        'use strict';
+        const BACKEND = (() => {
+            const m = document.querySelector('meta[name="castle-public-url"]');
+            return m ? m.content.replace(/\/$/, '') : window.location.origin;
+        })();
+
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // Shared toast so admin-reports.js (which calls window.showToast) works here too.
+        let _toastTimer;
+        window.showToast = function (msg, type) {
+            const el = document.getElementById('admin-toast');
+            if (!el) return;
+            el.textContent = msg;
+            el.className = (type || '') + ' show';
+            clearTimeout(_toastTimer);
+            _toastTimer = setTimeout(() => { el.className = (type || ''); }, 3200);
+        };
+
+        let _csrf = '';
+        window.adminGetCsrf = async function () {
+            if (_csrf) return _csrf;
+            try {
+                const r = await fetch(`${BACKEND}/api/csrf`, { credentials: 'include' });
+                if (r.ok) { const d = await r.json(); _csrf = d.token || ''; }
+            } catch (_) { /* same-origin is CSRF-exempt */ }
+            return _csrf;
+        };
+
+        // ── Access gate ──────────────────────────────────────────────
+        async function gate() {
+            try {
+                const r = await fetch(`${BACKEND}/api/me`, { credentials: 'include' });
+                if (!r.ok) return denied('Please sign in to continue.', true);
+                const me = await r.json();
+                const u = me.user || me;
+                const role = u.platform_staff_role;
+                const ok = u.is_platform_admin || role === 'staff' || role === 'support' || role === 'card_editor';
+                if (!ok) return denied('You do not have admin access.', false);
+
+                document.getElementById('admin-whoami').textContent =
+                    (u.is_platform_admin ? 'Platform admin' : 'Staff: ' + role) + ' · @' + (u.username || 'you');
+
+                document.getElementById('gate').style.display = 'none';
+                // Removing `hidden` triggers admin-reports.js to auto-load the queue.
+                document.getElementById('admin-view').classList.remove('hidden');
+                init(u);
+            } catch (e) {
+                denied('Could not verify access. Try again.', true);
+            }
+        }
+
+        function denied(msg, signin) {
+            const g = document.getElementById('gate');
+            g.innerHTML =
+                '<i class="bx bx-lock-alt"></i>' +
+                '<div style="font-family:Outfit,sans-serif;font-weight:900;font-size:1.3rem">Access denied</div>' +
+                '<div class="muted">' + esc(msg) + '</div>' +
+                (signin
+                    ? '<a class="btn btn-accent" href="/login">Sign in</a>'
+                    : '<a class="btn" href="/dashboard">Back to dashboard</a>');
+        }
+
+        function init(u) {
+            // Tab switching
+            const tabs = document.querySelectorAll('.admin-tab');
+            const panels = document.querySelectorAll('.admin-panel');
+            tabs.forEach(t => t.addEventListener('click', () => {
+                tabs.forEach(x => x.classList.remove('active'));
+                panels.forEach(p => p.classList.remove('active'));
+                t.classList.add('active');
+                const name = t.dataset.tab;
+                document.querySelector(`.admin-panel[data-panel="${name}"]`).classList.add('active');
+                if (name === 'stats') adminLoadStats();
+                if (name === 'users') adminLoadUsers();
+                if (name === 'config') { adminLoadConfig(); adminLoadStaff(); }
+            }));
+
+            // Staff management is platform-admin only; hide for staff-only viewers.
+            if (!u.is_platform_admin) {
+                const cfgTab = document.querySelector('.admin-tab[data-tab="config"]');
+                if (cfgTab) cfgTab.style.display = 'none';
+            }
+            // Reports auto-loads via admin-reports.js MutationObserver.
+        }
+
+        // ── Stats ────────────────────────────────────────────────────
+        function applyStats(d) {
+            document.querySelectorAll('#admin-stats-grid [data-stat]').forEach(el => {
+                const v = d[el.dataset.stat];
+                el.textContent = (v == null ? '—' : Number(v).toLocaleString());
+            });
+            // Feed the Users-tab segmented counts too.
+            const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.textContent = Number(v).toLocaleString(); };
+            set('count-active', d.active_users);
+            set('count-inactive', d.inactive_users);
+            set('count-all', d.total_users);
+        }
+
+        let _statsCache = null;
+        window.adminLoadStats = async function () {
+            try {
+                const r = await fetch(`${BACKEND}/api/admin/stats`, { credentials: 'include' });
+                if (!r.ok) throw new Error('Unauthorized');
+                _statsCache = await r.json();
+                applyStats(_statsCache);
+            } catch (e) {
+                window.showToast('Could not load stats', 'error');
+            }
+        };
+
+        // ── Users ────────────────────────────────────────────────────
+        let _userFilter = 'active'; // 'active' | 'inactive' | '' (all)
+
+        window.adminSetUserFilter = function (status, btn) {
+            _userFilter = status;
+            document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            adminLoadUsers();
+        };
+
+        window.adminLoadUsers = async function () {
+            const body = document.getElementById('admin-users-body');
+            body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:18px">Loading…</td></tr>';
+            // Refresh the segmented counts (cheap, and keeps them in sync after wipes/links).
+            adminLoadStats();
+            try {
+                const qs = _userFilter ? `?status=${_userFilter}&limit=200` : '?limit=200';
+                const r = await fetch(`${BACKEND}/api/admin/users${qs}`, { credentials: 'include' });
+                if (!r.ok) throw new Error('Unauthorized');
+                const users = await r.json();
+                if (!Array.isArray(users) || !users.length) {
+                    body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:18px">No users in this view.</td></tr>';
+                    return;
+                }
+                body.innerHTML = users.map(u => {
+                    const tid = esc(u.twitch_id || '');
+                    const joined = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
+                    const avatar = u.avatar_url
+                        ? `<img src="${esc(u.avatar_url)}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+                        : '';
+                    const badge = u.is_active
+                        ? `<span class="badge badge-active"><i class="bx bxs-circle" style="font-size:0.5em"></i> Active</span>`
+                        : `<span class="badge badge-inactive">Inactive</span>`;
+                    const kick = u.kick_linked ? ` <span class="badge badge-kick">Kick</span>` : '';
+                    return `<tr>
+                        <td><div style="display:flex;align-items:center;gap:8px">${avatar}<span style="font-weight:700">${esc(u.username || tid)}</span></div></td>
+                        <td>${badge}${kick}</td>
+                        <td class="muted">${esc(u.trade_code || '—')}</td>
+                        <td class="muted">${esc(joined)}</td>
+                        <td style="text-align:right"><button class="btn btn-danger" onclick="adminWipeUser('${tid}','${esc(u.username || tid)}',this)">Wipe cards</button></td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                body.innerHTML = '<tr><td colspan="5" style="padding:18px;color:#f87171">Failed to load users.</td></tr>';
+            }
+        };
+
+        window.adminWipeUser = async function (twitchId, name, btn) {
+            if (!window.confirm(`Wipe ALL cards owned by ${name}? This cannot be undone.`)) return;
+            if (btn) { btn.disabled = true; btn.textContent = 'Wiping…'; }
+            try {
+                const token = await window.adminGetCsrf();
+                const r = await fetch(`${BACKEND}/api/admin/users?target_id=${encodeURIComponent(twitchId)}`, {
+                    method: 'DELETE', credentials: 'include', headers: { 'X-CSRF-Token': token },
+                });
+                if (!r.ok) throw new Error('Failed');
+                window.showToast(`Cards wiped for ${name}`, 'success');
+                if (btn) { btn.disabled = false; btn.textContent = 'Wipe cards'; }
+            } catch (e) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Wipe cards'; }
+                window.showToast('Could not wipe user (platform admin required)', 'error');
+            }
+        };
+
+        // ── Config & Staff ───────────────────────────────────────────
+        window.adminLoadConfig = async function () {
+            const list = document.getElementById('admin-config-list');
+            list.innerHTML = '<div class="muted">Loading…</div>';
+            try {
+                const r = await fetch(`${BACKEND}/api/admin/config`, { credentials: 'include' });
+                if (!r.ok) throw new Error('Unauthorized');
+                const rows = await r.json();
+                if (!Array.isArray(rows) || !rows.length) {
+                    list.innerHTML = '<div class="muted">No config entries.</div>';
+                    return;
+                }
+                list.innerHTML = rows.map(row => {
+                    const id = esc(row.id);
+                    const json = esc(JSON.stringify(row.data == null ? {} : row.data, null, 2));
+                    return `<div>
+                        <div style="font-size:0.7rem;font-weight:800;margin-bottom:6px">${id}</div>
+                        <textarea id="cfg-${id}" spellcheck="false" style="width:100%;min-height:110px;font-family:ui-monospace,monospace;font-size:0.7rem;padding:10px;border-radius:10px;background:rgba(5,7,10,0.75);border:1.5px solid rgba(255,255,255,0.1);color:var(--void-text);color-scheme:dark;resize:vertical">${json}</textarea>
+                        <div style="margin-top:6px"><button class="btn btn-accent" onclick="adminSaveConfig('${id}',this)">Save ${id}</button></div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                list.innerHTML = '<div style="color:#f87171">Failed to load config.</div>';
+            }
+        };
+
+        window.adminSaveConfig = async function (id, btn) {
+            const ta = document.getElementById('cfg-' + id);
+            if (!ta) return;
+            let parsed;
+            try { parsed = JSON.parse(ta.value); }
+            catch (e) { window.showToast('Invalid JSON — fix and retry', 'error'); return; }
+            if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+            try {
+                const token = await window.adminGetCsrf();
+                const r = await fetch(`${BACKEND}/api/admin/config`, {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+                    body: JSON.stringify({ id, data: parsed }),
+                });
+                if (!r.ok) throw new Error('Failed');
+                window.showToast(`Saved ${id}`, 'success');
+            } catch (e) {
+                window.showToast('Could not save config', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Save ' + id; }
+            }
+        };
+
+        window.adminAddStaff = async function () {
+            const tid = document.getElementById('staff-twitch-id').value.trim();
+            const role = document.getElementById('staff-role').value;
+            if (!tid) { window.showToast('Enter a Twitch ID', 'error'); return; }
+            try {
+                const token = await window.adminGetCsrf();
+                const r = await fetch(`${BACKEND}/api/admin/platform-staff`, {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+                    body: JSON.stringify({ twitch_id: tid, role }),
+                });
+                if (!r.ok) throw new Error('Failed');
+                window.showToast(`Staff role "${role}" set for ${tid}`, 'success');
+                document.getElementById('staff-twitch-id').value = '';
+                adminLoadStaff();
+            } catch (e) {
+                window.showToast('Could not set staff role (platform admin required)', 'error');
+            }
+        };
+
+        const ROLE_LABELS = { staff: 'Staff', card_editor: 'Card editor', support: 'Support' };
+
+        window.adminLoadStaff = async function () {
+            const body = document.getElementById('admin-staff-body');
+            if (!body) return;
+            body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:18px">Loading…</td></tr>';
+            try {
+                const r = await fetch(`${BACKEND}/api/admin/platform-staff`, { credentials: 'include' });
+                if (!r.ok) throw new Error('Unauthorized');
+                const rows = await r.json();
+                if (!Array.isArray(rows) || !rows.length) {
+                    body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:18px">No staff configured. Full admins are set via the PLATFORM_ADMIN_IDS secret.</td></tr>';
+                    return;
+                }
+                body.innerHTML = rows.map(s => {
+                    const tid = esc(s.twitch_id || '');
+                    const added = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
+                    const avatar = s.avatar_url
+                        ? `<img src="${esc(s.avatar_url)}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+                        : '';
+                    const who = s.username ? '@' + esc(s.username) : '<span class="muted">unknown</span>';
+                    return `<tr>
+                        <td><div style="display:flex;align-items:center;gap:8px">${avatar}<span style="font-weight:700">${who}</span></div></td>
+                        <td class="muted">${tid}</td>
+                        <td>${esc(ROLE_LABELS[s.role] || s.role || '—')}</td>
+                        <td class="muted">${esc(added)}</td>
+                        <td style="text-align:right"><button class="btn btn-danger" onclick="adminRemoveStaff('${tid}','${esc(s.username || tid)}',this)">Revoke</button></td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                body.innerHTML = '<tr><td colspan="5" style="padding:18px;color:#f87171">Failed to load staff (platform admin required).</td></tr>';
+            }
+        };
+
+        window.adminRemoveStaff = async function (twitchId, name, btn) {
+            if (!window.confirm(`Revoke staff access for ${name}?`)) return;
+            if (btn) { btn.disabled = true; btn.textContent = 'Revoking…'; }
+            try {
+                const token = await window.adminGetCsrf();
+                const r = await fetch(`${BACKEND}/api/admin/platform-staff?twitch_id=${encodeURIComponent(twitchId)}`, {
+                    method: 'DELETE', credentials: 'include', headers: { 'X-CSRF-Token': token },
+                });
+                if (!r.ok) throw new Error('Failed');
+                window.showToast(`Revoked staff access for ${name}`, 'success');
+                adminLoadStaff();
+            } catch (e) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Revoke'; }
+                window.showToast('Could not revoke staff role', 'error');
+            }
+        };
+
+        gate();
+    })();
+    </script>
+
+    <script src="/admin-reports.js"></script>
+</body>
+
+</html>
