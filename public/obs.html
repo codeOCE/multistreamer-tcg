@@ -404,7 +404,7 @@
         async function playReveal(card) {
             isAnimating   = true;
             skipRequested = false;
-
+            try {
             const scene = document.getElementById('pack-scene');
             const packFace = document.getElementById('pack-face');
             const flipper = document.getElementById('card-flipper');
@@ -528,8 +528,10 @@
 
             scene.classList.remove('ripping', 'brutalist-jitter');
             flipper.classList.remove('cosmic-glow');
-            skipRequested = false;
-            isAnimating   = false;
+            } finally {
+                skipRequested = false;
+                isAnimating   = false;
+            }
         }
 
         function setFlip(el, { opacity, rotateY, translateY, scale, transition }) {

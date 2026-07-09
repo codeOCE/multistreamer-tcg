@@ -830,10 +830,16 @@
                             <div class="flex-1 min-w-0 space-y-1">
                                 <label for="cp-custom-card-id"
                                     class="text-[9px] font-black uppercase tracking-widest text-void-muted ml-0.5">Card</label>
-                                <select id="cp-custom-card-id"
-                                    class="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-void-accent/40 appearance-none cursor-pointer">
-                                    <option value="">Select card</option>
-                                </select>
+                                <div class="void-dropdown" id="cp-custom-card-wrapper" data-select-id="cp-custom-card-id">
+                                    <select id="cp-custom-card-id" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                        <option value="">Pick a card</option>
+                                    </select>
+                                    <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                        <span class="void-dropdown-label">Pick a card</span>
+                                        <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                                    </button>
+                                    <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                                </div>
                             </div>
                             <label
                                 class="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:border-void-accent/30 transition-all shrink-0 lg:mb-0.5 min-w-[10rem]">
@@ -1236,6 +1242,14 @@
                                 <canvas id="pack-activity-chart"></canvas>
                             </div>
 
+                            <!-- Pack chart controls -->
+                            <div class="flex items-center justify-between px-1 pt-2">
+                                <span id="pack-granularity" class="text-[9px] font-bold uppercase tracking-widest text-void-muted/60"></span>
+                                <button type="button" onclick="exportAnalyticsCSV()"
+                                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border border-void-accent/20 text-void-accent/70 hover:text-void-accent hover:border-void-accent/50 transition-all">
+                                    <i class="bx bx-download" aria-hidden="true"></i>Export CSV
+                                </button>
+                            </div>
                             <!-- Source legend -->
                             <div id="pack-activity-legend"
                                 class="flex flex-wrap items-center justify-center mt-2 min-h-[14px]"></div>
@@ -1289,17 +1303,6 @@
 
 
                 <section id="content-cards" class="tab-content space-y-6">
-                    <div class="flex flex-wrap gap-2 border-b border-white/5 pb-4">
-                        <button onclick="switchSubTab('cards', 'all')" id="subtab-cards-all"
-                            class="px-6 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all bg-void-accent text-void-bg shadow-lg shadow-void-accent/20">All
-                            Cards</button>
-                        <button onclick="switchSubTab('cards', 'upload')" id="subtab-cards-upload"
-                            class="px-6 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all bg-white/5 text-void-muted hover:bg-white/10">Upload</button>
-                        <button onclick="switchSubTab('cards', 'templates')" id="subtab-cards-templates"
-                            class="px-6 py-3 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all bg-white/5 text-void-muted hover:bg-white/10">Templates</button>
-                    </div>
-
-
                     <div id="cards-subcontent-all" class="sub-content active space-y-6">
                         <div class="flex flex-col md:flex-row gap-4">
                             <div class="flex-1 relative">
@@ -1352,43 +1355,6 @@
 
                         <div id="creator-cards-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
 
-                        </div>
-                    </div>
-
-
-                    <div id="cards-subcontent-upload" class="sub-content hidden space-y-6">
-                        <div class="glass-card flex flex-col items-center justify-center py-16 text-center space-y-6">
-                            <div
-                                class="w-20 h-20 rounded-full bg-void-accent/10 border border-void-accent/20 flex items-center justify-center text-void-accent text-3xl shadow-lg shadow-void-accent/5">
-                                <i class="bx bxs-plus"></i>
-                            </div>
-                            <div>
-                                <h4 class="text-xl font-black uppercase italic tracking-tight text-white">Create New
-                                    Card</h4>
-                                <p class="text-[10px] text-void-muted uppercase font-bold tracking-[0.2em] mt-2">Design
-                                    and add a new card to your deck</p>
-                            </div>
-                            <button onclick="window.location.href='/card-creator'"
-                                class="px-12 py-5 bg-void-accent text-void-bg rounded-2xl font-black uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-void-accent/20">
-                                Open Card Creator
-                            </button>
-                        </div>
-                    </div>
-
-
-                    <div id="cards-subcontent-templates" class="sub-content hidden space-y-6">
-                        <div class="flex items-center justify-between mb-8">
-                            <div>
-                                <h3 class="text-xl font-black uppercase italic tracking-tight">Templates</h3>
-                                <p class="text-[10px] text-void-muted mt-1 uppercase tracking-widest font-bold">Dynamic
-                                    card templates with trait areas</p>
-                            </div>
-                            <button onclick="openTemplateEditor()"
-                                class="px-6 py-3 bg-void-accent/10 border border-void-accent/20 text-void-accent rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-void-accent hover:text-void-bg">Create
-                                Template</button>
-                        </div>
-                        <div id="templates-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <!-- Templates will be rendered here -->
                         </div>
                     </div>
 
@@ -1571,16 +1537,6 @@
                                     <input type="date" id="dash-promo-expires-at"
                                         class="w-full bg-[rgba(5,7,10,0.6)] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:border-void-accent/60 focus:outline-none transition-colors">
                                 </div>
-                                <div>
-                                    <label for="dash-promo-rerun-fee" class="text-[8px] font-black uppercase tracking-widest text-void-muted mb-2 block">Rerun Fee (USD) <span class="normal-case font-normal opacity-50">(0 = free)</span></label>
-                                    <input type="number" id="dash-promo-rerun-fee" min="0" step="0.01" placeholder="e.g. 5.00"
-                                        class="w-full bg-[rgba(5,7,10,0.6)] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:border-void-accent/60 focus:outline-none transition-colors">
-                                </div>
-                                <div>
-                                    <label for="dash-promo-rerun-cooldown" class="text-[8px] font-black uppercase tracking-widest text-void-muted mb-2 block">Rerun Cooldown (days) <span class="normal-case font-normal opacity-50">(0 = no limit)</span></label>
-                                    <input type="number" id="dash-promo-rerun-cooldown" min="0" placeholder="e.g. 7"
-                                        class="w-full bg-[rgba(5,7,10,0.6)] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:border-void-accent/60 focus:outline-none transition-colors">
-                                </div>
                             </div>
                             <button type="button" id="dash-promo-generate-btn" onclick="dashGeneratePromoCode()"
                                 class="py-3 px-8 bg-void-accent text-void-bg rounded-xl text-[10px] font-black uppercase tracking-[.15em] hover:brightness-110 transition-all disabled:opacity-40 disabled:pointer-events-none">
@@ -1595,6 +1551,96 @@
                             <div id="dash-promo-codes-list" class="space-y-2">
                                 <div class="py-5 text-[10px] text-void-muted/40 text-center">Switch to this tab to load</div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card admin-events-card">
+                        <div class="admin-events-head">
+                            <div>
+                                <h3 class="text-2xl font-black uppercase italic tracking-tight">Special events</h3>
+                                <p class="text-xs text-void-muted mt-1 uppercase tracking-widest font-bold">Rarity boost
+                                    — temporary drop rates</p>
+                            </div>
+                            <div id="event-status-badge" class="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl shrink-0">
+                                <span id="event-status-label"
+                                    class="text-[10px] font-black uppercase tracking-widest text-red-400">Standby</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+                            <div>
+                                <label
+                                    class="block text-[10px] font-black uppercase tracking-widest text-void-accent mb-4 pl-1">Target
+                                    Rarity</label>
+                                <div class="void-dropdown" data-select-id="event-boost-rarity">
+                                    <select id="event-boost-rarity" class="void-dropdown-native" aria-hidden="true"
+                                        tabindex="-1">
+                                        <option value="rare">Rare</option>
+                                        <option value="epic">Epic</option>
+                                        <option value="legendary">Legendary</option>
+                                    </select>
+                                    <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
+                                        aria-expanded="false">
+                                        <span class="void-dropdown-label">Rare</span>
+                                        <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                                    </button>
+                                    <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                                        <div class="void-dropdown-option" role="option" data-value="rare">Rare</div>
+                                        <div class="void-dropdown-option" role="option" data-value="epic">Epic</div>
+                                        <div class="void-dropdown-option" role="option" data-value="legendary">Legendary
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-[10px] font-black uppercase tracking-widest text-void-accent mb-4 pl-1">Multiplier</label>
+                                <div
+                                    class="flex items-center gap-3 bg-[rgba(5,7,10,0.75)] border border-[rgba(var(--void-accent-rgb),0.35)] rounded-[0.625rem] px-3 py-2">
+                                    <span class="text-base font-black text-void-accent shrink-0 w-10 text-center"
+                                        id="event-multiplier-display">2.0x</span>
+                                    <input type="range" id="event-multiplier" min="1.1" max="5.0" step="0.1" value="2.0"
+                                        class="flex-1 cursor-pointer"
+                                        oninput="document.getElementById('event-multiplier-display').textContent = parseFloat(this.value).toFixed(1) + 'x'">
+                                </div>
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-[10px] font-black uppercase tracking-widest text-void-accent mb-4 pl-1">Duration</label>
+                                <div class="void-dropdown" data-select-id="event-duration">
+                                    <select id="event-duration" class="void-dropdown-native" aria-hidden="true"
+                                        tabindex="-1">
+                                        <option value="3600">60 Minutes</option>
+                                        <option value="7200" selected>2 Hours</option>
+                                        <option value="14400">4 Hours</option>
+                                        <option value="86400">24 Hours</option>
+                                    </select>
+                                    <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
+                                        aria-expanded="false">
+                                        <span class="void-dropdown-label">2 Hours</span>
+                                        <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                                    </button>
+                                    <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
+                                        <div class="void-dropdown-option" role="option" data-value="3600">60 Minutes
+                                        </div>
+                                        <div class="void-dropdown-option" role="option" data-value="7200">2 Hours</div>
+                                        <div class="void-dropdown-option" role="option" data-value="14400">4 Hours</div>
+                                        <div class="void-dropdown-option" role="option" data-value="86400">24 Hours
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 pt-5 border-t border-white/5 flex items-start gap-3">
+                            <i class="bx bx-info-circle text-void-muted text-sm mt-0.5 flex-shrink-0"></i>
+                            <p class="text-[9px] text-void-muted leading-relaxed">First rarity boost each week is <span class="text-white font-bold">free</span>. Additional boosts within the same week incur a platform rerun fee charged by Castle.</p>
+                        </div>
+
+                        <div class="mt-8 pt-6 border-t border-white/5">
+                            <button type="button" onclick="initiateEventPulse()"
+                                class="w-full py-5 bg-void-accent text-void-bg rounded-2xl font-black uppercase tracking-[0.2em] shadow-lg shadow-void-accent/20 hover:scale-[1.01] active:scale-[0.99] transition-all">Start
+                                Rarity Boost</button>
                         </div>
                     </div>
                 </section>
@@ -1648,10 +1694,16 @@
                                     <input type="text" id="grant-tab-card-search" placeholder="Card name or rarity..."
                                         class="w-full bg-void-bg/50 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold focus:border-void-accent focus:ring-1 focus:ring-void-accent outline-none transition-all">
                                 </div>
-                                <select id="grant-tab-card-id"
-                                    class="w-full bg-void-bg/50 border border-white/5 rounded-2xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all appearance-none cursor-pointer">
-                                    <option value="">Loading cards...</option>
-                                </select>
+                                <div class="void-dropdown" id="grant-tab-card-wrapper" data-select-id="grant-tab-card-id">
+                                    <select id="grant-tab-card-id" class="void-dropdown-native" aria-hidden="true" tabindex="-1">
+                                        <option value="">Loading cards...</option>
+                                    </select>
+                                    <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                        <span class="void-dropdown-label">-- Select a Card --</span>
+                                        <i class="bx bx-chevron-down void-dropdown-chevron"></i>
+                                    </button>
+                                    <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden></div>
+                                </div>
                             </div>
 
                             <div
@@ -1712,6 +1764,10 @@
                                             <button onclick="copyOBSLink('packs-obs-link')"
                                                 class="px-6 bg-void-accent text-void-bg rounded-2xl text-[10px] font-black uppercase transition-all hover:scale-105 active:scale-95"><i
                                                     class="bx bxs-copy"></i></button>
+                                            <button onclick="regenerateOverlayToken()"
+                                                class="px-6 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl text-[10px] font-black uppercase transition-all hover:scale-105 active:scale-95"
+                                                title="Regenerate overlay token"><i
+                                                    class="bx bx-refresh"></i></button>
                                         </div>
                                     </div>
                                     <div>
@@ -1989,18 +2045,8 @@
                             <div class="min-w-0">
                                 <h2 id="admin-panel-heading" class="admin-workspace__title">Members &amp; team</h2>
                                 <p class="admin-workspace__sub">
-                                    Collectors with at least one card here. Add <span class="text-white/80">mods</span>
-                                    or <span class="text-white/80">editors</span>,
-                                    <span class="text-white/80">block</span> or <span class="text-white/80">wipe</span>
-                                    per channel.
+                                    Assign <span class="text-white/80">mods</span> or <span class="text-white/80">editors</span> to your channel team, or <span class="text-white/80">block</span> collectors per channel.
                                 </p>
-                            </div>
-                            <div class="admin-workspace__actions">
-                                <button type="button" onclick="switchTab('granting')"
-                                    class="admin-tool-btn admin-tool-btn--primary">
-                                    <i class="bx bxs-gift" aria-hidden="true"></i>
-                                    Send cards
-                                </button>
                             </div>
                         </div>
 
@@ -2011,19 +2057,17 @@
                                         <i class="bx bxs-shield text-void-accent" aria-hidden="true"></i>
                                         Channel team
                                     </h3>
-                                    <p class="admin-workspace__team-hint">Mods: grants &amp; queue · Editors: catalog
-                                        &amp; branding. Owner-only roster.</p>
+                                    <p class="admin-workspace__team-hint">Mods: queue access · Editors: catalog &amp; branding. Owner-only roster.</p>
                                 </div>
                                 <div id="channel-team-list" class="admin-workspace__team-list"></div>
                             </aside>
 
                             <div class="admin-workspace__members">
                                 <label class="sr-only" for="user-search">Search members</label>
-                                <div class="admin-search-wrap relative mb-3">
-                                    <i class="bx bxs-search admin-search-wrap__icon text-void-muted"
-                                        aria-hidden="true"></i>
+                                <div class="admin-search-wrap">
+                                    <i class="bx bxs-search admin-search-wrap__icon" aria-hidden="true"></i>
                                     <input type="text" id="user-search" placeholder="Search username or Twitch ID…"
-                                        class="admin-search-input w-full bg-void-bg/55 border border-white/[0.07] rounded-xl pl-11 pr-4 py-3 text-sm font-bold text-white placeholder:text-void-muted/70 focus:border-void-accent focus:ring-1 focus:ring-void-accent/25 transition-all">
+                                        class="admin-search-input">
                                 </div>
                                 <p class="admin-workspace__members-label">Collectors</p>
                                 <div id="admin-user-list" class="admin-member-scroll custom-scrollbar"></div>
@@ -2031,102 +2075,17 @@
                         </div>
                     </div>
 
-                    <div class="glass-card admin-events-card">
-                        <div class="admin-events-head">
-                            <div>
-                                <h3 class="text-2xl font-black uppercase italic tracking-tight">Special events</h3>
-                                <p class="text-xs text-void-muted mt-1 uppercase tracking-widest font-bold">Rarity boost
-                                    — temporary drop rates</p>
-                            </div>
-                            <div class="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl shrink-0">
-                                <span
-                                    class="text-[10px] font-black uppercase tracking-widest text-red-400">Standby</span>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-                            <div>
-                                <label
-                                    class="block text-[10px] font-black uppercase tracking-widest text-void-accent mb-4 pl-1">Target
-                                    Rarity</label>
-                                <div class="void-dropdown" data-select-id="event-boost-rarity">
-                                    <select id="event-boost-rarity" class="void-dropdown-native" aria-hidden="true"
-                                        tabindex="-1">
-                                        <option value="rare">Rare</option>
-                                        <option value="epic">Epic</option>
-                                        <option value="legendary">Legendary</option>
-                                    </select>
-                                    <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
-                                        aria-expanded="false">
-                                        <span class="void-dropdown-label">Rare</span>
-                                        <i class="bx bx-chevron-down void-dropdown-chevron"></i>
-                                    </button>
-                                    <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
-                                        <div class="void-dropdown-option" role="option" data-value="rare">Rare</div>
-                                        <div class="void-dropdown-option" role="option" data-value="epic">Epic</div>
-                                        <div class="void-dropdown-option" role="option" data-value="legendary">Legendary
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-[10px] font-black uppercase tracking-widest text-void-accent mb-4 pl-1">Multiplier</label>
-                                <div
-                                    class="flex items-center gap-4 bg-void-bg/50 border border-white/5 rounded-2xl px-6 py-4">
-                                    <span class="text-xl font-black text-void-accent"
-                                        id="event-multiplier-display">2.0x</span>
-                                    <input type="range" id="event-multiplier" min="1.1" max="5.0" step="0.1" value="2.0"
-                                        class="flex-1 h-1.5 bg-void-bg rounded-lg appearance-none cursor-pointer accent-void-accent"
-                                        oninput="document.getElementById('event-multiplier-display').textContent = this.value + 'x'">
-                                </div>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-[10px] font-black uppercase tracking-widest text-void-accent mb-4 pl-1">Duration</label>
-                                <div class="void-dropdown" data-select-id="event-duration">
-                                    <select id="event-duration" class="void-dropdown-native" aria-hidden="true"
-                                        tabindex="-1">
-                                        <option value="3600">60 Minutes</option>
-                                        <option value="7200" selected>2 Hours</option>
-                                        <option value="14400">4 Hours</option>
-                                        <option value="86400">24 Hours</option>
-                                    </select>
-                                    <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
-                                        aria-expanded="false">
-                                        <span class="void-dropdown-label">2 Hours</span>
-                                        <i class="bx bx-chevron-down void-dropdown-chevron"></i>
-                                    </button>
-                                    <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
-                                        <div class="void-dropdown-option" role="option" data-value="3600">60 Minutes
-                                        </div>
-                                        <div class="void-dropdown-option" role="option" data-value="7200">2 Hours</div>
-                                        <div class="void-dropdown-option" role="option" data-value="14400">4 Hours</div>
-                                        <div class="void-dropdown-option" role="option" data-value="86400">24 Hours
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mt-8 pt-6 border-t border-white/5">
-                            <button type="button" onclick="initiateEventPulse()"
-                                class="w-full py-5 bg-void-accent text-void-bg rounded-2xl font-black uppercase tracking-[0.2em] shadow-lg shadow-void-accent/20 hover:scale-[1.01] active:scale-[0.99] transition-all">Start
-                                Rarity Boost</button>
-                        </div>
-                    </div>
-
                 </section>
 
-                <section id="content-activity-log" class="tab-content space-y-6" aria-labelledby="activity-log-heading">
-                    <div class="glass-card activity-log-page">
+                <section id="content-activity-log" class="tab-content" aria-labelledby="activity-log-heading">
                         <div class="activity-log-page__intro mb-5">
                             <h2 id="activity-log-heading"
                                 class="text-2xl font-black uppercase italic tracking-tight text-white">Activity log</h2>
                             <p
                                 class="activity-log-page__lede text-[11px] text-void-muted font-semibold uppercase tracking-widest mt-2 max-w-2xl leading-relaxed">
-                                Grants, trades, webhooks, and system events for this channel.
+                                Grants, trades, and system events for this channel.
                             </p>
+                            <p class="text-[9px] text-void-muted/50 font-bold uppercase tracking-widest mt-1">Logs older than 90 days are automatically removed.</p>
                         </div>
                         <div class="flex flex-wrap items-center gap-3 mb-4">
                             <div class="relative flex-1 min-w-[200px]">
@@ -2145,6 +2104,8 @@
                                     <option value="system">System</option>
                                     <option value="trade">Trade</option>
                                     <option value="webhook">Webhook</option>
+                                    <option value="revenue">Revenue</option>
+                                    <option value="admin">Admin</option>
                                 </select>
                                 <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
                                     aria-expanded="false">
@@ -2158,6 +2119,8 @@
                                     <div class="void-dropdown-option" role="option" data-value="system">System</div>
                                     <div class="void-dropdown-option" role="option" data-value="trade">Trade</div>
                                     <div class="void-dropdown-option" role="option" data-value="webhook">Webhook</div>
+                                    <div class="void-dropdown-option" role="option" data-value="revenue">Revenue</div>
+                                    <div class="void-dropdown-option" role="option" data-value="admin">Admin</div>
                                 </div>
                             </div>
                             <button type="button" onclick="fetchAdminLogs()"
@@ -2167,7 +2130,7 @@
                             </button>
                         </div>
                         <div class="grid grid-cols-12 gap-3 px-4 py-3 bg-white/5 rounded-t-xl border border-white/10">
-                            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">Time
+                            <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">When
                             </div>
                             <div class="col-span-2 text-[9px] font-black uppercase text-void-muted tracking-widest">
                                 Level</div>
@@ -2178,7 +2141,6 @@
                         </div>
                         <div class="activity-log-page__body border border-t-0 border-white/10 rounded-b-xl overflow-hidden bg-void-bg/20 min-h-[280px] max-h-[min(62vh,560px)] overflow-y-auto custom-scrollbar"
                             id="admin-activity-logs"></div>
-                    </div>
                 </section>
 
                 <section id="content-achievements" class="tab-content space-y-4">
@@ -2204,202 +2166,6 @@
                 </section>
 
 
-            </div>
-        </div>
-
-
-        <div id="card-creator-modal"
-            class="fixed inset-0 bg-void-bg/90 backdrop-blur-md z-[1000] hidden flex items-center justify-center p-6"
-            role="dialog" aria-modal="true" aria-labelledby="card-form-title">
-            <div class="glass-card w-full max-w-4xl max-h-[90vh] overflow-y-auto relative custom-scrollbar">
-                <button onclick="closeCardCreator()" aria-label="Close Card Creator"
-                    class="absolute top-8 right-8 text-void-muted hover:text-white transition-colors">
-                    <i class="bx bx-x text-2xl"></i>
-                </button>
-
-                <div class="flex flex-col md:flex-row gap-12">
-
-                    <div class="w-full md:w-1/2 space-y-8">
-                        <h3 id="card-form-title"
-                            class="text-3xl font-black uppercase italic tracking-tight text-white mb-2">New Card</h3>
-                        <div
-                            class="aspect-[2/3] w-full bg-white/[0.04] rounded-2xl border border-white/10 relative overflow-hidden group shadow-2xl shadow-black flex items-center justify-center">
-                            <img id="card-image-preview" src=""
-                                class="w-full h-full object-cover object-center hidden z-10 relative">
-                            <div id="card-image-placeholder"
-                                class="absolute inset-0 flex flex-col items-center justify-center text-void-muted space-y-4">
-                                <i
-                                    class="bx bxs-image text-4xl opacity-20 group-hover:scale-110 transition-transform duration-500"></i>
-                                <span class="text-[10px] uppercase font-black tracking-widest opacity-50">Upload Card
-                                    Image</span>
-                            </div>
-                            <input type="file" id="card-image-upload" accept="image/*" class="hidden"
-                                onchange="previewCardImage(this)">
-                            <button onclick="document.getElementById('card-image-upload').click()"
-                                class="absolute bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-white/5 hover:bg-white/10 backdrop-blur-sm border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0">Upload
-                                Image</button>
-                        </div>
-                    </div>
-
-
-                    <div class="flex-1 space-y-6 pt-12">
-                        <input type="hidden" id="card-edit-id">
-                        <div class="space-y-4">
-                            <div class="space-y-2">
-                                <label for="card-creator-name"
-                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Card
-                                    Name</label>
-                                <input type="text" id="card-creator-name" placeholder="NAME"
-                                    class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all placeholder:opacity-20">
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-2">
-                                    <label for="card-creator-rarity"
-                                        class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Rarity</label>
-                                    <div class="void-dropdown" data-select-id="card-creator-rarity">
-                                        <select id="card-creator-rarity" class="void-dropdown-native" aria-hidden="true"
-                                            tabindex="-1">
-                                            <option value="common">Common</option>
-                                            <option value="rare">Rare</option>
-                                            <option value="epic">Epic</option>
-                                            <option value="legendary">Legendary</option>
-                                        </select>
-                                        <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
-                                            aria-expanded="false">
-                                            <span class="void-dropdown-label">Common</span>
-                                            <i class="bx bx-chevron-down void-dropdown-chevron"></i>
-                                        </button>
-                                        <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
-                                            <div class="void-dropdown-option" role="option" data-value="common">Common
-                                            </div>
-                                            <div class="void-dropdown-option" role="option" data-value="rare">Rare</div>
-                                            <div class="void-dropdown-option" role="option" data-value="epic">Epic</div>
-                                            <div class="void-dropdown-option" role="option" data-value="legendary">
-                                                Legendary</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="space-y-2">
-                                    <label for="card-creator-set"
-                                        class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Card
-                                        Set</label>
-                                    <div class="void-dropdown" data-select-id="card-creator-set">
-                                        <select id="card-creator-set" class="void-dropdown-native" aria-hidden="true"
-                                            tabindex="-1">
-                                            <option value="">No Set</option>
-                                        </select>
-                                        <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
-                                            aria-expanded="false">
-                                            <span class="void-dropdown-label">No Set</span>
-                                            <i class="bx bx-chevron-down void-dropdown-chevron"></i>
-                                        </button>
-                                        <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden>
-                                            <div class="void-dropdown-option" role="option" data-value="">No Set</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-2">
-                                    <div class="flex justify-between items-end ml-1">
-                                        <label for="card-creator-attack"
-                                            class="text-[9px] font-black uppercase tracking-widest text-void-accent">Attack</label>
-                                        <button onclick="randomizeStats()"
-                                            class="text-[8px] font-bold text-void-accent/50 hover:text-void-accent uppercase transition-colors"><i
-                                                class="bx bxs-dicemr-1"></i> Randomize</button>
-                                    </div>
-                                    <input type="number" id="card-creator-attack" value="0"
-                                        class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
-                                </div>
-                                <div class="space-y-2">
-                                    <label for="card-creator-defense"
-                                        class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Defense</label>
-                                    <input type="number" id="card-creator-defense" value="0"
-                                        class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all">
-                                </div>
-                            </div>
-                            <div class="space-y-2">
-                                <label for="card-creator-description"
-                                    class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Description</label>
-                                <textarea id="card-creator-description" placeholder="Describe this card..." rows="3"
-                                    class="w-full bg-void-bg/50 border border-white/10 rounded-xl px-6 py-4 text-sm font-bold focus:border-void-accent transition-all placeholder:opacity-20 resize-none"></textarea>
-                            </div>
-
-                            <div class="space-y-4 pt-4 border-t border-white/5">
-                                <div class="space-y-2">
-                                    <label for="card-creator-template"
-                                        class="text-[9px] font-black uppercase tracking-widest text-void-accent ml-1">Card
-                                        Template (Dynamic Traits)</label>
-                                    <div class="void-dropdown" data-select-id="card-creator-template">
-                                        <select id="card-creator-template" class="void-dropdown-native"
-                                            aria-hidden="true" tabindex="-1">
-                                            <option value="">None (Static Image)</option>
-                                        </select>
-                                        <button type="button" class="void-dropdown-trigger" aria-haspopup="listbox"
-                                            aria-expanded="false" id="card-creator-template-trigger">
-                                            <span class="void-dropdown-label">None (Static Image)</span>
-                                            <i class="bx bx-chevron-down void-dropdown-chevron"></i>
-                                        </button>
-                                        <div class="void-dropdown-menu" role="listbox" aria-hidden="true" hidden
-                                            id="card-creator-template-menu">
-                                            <div class="void-dropdown-option" role="option" data-value="">None (Static
-                                                Image)</div>
-                                        </div>
-                                    </div>
-                                    <p class="text-[8px] text-void-muted leading-tight pl-1">Selecting a template
-                                        overrides the card image with a dynamic one containing traits.</p>
-                                </div>
-                                <div id="card-creator-trait-container"
-                                    class="p-4 bg-void-accent/5 border border-void-accent/20 rounded-xl hidden">
-                                    <div class="flex items-start gap-3">
-                                        <i class="bx bxs-magic-wand text-void-accent mt-0.5"></i>
-                                        <div>
-                                            <div
-                                                class="text-[9px] font-black uppercase tracking-widest text-void-accent underline decoration-void-accent/30 underline-offset-4">
-                                                Automated Traits</div>
-                                            <div class="text-[8px] text-void-muted/60 mt-2 leading-relaxed font-medium">
-                                                Traits, icons, and descriptions will be automatically rolled and baked
-                                                into the template on every pull.</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-4 pt-2">
-                                <label
-                                    class="flex items-center justify-between p-4 bg-void-bg/50 border border-white/10 rounded-xl cursor-pointer hover:border-void-accent/30 transition-all">
-                                    <div>
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-void-muted">
-                                            Battleable</div>
-                                        <div class="text-[8px] text-void-muted/60 mt-0.5">Allow in battles</div>
-                                    </div>
-                                    <label class="saas-toggle">
-                                        <input type="checkbox" id="card-creator-battleable" checked>
-                                        <span class="slider"></span>
-                                    </label>
-                                </label>
-                                <label
-                                    class="flex items-center justify-between p-4 bg-void-bg/50 border border-white/10 rounded-xl cursor-pointer hover:border-void-accent/30 transition-all">
-                                    <div>
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-void-muted">
-                                            Tradable</div>
-                                        <div class="text-[8px] text-void-muted/60 mt-0.5">Allow in trades</div>
-                                    </div>
-                                    <label class="saas-toggle">
-                                        <input type="checkbox" id="card-creator-tradable" checked>
-                                        <span class="slider"></span>
-                                    </label>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="pt-8">
-                            <button onclick="saveCard()"
-                                class="w-full py-5 bg-void-accent text-void-bg rounded-2xl font-black uppercase tracking-[0.2em] shadow-lg shadow-void-accent/20 hover:scale-[1.01] active:scale-[0.99] transition-all">Save
-                                Card</button>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -2839,6 +2605,7 @@
         </div>
         <!-- ── End Layer Editor Modal ──────────────────────────────────── -->
 
+        <script src="/checkout-modal.js"></script>
         <script src="/castle-auth-origin.js"></script>
         <script src="/nav-user-menu.js"></script>
         <script src="/nav-notifications.js"></script>
@@ -3019,8 +2786,6 @@
                     if (rewardType === 'card' && !cardId) { toast('Select a card first', 'error'); return; }
                     var maxUsesRaw = (document.getElementById('dash-promo-max-uses') || {}).value || '';
                     var expiresAtRaw = (document.getElementById('dash-promo-expires-at') || {}).value || '';
-                    var rerunFeeRaw = (document.getElementById('dash-promo-rerun-fee') || {}).value || '';
-                    var rerunCooldownRaw = (document.getElementById('dash-promo-rerun-cooldown') || {}).value || '';
                     var btn = document.getElementById('dash-promo-generate-btn');
                     if (btn) btn.disabled = true;
                     try {
@@ -3029,8 +2794,6 @@
                         if (rewardType === 'pack') body.set_id = setId;
                         if (maxUsesRaw) body.max_uses = parseInt(maxUsesRaw, 10);
                         if (expiresAtRaw) body.expires_at = expiresAtRaw;
-                        if (rerunFeeRaw) body.rerun_fee_cents = Math.round(parseFloat(rerunFeeRaw) * 100);
-                        if (rerunCooldownRaw) body.rerun_cooldown_days = parseInt(rerunCooldownRaw, 10);
                         var res = await fetch(BACKEND_URL + '/api/creator/promo-codes', {
                             method: 'POST', credentials: 'include',
                             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken || '' },
@@ -3049,8 +2812,6 @@
                         if (setSel) setSel.selectedIndex = 0;
                         document.getElementById('dash-promo-max-uses').value = '';
                         document.getElementById('dash-promo-expires-at').value = '';
-                        document.getElementById('dash-promo-rerun-fee').value = '';
-                        document.getElementById('dash-promo-rerun-cooldown').value = '';
                         window.dashLoadPromoCodes();
                     } catch (e) {
                         toast(e.message || 'Failed to generate', 'error');
@@ -3452,6 +3213,297 @@
                 closeAnalyticsDatePicker();
             });
         })();
+        </script>
+
+        <script>
+// ── Dashboard patches ─────────────────────────────────────────────────────────
+
+// Fix 1: updateEventUI – original queries "#content-events" which doesn't exist;
+//         now targets elements by IDs added to the badge markup.
+window.updateEventUI = function(active, name, endsAt) {
+    name = name || "";
+    endsAt = endsAt || null;
+    var badge = document.getElementById("event-status-badge");
+    var label = document.getElementById("event-status-label");
+    if (!badge || !label) return;
+    if (active) {
+        label.textContent = "ACTIVE: " + name.toUpperCase();
+        label.classList.remove("text-red-400"); label.classList.add("text-void-accent");
+        badge.classList.remove("bg-red-500/10","border-red-500/20");
+        badge.classList.add("bg-void-accent/10","border-void-accent/20");
+        var cd = document.getElementById("event-countdown");
+        if (endsAt) {
+            if (!cd) {
+                cd = document.createElement("div");
+                cd.id = "event-countdown";
+                cd.className = "text-[8px] font-bold text-void-accent/50 uppercase mt-1 text-center";
+                badge.parentElement.appendChild(cd);
+            }
+            var endMs = new Date(endsAt).getTime();
+            var tick = function() {
+                var rem = endMs - Date.now();
+                if (rem <= 0) { clearInterval(window.eventInterval); window.updateEventUI(false); return; }
+                cd.textContent = "Ends in: " + Math.floor(rem/3600000) + "h " + Math.floor(rem%3600000/60000) + "m " + Math.floor(rem%60000/1000) + "s";
+            };
+            window.eventInterval && clearInterval(window.eventInterval);
+            window.eventInterval = setInterval(tick, 1000);
+            tick();
+        }
+    } else {
+        label.textContent = "STANDBY";
+        label.classList.add("text-red-400"); label.classList.remove("text-void-accent");
+        badge.classList.add("bg-red-500/10","border-red-500/20");
+        badge.classList.remove("bg-void-accent/10","border-void-accent/20");
+        var cd2 = document.getElementById("event-countdown");
+        if (cd2) cd2.remove();
+        window.eventInterval && clearInterval(window.eventInterval);
+    }
+};
+
+// Fix 2: testPackSound – only defined in app.js which isn't loaded here.
+window.testPackSound = function() {
+    var soundEl = document.getElementById("pack-sound-effect");
+    var volEl = document.getElementById("overlay-volume");
+    var url = (soundEl && soundEl.value) || "/packopensound.wav";
+    var vol = volEl ? Math.max(0, Math.min(1, parseInt(volEl.value, 10) / 100)) : 0.85;
+    try { var a = new Audio(url); a.volume = vol; a.play(); } catch(e) {}
+};
+
+// Fix 4: Wire overlay volume slider into save + read-back.
+(function() {
+    var _origSave = window.saveObsSettings;
+    window.saveObsSettings = async function() {
+        var volEl = document.getElementById("overlay-volume");
+        if (volEl && typeof saveSettings === "function") {
+            await saveSettings({ obs_overlay_volume: parseInt(volEl.value, 10) });
+        }
+        if (typeof _origSave === "function") return _origSave.apply(this, arguments);
+    };
+    var _origPop = window.populateOverlaySettings;
+    if (typeof _origPop === "function") {
+        window.populateOverlaySettings = function() {
+            _origPop.apply(this, arguments);
+            var volEl = document.getElementById("overlay-volume");
+            var dispEl = document.getElementById("volume-display");
+            if (volEl && window.currentUser && window.currentUser.streamer) {
+                var v = window.currentUser.streamer.obs_overlay_volume;
+                if (typeof v === "number") {
+                    volEl.value = v;
+                    if (dispEl) dispEl.textContent = v + "%";
+                }
+            }
+        };
+    }
+})();
+
+// Fix 5: removeChannelTeamMember – replace native confirm() with showConfirmModal.
+window.removeChannelTeamMember = async function(id) {
+    if (!id) return;
+    showConfirmModal("Remove team member", "Remove this person from your channel team?", async function() {
+        try {
+            var r = await apiFetch(BACKEND_URL + "/api/creator/team?member_twitch_id=" + encodeURIComponent(id), { method: "DELETE", credentials: "include" });
+            var j = await r.json().catch(function() { return {}; });
+            if (!r.ok) { showToast(j.error || j.message || "Could not remove", "error"); return; }
+            showToast("Removed from team", "success");
+            await fetchChannelTeam();
+            renderAdminUserList();
+        } catch(e) { showToast("Network error", "error"); }
+    }, "Remove");
+};
+
+// Fix 6: setCollectorBlocked – replace native confirm() with showConfirmModal.
+window.setCollectorBlocked = async function(twitchId, block) {
+    var id = String(twitchId || "").trim();
+    if (!id) return;
+    var msg = block
+        ? "Block this user from earning cards on this channel?"
+        : "Unblock this user?";
+    showConfirmModal(block ? "Block user" : "Unblock user", msg, async function() {
+        showToast(block ? "Blocking…" : "Unblocking…", "loading");
+        try {
+            var r = block
+                ? await apiFetch(BACKEND_URL + "/api/creator/blocked-collectors", { method: "POST", credentials: "include", headers: {"Content-Type":"application/json"}, body: JSON.stringify({twitch_id: id}) })
+                : await apiFetch(BACKEND_URL + "/api/creator/blocked-collectors?twitch_id=" + encodeURIComponent(id), { method: "DELETE", credentials: "include" });
+            var j = await r.json().catch(function() { return {}; });
+            if (!r.ok) { showToast(j.error || j.message || "Request failed", "error"); return; }
+            showToast(block ? "User blocked" : "User unblocked", "success");
+            await fetchBlockedCollectors();
+            renderAdminUserList();
+        } catch(e) { showToast("Network error", "error"); }
+    }, block ? "Block" : "Unblock");
+};
+
+// Fix 8a: Grant tab void-dropdown – sync menu after populateGrantTabCards rebuilds options.
+(function() {
+    var _orig = window.populateGrantTabCards;
+    if (typeof _orig === "function") {
+        window.populateGrantTabCards = function(search, cards) {
+            _orig.apply(this, arguments);
+            var wrapper = document.getElementById("grant-tab-card-wrapper");
+            var sel = document.getElementById("grant-tab-card-id");
+            if (wrapper && sel && typeof syncVoidDropdownMenu === "function") {
+                syncVoidDropdownMenu(wrapper, sel);
+                if (typeof initVoidDropdown === "function" && wrapper.dataset.voidDropdownInit !== "true") {
+                    initVoidDropdown(wrapper);
+                }
+            }
+        };
+    }
+})();
+
+// Fix 8b: CP custom card void-dropdown – sync menu after loadChannelPointsTab populates options.
+(function() {
+    var _orig = window.loadChannelPointsTab;
+    if (typeof _orig === "function") {
+        window.loadChannelPointsTab = async function() {
+            var result = await _orig.apply(this, arguments);
+            var wrapper = document.getElementById("cp-custom-card-wrapper");
+            var sel = document.getElementById("cp-custom-card-id");
+            if (wrapper && sel && typeof syncVoidDropdownMenu === "function") {
+                syncVoidDropdownMenu(wrapper, sel);
+                if (typeof initVoidDropdown === "function" && wrapper.dataset.voidDropdownInit !== "true") {
+                    initVoidDropdown(wrapper);
+                }
+            }
+            return result;
+        };
+    }
+})();
+
+// Fix 9: Pack granularity label – update when analytics render.
+(function() {
+    var _orig = window.renderPackActivityChart;
+    if (typeof _orig === "function") {
+        window.renderPackActivityChart = async function() {
+            var result = await _orig.apply(this, arguments);
+            var el = document.getElementById("pack-granularity");
+            if (el && typeof analyticsUsesMonthlyGranularity === "function") {
+                el.textContent = analyticsUsesMonthlyGranularity() ? "Monthly view" : "Daily view";
+            }
+            return result;
+        };
+    }
+})();
+
+// Fix 10: Analytics CSV export.
+window.exportAnalyticsCSV = function() {
+    var rows = [];
+    var panels = {
+        packs: document.getElementById("analytics-chart-panel-packs"),
+        collectors: document.getElementById("analytics-chart-panel-collectors"),
+        battles: document.getElementById("analytics-chart-panel-battles"),
+        revenue: document.getElementById("analytics-chart-panel-revenue")
+    };
+    var activeKey = "packs";
+    for (var k in panels) {
+        if (panels[k] && !panels[k].classList.contains("hidden")) { activeKey = k; break; }
+    }
+    var ad = (typeof analyticsData !== "undefined") ? analyticsData : {};
+    if (activeKey === "packs") {
+        var data = (ad.packs && ad.packs.activity_data) || [];
+        var sources = Object.keys((data[0] && data[0].by_source) || {});
+        rows.push(["Date","Total"].concat(sources).join(","));
+        data.forEach(function(r) {
+            rows.push([r.date, r.count].concat(sources.map(function(s) { return (r.by_source || {})[s] || 0; })).join(","));
+        });
+    } else if (activeKey === "collectors") {
+        var data2 = (ad.overview && ad.overview.growth_data) || [];
+        rows.push("Date,Collectors");
+        data2.forEach(function(r) { rows.push(r.date + "," + r.count); });
+    } else if (activeKey === "battles") {
+        var data3 = (ad.battles && ad.battles.activity_data) || [];
+        rows.push("Date,Battles");
+        data3.forEach(function(r) { rows.push(r.date + "," + r.count); });
+    } else {
+        var data4 = (ad.revenue && ad.revenue.activity_data) || [];
+        rows.push("Date,Revenue cents,Revenue USD");
+        data4.forEach(function(r) { rows.push(r.date + "," + r.amount_cents + "," + (r.amount_cents/100).toFixed(2)); });
+    }
+    if (!rows.length) { showToast("No data to export", "error"); return; }
+    var blob = new Blob([rows.join("\n")], {type: "text/csv"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "castle-analytics-" + activeKey + "-" + new Date().toISOString().slice(0,10) + ".csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("CSV downloaded", "success");
+};
+
+// Full Customisation: replace redirect-to-Stripe with in-page checkout modal.
+window.unlockSetCustomization = async function() {
+    if (typeof window.openCheckout !== "function") {
+        showToast("Checkout unavailable", "error");
+        return;
+    }
+    // Check already-purchased before opening modal
+    try {
+        var check = await apiFetch(BACKEND_URL + "/api/creator/purchase/set-customization/payment-intent", {
+            method: "POST", credentials: "include", headers: {"Content-Type":"application/json"}, body: "{}"
+        });
+        var j = await check.json().catch(function() { return {}; });
+        if (j.already_purchased) {
+            if (window.currentUser && window.currentUser.streamer) window.currentUser.streamer.has_set_customization = true;
+            if (typeof applySetCustomizationGate === "function") applySetCustomizationGate();
+            showToast("Already unlocked", "success");
+            return;
+        }
+    } catch(e) {}
+    window.openCheckout({
+        paymentIntentPath: "/api/creator/purchase/set-customization/payment-intent",
+        paymentIntentBody: {},
+        onSuccess: function() {
+            if (window.currentUser && window.currentUser.streamer) window.currentUser.streamer.has_set_customization = true;
+            if (typeof applySetCustomizationGate === "function") applySetCustomizationGate();
+            showToast("Full Customisation unlocked!", "success");
+        }
+    });
+};
+
+// Event Rerun: override initiateEventPulse to handle 402 rerun-fee gate (Castle platform charge).
+(function() {
+    window.initiateEventPulse = async function() {
+        var rarity = (document.getElementById("event-boost-rarity") || {}).value || "rare";
+        var multiplier = (document.getElementById("event-multiplier") || {}).value || "2";
+        var durSecs = parseInt(((document.getElementById("event-duration") || {}).value) || "7200", 10);
+        var durationHrs = Math.max(1, Math.floor(durSecs / 3600));
+        showToast("Starting Special Event...", "loading");
+        try {
+            var r = await apiFetch(BACKEND_URL + "/api/creator/events", {
+                method: "POST",
+                headers: {"Content-Type": "application/json", "X-CSRF-Token": csrfToken},
+                credentials: "include",
+                body: JSON.stringify({type: "rarity_boost", target_rarity: rarity, multiplier: multiplier, duration: durationHrs})
+            });
+            var data = await r.json().catch(function() { return {}; });
+            if (r.status === 402 && data.requires_payment) {
+                if (typeof window.openCheckout !== "function") {
+                    showToast("Rerun fee $" + ((data.fee_cents || 0) / 100).toFixed(2) + " required", "error");
+                    return;
+                }
+                showToast("Rerun fee applies — opening checkout", "loading");
+                window.openCheckout({
+                    paymentIntentPath: "/api/creator/events/rerun-payment-intent",
+                    paymentIntentBody: {target_rarity: rarity, multiplier: multiplier, duration_hrs: durationHrs},
+                    streamerId: (window.currentUser && window.currentUser.streamer && window.currentUser.streamer.id) || "",
+                    onSuccess: function() {
+                        showToast(rarity.toUpperCase() + " BOOST SCHEDULED", "success");
+                    }
+                });
+                return;
+            }
+            if (r.ok) {
+                showToast(rarity.toUpperCase() + " BOOST ACTIVE", "success");
+                window.updateEventUI(true, data.name, data.ends_at);
+            } else {
+                showToast(data.error || "Event failed to start", "error");
+            }
+        } catch(e) {
+            showToast("Connection error: " + e.message, "error");
+        }
+    };
+})();
+
         </script>
 </body>
 

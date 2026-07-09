@@ -303,6 +303,11 @@
     min-height: calc(100vh - 9rem);
 }
 
+.dashboard-content-area:has(.admin-layout.active) {
+    height: calc(100vh - 9rem);
+    overflow: hidden;
+}
+
 /* Dashboard search — bar + dropdown */
 .dash-search-bar {
     display: flex;
@@ -1054,6 +1059,9 @@ canvas {
 
 .tab-content.active.admin-layout {
     display: flex;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .activity-log-page {
@@ -1067,6 +1075,9 @@ canvas {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .admin-workspace__toolbar {
@@ -1154,45 +1165,32 @@ canvas {
 }
 
 .admin-workspace__split {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
     min-width: 0;
-}
-
-@media (min-width: 900px) {
-    .admin-workspace__split {
-        grid-template-columns: minmax(180px, 22%) minmax(0, 1fr);
-        gap: 0;
-    }
-
-    .admin-workspace__team {
-        padding-right: 1rem;
-        margin-right: 1rem;
-        border-right: 1px solid rgba(255, 255, 255, 0.07);
-    }
-}
-
-@media (min-width: 1280px) {
-    .admin-workspace__split {
-        grid-template-columns: minmax(200px, 26%) minmax(0, 1fr);
-    }
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .admin-workspace__team {
     min-width: 0;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .admin-workspace__team-head {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .admin-workspace__team-title {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -1200,32 +1198,28 @@ canvas {
 }
 
 .admin-workspace__team-hint {
-    font-size: 0.6rem;
+    font-size: 0.58rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: rgba(148, 163, 184, 0.82);
-    line-height: 1.45;
-    margin-top: 0.35rem;
+    letter-spacing: 0.07em;
+    color: rgba(148, 163, 184, 0.65);
+    line-height: 1.5;
+    margin-top: 0.4rem;
 }
 
 .admin-workspace__team-list {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    flex-direction: row;
     gap: 0.5rem;
-    min-height: 3rem;
-    max-height: min(260px, 38vh);
-    overflow-y: auto;
-    padding-right: 0.3rem;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+    min-height: 2rem;
 }
 
 .admin-workspace__team-list::-webkit-scrollbar {
-    width: 4px;
+    width: 3px;
 }
 .admin-workspace__team-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
 }
 
@@ -1233,35 +1227,78 @@ canvas {
     min-width: 0;
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 .admin-workspace__members-label {
-    font-size: 0.6rem;
+    font-size: 0.58rem;
     font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.2em;
-    color: rgba(148, 163, 184, 0.55);
-    margin-bottom: 0.5rem;
+    letter-spacing: 0.22em;
+    color: rgba(148, 163, 184, 0.4);
+    margin-bottom: 0.6rem;
+    padding-left: 0.15rem;
+}
+
+.admin-search-wrap {
+    position: relative;
+    margin-bottom: 0.85rem;
 }
 
 .admin-search-wrap__icon {
     position: absolute;
-    left: 0.9rem;
+    left: 0.85rem;
     top: 50%;
     transform: translateY(-50%);
     font-size: 0.8rem;
     pointer-events: none;
-    opacity: 0.75;
+    color: rgba(148, 163, 184, 0.5);
+}
+
+.admin-search-input {
+    width: 100%;
+    background: rgba(5, 7, 10, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.85rem;
+    padding: 0.65rem 1rem 0.65rem 2.4rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: inherit;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-search-input::placeholder {
+    color: rgba(148, 163, 184, 0.45);
+    font-weight: 600;
+}
+
+.admin-search-input:focus {
+    outline: none;
+    border-color: var(--void-accent);
+    box-shadow: 0 0 0 3px rgba(var(--void-accent-rgb, 63, 170, 255), 0.1);
 }
 
 .admin-member-scroll {
-    max-height: min(620px, 68vh);
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    padding-right: 0.35rem;
+    padding-right: 0.3rem;
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: 0.45rem;
     scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.admin-member-scroll::-webkit-scrollbar {
+    width: 3px;
+}
+.admin-member-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
 }
 
 .admin-events-head {
@@ -1281,29 +1318,28 @@ canvas {
 .admin-team-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.7rem 1rem;
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 0.85rem;
-    transition: border-color 0.2s ease, background 0.2s ease;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0.9rem;
+    transition: border-color 0.2s ease;
+    min-width: 0;
 }
 
 .admin-team-row:hover {
-    border-color: rgba(255, 255, 255, 0.11);
-    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(var(--void-accent-rgb, 63, 170, 255), 0.28);
 }
 
 .admin-member-row {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.85rem 1rem;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 1rem;
-    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    gap: 0.65rem;
+    padding: 0.8rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 1.25rem;
+    transition: border-color 0.2s ease;
 }
 
 @media (min-width: 640px) {
@@ -1316,110 +1352,121 @@ canvas {
 }
 
 .admin-member-row:hover {
-    border-color: rgba(var(--void-accent-rgb, 63, 170, 255), 0.22);
-    background: rgba(255, 255, 255, 0.045);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.22);
+    border-color: rgba(var(--void-accent-rgb, 63, 170, 255), 0.3);
 }
 
 .admin-member-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem 0.45rem;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    align-items: center;
     justify-content: flex-end;
     flex-shrink: 0;
 }
 
 .admin-action-btn {
-    font-size: 0.62rem;
+    font-size: 0.6rem;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    padding: 0.45rem 0.65rem;
-    border-radius: 0.6rem;
+    padding: 0.38rem 0.65rem;
+    border-radius: 0.55rem;
     border: 1px solid transparent;
     cursor: pointer;
-    transition:
-        border-color 0.2s ease,
-        background 0.2s ease,
-        color 0.2s ease,
-        opacity 0.2s ease;
-}
-
-.admin-action-btn:hover:not(:disabled) {
-    filter: brightness(1.08);
+    white-space: nowrap;
+    transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, opacity 0.18s ease;
 }
 
 .admin-action-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
     cursor: not-allowed;
 }
 
-.admin-action-btn--grant {
-    color: #f8fafc;
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.08);
-}
-
-.admin-action-btn--grant:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.12);
-}
-
 .admin-action-btn--mod {
-    color: #f8fafc;
+    color: rgba(226, 232, 240, 0.75);
     background: rgba(255, 255, 255, 0.05);
     border-color: rgba(255, 255, 255, 0.08);
+}
+
+.admin-action-btn--mod:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.14);
 }
 
 .admin-action-btn--editor {
     color: var(--void-accent);
-    background: rgba(var(--void-accent-rgb, 63, 170, 255), 0.12);
+    background: rgba(var(--void-accent-rgb, 63, 170, 255), 0.08);
     border-color: rgba(var(--void-accent-rgb, 63, 170, 255), 0.22);
 }
 
+.admin-action-btn--editor:hover:not(:disabled) {
+    background: rgba(var(--void-accent-rgb, 63, 170, 255), 0.15);
+    border-color: rgba(var(--void-accent-rgb, 63, 170, 255), 0.38);
+}
+
 .admin-action-btn--block {
+    color: rgba(248, 113, 113, 0.8);
+    background: rgba(239, 68, 68, 0.07);
+    border-color: rgba(239, 68, 68, 0.14);
+}
+
+.admin-action-btn--block:hover:not(:disabled) {
     color: #f87171;
-    background: rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.22);
+    background: rgba(239, 68, 68, 0.13);
+    border-color: rgba(239, 68, 68, 0.28);
 }
 
 .admin-action-btn--unblock {
-    color: #4ade80;
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.08);
+    color: rgba(74, 222, 128, 0.8);
+    background: rgba(74, 222, 128, 0.07);
+    border-color: rgba(74, 222, 128, 0.14);
 }
 
-.admin-action-btn--wipe {
-    color: #fbbf24;
-    background: rgba(245, 158, 11, 0.1);
-    border-color: rgba(245, 158, 11, 0.25);
+.admin-action-btn--unblock:hover:not(:disabled) {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.13);
+    border-color: rgba(74, 222, 128, 0.28);
 }
 
 .admin-action-btn--remove {
+    color: rgba(248, 113, 113, 0.8);
+    background: rgba(239, 68, 68, 0.07);
+    border-color: rgba(239, 68, 68, 0.14);
+}
+
+.admin-action-btn--remove:hover:not(:disabled) {
     color: #f87171;
-    background: rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.22);
+    background: rgba(239, 68, 68, 0.13);
+    border-color: rgba(239, 68, 68, 0.28);
+}
+
+/* Keep member avatars as rounded squares, matching the rest of the dashboard */
+.admin-member-row img.w-10,
+.admin-member-row div.w-10 {
+    flex-shrink: 0;
 }
 
 .admin-badge {
-    font-size: 0.62rem;
+    font-size: 0.58rem;
     font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 0.2rem 0.45rem;
+    letter-spacing: 0.08em;
+    padding: 0.18rem 0.45rem;
     border-radius: 0.35rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .admin-badge--team {
     color: var(--void-accent);
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--void-accent-rgb, 63, 170, 255), 0.1);
+    border-color: rgba(var(--void-accent-rgb, 63, 170, 255), 0.2);
 }
 
 .admin-badge--blocked {
     color: #f87171;
-    background: rgba(239, 68, 68, 0.12);
-    border-color: rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.22);
 }
 
 .admin-log-row {
@@ -1732,4 +1779,32 @@ body.dashboard-act-as-banner-visible .dashboard-sidebar {
 
 .template-cancel-btn:hover {
     color: #fff;
+}
+
+/* Special events multiplier slider */
+#event-multiplier {
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255,255,255,0.08);
+    height: 4px;
+    border-radius: 4px;
+}
+#event-multiplier::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--void-accent, #39ff6e);
+    cursor: pointer;
+    border: 2px solid rgba(5,7,10,0.85);
+    box-shadow: 0 0 6px rgba(var(--void-accent-rgb), 0.4);
+}
+#event-multiplier::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--void-accent, #39ff6e);
+    cursor: pointer;
+    border: 2px solid rgba(5,7,10,0.85);
+    box-shadow: 0 0 6px rgba(var(--void-accent-rgb), 0.4);
 }

@@ -22,6 +22,8 @@ tests/output/
 .vscode/
 Thumbs.db
 *.log
+*.bak
+*.bak2
 
 # MRQ Local Config
 .mrq.json

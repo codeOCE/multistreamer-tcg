@@ -1593,12 +1593,7 @@
             </div>
             <div class="sf-right" id="sf-streamer-cell">
               <div class="sf-streamer-text">
-                <div class="flex items-center gap-2">
-                  <span class="sf-streamer-name" id="sf-streamer-name">—</span>
-                  <button onclick="openStreamerSettings()" class="text-void-muted hover:text-void-text transition-colors p-1" title="Streamer settings">
-                    <i class="bx bx-cog text-lg"></i>
-                  </button>
-                </div>
+                <span class="sf-streamer-name" id="sf-streamer-name">—</span>
                 <span class="sf-streamer-sub">Creator</span>
               </div>
               <div class="sf-streamer-avatar-placeholder" id="sf-streamer-avatar-wrap">
@@ -1739,60 +1734,6 @@
         <button class="move-card-btn" id="move-card-cancel" onclick="closeMoveCardModal()">Cancel</button>
         <button class="move-card-btn" id="move-card-confirm" onclick="confirmMoveCard()">Move Card</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Streamer Settings Modal -->
-  <div id="streamer-settings-modal" class="fixed inset-0 z-[1000] bg-black/80 backdrop-blur hidden flex items-center justify-center p-4" onclick="if(event.target===this)closeStreamerSettings()">
-    <div class="bg-void-bg border border-white/10 rounded-2xl max-w-md w-full p-6 space-y-6">
-      <h3 class="text-lg font-black uppercase tracking-tight">Settings</h3>
-
-      <div>
-        <label class="text-xs font-black uppercase tracking-widest text-void-muted block mb-2">Sort by</label>
-        <select id="streamer-sort-select" onchange="applyStreamerSettings()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-          <option value="name">Name</option>
-          <option value="rarity">Rarity</option>
-          <option value="date">Date Acquired</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="text-xs font-black uppercase tracking-widest text-void-muted block mb-2">Filter Rarity</label>
-        <select id="streamer-rarity-select" onchange="applyStreamerSettings()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-          <option value="">All Rarities</option>
-          <option value="Legendary">Legendary</option>
-          <option value="Epic">Epic</option>
-          <option value="Rare">Rare</option>
-          <option value="Common">Common</option>
-        </select>
-      </div>
-
-      <label class="flex items-center gap-3 cursor-pointer">
-        <input type="checkbox" id="streamer-hide-owned" onchange="applyStreamerSettings()" class="w-4 h-4">
-        <span class="text-sm text-void-muted">Hide cards I own</span>
-      </label>
-
-      <label class="flex items-center gap-3 cursor-pointer">
-        <input type="checkbox" id="streamer-hide-locked" onchange="applyStreamerSettings()" class="w-4 h-4">
-        <span class="text-sm text-void-muted">Hide locked cards</span>
-      </label>
-
-      <label class="flex items-center gap-3 cursor-pointer">
-        <input type="checkbox" id="streamer-notifications" checked onchange="applyStreamerSettings()" class="w-4 h-4">
-        <span class="text-sm text-void-muted">Notifications from this creator</span>
-      </label>
-
-      <button onclick="closeStreamerSettings()" class="w-full py-2 bg-void-accent/20 hover:bg-void-accent/30 border border-void-accent/30 rounded-xl text-sm font-bold uppercase tracking-wider transition-colors">Done</button>
-    </div>
-  </div>
-
-  <!-- Set Selector for Reward Packs -->
-  <div id="set-selector-modal" class="fixed inset-0 z-[1000] bg-black/80 backdrop-blur hidden flex items-center justify-center p-4" onclick="if(event.target===this)closeSetSelector()">
-    <div class="bg-void-bg border border-white/10 rounded-2xl max-w-md w-full p-6">
-      <h3 class="text-lg font-black uppercase tracking-tight mb-2">Choose a Set</h3>
-      <p class="text-sm text-void-muted mb-6">Select which set to open from:</p>
-      <div id="set-selector-list" class="space-y-2 mb-6 max-h-64 overflow-y-auto"></div>
-      <button onclick="closeSetSelector()" class="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold uppercase tracking-wider transition-colors">Cancel</button>
     </div>
   </div>
 
@@ -2288,6 +2229,7 @@
     function renderLeftPacks(sets, pendingPacks, slug) {
       _leftPackSets     = sets;
       _availableSets    = sets;  // For set selector modal
+      window.streamerAvailableSets = sets;  // Publish to the global settings menu pack selector
       _leftPendingPacks = Array.isArray(pendingPacks) ? pendingPacks : [];
       _leftSlug         = slug;
       const streamerDbId = streamerData?.id || null;
@@ -2339,116 +2281,26 @@
       openPackModal(slug, firstPack);
     }
 
-    let _pendingSetSelectionPack = null;
     let _availableSets = [];
 
     function openPackModal(slug, pack = null) {
-      // If pack needs set selection (Twitch reward), show selector first
-      if (pack && pack.roll_on_open && _availableSets.length > 0) {
-        _pendingSetSelectionPack = pack;
-        showSetSelector();
-        return;
-      }
-
       const modal = document.getElementById('pack-modal');
       const frame = document.getElementById('pack-modal-frame');
       if (!modal || !frame) return;
       const params = new URLSearchParams({ embed: '1' });
       if (slug) params.set('streamer', slug);
       if (pack?.id) params.set('pack_id', pack.id);
+      // For roll-on-open packs (Twitch rewards), apply the viewer's preferred set
+      // chosen in the cog settings menu. Empty = "Surprise me" (random set).
+      if (pack && pack.roll_on_open) {
+        const preferred = (typeof window.getStreamerPreferredSetId === 'function')
+          ? window.getStreamerPreferredSetId() : '';
+        if (preferred) params.set('set_id', preferred);
+      }
       frame.src = '/pack-opening.html?' + params.toString();
       modal.classList.add('open');
       document.body.style.overflow = 'hidden';
-    }
-
-    function showSetSelector() {
-      const modal = document.getElementById('set-selector-modal');
-      const list = document.getElementById('set-selector-list');
-      if (!modal || !list) return;
-
-      list.innerHTML = _availableSets.map(set => `
-        <button onclick="selectSetAndOpen('${set.id}')"
-          class="w-full text-left p-3 bg-white/5 hover:bg-void-accent/20 border border-white/10 rounded-lg transition-colors">
-          <div class="font-bold">${set.name}</div>
-          <div class="text-xs text-void-muted">${set.card_count || 0} cards</div>
-        </button>
-      `).join('');
-
-      modal.classList.remove('hidden');
-    }
-
-    function selectSetAndOpen(setId) {
-      const modal = document.getElementById('set-selector-modal');
-      if (modal) modal.classList.add('hidden');
-
-      const packModal = document.getElementById('pack-modal');
-      const frame = document.getElementById('pack-modal-frame');
-      if (!packModal || !frame) return;
-
-      const params = new URLSearchParams({ embed: '1' });
-      if (_pendingSetSelectionPack?.streamer?.username) {
-        params.set('streamer', _pendingSetSelectionPack.streamer.username);
-      }
-      if (setId) params.set('set_id', setId);
-      if (_pendingSetSelectionPack?.id) params.set('pack_id', _pendingSetSelectionPack.id);
-
-      frame.src = '/pack-opening.html?' + params.toString();
-      packModal.classList.add('open');
-      document.body.style.overflow = 'hidden';
-      _pendingSetSelectionPack = null;
-    }
-
-    function closeSetSelector() {
-      const modal = document.getElementById('set-selector-modal');
-      if (modal) modal.classList.add('hidden');
-      _pendingSetSelectionPack = null;
-    }
-
-    let _streamerSettings = {};
-
-    function openStreamerSettings() {
-      const modal = document.getElementById('streamer-settings-modal');
-      if (modal) modal.classList.remove('hidden');
-      // Load saved settings for this streamer
-      const streamerKey = streamerData?.id || 'default';
-      _streamerSettings = JSON.parse(sessionStorage.getItem(`streamer_settings_${streamerKey}`) || '{}');
-
-      const sortSel = document.getElementById('streamer-sort-select');
-      const raritySel = document.getElementById('streamer-rarity-select');
-      const hideOwnedChk = document.getElementById('streamer-hide-owned');
-      const hideLockedChk = document.getElementById('streamer-hide-locked');
-      const notifChk = document.getElementById('streamer-notifications');
-
-      if (sortSel) sortSel.value = _streamerSettings.sortBy || 'name';
-      if (raritySel) raritySel.value = _streamerSettings.filterRarity || '';
-      if (hideOwnedChk) hideOwnedChk.checked = _streamerSettings.hideOwned || false;
-      if (hideLockedChk) hideLockedChk.checked = _streamerSettings.hideLocked || false;
-      if (notifChk) notifChk.checked = _streamerSettings.notifications !== false;
-    }
-
-    function closeStreamerSettings() {
-      const modal = document.getElementById('streamer-settings-modal');
-      if (modal) modal.classList.add('hidden');
-    }
-
-    function applyStreamerSettings() {
-      const sortSel = document.getElementById('streamer-sort-select');
-      const raritySel = document.getElementById('streamer-rarity-select');
-      const hideOwnedChk = document.getElementById('streamer-hide-owned');
-      const hideLockedChk = document.getElementById('streamer-hide-locked');
-      const notifChk = document.getElementById('streamer-notifications');
-
-      _streamerSettings = {
-        sortBy: sortSel?.value || 'name',
-        filterRarity: raritySel?.value || '',
-        hideOwned: hideOwnedChk?.checked || false,
-        hideLocked: hideLockedChk?.checked || false,
-        notifications: notifChk?.checked !== false
-      };
-
-      const streamerKey = streamerData?.id || 'default';
-      sessionStorage.setItem(`streamer_settings_${streamerKey}`, JSON.stringify(_streamerSettings));
-      // TODO: Apply filtering/sorting to card grid
+      return;
     }
 
     function closePackModal() {
@@ -3504,20 +3356,32 @@
       const privIcon   = document.getElementById('privacy-icon');
 
       const isUserBinder = !!b;
-      const isPublic     = !!b?.is_public;
+      const isPublic     = isUserBinder ? !!b.is_public : true; // default binders are always public
 
       if (privBtn) {
-        privBtn.style.display = isUserBinder ? 'flex' : 'none';
+        privBtn.style.display = 'flex';
         privBtn.classList.toggle('public', isPublic);
-        privBtn.title = isPublic ? 'Public — click to make private' : 'Private — click to make public';
+        if (isUserBinder) {
+          privBtn.title = isPublic ? 'Public — click to make private' : 'Private — click to make public';
+        } else {
+          privBtn.title = 'This binder is always public';
+        }
       }
       if (privIcon) privIcon.className = `bx ${isPublic ? 'bx-globe' : 'bx-lock'}`;
-      if (copyBtn)  copyBtn.style.display = (isPublic && b?.share_token) ? 'flex' : 'none';
+      // Show copy link for user binders (public + token) OR always for default binders
+      if (copyBtn) copyBtn.style.display = (isUserBinder ? (isPublic && b?.share_token) : true) ? 'flex' : 'none';
     }
 
     function copyBinderLink() {
       const b = userBinders.find(x => String(x.id) === String(activeBinder));
-      if (!b?.share_token) { showToast('Make this binder public first', 'error'); return; }
+      if (!b) {
+        // Default binder — copy the current page URL
+        navigator.clipboard.writeText(window.location.href)
+          .then(() => showToast('Link copied to clipboard!', 'success'))
+          .catch(() => showToast('Could not copy — check browser permissions', 'error'));
+        return;
+      }
+      if (!b.share_token) { showToast('Make this binder public first', 'error'); return; }
       const shareUrl = `${window.location.origin}/binder.html?share=${encodeURIComponent(b.share_token)}`;
       navigator.clipboard.writeText(shareUrl)
         .then(() => showToast('Link copied to clipboard!', 'success'))
@@ -3529,6 +3393,7 @@
     window._privacyToggleClick = function () {
       const b = userBinders.find(x => String(x.id) === String(activeBinder));
       if (b) toggleBinderPrivacy(b.id, !b.is_public);
+      else showToast('This binder is always public', 'info');
     };
 
     /* ── Create binder ── */

@@ -47,7 +47,7 @@ Status legend:
 ## Creator Features
 
 - [~] **Gate creator functionality behind a paywall.** Entitlement foundation built (disabled / free for now): `streamers.has_creator_access` (default true grandfathers existing), `CREATOR_PAYWALL_ENABLED` switch + `assertCreatorAccess()` at the `checkCreator` chokepoint. Purchase flow + upgrade UI + price still to do when monetising.
-- [ ] **Choose which card set is distributed via Twitch subs vs website purchases.** No per-channel set-distribution setting found.
+- [x] **Choose which card set is distributed via Twitch subs vs website purchases.** Done — see Phase 7 (creators pick up to 3 active sets; roll-on-open credit system).
 - [x] **Final submission button when uploading custom cards.** The save action is now an explicit **"Publish Card"** button with a one-time confirm for new cards (edits save silently as "Save Changes"), wrapping the existing `csSave` in [card-creator.html](public/card-creator.html). Kept instant-live (no draft state).
 
 ## Collection & Binder Improvements
@@ -57,7 +57,7 @@ Status legend:
 - [x] **Move "New Binder" button to the main binders page.** Already correct in the unified binder page: the New Binder button sits on the shelf/index ([binder.html:1480](public/binder.html#L1480)), not inside an individual binder.
 - [~] **Binder carousel (favourites first, click-drag).** DROPPED (2026-06-18) — direction changed since the list was made; the unified binder.html shelf supersedes this. Not building.
 - [x] **Binder starring.** Star a user binder to pin it to the front of the shelf; stored in `profile_settings.ui_prefs.favourite_binders` via `PATCH /api/user/ui-prefs`, with favourites-first ordering ([binder.html](public/binder.html), [src/index.ts](src/index.ts)).
-- [ ] **Merge /binders and /binder (animated expand).** Future; not implemented.
+- [x] **Merge /binders and /binder (animated expand).** Done — the shelf/fly-open animation from TEST-BINDER-PLAN.md was built directly into binder.html (`#tb-shelf`, `#tb-fly-*`), and `/binder` + `/binders` both redirect to `/my-collection` (src/index.ts:18853).
 
 ## Marketplace Improvements
 
@@ -74,9 +74,9 @@ Status legend:
 
 ## Battle System
 
-- [ ] **Trigger labels on traits (Start of Combat, On Attack, On Death, …).** No trigger-label rendering in `battle.js`.
-- [ ] **Make revive mechanics clearer.** Not found.
-- [ ] **Revive behaviour: return with combat attack value + 1 health.** Not found; needs engine change in arena/battle logic.
+- [x] **Trigger labels on traits (Start of Combat, On Attack, On Death, …).** Added a `TRAIT_TRIGGER` phase map (Start of Combat: mimic/mirror/bounty_hunter; On Attack: frost/rage/absorb/echo/cleanse; On Death: revive; Passive: guard) derived from the actual engine phases in `processDeaths`/`runAttackInstance`/setup ([src/index.ts:2900-3220](src/index.ts#L2900-L3220)). Surfaced as tooltips on trait pips in [battle.js](public/battle.js) (deck picker + battle slots) and [arena.js](public/arena.js) (live arena card labels), plus inline text in the deck-preview panel where there's room.
+- [x] **Make revive mechanics clearer.** Decision (2026-07-09): keep the simple 1-HP-once-per-battle rule as-is, no engine change. Clarity delivered via the "Revive — On Death" trigger label above; the mechanic's existing description ("Revives with 1 HP once per battle (Reborn)") already states the rule.
+- [ ] **Revive behaviour: return with combat attack value + 1 health.** DROPPED (2026-07-09) — decided to keep current simple version instead.
 
 ## Moderation & Safety
 
@@ -84,7 +84,7 @@ Status legend:
 
 ## Monetisation
 
-- [ ] **Promo limits (frequency cap + recurring weekly cost to rerun).** Not implemented.
+- [x] **Promo limits (frequency cap + recurring weekly cost to rerun).** Done — see Phase 7 (per-rerun fee + cooldown).
 
 ## Future Ideas
 
@@ -143,5 +143,4 @@ Status legend:
 
 ### Open questions for you
 - Paywall: which creator features sit behind it, and what's the price model? (changes Phase 7 scope a lot)
-- "Merge /binders and /binder": is this a real near-term goal or a someday-idea? It's the biggest single item here.
-- Revive change: is the "return with combat attack value + 1 HP" the final rule, or still being playtested?
+- Revive change: is the "return with combat attack value + 1 HP" the final rule, or still being playtested? (2026-07-07: still deciding — deferred, not in the active loop)

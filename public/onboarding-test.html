@@ -765,10 +765,22 @@
                             <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">You're Ready to Launch!</h2>
                             <p class="text-void-muted text-sm leading-snug max-w-md">Your collection is initialized and overlays
                                 are set. Visit the dashboard after activation to create your first card set.</p>
+
+                            <!-- Creator access (one-time; free for now) -->
+                            <div class="w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.02] p-4 flex flex-col gap-2 text-center">
+                                <div class="text-[10px] uppercase tracking-widest font-black text-void-muted">Creator Access</div>
+                                <div class="text-sm text-void-text leading-snug">Card Studio, sets &amp; custom card publishing.</div>
+                                <div class="flex items-baseline justify-center gap-2 my-1">
+                                    <span class="text-2xl font-display font-black text-void-accent">$0</span>
+                                    <span class="text-[11px] uppercase tracking-widest text-void-muted">Free for now</span>
+                                </div>
+                            </div>
+
                             <button onclick="activateCollection()" id="btn-activate"
                                 class="w-full max-w-sm btn-void py-3 px-8 rounded-xl text-sm flex items-center justify-center gap-2">
-                                Launch Collection <i class="bx bxs-bolt"></i>
+                                Become a Creator &amp; Launch <i class="bx bxs-bolt"></i>
                             </button>
+                            <div id="unlock-creator-feedback" class="text-[11px] text-void-muted hidden"></div>
                         </div>
                     </div>
                 </div>
@@ -855,9 +867,9 @@
                     <!-- Step 2: Discovery & Follows -->
                     <div id="col-step-2" class="step-card hidden animate-step p-5 md:p-6 rounded-3xl">
                         <div class="w-full flex flex-col gap-4">
-                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Sync your follows.</h2>
-                            <p class="text-void-muted text-sm leading-snug shrink-0">We've found these creators you follow on
-                                Twitch who are already active on Castle TCG.</p>
+                            <h2 class="text-2xl md:text-3xl font-display font-black italic tracking-tighter shrink-0">Bring your follows with you.</h2>
+                            <p class="text-void-muted text-sm leading-snug shrink-0">These are the creators you already follow on
+                                Twitch who are live on Castle TCG. Add them to start collecting their cards and packs.</p>
 
                             <div id="follows-loading" class="text-center py-12">
                                 <i class="bx bx-loader-circle bx-spin text-void-accent text-3xl mb-4"></i>

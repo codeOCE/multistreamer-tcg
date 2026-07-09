@@ -398,6 +398,19 @@
             text-transform: uppercase;
             text-align: center;
         }
+        .tr-card-lister {
+            font-size: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-align: center;
+            color: var(--void-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            margin-top: 1px;
+        }
+        .tr-card-lister--own { color: var(--void-accent); opacity: 0.85; }
 
         /* Empty / loading state */
         .tr-empty {
@@ -1123,6 +1136,20 @@
         .tr-btn-accept:hover { background: rgba(var(--page-accent-rgb), 0.22); }
         .tr-btn-accept:disabled { opacity: 0.4; cursor: not-allowed; }
 
+        .tr-offer-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+        .tr-btn-decline {
+            padding: 8px 16px;
+            background: rgba(239,68,68,0.08);
+            color: #f87171;
+            border: 1px solid rgba(239,68,68,0.28);
+            border-radius: 8px;
+            font-size: 0.65rem; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+            cursor: pointer; flex-shrink: 0; transition: all 0.2s; white-space: nowrap;
+        }
+        .tr-btn-decline:hover { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.45); }
+        .tr-btn-decline:disabled { opacity: 0.4; cursor: not-allowed; }
+        #tr-my-offers-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+
         /* Toast */
         #tr-toast {
             position: fixed;
@@ -1234,6 +1261,9 @@
             </button>
             <button class="tr-nav-btn" id="tr-btn-mine" onclick="tViewMyListings()">
                 <i class="bx bxs-layer"></i> <span id="tr-mine-label">Your listings</span>
+            </button>
+            <button class="tr-nav-btn" id="tr-btn-my-offers" onclick="tOpenMyOffers()">
+                <i class="bx bx-paper-plane"></i> Your Offers
             </button>
             <button class="tr-nav-btn" id="tr-btn-pile" onclick="tOpenTradePile()">
                 <i class="bx bxs-collection"></i> Your Trade Pile
@@ -1353,6 +1383,19 @@
         <div class="tr-modal-actions" style="margin-top:8px;">
             <button class="tr-btn-danger" id="tr-cancel-listing-btn" onclick="tCancelMyListing()"><i class="bx bx-x-circle"></i> Cancel Listing</button>
             <button class="tr-btn-ghost" onclick="tCloseModal('tr-offers-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Your Offers Modal (outgoing offers you've made) ── -->
+<div class="tr-modal-overlay" id="tr-my-offers-modal" onclick="if(event.target===this)tCloseModal('tr-my-offers-modal')">
+    <div class="tr-modal">
+        <button class="tr-modal-close" onclick="tCloseModal('tr-my-offers-modal')"><i class="bx bx-x"></i></button>
+        <p class="tr-modal-title">Your Offers</p>
+        <p class="tr-modal-sub">Offers you've made on other players' listings. Retract any that are still pending.</p>
+        <div id="tr-my-offers-list"></div>
+        <div class="tr-modal-actions" style="margin-top:8px;">
+            <button class="tr-btn-ghost" onclick="tCloseModal('tr-my-offers-modal')">Close</button>
         </div>
     </div>
 </div>
@@ -1562,8 +1605,10 @@
                 </div>
                 <div id="tr-detail-traits" class="tr-detail-traits"></div>
                 <div id="tr-detail-lister" class="tr-detail-lister"></div>
-                <div class="tr-modal-actions" style="margin-top:auto;padding-top:16px;">
+                <div class="tr-modal-actions" style="margin-top:auto;padding-top:16px;flex-wrap:wrap;">
                     <button class="tr-btn-ghost" onclick="tCloseInspect()">Close</button>
+                    <button id="tr-detail-wishlist-btn" class="tr-btn-ghost" onclick="tDetailWishlist()" title="Add to wishlist"><i class="bx bx-heart"></i> Wishlist</button>
+                    <button id="tr-detail-filter-btn" class="tr-btn-ghost" onclick="tDetailFilter()" title="Filter market by this card"><i class="bx bx-filter-alt"></i> Filter</button>
                     <button id="tr-detail-cancel-btn" class="tr-btn-danger" style="display:none" onclick="tDetailCancel()">Cancel Listing</button>
                     <button id="tr-detail-offer-btn" class="tr-btn-primary" onclick="tDetailOffer()">Send Offer</button>
                 </div>

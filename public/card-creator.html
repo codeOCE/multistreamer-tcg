@@ -807,7 +807,7 @@
                 </div>
             </div>
             <div class="cs-sep"></div>
-            <button onclick="csSave()" id="cs-save-btn" class="cs-tbtn cs-primary"><i class="bx bxs-save"></i>Save Card</button>
+            <button onclick="csPublishConfirm()" id="cs-save-btn" class="cs-tbtn cs-primary"><i class="bx bxs-save"></i>Publish Card</button>
             <button class="cs-tbtn cs-ghost cs-icon-btn" onclick="csShowShortcutsModal()" title="Keyboard shortcuts (?)"><i class="bx bxs-keyboard"></i></button>
         </div>
     </div>
@@ -1469,6 +1469,31 @@ document.addEventListener('click', e => {
 })();
 </script>
 <script src="/card-creator.js"></script>
+<script>
+// Final "Publish" step — make saving a card an unmistakable, confirmed action.
+// New cards (no #cs-card-id) get a one-time confirm; editing an existing card saves silently.
+// Wraps the existing csSave() (validation/upload/POST) without touching it.
+function csPublishConfirm() {
+    var idEl = document.getElementById('cs-card-id');
+    var isNew = !idEl || !idEl.value;
+    if (isNew && !window.confirm('Publish this card? It will be available to collectors to pull, trade, and battle. You can keep editing it afterwards.')) return;
+    if (typeof window.csSave === 'function') window.csSave();
+}
+(function () {
+    function syncPublishLabel() {
+        var btn = document.getElementById('cs-save-btn');
+        var idEl = document.getElementById('cs-card-id');
+        if (!btn) return;
+        var isNew = !idEl || !idEl.value;
+        btn.innerHTML = '<i class="bx bxs-save"></i>' + (isNew ? 'Publish Card' : 'Save Changes');
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        syncPublishLabel();
+        // Re-check after the async card load (?id=...) populates #cs-card-id.
+        setTimeout(syncPublishLabel, 1200);
+    });
+})();
+</script>
 <script>
 // Auto-scale toolstrip so it always fits within the viewport height
 function _fitToolstrip() {

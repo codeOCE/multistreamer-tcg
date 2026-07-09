@@ -10,7 +10,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/tailwind-built.css">
   <style>
@@ -742,8 +741,25 @@
     document.getElementById('confirm').classList.remove('open');
     document.getElementById('burn-btn').disabled = true;
 
+    const cardToRemove = selectedCard;
+    const slotImg = document.getElementById('slot-img');
+    const chip    = document.getElementById('dust-chip');
+
+    // Kick off the anvil smash IMMEDIATELY (using the locally-known reward) and run
+    // the network call in parallel — otherwise the card sits frozen for the whole
+    // round-trip before the hammer falls, which is the "delay/jank" people saw.
+    // Real anvil/workshop art TODO — hook points live in /anvil-smash.js.
+    if (typeof window.playAnvilSmash === 'function' && slotImg) {
+      window.playAnvilSmash({
+        cardEl: slotImg,
+        imageUrl: cardToRemove.image_url || slotImg.src,
+        amount: dust(cardToRemove.rarity),
+        target: chip,
+      });
+    }
+    chip.classList.add('glow');
+
     try {
-      const cardToRemove = selectedCard;
       const headers = { 'Content-Type': 'application/json' };
       if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
@@ -754,24 +770,9 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
-      // Anvil smash (placeholder): the card is struck on the anvil, shatters
-      // into fragments that fly up into the dust counter. Real anvil/workshop
-      // art TODO — hook points live in /anvil-smash.js.
-      const slotImg = document.getElementById('slot-img');
-      const chip    = document.getElementById('dust-chip');
-      if (typeof window.playAnvilSmash === 'function' && slotImg) {
-        window.playAnvilSmash({
-          cardEl: slotImg,
-          imageUrl: cardToRemove.image_url || slotImg.src,
-          amount: data.dust_earned,
-          target: chip,
-        });
-      }
-
-      // Update balance + glow the chip as the fragments arrive.
+      // Reconcile the real balance once the server confirms.
       dustBalance = data.magic_dust;
       document.getElementById('dust-balance').textContent = dustBalance.toLocaleString();
-      chip.classList.add('glow');
 
       // Let the hammer strike + shards burst before clearing the slot.
       await sleep(900);
@@ -783,6 +784,9 @@
       chip.classList.remove('glow');
 
     } catch (e) {
+      // Burn failed server-side — undo the optimistic visuals.
+      chip.classList.remove('glow');
+      if (slotImg) slotImg.style.opacity = '';
       if (selectedCard) { idleSpin(); setGlow(.35); } else { stopSpin(); setGlow(0); }
       showToast(e.message || 'Burn failed', 'error');
     }

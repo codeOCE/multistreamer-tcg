@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SignJWT, jwtVerify } from 'jose';
 import { Redis } from '@upstash/redis/cloudflare';
 import Stripe from 'stripe';
+import { Toucan } from 'toucan-js';
 import { containsProfanity, profanityError } from './profanity';
 
 // Gated debug logging. Defaults off; set per-request from env.DEBUG_LOGS in fetch().
@@ -10,6 +11,45 @@ import { containsProfanity, profanityError } from './profanity';
 let DEBUG = false;
 function dbg(...args: any[]): void {
   if (DEBUG) console.log(...args);
+}
+
+/**
+ * Report an exception to Sentry (via toucan-js) without ever throwing itself.
+ * No-op when SENTRY_DSN is unset, so local/dev runs stay quiet.
+ *
+ * Reporting is queued on ctx.waitUntil so it never delays the response. Cookies
+ * and the Authorization header are intentionally NOT forwarded — only a minimal
+ * header allowlist — so we don't ship session tokens to a third party.
+ *
+ * Use in inner catch blocks (Stripe webhook, pack grant, trade settle, ...) so
+ * swallowed-and-turned-into-500 errors still surface; the top-level fetch catch
+ * already calls it for everything else.
+ */
+function reportError(
+  err: unknown,
+  env: Env,
+  ctx: { waitUntil: (p: Promise<any>) => void } | undefined,
+  request?: Request,
+  extra?: Record<string, any>,
+): void {
+  if (!env?.SENTRY_DSN) return;
+  try {
+    const sentry = new Toucan({
+      dsn: env.SENTRY_DSN,
+      context: ctx as any,
+      request,
+      environment: env.ENVIRONMENT || 'production',
+      requestDataOptions: {
+        allowedHeaders: ['user-agent', 'cf-ray', 'content-type', 'origin', 'referer'],
+        allowedSearchParams: true,
+        allowedCookies: false,
+      },
+    });
+    if (extra) sentry.setExtras(extra);
+    sentry.captureException(err);
+  } catch {
+    // Telemetry must never break a request.
+  }
 }
 
 // Type definitions
@@ -546,6 +586,8 @@ interface Env {
   PACK_OPENING_SESSIONS: any; // DurableObjectNamespace
   OBS_QUEUE_SESSIONS: any; // DurableObjectNamespace — OBSQueueSession (push-based signal model)
   ADMIN_PASSWORD?: string; // Beta gate signing key — when set, site is behind the coming-soon gate
+  /** Sentry DSN. When unset, error reporting is a no-op (e.g. local dev). Set via `wrangler secret put SENTRY_DSN`. */
+  SENTRY_DSN?: string;
   // --- RATE LIMITING ---
   RATE_LIMITER_BOOTSTRAP:  { limit(opts: { key: string }): Promise<{ success: boolean }> };
   RATE_LIMITER_ADMIN_LOGIN:{ limit(opts: { key: string }): Promise<{ success: boolean }> };
@@ -905,17 +947,37 @@ interface DustBuyBody {
 
 
 
+/**
+ * All `session=` cookie values in the header, in order. The sibling app on
+ * .creatorcastle.gg sets a domain-wide cookie with the same name signed by its
+ * own secret, so the first match is not necessarily ours — callers must try each.
+ */
+function sessionCookieCandidates(cookieHeader: string): string[] {
+  return [...cookieHeader.matchAll(/(?:^|;\s*)session=([^;]*)/g)].map(m => m[1]);
+}
+
+/** First session cookie that verifies against our SESSION_SECRET, or null. */
+async function verifyAnySessionCookie(cookieHeader: string, env: Env): Promise<{ token: string; payload: any } | null> {
+  for (const token of sessionCookieCandidates(cookieHeader)) {
+    try {
+      const { payload } = await jwtVerify(token, new TextEncoder().encode(env.SESSION_SECRET));
+      return { token, payload };
+    } catch (e: any) {
+      if (e.code !== 'ERR_JWT_EXPIRED') {
+        console.warn('[Auth] Skipping session cookie that failed verification:', e.message);
+      }
+    }
+  }
+  return null;
+}
+
 async function getUserFromSession(request: Request, env: Env, supabase: any) {
   const cookie = request.headers.get('Cookie') || '';
-  const token = cookie.match(/(?:^|; )session=([^;]*)/)?.[1];
-
-  if (!token) return null;
+  const verified = await verifyAnySessionCookie(cookie, env);
+  if (!verified) return null;
 
   try {
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(env.SESSION_SECRET)
-    );
+    const payload = verified.payload;
 
     const twitchId = payload.sub || (payload as any).twitch_id || (payload as any).id;
     if (!twitchId) return null;
@@ -969,9 +1031,9 @@ function parseJwtPayload(token: string): Record<string, unknown> | null {
 // token and return the Set-Cookie string.  Returns null when no renewal is needed.
 async function maybeRenewSession(request: Request, env: Env, user: any): Promise<string | null> {
   const cookie = request.headers.get('Cookie') || '';
-  const token = cookie.match(/(?:^|; )session=([^;]*)/)?.[1];
-  if (!token) return null;
-  const payload = parseJwtPayload(token);
+  const verified = await verifyAnySessionCookie(cookie, env);
+  if (!verified) return null;
+  const payload = verified.payload;
   if (!payload?.exp) return null;
   const remaining = (payload.exp as number) - Math.floor(Date.now() / 1000);
   if (remaining > SESSION_RENEW_THRESHOLD_SEC) return null;
@@ -1094,7 +1156,9 @@ async function getTwitchFollows(
 
 /** Same secret as /auth/callback — must match for encrypt/decrypt of Twitch user tokens */
 function twitchTokenEncryptSecret(env: Env): string {
-  return env.ENCRYPTION_SECRET ?? env.SESSION_SECRET;
+  // `||` not `??`: an empty-string ENCRYPTION_SECRET (e.g. a stray "" var) must
+  // fall back to SESSION_SECRET, never silently encrypt with an empty key.
+  return env.ENCRYPTION_SECRET || env.SESSION_SECRET;
 }
 
 /** OAuth refresh; persists new tokens on users and streamers (Channel Points Helix reads refreshed row) */
@@ -1171,7 +1235,7 @@ async function refreshKickUserAccessToken(
       return null;
     }
 
-    const encKey = env.ENCRYPTION_SECRET ?? env.SESSION_SECRET;
+    const encKey = twitchTokenEncryptSecret(env);
     const encryptedAccess = await encryptSensitive(tokenData.access_token, encKey);
     const encryptedRefresh = tokenData.refresh_token
       ? await encryptSensitive(tokenData.refresh_token, encKey)
@@ -1381,7 +1445,7 @@ async function computeKickAuthHealth(
   env: Env,
   canonicalId: string
 ): Promise<{ token_valid: boolean; needs_reauth: boolean; token_error?: string }> {
-  const encKey = env.ENCRYPTION_SECRET ?? env.SESSION_SECRET;
+  const encKey = twitchTokenEncryptSecret(env);
   const { data: row } = await supabase
     .from('users')
     .select('kick_access_token_encrypted, kick_refresh_token_encrypted')
@@ -2673,7 +2737,7 @@ async function rollTraitsForCard(
   secondaryId?: string | null
 ): Promise<string[]> {
   const traitList: string[] = [];
-  if (!card || (card.auto_roll_traits === false)) return [];
+  if (!card) return [];
 
   // 1 trait by default, 2 if genesis status detected
   const isGenesis = card.is_genesis || card.is_genesis_mint || !!secondaryId;
@@ -2682,6 +2746,12 @@ async function rollTraitsForCard(
   // Prioritize provided legacy mechanics (Put Genesis/Secondary FIRST if it exists)
   if (secondaryId && traitCount > 1) traitList.push(secondaryId);
   if (primaryId) traitList.push(primaryId);
+
+  // auto_roll_traits=false means "don't roll EXTRA random traits" — but any mechanic
+  // explicitly assigned to this mint (primary/secondary) must still be reflected in
+  // trait_list so it renders in the marketplace/trade UI (which reads trait_list, not
+  // mechanic_id). Without this the card has a mechanic_id but shows no traits.
+  if (card.auto_roll_traits === false) return traitList.slice(0, traitCount);
 
   // Fill remaining slots if needed
   if (traitList.length < traitCount) {
@@ -4371,23 +4441,31 @@ async function grantRandomCard(
         }
       }
 
-      // Roll dynamic traits if this card has a template configured
-      let traitList: string[] = [];
-      if (randomCard.template_id && (randomCard.auto_roll_traits || true)) {
+      // Roll dynamic traits. Always include the assigned mechanic(s) first so trait_list
+      // stays in sync with mechanic_id — the marketplace/trade UI renders from trait_list,
+      // not mechanic_id. Extra random traits fill up to the rarity-based count, unless the
+      // creator disabled auto-rolling (then only the assigned mechanics are kept).
+      const traitList: string[] = [];
+      if (secondaryMechanicId) traitList.push(secondaryMechanicId);
+      if (primaryMechanicId && !traitList.includes(primaryMechanicId)) traitList.push(primaryMechanicId);
+      if (randomCard.template_id && randomCard.auto_roll_traits !== false) {
         const rarityKey = (randomCard.rarity || 'common').toLowerCase();
         let traitCount = 1;
         if (rarityKey === 'rare') traitCount = 2;
         else if (rarityKey === 'epic') traitCount = 3;
         else if (rarityKey === 'legendary') traitCount = 4;
 
-        const { data: mechanicsRows } = await supabase
-          .from('mechanics')
-          .select('id, name, display_name, rarity_weight')
-          .eq('is_active', true);
-        const mechanicsList = mechanicsRows || [];
-        for (let i = 0; i < traitCount; i++) {
-          const mid = pickWeightedMechanicFromList(mechanicsList);
-          if (mid) traitList.push(mid);
+        if (traitList.length < traitCount) {
+          const { data: mechanicsRows } = await supabase
+            .from('mechanics')
+            .select('id, name, display_name, rarity_weight')
+            .eq('is_active', true);
+          const mechanicsList = mechanicsRows || [];
+          while (traitList.length < traitCount) {
+            const mid = pickWeightedMechanicFromList(mechanicsList);
+            if (mid && !traitList.includes(mid)) traitList.push(mid);
+            else if (mechanicsList.length <= traitList.length) break;
+          }
         }
       }
 
@@ -4525,23 +4603,31 @@ async function grantRandomCard(
         }
       }
 
-      // Roll dynamic traits if template is present
-      let rolledTraitList: string[] = [];
-      if (randomCard.template_id && (randomCard.auto_roll_traits || true)) {
+      // Roll dynamic traits. Always include the assigned mechanic(s) first so trait_list
+      // stays in sync with mechanic_id — the marketplace/trade UI renders from trait_list,
+      // not mechanic_id. Extra random traits fill up to the rarity-based count, unless the
+      // creator disabled auto-rolling (then only the assigned mechanics are kept).
+      const rolledTraitList: string[] = [];
+      if (secondaryMechId) rolledTraitList.push(secondaryMechId);
+      if (primaryMechId && !rolledTraitList.includes(primaryMechId)) rolledTraitList.push(primaryMechId);
+      if (randomCard.template_id && randomCard.auto_roll_traits !== false) {
         const rarityKey = (randomCard.rarity || 'common').toLowerCase();
         let tCount = 1;
         if (rarityKey === 'rare') tCount = 2;
         else if (rarityKey === 'epic') tCount = 3;
         else if (rarityKey === 'legendary') tCount = 4;
 
-        const { data: mechRows } = await supabase
-          .from('mechanics')
-          .select('id, name, display_name, rarity_weight')
-          .eq('is_active', true);
-        const mechList = mechRows || [];
-        for (let i = 0; i < tCount; i++) {
-          const mid = pickWeightedMechanicFromList(mechList);
-          if (mid) rolledTraitList.push(mid);
+        if (rolledTraitList.length < tCount) {
+          const { data: mechRows } = await supabase
+            .from('mechanics')
+            .select('id, name, display_name, rarity_weight')
+            .eq('is_active', true);
+          const mechList = mechRows || [];
+          while (rolledTraitList.length < tCount) {
+            const mid = pickWeightedMechanicFromList(mechList);
+            if (mid && !rolledTraitList.includes(mid)) rolledTraitList.push(mid);
+            else if (mechList.length <= rolledTraitList.length) break;
+          }
         }
       }
 
@@ -5599,11 +5685,19 @@ export default {
     // castle_access cookie are allowed through. Everything else is redirected
     // to creatorcastle.gg (the coming-soon page). Third-party webhook callers
     // and OBS browser sources are exempt since they have no browser cookie.
-    const BETA_GATE_EXEMPT = ['/api/twitch', '/api/kick', '/api/stripe/webhook', '/obs-overlay', '/queue-control'];
+    // OAuth callbacks are exempt: the browser arrives cross-site from twitch.tv/kick.com,
+    // so the castle_access cookie is withheld and the gate would eat the login.
+    const BETA_GATE_EXEMPT = ['/api/twitch', '/api/kick', '/api/payment/webhook', '/obs-overlay', '/queue-control', '/auth/callback', '/auth/kick/callback'];
     if (env.ADMIN_PASSWORD && !BETA_GATE_EXEMPT.some(p => path.startsWith(p))) {
       const cookieHeader = request.headers.get('Cookie') || '';
       const betaToken = cookieHeader.match(/(?:^|;\s*)castle_access=([^;]+)/)?.[1] ?? '';
-      if (!betaToken || !(await verifyBetaToken(betaToken, env.ADMIN_PASSWORD))) {
+      let betaAllowed = !!betaToken && (await verifyBetaToken(betaToken, env.ADMIN_PASSWORD));
+      if (!betaAllowed && env.SESSION_SECRET) {
+        // A valid login session also passes: the post-OAuth redirect chain is still
+        // cross-site, so castle_access may be withheld even for approved beta users.
+        betaAllowed = !!(await verifyAnySessionCookie(cookieHeader, env));
+      }
+      if (!betaAllowed) {
         return Response.redirect('https://creatorcastle.gg', 302);
       }
     }
@@ -5717,13 +5811,10 @@ export default {
       const isPrivate = path.startsWith('/api/v2/bootstrap');
       if (isPrivate) {
         const cookie = request.headers.get('Cookie') || '';
-        const token = cookie.match(/(?:^|; )session=([^;]*)/)?.[1];
-        if (token) {
-          try {
-            const { payload } = await jwtVerify(token, new TextEncoder().encode(env.SESSION_SECRET));
-            const twitchId = payload.sub || (payload as any).twitch_id;
-            if (twitchId) cacheKeyUrl += `?_cache_user=${twitchId}`;
-          } catch { /* if JWT invalid, let standard auth handle it later */ }
+        const verifiedSess = await verifyAnySessionCookie(cookie, env);
+        if (verifiedSess) {
+          const twitchId = verifiedSess.payload.sub || verifiedSess.payload.twitch_id;
+          if (twitchId) cacheKeyUrl += `?_cache_user=${twitchId}`;
         }
       }
 
@@ -5829,10 +5920,6 @@ export default {
 
           if (target.twitch_id === u.twitch_id) {
             return { user: u, streamer: target, teamRole: null as 'moderator' | 'editor' | null };
-          }
-
-          if (isEnvPlatformAdmin(env, u.twitch_id)) {
-            return { user: u, streamer: target, teamRole: 'editor' as 'moderator' | 'editor' | null };
           }
 
           const tr = await getStreamerTeamRole(sbase, u.twitch_id, target.id);
@@ -6439,16 +6526,58 @@ export default {
         if (event.type === 'payment_intent.succeeded') {
           const pi = event.data.object as Stripe.PaymentIntent;
           const m = pi.metadata || {};
-          // Only fulfil pack PaymentIntents (the in-page Payment Element checkout).
-          if (m.userId && m.streamerId) {
-            // Idempotency — reuse the processed-sessions table keyed by the PI id.
-            const { error: dedupErr } = await supabase
-              .from('stripe_processed_sessions')
-              .insert({ session_id: pi.id });
-            if (dedupErr && (dedupErr.code === '23505' || String(dedupErr.message || '').toLowerCase().includes('duplicate'))) {
-              dbg(`[Stripe Webhook] Duplicate payment_intent ignored: ${pi.id}`);
-              return new Response('OK', { status: 200 });
+
+          // Idempotency guard shared by all PI fulfillment paths
+          const { error: piDedupErr } = await supabase
+            .from('stripe_processed_sessions')
+            .insert({ session_id: pi.id });
+          if (piDedupErr && (piDedupErr.code === '23505' || String(piDedupErr.message || '').toLowerCase().includes('duplicate'))) {
+            dbg(`[Stripe Webhook] Duplicate payment_intent ignored: ${pi.id}`);
+            return new Response('OK', { status: 200 });
+          }
+
+          // Event rerun paid via in-page checkout — create the event now
+          if (m.type === 'event_rerun' && m.streamer_id) {
+            const rarity = m.target_rarity || 'rare';
+            const multiplier = parseFloat(m.multiplier || '2');
+            const durationHrs = Math.max(1, parseInt(m.duration_hrs || '2'));
+            const evStartsAt = new Date();
+            const evEndsAt = new Date(evStartsAt.getTime() + durationHrs * 60 * 60 * 1000);
+            const evConfig: any = { common: 50, uncommon: 25, rare: 15, epic: 8, legendary: 2 };
+            const baseWeight = evConfig[rarity] || 15;
+            const newWeight = Math.min(baseWeight * multiplier, 50);
+            evConfig[rarity] = newWeight;
+            evConfig.common = Math.max(10, evConfig.common - (newWeight - baseWeight));
+            const { error: evErr } = await supabase.from('streamer_events').insert({
+              streamer_id: m.streamer_id,
+              type: 'rarity_boost',
+              name: `${rarity.toUpperCase()} Protocol Boost`,
+              config: evConfig,
+              starts_at: evStartsAt.toISOString(),
+              ends_at: evEndsAt.toISOString(),
+            });
+            if (evErr) {
+              dbg(`[Stripe Webhook] event_rerun insert failed: ${evErr.message}`);
+            } else {
+              dbg(`[Stripe Webhook] event_rerun created for streamer ${m.streamer_id}`);
             }
+          }
+
+          // Per-set customization one-time unlock via in-page checkout
+          if (m.type === 'set_customization' && m.streamer_id) {
+            const { error: custErr } = await supabase
+              .from('streamers')
+              .update({ has_set_customization: true })
+              .eq('id', m.streamer_id);
+            if (custErr) {
+              console.error('[Stripe Webhook] set_customization PI unlock failed:', custErr.message);
+            } else {
+              dbg(`[Stripe Webhook] set_customization unlocked via PI for streamer ${m.streamer_id}`);
+            }
+          }
+
+          // Pack fulfillment
+          if (m.userId && m.streamerId) {
             await fulfillStorePack(supabase, env, {
               userId: m.userId,
               userName: m.userName || '',
@@ -6690,13 +6819,22 @@ export default {
             return secureResponse('Unauthorized', 401, corsHeaders, true);
           }
 
-          // Check if user is a creator
-          const { data: streamer } = await supabase.from('streamers').select('id').eq('twitch_id', user.twitch_id).maybeSingle();
+          // Check if user is a creator + resolve platform admin/staff role for the System Console gate
+          const [{ data: streamer }, platformStaffRole] = await Promise.all([
+            supabase.from('streamers').select('id').eq('twitch_id', user.twitch_id).maybeSingle(),
+            getPlatformStaffRole(supabase, user.twitch_id),
+          ]);
+          const isPlatformAdmin = isEnvPlatformAdmin(env, user.twitch_id);
 
           dbg(`[Auth/Me] Session verified for: ${user.username}`);
           const userSafe: Record<string, unknown> = { ...(user as object) };
           delete userSafe.kick_user_id;
-          return secureResponse({ ...userSafe, is_creator: !!streamer }, 200, corsHeaders);
+          return secureResponse({
+            ...userSafe,
+            is_creator: !!streamer,
+            is_platform_admin: isPlatformAdmin,
+            platform_staff_role: platformStaffRole,
+          }, 200, corsHeaders);
         } catch (e: any) {
           console.error(`[Auth/Me] Error: ${e.message}`);
           return secureResponse('Unauthorized', 401, corsHeaders, true);
@@ -7657,7 +7795,7 @@ export default {
       if (method === 'POST' && path === '/api/onboarding/referral') {
         const user = await getUserFromSession(request, env, supabase);
         if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
-        const body = await request.json() as { code?: string };
+        const body = await request.json() as { code?: string; check_only?: boolean };
         const code = String(body.code || '').trim().toLowerCase();
         if (!code) return secureResponse({ ok: true }, 200, corsHeaders); // blank = skip
 
@@ -7673,6 +7811,9 @@ export default {
         const { data: self } = await supabase
           .from('streamers').select('id').eq('twitch_id', user.twitch_id).maybeSingle();
         if (self?.id === referrer.id) return secureResponse('Cannot use your own code', 400, corsHeaders, true);
+
+        // Validation-only check — don't persist yet
+        if (body.check_only) return secureResponse({ ok: true, referrer: referrer.username }, 200, corsHeaders);
 
         const { error } = await supabase
           .from('streamers')
@@ -8269,6 +8410,48 @@ export default {
             .eq('twitch_id', (user as any).twitch_id);
           if (dbErr) throw dbErr;
           return secureResponse({ success: true, notification_prefs: merged.notification_prefs }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message || 'Update failed', 500, corsHeaders, true);
+        }
+      }
+
+      // Per-creator preferences for the streamer cog settings menu (account-level).
+      // Stored under profile_settings.creator_prefs[streamerId] = { muted, preferred_set_id }.
+      if (method === 'GET' && path === '/api/creator-prefs') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        const streamerId = url.searchParams.get('streamer_id');
+        if (!streamerId) return secureResponse('streamer_id required', 400, corsHeaders, true);
+        const all = ((user as any).profile_settings as any)?.creator_prefs || {};
+        const prefs = all[streamerId] || {};
+        return secureResponse({
+          muted: prefs.muted === true,
+          preferred_set_id: typeof prefs.preferred_set_id === 'string' ? prefs.preferred_set_id : ''
+        }, 200, corsHeaders);
+      }
+
+      if (method === 'PATCH' && path === '/api/creator-prefs') {
+        const user = await getUserFromSession(request, env, supabase);
+        if (!user) return secureResponse('Unauthorized', 401, corsHeaders, true);
+        try {
+          const body = (await request.json()) as Record<string, unknown>;
+          const streamerId = typeof body.streamer_id === 'string' ? body.streamer_id : '';
+          if (!streamerId) return secureResponse('streamer_id required', 400, corsHeaders, true);
+
+          const existing = ((user as any).profile_settings as Record<string, unknown>) || {};
+          const allPrefs = { ...((existing.creator_prefs as Record<string, any>) || {}) };
+          const current = { ...(allPrefs[streamerId] || {}) };
+          if (typeof body.muted === 'boolean') current.muted = body.muted;
+          if (typeof body.preferred_set_id === 'string') current.preferred_set_id = body.preferred_set_id;
+          allPrefs[streamerId] = current;
+
+          const merged: Record<string, unknown> = { ...existing, creator_prefs: allPrefs };
+          const { error: dbErr } = await supabase
+            .from('users')
+            .update({ profile_settings: merged })
+            .eq('twitch_id', (user as any).twitch_id);
+          if (dbErr) throw dbErr;
+          return secureResponse({ success: true, prefs: current }, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message || 'Update failed', 500, corsHeaders, true);
         }
@@ -10553,23 +10736,6 @@ export default {
 
       // --- ADMIN ROUTES ---
 
-      if (method === 'GET' && path === '/api/admin/streamer-lookup') {
-        try {
-          await checkAdmin(request);
-          const q = (url.searchParams.get('q') || '').trim();
-          if (!q) throw new Error('q required');
-          const { data: rows, error } = await supabase
-            .from('streamers')
-            .select('id, username, display_name, avatar_url')
-            .ilike('username', q)
-            .limit(5);
-          if (error) throw error;
-          return secureResponse(rows || [], 200, corsHeaders);
-        } catch (e: any) {
-          return secureResponse(e.message, 400, corsHeaders, true);
-        }
-      }
-
       // 1. Add Card
       if (method === 'POST' && path === '/api/admin/cards') {
         try {
@@ -10715,14 +10881,30 @@ export default {
             throw new Error("Unauthorized: Platform Admin or staff required");
           }
 
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(50);
+          // Active = has linked an account by logging in via Twitch/Kick OAuth (is_linked).
+          // Inactive = stub rows created by card grants for users who never joined.
+          const status = (url.searchParams.get('status') || '').toLowerCase(); // '', 'active', 'inactive'
+          const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 1), 200);
 
+          // Explicit safe columns only — never return encrypted tokens to the client.
+          let q = supabase
+            .from('users')
+            .select('twitch_id, username, avatar_url, trade_code, created_at, last_logout_at, role, magic_dust, is_linked, kick_user_id')
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+          if (status === 'active') q = q.eq('is_linked', true);
+          else if (status === 'inactive') q = q.or('is_linked.is.null,is_linked.eq.false');
+
+          const { data, error } = await q;
           if (error) throw error;
-          return secureResponse(data, 200, corsHeaders);
+
+          const rows = (data || []).map((u: any) => ({
+            ...u,
+            is_active: !!u.is_linked, // canonical: set true on Twitch/Kick OAuth login
+            kick_linked: !!u.kick_user_id,
+          }));
+          return secureResponse(rows, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(((e as any).message || String(e)) || 'Unauthorized', 401, corsHeaders, true);
         }
@@ -10853,9 +11035,20 @@ export default {
           if (nPrefs.trades === false) { ['trade_request','trade_offered','trade_completed','trade_rejected'].forEach(t => disabledTypes.add(t)); }
           if (nPrefs.achievements === false) disabledTypes.add('achievement_unlock');
 
-          const filtered = disabledTypes.size > 0
-            ? (notifications || []).filter((n: any) => !disabledTypes.has(n.type))
-            : (notifications || []);
+          // Per-creator mute (cog settings menu): hide this creator's card/pack notifications.
+          // Stored account-level under profile_settings.creator_prefs[streamerId].muted.
+          const creatorPrefs = ((user as any).profile_settings as any)?.creator_prefs || {};
+          const mutedStreamerIds = new Set<string>(
+            Object.keys(creatorPrefs).filter((sid) => creatorPrefs[sid] && creatorPrefs[sid].muted === true)
+          );
+          const CREATOR_MUTE_TYPES = new Set<string>(['card_drop', 'pack_earned']);
+
+          const filtered = (notifications || []).filter((n: any) => {
+            if (disabledTypes.has(n.type)) return false;
+            if (mutedStreamerIds.size > 0 && n.streamer_id && CREATOR_MUTE_TYPES.has(n.type)
+                && mutedStreamerIds.has(String(n.streamer_id))) return false;
+            return true;
+          });
 
           // Enrich with streamer info (brand/display name + slug) so the nav dropdown
           // can show "from <Streamer>" without a second round-trip.
@@ -11890,6 +12083,8 @@ export default {
           if (b.promotion_placements !== undefined) updateData.promotion_placements = b.promotion_placements;
           if (b.promoted_card_ids !== undefined) updateData.promoted_card_ids = (Array.isArray(b.promoted_card_ids) ? b.promoted_card_ids.slice(0, 3) : []);
 
+          if (b.obs_overlay_volume !== undefined) updateData.obs_overlay_volume = Math.max(0, Math.min(100, Math.floor(Number(b.obs_overlay_volume) || 0)));
+
           const streamerCdnUrlFields = [
             'pack_image_url',
             'pack_design_url',
@@ -12616,6 +12811,35 @@ export default {
             platform: 'dashboard',
           });
           return secureResponse({ success: true }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 400, corsHeaders, true);
+        }
+      }
+
+      // Platform admin: list current global staff (enriched with usernames/avatars).
+      if (method === 'GET' && path === '/api/admin/platform-staff') {
+        try {
+          const { isPlatformAdmin } = await checkAdmin(request);
+          if (!isPlatformAdmin) throw new Error('Platform Admin required');
+          const { data: rows, error } = await supabase
+            .from('platform_staff')
+            .select('twitch_id, role, notes, created_at')
+            .order('created_at', { ascending: true });
+          if (error) throw error;
+          const ids = (rows || []).map((r: any) => r.twitch_id).filter(Boolean);
+          const { data: users } = ids.length
+            ? await supabase.from('users').select('twitch_id, username, avatar_url').in('twitch_id', ids)
+            : { data: [] as any[] };
+          const uMap = new Map((users || []).map((u: any) => [u.twitch_id, u]));
+          const result = (rows || []).map((r: any) => ({
+            twitch_id: r.twitch_id,
+            role: r.role,
+            notes: r.notes || null,
+            created_at: r.created_at,
+            username: uMap.get(r.twitch_id)?.username || null,
+            avatar_url: uMap.get(r.twitch_id)?.avatar_url || null,
+          }));
+          return secureResponse(result, 200, corsHeaders);
         } catch (e: any) {
           return secureResponse(e.message, 400, corsHeaders, true);
         }
@@ -13873,6 +14097,38 @@ export default {
         }
       }
 
+      // Creator: PaymentIntent for event rerun fee (in-page checkout)
+      if (method === 'POST' && path === '/api/creator/events/rerun-payment-intent') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          const rerunFee = parseInt(env.EVENT_RERUN_FEE_CENTS || '500', 10);
+          if (!rerunFee) return secureResponse({ error: 'Rerun fee not configured' }, 400, corsHeaders);
+          if (!env.STRIPE_PUBLISHABLE_KEY) return secureResponse('Checkout is not configured', 500, corsHeaders, true);
+          const b = await request.json() as any;
+          const stripeLocal = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-04-10' as any });
+          const pi = await stripeLocal.paymentIntents.create({
+            amount: rerunFee,
+            currency: 'usd',
+            automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+            metadata: {
+              type: 'event_rerun',
+              streamer_id: streamer.id,
+              target_rarity: b.target_rarity || 'rare',
+              multiplier: String(b.multiplier || '2'),
+              duration_hrs: String(Math.max(1, parseInt(b.duration_hrs || '2'))),
+            },
+          });
+          return secureResponse({
+            client_secret: pi.client_secret,
+            publishable_key: env.STRIPE_PUBLISHABLE_KEY,
+            amount: rerunFee,
+            currency: 'usd',
+          }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 400, corsHeaders, true);
+        }
+      }
+
       // Creator: Trigger Special Event (Rarity Boost)
       if (method === 'POST' && path === '/api/creator/events') {
         try {
@@ -13883,6 +14139,18 @@ export default {
           const durationHrs = Math.max(1, parseInt(b.duration || '1'));
           const startsAt = new Date();
           const endsAt = new Date(startsAt.getTime() + durationHrs * 60 * 60 * 1000);
+
+          // First boost per week is free; subsequent ones require the rerun fee.
+          const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+          const { count: weekCount } = await supabase
+            .from('streamer_events')
+            .select('*', { count: 'exact', head: true })
+            .eq('streamer_id', streamer.id)
+            .gte('starts_at', weekAgo);
+          const rerunFee = parseInt(env.EVENT_RERUN_FEE_CENTS || '500', 10);
+          if ((weekCount || 0) >= 1 && rerunFee > 0) {
+            return secureResponse({ requires_payment: true, fee_cents: rerunFee }, 402, corsHeaders);
+          }
 
           const rarity = b.target_rarity || 'rare';
           const multiplier = parseFloat(b.multiplier || '2');
@@ -14366,6 +14634,32 @@ export default {
         }
       }
 
+      // Creator: set-customization unlock via in-page Payment Element (returns PaymentIntent)
+      if (method === 'POST' && path === '/api/creator/purchase/set-customization/payment-intent') {
+        try {
+          const { streamer } = await checkCreator(request, supabase);
+          if (streamer.has_set_customization) {
+            return secureResponse({ already_purchased: true }, 200, corsHeaders);
+          }
+          if (!env.STRIPE_PUBLISHABLE_KEY) return secureResponse('Checkout is not configured', 500, corsHeaders, true);
+          const stripeLocal = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-04-10' as any });
+          const pi = await stripeLocal.paymentIntents.create({
+            amount: 999,
+            currency: 'usd',
+            automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+            metadata: { type: 'set_customization', streamer_id: streamer.id },
+          });
+          return secureResponse({
+            client_secret: pi.client_secret,
+            publishable_key: env.STRIPE_PUBLISHABLE_KEY,
+            amount: 999,
+            currency: 'usd',
+          }, 200, corsHeaders);
+        } catch (e: any) {
+          return secureResponse(e.message, 400, corsHeaders, true);
+        }
+      }
+
       // Creator: Update own set
       if (method === 'PUT' && path.startsWith('/api/creator/sets/')) {
         try {
@@ -14652,6 +14946,10 @@ export default {
           const { count: cardCount } = await supabase.from('user_cards').select('*', { count: 'exact', head: true });
           const { count: uniqueCount } = await supabase.from('cards').select('*', { count: 'exact', head: true });
 
+          // Active = linked via Twitch/Kick OAuth (is_linked). Inactive = grant-only stubs.
+          const { count: activeCount } = await supabase
+            .from('users').select('*', { count: 'exact', head: true }).eq('is_linked', true);
+
           const { data: legendaryCards } = await supabase.from('cards').select('id').eq('rarity', 'Legendary');
           const legendaryIds = legendaryCards?.map((c: any) => c.id) || [];
           const { count: legendaryCount } = await supabase
@@ -14659,8 +14957,12 @@ export default {
             .select('*', { count: 'exact', head: true })
             .in('card_id', legendaryIds);
 
+          const totalU = userCount || 0;
+          const activeU = activeCount || 0;
           return new Response(JSON.stringify({
-            total_users: userCount || 0,
+            total_users: totalU,
+            active_users: activeU,
+            inactive_users: Math.max(totalU - activeU, 0),
             total_cards: cardCount || 0,
             unique_cards: uniqueCount || 0,
             legendary_count: legendaryCount || 0
@@ -15527,7 +15829,7 @@ export default {
           for (const field of allowedFields) {
             if (body[field] !== undefined) {
               if (['twitch_client_secret', 'streamelements_jwt'].includes(field) && body[field]) {
-                updates[field] = await encryptSensitive(body[field], env.ENCRYPTION_SECRET ?? env.SESSION_SECRET);
+                updates[field] = await encryptSensitive(body[field], twitchTokenEncryptSecret(env));
               } else {
                 updates[field] = body[field];
               }
@@ -16610,7 +16912,8 @@ export default {
       // Get Config
       if (method === 'GET' && path === '/api/admin/config') {
         try {
-          await checkAdmin(request);
+          const { isPlatformAdmin } = await checkAdmin(request);
+          if (!isPlatformAdmin) throw new Error('Unauthorized: Platform Admin required');
           const { data, error } = await supabase.from('system_config').select('*');
           if (error) throw error;
           return secureResponse(data, 200, corsHeaders);
@@ -16622,7 +16925,8 @@ export default {
       // Update Config
       if (method === 'POST' && path === '/api/admin/config') {
         try {
-          await checkAdmin(request);
+          const { isPlatformAdmin } = await checkAdmin(request);
+          if (!isPlatformAdmin) throw new Error('Unauthorized: Platform Admin required');
           const body = await request.json() as ConfigBody;
           const { error } = await supabase.from('system_config').upsert({
             id: body.id,
@@ -16704,7 +17008,7 @@ export default {
         const canonicalId = kickCanonicalUserId(ku.user_id);
         const displayName = String(ku.name || 'Kick User');
         const avatarUrl = ku.profile_picture || null;
-        const encKeyKick = env.ENCRYPTION_SECRET ?? env.SESSION_SECRET;
+        const encKeyKick = twitchTokenEncryptSecret(env);
         const encryptedAccessKick = await encryptSensitive(tokenData.access_token, encKeyKick);
         const encryptedRefreshKick = tokenData.refresh_token
           ? await encryptSensitive(tokenData.refresh_token, encKeyKick)
@@ -17051,7 +17355,7 @@ export default {
         // 1b. Provision Streamer record if Creator role
         if (role === 'creator') {
           const { data: existingTwitchStreamer } = await supabase
-            .from('streamers').select('twitch_id').eq('twitch_id', user.id).maybeSingle();
+            .from('streamers').select('twitch_id, username').eq('twitch_id', user.id).maybeSingle();
 
           const streamerPayload: Record<string, unknown> = {
             twitch_id: user.id,
@@ -17062,12 +17366,11 @@ export default {
             twitch_refresh_token_encrypted: encryptedRefresh,
             twitch_token_scope: tokenScope
           };
-          if (!existingTwitchStreamer) {
-            // Defer the public handle until the creator finishes onboarding ("Become a Creator &
-            // Launch" → /api/creator/provision). The placeholder satisfies username NOT NULL/unique
-            // without reserving a real slug; castle_code + users.trade_code are assigned at provision.
-            streamerPayload.username = `pending:${user.id}`;
-          }
+          // Username must always be present: Postgres enforces NOT NULL on the upsert's
+          // insert tuple even when the conflict path would update an existing row.
+          // New creators get a placeholder; the public handle is claimed at
+          // /api/creator/provision (castle_code + users.trade_code assigned there too).
+          streamerPayload.username = existingTwitchStreamer?.username || `pending:${user.id}`;
 
           const { error: streamerErr } = await supabase.from('streamers').upsert(
             streamerPayload, { onConflict: 'twitch_id' }
@@ -18534,6 +18837,7 @@ export default {
           if (path === '/settings')   { const res = await serveHtml('settings.html');   if (res) return res; }
           if (path === '/card-studio') { const res = await serveHtml('dashboard.html'); if (res) return res; }
           if (path === '/card-creator') { const res = await serveHtml('card-creator.html'); if (res) return res; }
+          if (path === '/admin')      { const res = await serveHtml('admin.html');      if (res) return res; }
           if (path === '/stream-features') { const res = await serveHtml('dashboard.html'); if (res) return res; }
 
           // /trading → trading centre (bare path)
@@ -19416,7 +19720,20 @@ export default {
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       console.error(`[Fatal Error] ${url.pathname}:`, message);
+      reportError(err, env, ctx, request, { path: url.pathname, method });
       return secureResponse(message, 500, corsHeaders, true);
+    }
+  },
+
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    if (event.cron === '0 3 * * *') {
+      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+      const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const { error } = await supabase
+        .from('streamer_activity_logs')
+        .delete()
+        .lt('created_at', cutoff);
+      if (error) console.error('[Cron] activity log prune failed:', error.message);
     }
   },
 };

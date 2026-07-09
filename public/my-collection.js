@@ -1,181 +1,4 @@
-(function () {
-    'use strict';
-
-    const BACKEND = (() => {
-        const m = document.querySelector('meta[name="castle-public-url"]');
-        return m ? m.content.replace(/\/$/, '') : '';
-    })();
-
-    let collections = [];   // array of { streamer_id, streamer_username, brand_name, brand_color_primary, avatar_url, pack_image_url, card_count, preview_images, is_favorited }
-    let discoverCollections = [];
-    let mutualCollections = [];
-    let currentUser = null;
-    let searchQuery = '';
-
-    /* ── Nav user ─────────────────────────────────────────────────────────── */
-    function setupNavUser(user) {
-        if (!user) return;
-        window.currentUser = { ...user, avatar: user.avatar_url || user.avatar };
-        const navAvatar  = document.getElementById('nav-avatar');
-        const menuAvatar = document.getElementById('nav-user-menu-avatar');
-        if (navAvatar)  navAvatar.src  = window.currentUser.avatar || '';
-        if (menuAvatar) menuAvatar.src = window.currentUser.avatar || '';
-        const preview = document.getElementById('nav-user-preview');
-        if (preview) { preview.classList.remove('hidden'); preview.style.display = 'flex'; }
-        window.initNavUserMenu?.();
-        window.updateNavUserMenuLabels?.();
-    }
-
-    /* ── Helpers ──────────────────────────────────────────────────────────── */
-    function escapeHTML(s) {
-        if (s == null) return '';
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
-
-    let _csrfToken = '';
-    async function ensureCsrfToken() {
-        if (_csrfToken) return _csrfToken;
-        const r = await fetch(`${BACKEND}/api/csrf`, { credentials: 'include' });
-        const d = await r.json();
-        _csrfToken = d.token || '';
-        return _csrfToken;
-    }
-
-    async function writeFetch(url, body) {
-        const token = await ensureCsrfToken();
-        let res = await fetch(url, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': token },
-            body: JSON.stringify(body || {})
-        });
-        if (res.status === 403) {
-            _csrfToken = '';
-            const retryToken = await ensureCsrfToken();
-            res = await fetch(url, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': retryToken },
-                body: JSON.stringify(body || {})
-            });
-        }
-        if (!res.ok) {
-            const text = await res.text().catch(() => '');
-            throw new Error(text || `HTTP ${res.status}`);
-        }
-        return res.json().catch(() => ({}));
-    }
-
-    function sortCollections(items) {
-        return [...(items || [])].sort((a, b) => {
-            const af = a?.is_favorited ? 1 : 0;
-            const bf = b?.is_favorited ? 1 : 0;
-            if (bf !== af) return bf - af;
-            const ac = Number(a?.card_count || 0);
-            const bc = Number(b?.card_count || 0);
-            if (bc !== ac) return bc - ac;
-            const an = (a?.brand_name || a?.streamer_username || '').toLowerCase();
-            const bn = (b?.brand_name || b?.streamer_username || '').toLowerCase();
-            return an.localeCompare(bn);
-        });
-    }
-
-    function hexToRgb(hex) {
-        if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return { rgb: '55, 48, 163', light: false };
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        // Perceived luminance (sRGB formula)
-        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        return { rgb: `${r}, ${g}, ${b}`, light: lum > 0.45 };
-    }
-
-    /* ── DOM helpers ──────────────────────────────────────────────────────── */
-    function show(id) { document.getElementById(id)?.classList.remove('hidden'); }
-    function hide(id) { document.getElementById(id)?.classList.add('hidden'); }
-
-    /* ── Bootstrap / auth ────────────────────────────────────────────────── */
-    async function init() {
-        try {
-            // Light bootstrap call to get user identity
-            const bsRes = await fetch(`${BACKEND}/api/v2/bootstrap?streamer=all&lite=1`, { credentials: 'include' });
-            if (!bsRes.ok) {
-                hide('mc-loading');
-                show('mc-signin');
-                return;
-            }
-            const bs = await bsRes.json();
-            currentUser = bs?.user ?? null;
-
-            if (!currentUser?.username && !currentUser?.twitch_id) {
-                hide('mc-loading');
-                show('mc-signin');
-                return;
-            }
-
-            // Set up nav profile dropdown + shared nav links
-            setupNavUser(currentUser);
-            if (window.castleNav) castleNav.autoInit();
-
-            // Fetch collections
-            const colRes = await fetch(`${BACKEND}/api/my-collections`, { credentials: 'include' });
-            if (colRes.ok) {
-                collections = await colRes.json();
-                if (!Array.isArray(collections)) collections = [];
-                collections = sortCollections(collections);
-            }
-
-            hide('mc-loading');
-            show('mc-root');
-
-            renderHeader();
-            renderBinders();
-            renderPurchaseList();
-            loadPendingPacks();
-            loadDailyGoals();
-
-        } catch (err) {
-            console.error('[MyCollection] Init error:', err);
-            hide('mc-loading');
-            show('mc-signin');
-        }
-    }
-
-    /* ── Header ──────────────────────────────────────────────────────────── */
-    function renderHeader() {
-        const usernameEl = document.getElementById('mc-username');
-        if (usernameEl) {
-            const name = currentUser?.username || currentUser?.twitch_id || 'Collector';
-            usernameEl.textContent = name.toUpperCase();
-            document.title = `${name}'s Collection · Castle TCG`;
-        }
-    }
-
-    /* ── Binders grid ────────────────────────────────────────────────────── */
-    function renderBinders() {
-        const grid = document.getElementById('mc-binders');
-        const empty = document.getElementById('mc-empty');
-        if (!grid) return;
-
-        const query = searchQuery.toLowerCase().trim();
-        const filtered = query
-            ? collections.filter(c =>
-                (c.brand_name || '').toLowerCase().includes(query) ||
-                (c.streamer_username || '').toLowerCase().includes(query))
-            : collections;
-
-        if (filtered.length === 0) {
-            grid.innerHTML = '';
-            show('mc-empty');
-            return;
-        }
-        hide('mc-empty');
-
-        // Always fill to a multiple of 4 (minimum 8 slots so the grid looks populated)
-        const COLS = 4;
-        const minSlots = Math.max(COLS * 2, Math.ceil(filtered.length / COLS) * COLS);
-        const emptyCount = minSlots - filtered.length;
-        const emptySlots = Array(emptyCount).fill(null).map(() => `
+(function(){"use strict";const v=(()=>{const e=document.querySelector('meta[name="castle-public-url"]');return e?e.content.replace(/\/$/,""):""})();let i=[],x=[],g=[],_=null,M="";function U(e){if(!e)return;window.currentUser={...e,avatar:e.avatar_url||e.avatar};const t=document.getElementById("nav-avatar"),n=document.getElementById("nav-user-menu-avatar");t&&(t.src=window.currentUser.avatar||""),n&&(n.src=window.currentUser.avatar||"");const o=document.getElementById("nav-user-preview");o&&(o.classList.remove("hidden"),o.style.display="flex"),window.initNavUserMenu?.(),window.updateNavUserMenuLabels?.()}function p(e){return e==null?"":String(e).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}let C="";async function B(){return C||(C=(await(await fetch(`${v}/api/csrf`,{credentials:"include"})).json()).token||"",C)}async function S(e,t){const n=await B();let o=await fetch(e,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json","x-csrf-token":n},body:JSON.stringify(t||{})});if(o.status===403){C="";const r=await B();o=await fetch(e,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json","x-csrf-token":r},body:JSON.stringify(t||{})})}if(!o.ok){const r=await o.text().catch(()=>"");throw new Error(r||`HTTP ${o.status}`)}return o.json().catch(()=>({}))}function T(e){return[...e||[]].sort((t,n)=>{const o=t?.is_favorited?1:0,r=n?.is_favorited?1:0;if(r!==o)return r-o;const a=Number(t?.card_count||0),s=Number(n?.card_count||0);if(s!==a)return s-a;const c=(t?.brand_name||t?.streamer_username||"").toLowerCase(),d=(n?.brand_name||n?.streamer_username||"").toLowerCase();return c.localeCompare(d)})}function I(e){if(!e||!/^#[0-9a-fA-F]{6}$/.test(e))return{rgb:"55, 48, 163",light:!1};const t=parseInt(e.slice(1,3),16),n=parseInt(e.slice(3,5),16),o=parseInt(e.slice(5,7),16),r=(.299*t+.587*n+.114*o)/255;return{rgb:`${t}, ${n}, ${o}`,light:r>.45}}function L(e){document.getElementById(e)?.classList.remove("hidden")}function k(e){document.getElementById(e)?.classList.add("hidden")}async function D(){try{const e=await fetch(`${v}/api/v2/bootstrap?streamer=all&lite=1`,{credentials:"include"});if(!e.ok){k("mc-loading"),L("mc-signin");return}if(_=(await e.json())?.user??null,!_?.username&&!_?.twitch_id){k("mc-loading"),L("mc-signin");return}U(_),window.castleNav&&castleNav.autoInit();const n=await fetch(`${v}/api/my-collections`,{credentials:"include"});n.ok&&(i=await n.json(),Array.isArray(i)||(i=[]),i=T(i)),k("mc-loading"),L("mc-root"),q(),E(),z(),Q(),H()}catch(e){console.error("[MyCollection] Init error:",e),k("mc-loading"),L("mc-signin")}}function q(){const e=document.getElementById("mc-username");if(e){const t=_?.username||_?.twitch_id||"Collector";e.textContent=t.toUpperCase(),document.title=`${t}'s Collection \xB7 Castle TCG`}}function E(){const e=document.getElementById("mc-binders"),t=document.getElementById("mc-empty");if(!e)return;const n=M.toLowerCase().trim(),o=n?i.filter(d=>(d.brand_name||"").toLowerCase().includes(n)||(d.streamer_username||"").toLowerCase().includes(n)):i;if(o.length===0){e.innerHTML="",L("mc-empty");return}k("mc-empty");const r=4,s=Math.max(r*2,Math.ceil(o.length/r)*r)-o.length,c=Array(s).fill(null).map(()=>`
             <div class="binder-tile binder-empty" style="cursor:pointer" onclick="window.openDiscoverCreators && window.openDiscoverCreators()">
                 <div class="binder-book binder-book--empty">
                     <div class="binder-empty-icon"><i class="bx bxs-plus"></i></div>
@@ -183,36 +6,10 @@
                 <div class="binder-label">
                     <span class="binder-name" style="color:var(--void-muted)">Empty Slot</span>
                 </div>
-            </div>`).join('');
-
-        grid.innerHTML = filtered.map(c => binderTileHTML(c)).join('') + emptySlots;
-    }
-
-    function binderTileHTML(c) {
-        // Use brand color, fall back to a rich dark indigo if not set
-        const rawColor = c.binder_color || c.brand_color_primary || '#3730a3';
-        const { rgb: accentRgb, light: isLight } = hexToRgb(rawColor);
-        const brandName = escapeHTML(c.brand_name || c.streamer_username);
-        const handle = escapeHTML(c.streamer_username);
-        const count = c.card_count ?? 0;
-
-        // Light covers: dark debossed text (pressed-in look)
-        // Dark covers: light embossed text (raised look)
-        const etchColor    = isLight ? 'rgba(0,0,0,0.72)'         : 'rgba(255,255,255,0.85)';
-        const etchShadow   = isLight ? '0 1px 1px rgba(255,255,255,0.30)' : '0 1px 2px rgba(0,0,0,0.7), 0 -1px 0 rgba(255,255,255,0.12)';
-        const etchColorSub = isLight ? 'rgba(0,0,0,0.55)'         : 'rgba(255,255,255,0.65)';
-        const etchShadowSub= isLight ? '0 1px 0 rgba(255,255,255,0.20)'  : '0 1px 2px rgba(0,0,0,0.6)';
-        const countColor   = isLight ? 'rgba(0,0,0,0.60)'         : 'rgba(255,255,255,0.70)';
-        const countShadow  = isLight ? '0 1px 0 rgba(255,255,255,0.20)'  : '0 1px 1px rgba(0,0,0,0.6)';
-
-        const favTitle = c.is_favorited ? 'Unfavorite binder' : 'Favorite binder';
-        const favClass = c.is_favorited ? 'is-favorited' : '';
-        const avatarUrl = escapeHTML(c.avatar_url || '');
-        const avatarImg = avatarUrl ? `<img class="binder-avatar" src="${avatarUrl}" alt="${handle}" loading="lazy" onerror="this.style.display='none'">` : '';
-        return `
-        <a class="binder-tile" href="/${handle}/binders" style="--binder-accent-rgb: ${accentRgb}" data-light="${isLight}">
-            <button class="binder-fav-btn ${favClass}" type="button" title="${favTitle}" onclick="event.preventDefault();event.stopPropagation();window._mcToggleFavorite('${escapeHTML(c.streamer_id)}')">
-                <i class="fa-${c.is_favorited ? 'solid' : 'regular'} fa-star"></i>
+            </div>`).join("");e.innerHTML=o.map(d=>G(d)).join("")+c}function G(e){const t=e.binder_color||e.brand_color_primary||"#3730a3",{rgb:n,light:o}=I(t),r=p(e.brand_name||e.streamer_username),a=p(e.streamer_username),s=e.card_count??0,c=o?"rgba(0,0,0,0.72)":"rgba(255,255,255,0.85)",d=o?"0 1px 1px rgba(255,255,255,0.30)":"0 1px 2px rgba(0,0,0,0.7), 0 -1px 0 rgba(255,255,255,0.12)",l=o?"rgba(0,0,0,0.55)":"rgba(255,255,255,0.65)",b=o?"0 1px 0 rgba(255,255,255,0.20)":"0 1px 2px rgba(0,0,0,0.6)",m=o?"rgba(0,0,0,0.60)":"rgba(255,255,255,0.70)",u=o?"0 1px 0 rgba(255,255,255,0.20)":"0 1px 1px rgba(0,0,0,0.6)",y=e.is_favorited?"Unfavourite creator":"Favourite creator",f=e.is_favorited?"is-favorited":"",h=p(e.avatar_url||""),w=h?`<img class="binder-avatar" src="${h}" alt="${a}" loading="lazy" onerror="this.style.display='none'">`:"";return`
+        <a class="binder-tile" href="/${a}/binders" style="--binder-accent-rgb: ${n}" data-light="${o}">
+            <button class="binder-fav-btn ${f}" type="button" title="${y}" onclick="event.preventDefault();event.stopPropagation();window._mcToggleFavorite('${p(e.streamer_id)}')">
+                <i class="fa-${e.is_favorited?"solid":"regular"} fa-star"></i>
             </button>
             <div class="binder-book">
                 <!-- Spine dark strip -->
@@ -223,497 +20,63 @@
                     <div class="binder-sheen"></div>
                     <div class="binder-stitch"></div>
                     <div class="binder-zipper"></div>
-                    ${avatarImg}
+                    ${w}
                     <!-- Etched brand + handle -->
                     <div class="binder-etched">
-                        <div class="binder-etch-name" style="color:${etchColor};text-shadow:${etchShadow}">${brandName}</div>
-                        <div class="binder-etch-handle" style="color:${etchColorSub};text-shadow:${etchShadowSub}">by ${handle}</div>
+                        <div class="binder-etch-name" style="color:${c};text-shadow:${d}">${r}</div>
+                        <div class="binder-etch-handle" style="color:${l};text-shadow:${b}">by ${a}</div>
                     </div>
                     <!-- Card count etched bottom-right -->
-                    <div class="binder-card-count" style="color:${countColor};text-shadow:${countShadow}">${count} card${count !== 1 ? 's' : ''}</div>
+                    <div class="binder-card-count" style="color:${m};text-shadow:${u}">${s} card${s!==1?"s":""}</div>
                 </div>
             </div>
             <div class="binder-label">
-                <span class="binder-name">${brandName}</span>
+                <span class="binder-name">${r}</span>
                 <div class="binder-meta">
                     <span class="accent-dot"></span>
-                    <span>${count} card${count !== 1 ? 's' : ''}</span>
+                    <span>${s} card${s!==1?"s":""}</span>
                 </div>
             </div>
-        </a>`;
-    }
-
-    function recommendationCardHTML(c, reasonLabel) {
-        const rawColor = c.binder_color || c.brand_color_primary || '#3730a3';
-        const { rgb: accentRgb } = hexToRgb(rawColor);
-        const name = escapeHTML(c.brand_name || c.streamer_username || 'Unknown');
-        const handle = escapeHTML(c.streamer_username || '');
-        const overlap = Number(c.overlap_count || c.shared_collectors || 0);
-        const overlapText = overlap > 0 ? `${overlap} mutual${overlap === 1 ? '' : 's'}` : reasonLabel;
-        return `
-        <a class="mc-rec-card" href="/${handle}" style="--binder-accent-rgb:${accentRgb}">
-            <div class="mc-rec-name">${name}</div>
-            <div class="mc-rec-meta">@${handle}</div>
-            <div class="mc-rec-reason">${escapeHTML(overlapText)}</div>
-        </a>`;
-    }
-
-    function discoverModalCardHTML(c, reasonText) {
-        const rawColor = c.binder_color || c.brand_color_primary || '#3730a3';
-        const { rgb: accentRgb } = hexToRgb(rawColor);
-        const name = escapeHTML(c.brand_name || c.streamer_username || 'Unknown');
-        const handle = escapeHTML(c.streamer_username || '');
-        const count = Number(c.card_count || 0);
-        return `
-        <a class="mc-rec-card" href="/${handle}" style="--binder-accent-rgb:${accentRgb}">
-            <div class="mc-rec-name">${name}</div>
-            <div class="mc-rec-meta">@${handle}</div>
-            <div class="mc-rec-reason">${escapeHTML(reasonText || `${count} card${count === 1 ? '' : 's'} collected`)}</div>
-        </a>`;
-    }
-
-    function renderRecommendations() {
-        const discoverWrap = document.getElementById('mc-discover-results');
-        const mutualWrap = document.getElementById('mc-mutual-results');
-        if (discoverWrap) {
-            discoverWrap.innerHTML = discoverCollections.length
-                ? discoverCollections.map(c => recommendationCardHTML(c, 'Followed creator')).join('')
-                : '<p class="mc-rec-empty">No follow-based binder suggestions yet.</p>';
-        }
-        if (mutualWrap) {
-            mutualWrap.innerHTML = mutualCollections.length
-                ? mutualCollections.map(c => recommendationCardHTML(c, 'Mutual collection')).join('')
-                : '<p class="mc-rec-empty">No mutual binder recommendations yet.</p>';
-        }
-    }
-
-    /* ── Purchase modal ──────────────────────────────────────────────────── */
-    function renderPurchaseList() {
-        const list = document.getElementById('mc-purchase-list');
-        if (!list) return;
-
-        if (collections.length === 0) {
-            list.innerHTML = `<p style="font-size:0.6rem;color:var(--void-muted);text-align:center;padding:20px 0">Start collecting from a stream to unlock pack purchases.</p>`;
-            return;
-        }
-
-        list.innerHTML = collections.map(c => {
-            const { rgb: accentRgb } = hexToRgb(c.binder_color || c.brand_color_primary);
-            const name = escapeHTML(c.brand_name || c.streamer_username);
-            const slug = escapeHTML(c.streamer_username);
-            const avatarHTML = c.avatar_url
-                ? `<img src="${escapeHTML(c.avatar_url)}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
-                : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800;color:rgba(${accentRgb},0.9);background:rgba(${accentRgb},0.12);border-radius:50%">${name.charAt(0).toUpperCase()}</div>`;
-
-            return `
+        </a>`}function A(e,t){const n=e.binder_color||e.brand_color_primary||"#3730a3",{rgb:o}=I(n),r=p(e.brand_name||e.streamer_username||"Unknown"),a=p(e.streamer_username||""),s=Number(e.overlap_count||e.shared_collectors||0),c=s>0?`${s} mutual${s===1?"":"s"}`:t;return`
+        <a class="mc-rec-card" href="/${a}" style="--binder-accent-rgb:${o}">
+            <div class="mc-rec-name">${r}</div>
+            <div class="mc-rec-meta">@${a}</div>
+            <div class="mc-rec-reason">${p(c)}</div>
+        </a>`}function P(e,t){const n=e.binder_color||e.brand_color_primary||"#3730a3",{rgb:o}=I(n),r=p(e.brand_name||e.streamer_username||"Unknown"),a=p(e.streamer_username||""),s=Number(e.card_count||0);return`
+        <a class="mc-rec-card" href="/${a}" style="--binder-accent-rgb:${o}">
+            <div class="mc-rec-name">${r}</div>
+            <div class="mc-rec-meta">@${a}</div>
+            <div class="mc-rec-reason">${p(t||`${s} card${s===1?"":"s"} collected`)}</div>
+        </a>`}function j(){const e=document.getElementById("mc-discover-results"),t=document.getElementById("mc-mutual-results");e&&(e.innerHTML=x.length?x.map(n=>A(n,"Followed creator")).join(""):'<p class="mc-rec-empty">No follow-based binder suggestions yet.</p>'),t&&(t.innerHTML=g.length?g.map(n=>A(n,"Mutual collection")).join(""):'<p class="mc-rec-empty">No mutual binder recommendations yet.</p>')}function z(){const e=document.getElementById("mc-purchase-list");if(e){if(i.length===0){e.innerHTML='<p style="font-size:0.6rem;color:var(--void-muted);text-align:center;padding:20px 0">Start collecting from a stream to unlock pack purchases.</p>';return}e.innerHTML=i.map(t=>{const{rgb:n}=I(t.binder_color||t.brand_color_primary),o=p(t.brand_name||t.streamer_username),r=p(t.streamer_username),a=t.avatar_url?`<img src="${p(t.avatar_url)}" alt="${o}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800;color:rgba(${n},0.9);background:rgba(${n},0.12);border-radius:50%">${o.charAt(0).toUpperCase()}</div>`;return`
             <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
-                <div style="width:36px;height:36px;border-radius:50%;border:1px solid rgba(${accentRgb},0.3);overflow:hidden;flex-shrink:0">${avatarHTML}</div>
+                <div style="width:36px;height:36px;border-radius:50%;border:1px solid rgba(${n},0.3);overflow:hidden;flex-shrink:0">${a}</div>
                 <div style="flex:1;min-width:0">
-                    <div style="font-size:0.7rem;font-weight:700;color:var(--void-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-                    <div style="font-size:0.55rem;color:var(--void-muted)">${c.card_count} cards collected</div>
+                    <div style="font-size:0.7rem;font-weight:700;color:var(--void-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o}</div>
+                    <div style="font-size:0.55rem;color:var(--void-muted)">${t.card_count} cards collected</div>
                 </div>
-                <a href="/${slug}/binder?tab=packs" style="padding:7px 14px;background:rgba(${accentRgb},0.1);border:1px solid rgba(${accentRgb},0.25);border-radius:8px;font-size:0.55rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:rgba(${accentRgb},0.9);text-decoration:none;white-space:nowrap;transition:all 0.2s"
-                   onmouseover="this.style.background='rgba(${accentRgb},0.2)'" onmouseout="this.style.background='rgba(${accentRgb},0.1)'">
-                    Buy Packs
+                <a href="/${r}/binder?tab=packs" style="padding:7px 14px;background:rgba(${n},0.1);border:1px solid rgba(${n},0.25);border-radius:8px;font-size:0.55rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:rgba(${n},0.9);text-decoration:none;white-space:nowrap;transition:all 0.2s"
+                   onmouseover="this.style.background='rgba(${n},0.2)'" onmouseout="this.style.background='rgba(${n},0.1)'">
+                    Get Packs
                 </a>
-            </div>`;
-        }).join('');
-    }
-
-    function openPurchase() {
-        show('mc-purchase-modal');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closePurchase() {
-        hide('mc-purchase-modal');
-        document.body.style.overflow = '';
-    }
-
-    /* ── Search ──────────────────────────────────────────────────────────── */
-    function search(q) {
-        searchQuery = q;
-        renderBinders();
-    }
-
-    async function toggleFavorite(streamerId) {
-        if (!streamerId) return;
-        const idx = collections.findIndex(c => c.streamer_id === streamerId);
-        if (idx < 0) return;
-        const prev = collections[idx].is_favorited;
-        collections[idx].is_favorited = !prev;
-        collections = sortCollections(collections);
-        renderBinders();
-        try {
-            const result = await writeFetch(`${BACKEND}/api/favorites/toggle`, { streamer_id: streamerId });
-            const isFav = !!result?.favorited;
-            collections = collections.map(c => c.streamer_id === streamerId ? { ...c, is_favorited: isFav } : c);
-            collections = sortCollections(collections);
-            renderBinders();
-        } catch (err) {
-            collections = collections.map(c => c.streamer_id === streamerId ? { ...c, is_favorited: prev } : c);
-            collections = sortCollections(collections);
-            renderBinders();
-            console.error('[MyCollection] favorite toggle failed:', err);
-        }
-    }
-
-    async function loadDiscover() {
-        const btn = document.getElementById('mc-discover-btn');
-        if (btn) btn.setAttribute('disabled', 'disabled');
-        try {
-            const res = await fetch(`${BACKEND}/api/my-collections/discover`, { credentials: 'include' });
-            discoverCollections = res.ok ? (await res.json()) : [];
-            if (!Array.isArray(discoverCollections)) discoverCollections = [];
-        } catch {
-            discoverCollections = [];
-        } finally {
-            if (btn) btn.removeAttribute('disabled');
-            renderRecommendations();
-        }
-    }
-
-    async function loadMutuals() {
-        const btn = document.getElementById('mc-mutual-btn');
-        if (btn) btn.setAttribute('disabled', 'disabled');
-        try {
-            const res = await fetch(`${BACKEND}/api/my-collections/mutuals`, { credentials: 'include' });
-            mutualCollections = res.ok ? (await res.json()) : [];
-            if (!Array.isArray(mutualCollections)) mutualCollections = [];
-        } catch {
-            mutualCollections = [];
-        } finally {
-            if (btn) btn.removeAttribute('disabled');
-            renderRecommendations();
-        }
-    }
-
-    async function openDiscoverCreators() {
-        const modal = document.getElementById('discover-creators-modal');
-        if (!modal) return;
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.body.style.overflow = 'hidden';
-
-        const tabFollowed = document.getElementById('discover-tab-followed');
-        const tabRecommended = document.getElementById('discover-tab-recommended');
-        const panelFollowed = document.getElementById('discover-followed-panel');
-        const panelRecommended = document.getElementById('discover-recommended-panel');
-        const followedGrid = document.getElementById('discover-followed-grid');
-        const recommendedGrid = document.getElementById('discover-recommended-grid');
-        const followedEmpty = document.getElementById('discover-followed-empty');
-        const recommendedEmpty = document.getElementById('discover-recommended-empty');
-        const followedCount = document.getElementById('discover-followed-count');
-        const recommendedCount = document.getElementById('discover-recommended-count');
-        const loading = document.getElementById('discover-loading');
-        const error = document.getElementById('discover-error');
-
-        if (error) error.classList.add('hidden');
-        if (loading) loading.classList.remove('hidden');
-        if (followedGrid) followedGrid.innerHTML = '';
-        if (recommendedGrid) recommendedGrid.innerHTML = '';
-        if (followedEmpty) followedEmpty.classList.add('hidden');
-        if (recommendedEmpty) recommendedEmpty.classList.add('hidden');
-
-        if (tabFollowed && tabRecommended && panelFollowed && panelRecommended) {
-            tabFollowed.classList.add('bg-void-accent', 'text-void-bg');
-            tabRecommended.classList.remove('bg-void-accent', 'text-void-bg');
-            panelFollowed.classList.remove('hidden');
-            panelRecommended.classList.add('hidden');
-
-            tabFollowed.onclick = () => {
-                tabFollowed.classList.add('bg-void-accent', 'text-void-bg');
-                tabRecommended.classList.remove('bg-void-accent', 'text-void-bg');
-                panelFollowed.classList.remove('hidden');
-                panelRecommended.classList.add('hidden');
-            };
-            tabRecommended.onclick = () => {
-                tabRecommended.classList.add('bg-void-accent', 'text-void-bg');
-                tabFollowed.classList.remove('bg-void-accent', 'text-void-bg');
-                panelRecommended.classList.remove('hidden');
-                panelFollowed.classList.add('hidden');
-            };
-        }
-
-        const followed = Array.isArray(collections) ? collections : [];
-        if (followedGrid) {
-            if (!followed.length && followedEmpty) {
-                followedEmpty.classList.remove('hidden');
-            } else {
-                followedGrid.innerHTML = followed.map(c => discoverModalCardHTML(c, `${Number(c.card_count || 0)} cards collected`)).join('');
-            }
-        }
-        if (followedCount) followedCount.textContent = `${followed.length} followed`;
-
-        try {
-            const res = await fetch(`${BACKEND}/api/my-collections/mutuals`, { credentials: 'include' });
-            const mutuals = res.ok ? await res.json() : [];
-            mutualCollections = Array.isArray(mutuals) ? mutuals : [];
-            if (recommendedGrid) {
-                if (!mutualCollections.length && recommendedEmpty) {
-                    recommendedEmpty.classList.remove('hidden');
-                } else {
-                    recommendedGrid.innerHTML = mutualCollections.map(c => {
-                        const overlap = Number(c.overlap_count || c.shared_collectors || 0);
-                        const reason = overlap > 0 ? `${overlap} mutual collector${overlap === 1 ? '' : 's'}` : 'Mutual recommendation';
-                        return discoverModalCardHTML(c, reason);
-                    }).join('');
-                }
-            }
-            if (recommendedCount) recommendedCount.textContent = `${mutualCollections.length} recommended`;
-        } catch (err) {
-            console.error('[MyCollection] discover modal failed:', err);
-            if (error) error.classList.remove('hidden');
-        } finally {
-            if (loading) loading.classList.add('hidden');
-        }
-    }
-
-    function closeDiscoverCreators() {
-        const modal = document.getElementById('discover-creators-modal');
-        if (!modal) return;
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        document.body.style.overflow = '';
-    }
-
-    /* ── Pending packs ───────────────────────────────────────────────────── */
-    async function loadPendingPacks() {
-        // Make the open packs panel clickable
-        const openPanel = document.querySelector('#mc-left-open .side-panel');
-        if (openPanel) {
-            openPanel.style.cursor = 'pointer';
-            openPanel.onclick = () => { window.location.href = '/pack-opening.html'; };
-        }
-
-        try {
-            const res = await fetch(`${BACKEND}/api/packs/pending`, { credentials: 'include' });
-            if (!res.ok) return;
-            const packs = await res.json();
-            const count = Array.isArray(packs) ? packs.length : 0;
-            if (count === 0) return;
-
-            // Update count badge
-            const badge = document.getElementById('mc-pack-count');
-            if (badge) { badge.textContent = count; badge.classList.remove('hidden'); }
-
-            const label = document.querySelector('#mc-left-open .side-panel-label');
-            if (label) {
-                label.innerHTML = `Open Your<br><span style="color:var(--void-accent)">${count} Pack${count !== 1 ? 's' : ''}</span>`;
-            }
-
-            // Update pack stack images to show the first streamer's custom pack art
-            const packImgUrl = packs[0]?.streamer?.pack_image_url;
-            if (packImgUrl?.startsWith('http')) {
-                document.querySelectorAll('#mc-packs-rings .side-pack-img').forEach(el => {
-                    el.src = packImgUrl;
-                });
-            }
-
-            // Auto-switch to Open tab when packs are waiting
-            window._mcLeftTab('open');
-        } catch (_) {}
-    }
-
-    window._mcLeftTab = function(tab) {
-        const purchase = document.getElementById('mc-left-purchase');
-        const open = document.getElementById('mc-left-open');
-        const tabPurchase = document.getElementById('mc-tab-purchase');
-        const tabOpen = document.getElementById('mc-tab-open');
-        if (tab === 'purchase') {
-            purchase?.classList.remove('hidden');
-            open?.classList.add('hidden');
-            tabPurchase?.classList.add('active');
-            tabOpen?.classList.remove('active');
-        } else {
-            purchase?.classList.add('hidden');
-            open?.classList.remove('hidden');
-            tabPurchase?.classList.remove('active');
-            tabOpen?.classList.add('active');
-        }
-    };
-
-    /* ── Daily Goals ─────────────────────────────────────────────────────── */
-    function timeUntilMidnightUTC() {
-        const now = new Date();
-        const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-        const diff = midnight - now;
-        const h = Math.floor(diff / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
-        return `${h}h ${m}m`;
-    }
-
-    function renderGoals(data) {
-        const section = document.getElementById('mc-goals-section');
-        const list = document.getElementById('mc-goals-list');
-        if (!section || !list) return;
-
-        const { goals = [], streak = {}, reroll_available = false } = data;
-        if (!goals.length) return;
-
-        section.classList.remove('hidden');
-
-        const resetEl = document.getElementById('mc-goals-reset');
-        if (resetEl) resetEl.textContent = `Resets in ${timeUntilMidnightUTC()}`;
-
-        const streakBadge = document.getElementById('mc-streak-badge');
-        const streakCurrent = document.getElementById('mc-streak-current');
-        if (streakBadge && streak.current_streak > 0) {
-            streakCurrent.textContent = streak.current_streak;
-            streakBadge.classList.remove('hidden');
-            streakBadge.style.display = 'flex';
-        }
-
-        list.innerHTML = goals.map(g => {
-            const pct = Math.min(100, Math.round((g.progress / g.target) * 100));
-            const done = g.is_completed;
-            const canReroll = reroll_available && !done && g.type === 'rotating';
-            const accentColor = done ? '#4ade80' : 'var(--void-accent)';
-
-            return `
-            <div data-mc-goal-card style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,${done ? '0.12' : '0.06'});border-radius:16px;padding:16px 18px;opacity:${done ? '0.65' : '1'};transition:opacity 0.3s">
+            </div>`}).join("")}}function O(){L("mc-purchase-modal"),document.body.style.overflow="hidden"}function R(){k("mc-purchase-modal"),document.body.style.overflow=""}function F(e){M=e,E()}async function W(e){if(!e)return;const t=i.findIndex(o=>o.streamer_id===e);if(t<0)return;const n=i[t].is_favorited;i[t].is_favorited=!n,i=T(i),E();try{const r=!!(await S(`${v}/api/favorites/toggle`,{streamer_id:e}))?.favorited;i=i.map(a=>a.streamer_id===e?{...a,is_favorited:r}:a),i=T(i),E()}catch(o){i=i.map(r=>r.streamer_id===e?{...r,is_favorited:n}:r),i=T(i),E(),console.error("[MyCollection] favorite toggle failed:",o)}}async function X(){const e=document.getElementById("mc-discover-btn");e&&e.setAttribute("disabled","disabled");try{const t=await fetch(`${v}/api/my-collections/discover`,{credentials:"include"});x=t.ok?await t.json():[],Array.isArray(x)||(x=[])}catch{x=[]}finally{e&&e.removeAttribute("disabled"),j()}}async function J(){const e=document.getElementById("mc-mutual-btn");e&&e.setAttribute("disabled","disabled");try{const t=await fetch(`${v}/api/my-collections/mutuals`,{credentials:"include"});g=t.ok?await t.json():[],Array.isArray(g)||(g=[])}catch{g=[]}finally{e&&e.removeAttribute("disabled"),j()}}async function K(){const e=document.getElementById("discover-creators-modal");if(!e)return;e.classList.remove("hidden"),e.classList.add("flex"),document.body.style.overflow="hidden";const t=document.getElementById("discover-tab-followed"),n=document.getElementById("discover-tab-recommended"),o=document.getElementById("discover-followed-panel"),r=document.getElementById("discover-recommended-panel"),a=document.getElementById("discover-followed-grid"),s=document.getElementById("discover-recommended-grid"),c=document.getElementById("discover-followed-empty"),d=document.getElementById("discover-recommended-empty"),l=document.getElementById("discover-followed-count"),b=document.getElementById("discover-recommended-count"),m=document.getElementById("discover-loading"),u=document.getElementById("discover-error");u&&u.classList.add("hidden"),m&&m.classList.remove("hidden"),a&&(a.innerHTML=""),s&&(s.innerHTML=""),c&&c.classList.add("hidden"),d&&d.classList.add("hidden"),t&&n&&o&&r&&(t.classList.add("bg-void-accent","text-void-bg"),n.classList.remove("bg-void-accent","text-void-bg"),o.classList.remove("hidden"),r.classList.add("hidden"),t.onclick=()=>{t.classList.add("bg-void-accent","text-void-bg"),n.classList.remove("bg-void-accent","text-void-bg"),o.classList.remove("hidden"),r.classList.add("hidden")},n.onclick=()=>{n.classList.add("bg-void-accent","text-void-bg"),t.classList.remove("bg-void-accent","text-void-bg"),r.classList.remove("hidden"),o.classList.add("hidden")});const y=Array.isArray(i)?i:[];a&&(!y.length&&c?c.classList.remove("hidden"):a.innerHTML=y.map(f=>P(f,`${Number(f.card_count||0)} cards collected`)).join("")),l&&(l.textContent=`${y.length} followed`);try{const f=await fetch(`${v}/api/my-collections/mutuals`,{credentials:"include"}),h=f.ok?await f.json():[];g=Array.isArray(h)?h:[],s&&(!g.length&&d?d.classList.remove("hidden"):s.innerHTML=g.map(w=>{const $=Number(w.overlap_count||w.shared_collectors||0),ne=$>0?`${$} mutual collector${$===1?"":"s"}`:"Mutual recommendation";return P(w,ne)}).join("")),b&&(b.textContent=`${g.length} recommended`)}catch(f){console.error("[MyCollection] discover modal failed:",f),u&&u.classList.remove("hidden")}finally{m&&m.classList.add("hidden")}}function Y(){const e=document.getElementById("discover-creators-modal");e&&(e.classList.add("hidden"),e.classList.remove("flex"),document.body.style.overflow="")}async function Q(){const e=document.querySelector("#mc-left-open .side-panel");e&&(e.style.cursor="pointer",e.onclick=()=>{window.location.href="/pack-opening.html"});try{const t=await fetch(`${v}/api/packs/pending`,{credentials:"include"});if(!t.ok)return;const n=await t.json(),o=Array.isArray(n)?n.length:0;if(o===0)return;const r=document.getElementById("mc-pack-count");r&&(r.textContent=o,r.classList.remove("hidden"));const a=document.querySelector("#mc-left-open .side-panel-label");a&&(a.innerHTML=`Open Your<br><span style="color:var(--void-accent)">${o} Pack${o!==1?"s":""}</span>`);const s=n[0]?.streamer?.pack_image_url;s?.startsWith("http")&&document.querySelectorAll("#mc-packs-rings .side-pack-img").forEach(l=>{l.src=s});const c=document.querySelector("#mc-packs-rings .side-pack-back-1"),d=document.querySelector("#mc-packs-rings .side-pack-back-2");c&&(c.style.display=o>=2?"":"none"),d&&(d.style.display=o>=3?"":"none"),window._mcLeftTab("open")}catch{}}window._mcLeftTab=function(e){const t=document.getElementById("mc-left-purchase"),n=document.getElementById("mc-left-open"),o=document.getElementById("mc-tab-purchase"),r=document.getElementById("mc-tab-open");e==="purchase"?(t?.classList.remove("hidden"),n?.classList.add("hidden"),o?.classList.add("active"),r?.classList.remove("active")):(t?.classList.add("hidden"),n?.classList.remove("hidden"),o?.classList.remove("active"),r?.classList.add("active"))};function V(){const e=new Date,n=new Date(Date.UTC(e.getUTCFullYear(),e.getUTCMonth(),e.getUTCDate()+1))-e,o=Math.floor(n/36e5),r=Math.floor(n%36e5/6e4);return`${o}h ${r}m`}function N(e){const t=document.getElementById("mc-goals-section"),n=document.getElementById("mc-goals-list");if(!t||!n)return;const{goals:o=[],streak:r={},reroll_available:a=!1}=e;if(!o.length)return;t.classList.remove("hidden");const s=document.getElementById("mc-goals-reset");s&&(s.textContent=`Resets in ${V()}`);const c=document.getElementById("mc-streak-badge"),d=document.getElementById("mc-streak-current");c&&r.current_streak>0&&(d.textContent=r.current_streak,c.classList.remove("hidden"),c.style.display="flex"),n.innerHTML=o.map(l=>{const b=Math.min(100,Math.round(l.progress/l.target*100)),m=l.is_completed,u=a&&!m&&l.type==="rotating",y=m?"#4ade80":"var(--void-accent)";return`
+            <div data-mc-goal-card style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,${m?"0.12":"0.06"});border-radius:16px;padding:16px 18px;opacity:${m?"0.65":"1"};transition:opacity 0.3s">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                            ${done ? '<span style="color:#4ade80;font-size:0.75rem">&#10003;</span>' : ''}
-                            <span data-mc-goal-title style="font-weight:700;font-size:0.8rem;color:var(--void-text);text-transform:uppercase;letter-spacing:0.04em;display:inline-block">${escapeHTML(g.title)}</span>
+                            ${m?'<span style="color:#4ade80;font-size:0.75rem">&#10003;</span>':""}
+                            <span data-mc-goal-title style="font-weight:700;font-size:0.8rem;color:var(--void-text);text-transform:uppercase;letter-spacing:0.04em;display:inline-block">${p(l.title)}</span>
                         </div>
-                        <div data-mc-goal-desc style="font-size:0.65rem;color:var(--void-muted);margin-top:3px">${escapeHTML(g.description)}</div>
+                        <div data-mc-goal-desc style="font-size:0.65rem;color:var(--void-muted);margin-top:3px">${p(l.description)}</div>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-                        ${canReroll ? `<button class="mc-reroll-btn" onclick="window._mcRerollGoal('${escapeHTML(g.id)}', this)" title="Swap this goal (1 free reroll per day)"><i class="fa-solid fa-dice"></i>Reroll</button>` : ''}
+                        ${u?`<button class="mc-reroll-btn" onclick="window._mcRerollGoal('${p(l.id)}', this)" title="Swap this goal (1 free reroll per day)"><i class="fa-solid fa-dice"></i>Reroll</button>`:""}
                         <div style="text-align:right">
-                            <div data-mc-goal-xp style="font-size:0.7rem;font-weight:700;color:${accentColor}">${done ? g.xp_reward : `+${g.xp_reward}`} XP</div>
-                            <div data-mc-goal-progress style="font-size:0.55rem;color:var(--void-muted)">${g.progress}/${g.target}</div>
+                            <div data-mc-goal-xp style="font-size:0.7rem;font-weight:700;color:${y}">${m?l.xp_reward:`+${l.xp_reward}`} XP</div>
+                            <div data-mc-goal-progress style="font-size:0.55rem;color:var(--void-muted)">${l.progress}/${l.target}</div>
                         </div>
                     </div>
                 </div>
                 <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
-                    <div data-mc-goal-bar style="height:100%;width:${pct}%;background:${accentColor};border-radius:2px;transition:width 0.5s ease"></div>
+                    <div data-mc-goal-bar style="height:100%;width:${b}%;background:${y};border-radius:2px;transition:width 0.5s ease"></div>
                 </div>
-            </div>`;
-        }).join('');
-    }
-
-    async function loadDailyGoals() {
-        try {
-            const res = await fetch(`${BACKEND}/api/goals/daily`, { credentials: 'include' });
-            if (!res.ok) return;
-            const data = await res.json();
-            renderGoals(data);
-        } catch (_) {}
-    }
-
-    // Pool of goal titles to flash through while the slot reel spins.
-    function collectGoalTitlePool() {
-        const titles = Array.from(document.querySelectorAll('[data-mc-goal-title]'))
-            .map(el => el.textContent.trim())
-            .filter(Boolean);
-        const filler = ['NEW GOAL?', 'ROLLING…', 'COLLECT CARDS', 'OPEN PACKS', 'WATCH STREAMS', 'TRADE CARDS', 'EARN XP'];
-        const pool = titles.concat(filler);
-        return pool.length ? pool : filler;
-    }
-
-    // Decelerating reel that lands smoothly on `finalTitle`.
-    function settleReel(titleEl, pool, finalTitle) {
-        return new Promise(resolve => {
-            // Increasing delays simulate a slot wheel slowing to a stop.
-            const delays = [70, 80, 95, 115, 140, 175, 220, 290, 380];
-            let i = 0;
-            const step = () => {
-                if (i >= delays.length) {
-                    titleEl.classList.remove('mc-slot-rolling');
-                    titleEl.textContent = finalTitle;
-                    resolve();
-                    return;
-                }
-                titleEl.textContent = pool[Math.floor(Math.random() * pool.length)];
-                setTimeout(step, delays[i++]);
-            };
-            step();
-        });
-    }
-
-    async function rerollGoal(goalRowId, btn) {
-        if (btn) btn.classList.add('is-spinning');
-
-        const card = btn && btn.closest('[data-mc-goal-card]');
-        const titleEl = card && card.querySelector('[data-mc-goal-title]');
-        const descEl = card && card.querySelector('[data-mc-goal-desc]');
-        const pool = collectGoalTitlePool();
-
-        // Fast spin while the request is in flight.
-        let reelTimer = null;
-        if (titleEl) {
-            titleEl.classList.add('mc-slot-rolling');
-            if (descEl) descEl.style.opacity = '0.25';
-            reelTimer = setInterval(() => {
-                titleEl.textContent = pool[Math.floor(Math.random() * pool.length)];
-            }, 60);
-        }
-        const stopSpin = () => { if (reelTimer) { clearInterval(reelTimer); reelTimer = null; } };
-
-        try {
-            // Reroll, then fetch the new goal so the reel can land on it.
-            const minSpin = new Promise(r => setTimeout(r, 450));
-            const post = writeFetch(`${BACKEND}/api/goals/reroll`, { goal_row_id: goalRowId });
-            await Promise.all([post, minSpin]);
-
-            const res = await fetch(`${BACKEND}/api/goals/daily`, { credentials: 'include' });
-            const data = res.ok ? await res.json() : null;
-            const newGoal = data && (data.goals || []).find(g => g.id === goalRowId);
-
-            stopSpin();
-
-            // No DOM hooks (or no data) -> fall back to a full re-render.
-            if (!card || !titleEl || !newGoal) {
-                if (data) renderGoals(data);
-                if (btn) btn.classList.remove('is-spinning');
-                return;
-            }
-
-            // Land the reel on the new title, then update just this card in place.
-            await settleReel(titleEl, pool, newGoal.title);
-
-            const pct = Math.min(100, Math.round((newGoal.progress / newGoal.target) * 100));
-            if (descEl) {
-                descEl.textContent = newGoal.description;
-                descEl.style.opacity = '';
-            }
-            const xpEl = card.querySelector('[data-mc-goal-xp]');
-            const progEl = card.querySelector('[data-mc-goal-progress]');
-            const barEl = card.querySelector('[data-mc-goal-bar]');
-            if (xpEl) xpEl.textContent = `+${newGoal.xp_reward} XP`;
-            if (progEl) progEl.textContent = `${newGoal.progress}/${newGoal.target}`;
-            if (barEl) barEl.style.width = `${pct}%`;
-            if (btn) btn.classList.remove('is-spinning');
-        } catch (e) {
-            stopSpin();
-            if (titleEl) titleEl.classList.remove('mc-slot-rolling');
-            if (descEl) descEl.style.opacity = '';
-            if (btn) btn.classList.remove('is-spinning');
-            await loadDailyGoals();
-            alert(e.message || 'Reroll failed');
-        }
-    }
-
-    /* ── Keyboard ────────────────────────────────────────────────────────── */
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closePurchase();
-    });
-
-    /* ── Globals ─────────────────────────────────────────────────────────── */
-    window._mcSearch             = search;
-    window._mcOpenPurchase       = openPurchase;
-    window._mcClosePurchase      = closePurchase;
-    window._mcToggleFavorite     = toggleFavorite;
-    window._mcLoadDiscover       = loadDiscover;
-    window._mcLoadMutuals        = loadMutuals;
-    window.openDiscoverCreators  = openDiscoverCreators;
-    window.closeDiscoverCreators = closeDiscoverCreators;
-    window._mcRerollGoal         = rerollGoal;
-
-    /* ── Boot ────────────────────────────────────────────────────────────── */
-    init();
-
-})();
+            </div>`}).join("")}async function H(){try{const e=await fetch(`${v}/api/goals/daily`,{credentials:"include"});if(!e.ok)return;const t=await e.json();N(t)}catch{}}function Z(){const e=Array.from(document.querySelectorAll("[data-mc-goal-title]")).map(o=>o.textContent.trim()).filter(Boolean),t=["NEW GOAL?","ROLLING\u2026","COLLECT CARDS","OPEN PACKS","WATCH STREAMS","TRADE CARDS","EARN XP"],n=e.concat(t);return n.length?n:t}function ee(e,t,n){return new Promise(o=>{const r=[70,80,95,115,140,175,220,290,380];let a=0;const s=()=>{if(a>=r.length){e.classList.remove("mc-slot-rolling"),e.textContent=n,o();return}e.textContent=t[Math.floor(Math.random()*t.length)],setTimeout(s,r[a++])};s()})}async function te(e,t){t&&t.classList.add("is-spinning");const n=t&&t.closest("[data-mc-goal-card]"),o=n&&n.querySelector("[data-mc-goal-title]"),r=n&&n.querySelector("[data-mc-goal-desc]"),a=Z();let s=null;o&&(o.classList.add("mc-slot-rolling"),r&&(r.style.opacity="0.25"),s=setInterval(()=>{o.textContent=a[Math.floor(Math.random()*a.length)]},60));const c=()=>{s&&(clearInterval(s),s=null)};try{const d=new Promise($=>setTimeout($,450)),l=S(`${v}/api/goals/reroll`,{goal_row_id:e});await Promise.all([l,d]);const b=await fetch(`${v}/api/goals/daily`,{credentials:"include"}),m=b.ok?await b.json():null,u=m&&(m.goals||[]).find($=>$.id===e);if(c(),!n||!o||!u){m&&N(m),t&&t.classList.remove("is-spinning");return}await ee(o,a,u.title);const y=Math.min(100,Math.round(u.progress/u.target*100));r&&(r.textContent=u.description,r.style.opacity="");const f=n.querySelector("[data-mc-goal-xp]"),h=n.querySelector("[data-mc-goal-progress]"),w=n.querySelector("[data-mc-goal-bar]");f&&(f.textContent=`+${u.xp_reward} XP`),h&&(h.textContent=`${u.progress}/${u.target}`),w&&(w.style.width=`${y}%`),t&&t.classList.remove("is-spinning")}catch(d){c(),o&&o.classList.remove("mc-slot-rolling"),r&&(r.style.opacity=""),t&&t.classList.remove("is-spinning"),await H(),alert(d.message||"Reroll failed")}}document.addEventListener("keydown",e=>{e.key==="Escape"&&R()}),window._mcSearch=F,window._mcOpenPurchase=O,window._mcClosePurchase=R,window._mcToggleFavorite=W,window._mcLoadDiscover=X,window._mcLoadMutuals=J,window.openDiscoverCreators=K,window.closeDiscoverCreators=Y,window._mcRerollGoal=te,D()})();

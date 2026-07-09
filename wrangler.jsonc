@@ -20,11 +20,12 @@
 		"enabled": true
 	},
 	"vars": {
-		"UPSTASH_REDIS_REST_URL": "",
-		"UPSTASH_REDIS_REST_TOKEN": "",
-		"ENCRYPTION_SECRET": "",
 		"WORKER_DEV_URL": ""
 	},
+	// NOTE: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN and ENCRYPTION_SECRET
+	// are SECRETS, not vars. Set them with `wrangler secret put <NAME>`. They were
+	// previously empty-string vars here, which (a) disabled Redis and (b) made the
+	// AES-GCM token key an empty string. Do not re-add them as vars.
 	"routes": [
 		{ "pattern": "tcg.creatorcastle.gg", "custom_domain": true, "zone_name": "creatorcastle.gg" }
 	],
@@ -53,6 +54,9 @@
 				"class_name": "OBSQueueSession"
 			}
 		]
+	},
+	"triggers": {
+		"crons": ["0 3 * * *"]
 	},
 	"migrations": [
 		{
